@@ -2,11 +2,15 @@ import { router } from "expo-router";
 
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import AppHeader from "@/components/AppHeader";
+
 export default function PatientsScreen() {
 
   return (
 
     <View style={styles.container}>
+
+      <AppHeader />
 
       <Text style={styles.title}>My Patients</Text>
 

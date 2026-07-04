@@ -2,25 +2,21 @@ import { Link } from "expo-router";
 
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import AppHeader from "@/components/AppHeader";
+
 export default function LoginScreen() {
 
   return (
 
     <View style={styles.container}>
 
+      <AppHeader />
+
       <Text style={styles.title}>RussiCaptor</Text>
 
-      <Text style={styles.subtitle}>
+      <Text style={styles.subtitle}>Botulism Exercise</Text>
 
-        Botulism Exercise
-
-      </Text>
-
-      <Text style={styles.version}>
-
-        Version 0.2
-
-      </Text>
+      <Text style={styles.version}>Version 0.2</Text>
 
       <Link href="/dashboard" asChild>
 
