@@ -8,7 +8,7 @@ export default function AppHeader() {
 
       <Image
 
-        source={require("@/assets/logo.png")}
+        source={require("../assets/logo.png")}
 
         style={styles.logo}
 
