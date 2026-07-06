@@ -6,6 +6,7 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 
 import AppHeader from "@/components/AppHeader";
 
+import { assignPatientToMe } from "@/services/AssignmentRepository";
 import { findPatientByNationalId } from "@/services/PatientRepository";
 
 export default function ScanScreen() {
@@ -24,7 +25,11 @@ export default function ScanScreen() {
 
     }
 
-    router.push(`/patient/${patient.id}`);
+   assignPatientToMe(patient.id);
+
+assignPatientToMe(patient.id);
+
+router.push(`/patient/${patient.id}`);
 
   }
 

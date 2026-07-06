@@ -1,10 +1,14 @@
 import { router } from "expo-router";
 
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import AppHeader from "@/components/AppHeader";
 
+import { getMyPatients } from "@/services/AssignmentRepository";
+
 export default function PatientsScreen() {
+
+  const myPatients = getMyPatients();
 
   return (
 
@@ -16,19 +20,63 @@ export default function PatientsScreen() {
 
       <Text style={styles.subtitle}>Case Manager: Jaak</Text>
 
-      <View style={styles.emptyCard}>
+      {myPatients.length === 0 ? (
 
-        <Text style={styles.emptyTitle}>Patsiente ei ole veel.</Text>
+        <View style={styles.emptyCard}>
 
-        <Text style={styles.emptyText}>
+          <Text style={styles.emptyTitle}>Patsiente ei ole veel.</Text>
 
-          Skaneeri patsiendi QR-kood, et ta oma nimekirja lisada.
+          <Text style={styles.emptyText}>
 
-        </Text>
+            Skaneeri patsiendi QR-kood, et lisada ta oma nimekirja.
 
-      </View>
+          </Text>
 
-      <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
+        </View>
+
+      ) : (
+
+        <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+
+          {myPatients.map((patient) => (
+
+            <Pressable
+
+              key={patient.id}
+
+              style={styles.patientCard}
+
+              onPress={() => router.push(`/patient/${patient.id}`)}
+
+            >
+
+              <View style={styles.patientHeader}>
+
+                <Text style={styles.patientId}>{patient.id}</Text>
+
+                <Text style={styles.triageBadge}>{patient.triage}</Text>
+
+              </View>
+
+              <Text style={styles.patientName}>{patient.name}</Text>
+
+              <Text style={styles.patientMeta}>
+
+                {patient.status} · {patient.location}
+
+              </Text>
+
+              <Text style={styles.patientTime}>Last seen: {patient.lastSeen}</Text>
+
+            </Pressable>
+
+          ))}
+
+        </ScrollView>
+
+      )}
+
+      <Pressable style={styles.secondaryButton} onPress={() => router.push("/dashboard")}>
 
         <Text style={styles.secondaryButtonText}>Back to Dashboard</Text>
 
@@ -46,7 +94,7 @@ const styles = StyleSheet.create({
 
     flex: 1,
 
-    backgroundColor: "white",
+    backgroundColor: "#ffffff",
 
     justifyContent: "center",
 
@@ -72,7 +120,7 @@ const styles = StyleSheet.create({
 
     color: "#555",
 
-    marginBottom: 8,
+    marginBottom: 20,
 
   },
 
@@ -88,7 +136,7 @@ const styles = StyleSheet.create({
 
     padding: 24,
 
-    marginVertical: 28,
+    marginBottom: 24,
 
   },
 
@@ -108,6 +156,98 @@ const styles = StyleSheet.create({
 
     color: "#555",
 
+    lineHeight: 22,
+
+  },
+
+  list: {
+
+    width: "100%",
+
+    maxWidth: 420,
+
+    marginTop: 20,
+
+  },
+
+  listContent: {
+
+    gap: 12,
+
+    paddingBottom: 20,
+
+  },
+
+  patientCard: {
+
+    backgroundColor: "#f2f4f7",
+
+    borderRadius: 16,
+
+    padding: 18,
+
+  },
+
+  patientHeader: {
+
+    flexDirection: "row",
+
+    justifyContent: "space-between",
+
+    alignItems: "center",
+
+  },
+
+  patientId: {
+
+    fontSize: 18,
+
+    fontWeight: "bold",
+
+  },
+
+  triageBadge: {
+
+    backgroundColor: "#f5c542",
+
+    paddingHorizontal: 12,
+
+    paddingVertical: 6,
+
+    borderRadius: 10,
+
+    fontWeight: "bold",
+
+  },
+
+  patientName: {
+
+    fontSize: 24,
+
+    fontWeight: "bold",
+
+    marginTop: 8,
+
+  },
+
+  patientMeta: {
+
+    fontSize: 16,
+
+    color: "#555",
+
+    marginTop: 6,
+
+  },
+
+  patientTime: {
+
+    fontSize: 14,
+
+    color: "#777",
+
+    marginTop: 6,
+
   },
 
   secondaryButton: {
@@ -116,9 +256,9 @@ const styles = StyleSheet.create({
 
     maxWidth: 360,
 
-    borderColor: "#005BBB",
-
     borderWidth: 2,
+
+    borderColor: "#005BBB",
 
     paddingVertical: 14,
 
@@ -126,7 +266,7 @@ const styles = StyleSheet.create({
 
     alignItems: "center",
 
-    marginTop: 12,
+    marginTop: 16,
 
   },
 
