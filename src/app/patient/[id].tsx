@@ -62,15 +62,7 @@ export default function PatientWorkspaceScreen() {
 
       </View>
 
-      <ScrollView
-
-        horizontal
-
-        showsHorizontalScrollIndicator={false}
-
-        style={styles.tabs}
-
-        contentContainerStyle={styles.tabsContent}
+   <View style={styles.tabs}>
 
       >
 
@@ -86,7 +78,7 @@ export default function PatientWorkspaceScreen() {
 
         <TabButton label="Notes" value="notes" activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      </ScrollView>
+   </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
 
@@ -276,11 +268,17 @@ const styles = StyleSheet.create({
 
   tabs: {
 
-    maxHeight: 48,
+    width: "100%",
 
-    marginBottom: 12,
+  flexDirection: "row",
 
-  },
+  flexWrap: "wrap",
+
+  gap: 8,
+
+  marginBottom: 12,
+
+},
 
   tabsContent: {
 
