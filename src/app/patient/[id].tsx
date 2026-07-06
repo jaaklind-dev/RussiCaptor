@@ -64,7 +64,6 @@ export default function PatientWorkspaceScreen() {
 
    <View style={styles.tabs}>
 
-      >
 
         <TabButton label="Overview" value="overview" activeTab={activeTab} setActiveTab={setActiveTab} />
 
@@ -279,12 +278,6 @@ const styles = StyleSheet.create({
   marginBottom: 12,
 
 },
-
-  tabsContent: {
-
-    gap: 8,
-
-  },
 
   tabButton: {
 

@@ -1,15 +1,123 @@
-export interface Patient {
+export type TriageCategory = "P1" | "P2" | "P3" | "P4";
 
-  patientId: string;
+export type PatientStatus =
 
-  nationalId: string;   // isikukood
+  | "Active"
 
-  firstName: string;
+  | "Incoming"
 
-  lastName: string;
+  | "Transferred"
 
-  triage: "P1" | "P2" | "P3" | "P4";
+  | "Completed";
 
-  scenarioId: string;
+export type TimelineEvent = {
 
-}
+  id: string;
+
+  time: string;
+
+  title: string;
+
+  description: string;
+
+  revealed: boolean;
+
+};
+
+export type LabResult = {
+
+  id: string;
+
+  category: string;
+
+  name: string;
+
+  value: string;
+
+  unit?: string;
+
+  revealed: boolean;
+
+};
+
+export type ImagingStudy = {
+
+  id: string;
+
+  type: "XR" | "CT" | "EKG" | "US" | "OTHER";
+
+  title: string;
+
+  description: string;
+
+  file?: string;
+
+  revealed: boolean;
+
+};
+
+export type QuestionItem = {
+
+  id: string;
+
+  category: string;
+
+  prompt: string;
+
+  answer: string;
+
+  revealed: boolean;
+
+};
+
+export type PatientNote = {
+
+  id: string;
+
+  title: string;
+
+  text: string;
+
+};
+
+export type Mist = {
+
+  mechanism: string;
+
+  injuries: string;
+
+  signs: string;
+
+  treatment: string;
+
+};
+
+export type Patient = {
+
+  id: string;
+
+  isikukood: string;
+
+  name: string;
+
+  triage: TriageCategory;
+
+  status: PatientStatus;
+
+  location: string;
+
+  lastSeen: string;
+
+  mist: Mist;
+
+  timeline: TimelineEvent[];
+
+  labs: LabResult[];
+
+  imaging: ImagingStudy[];
+
+  questions: QuestionItem[];
+
+  notes: PatientNote[];
+
+};
