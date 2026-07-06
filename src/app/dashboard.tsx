@@ -1,10 +1,26 @@
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
+
+import { useCallback, useState } from "react";
 
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import AppHeader from "@/components/AppHeader";
 
+import { getDashboardStats } from "@/services/AssignmentRepository";
+
 export default function DashboardScreen() {
+
+  const [stats, setStats] = useState(getDashboardStats());
+
+  useFocusEffect(
+
+    useCallback(() => {
+
+      setStats(getDashboardStats());
+
+    }, [])
+
+  );
 
   return (
 
@@ -14,69 +30,35 @@ export default function DashboardScreen() {
 
       <Text style={styles.title}>CM Dashboard</Text>
 
-      <Text style={styles.subtitle}>
-
-        Case Manager: Jaak
-
-      </Text>
+      <Text style={styles.subtitle}>Case Manager: Jaak</Text>
 
       <View style={styles.card}>
 
-        <Text style={styles.row}>🟢 Active: 0</Text>
+        <Text style={styles.row}>🟢 Active: {stats.active}</Text>
 
-        <Text style={styles.row}>🔵 Incoming: 0</Text>
+        <Text style={styles.row}>🔵 Incoming: {stats.incoming}</Text>
 
-        <Text style={styles.row}>⚫ Transferred: 0</Text>
+        <Text style={styles.row}>⚫ Transferred: {stats.transferred}</Text>
 
-        <Text style={styles.row}>✅ Completed: 0</Text>
+        <Text style={styles.row}>✅ Completed: {stats.completed}</Text>
 
       </View>
 
-      <Pressable
+      <Pressable style={styles.button} onPress={() => router.push("/scan")}>
 
-        style={styles.button}
-
-        onPress={() => router.push("/scan")}
-
-      >
-
-        <Text style={styles.buttonText}>
-
-          Scan Patient
-
-        </Text>
+        <Text style={styles.buttonText}>Scan Patient</Text>
 
       </Pressable>
 
-      <Pressable
+      <Pressable style={styles.secondaryButton} onPress={() => router.push("/patients")}>
 
-        style={styles.secondaryButton}
-
-        onPress={() => router.push("/patients")}
-
-      >
-
-        <Text style={styles.secondaryButtonText}>
-
-          My Patients
-
-        </Text>
+        <Text style={styles.secondaryButtonText}>My Patients</Text>
 
       </Pressable>
 
-      <Pressable
+      <Pressable style={styles.secondaryButton} onPress={() => router.push("/history")}>
 
-        style={styles.secondaryButton}
-
-        onPress={() => router.push("/history")}
-
-      >
-
-        <Text style={styles.secondaryButtonText}>
-
-          History
-
-        </Text>
+        <Text style={styles.secondaryButtonText}>History</Text>
 
       </Pressable>
 

@@ -22,8 +22,18 @@ export function getMyPatients() {
 
 }
 
-export function getMyPatientCount() {
+export function getDashboardStats() {
 
-  return assignedPatientIds.length;
+  return {
+
+    active: assignedPatientIds.length,
+
+    incoming: 0,
+
+    transferred: 0,
+
+    completed: 0,
+
+  };
 
 }
