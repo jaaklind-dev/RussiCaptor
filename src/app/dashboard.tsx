@@ -14,7 +14,11 @@ export default function DashboardScreen() {
 
       <Text style={styles.title}>CM Dashboard</Text>
 
-      <Text style={styles.subtitle}>Case Manager: Jaak</Text>
+      <Text style={styles.subtitle}>
+
+        Case Manager: Jaak
+
+      </Text>
 
       <View style={styles.card}>
 
@@ -28,21 +32,51 @@ export default function DashboardScreen() {
 
       </View>
 
-      <Pressable style={styles.button}>
+      <Pressable
 
-        <Text style={styles.buttonText}>Scan Patient</Text>
+        style={styles.button}
+
+        onPress={() => router.push("/scan")}
+
+      >
+
+        <Text style={styles.buttonText}>
+
+          Scan Patient
+
+        </Text>
 
       </Pressable>
 
-      <Pressable style={styles.secondaryButton} onPress={() => router.push("/patients")}>
+      <Pressable
 
-        <Text style={styles.secondaryButtonText}>My Patients</Text>
+        style={styles.secondaryButton}
+
+        onPress={() => router.push("/patients")}
+
+      >
+
+        <Text style={styles.secondaryButtonText}>
+
+          My Patients
+
+        </Text>
 
       </Pressable>
 
-      <Pressable style={styles.secondaryButton}>
+      <Pressable
 
-        <Text style={styles.secondaryButtonText}>History</Text>
+        style={styles.secondaryButton}
+
+        onPress={() => router.push("/history")}
+
+      >
+
+        <Text style={styles.secondaryButtonText}>
+
+          History
+
+        </Text>
 
       </Pressable>
 
@@ -58,7 +92,7 @@ const styles = StyleSheet.create({
 
     flex: 1,
 
-    backgroundColor: "white",
+    backgroundColor: "#ffffff",
 
     justifyContent: "center",
 
@@ -130,13 +164,13 @@ const styles = StyleSheet.create({
 
     alignItems: "center",
 
-    marginTop: 10,
+    marginBottom: 12,
 
   },
 
   buttonText: {
 
-    color: "white",
+    color: "#ffffff",
 
     fontWeight: "bold",
 
@@ -160,7 +194,7 @@ const styles = StyleSheet.create({
 
     alignItems: "center",
 
-    marginTop: 12,
+    marginBottom: 12,
 
   },
 
