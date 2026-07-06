@@ -282,13 +282,11 @@ const styles = StyleSheet.create({
 
   },
 
-tabsContent: {
+  tabsContent: {
 
-  gap: 8,
+    gap: 8,
 
-  paddingRight: 64,
-
-},
+  },
 
   tabButton: {
 
