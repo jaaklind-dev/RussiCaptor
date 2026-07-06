@@ -1,12 +1,44 @@
 import { router, useLocalSearchParams } from "expo-router";
 
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import AppHeader from "@/components/AppHeader";
 
-export default function PatientOverviewScreen() {
+import { findPatientById } from "@/services/PatientRepository";
+
+type PatientTab = "overview" | "timeline" | "labs" | "imaging" | "questions" | "notes";
+
+export default function PatientWorkspaceScreen() {
 
   const { id } = useLocalSearchParams<{ id: string }>();
+
+  const [activeTab, setActiveTab] = useState<PatientTab>("overview");
+
+  const patient = findPatientById(id ?? "");
+
+  if (!patient) {
+
+    return (
+
+      <View style={styles.container}>
+
+        <AppHeader />
+
+        <Text style={styles.title}>Patsienti ei leitud</Text>
+
+        <Pressable style={styles.secondaryButton} onPress={() => router.push("/dashboard")}>
+
+          <Text style={styles.secondaryButtonText}>Back to Dashboard</Text>
+
+        </Pressable>
+
+      </View>
+
+    );
+
+  }
 
   return (
 
@@ -14,57 +46,161 @@ export default function PatientOverviewScreen() {
 
       <AppHeader />
 
-      <Text style={styles.title}>{id}</Text>
+      <View style={styles.headerBlock}>
 
-      <Text style={styles.subtitle}>Jüri Kask · P2 · EMO triaaž</Text>
+        <Text style={styles.patientId}>{patient.id}</Text>
 
-      <View style={styles.card}>
+        <Text style={styles.patientName}>{patient.name}</Text>
 
-        <Text style={styles.sectionTitle}>Patient Overview</Text>
+        <Text style={styles.patientMeta}>
 
-        <Text style={styles.row}>Current CM: Jaak</Text>
+          {patient.triage} · {patient.location} · Active
 
-        <Text style={styles.row}>Status: Active</Text>
+        </Text>
 
-        <Text style={styles.row}>Last seen: 09:22</Text>
+        <Text style={styles.cmLine}>Current CM: Jaak</Text>
 
       </View>
 
-      <Pressable style={styles.button}>
+      <ScrollView
 
-        <Text style={styles.buttonText}>MIST</Text>
+        horizontal
+
+        showsHorizontalScrollIndicator={false}
+
+        style={styles.tabs}
+
+        contentContainerStyle={styles.tabsContent}
+
+      >
+
+        <TabButton label="Overview" value="overview" activeTab={activeTab} setActiveTab={setActiveTab} />
+
+        <TabButton label="Timeline" value="timeline" activeTab={activeTab} setActiveTab={setActiveTab} />
+
+        <TabButton label="Labs" value="labs" activeTab={activeTab} setActiveTab={setActiveTab} />
+
+        <TabButton label="Imaging" value="imaging" activeTab={activeTab} setActiveTab={setActiveTab} />
+
+        <TabButton label="Questions" value="questions" activeTab={activeTab} setActiveTab={setActiveTab} />
+
+        <TabButton label="Notes" value="notes" activeTab={activeTab} setActiveTab={setActiveTab} />
+
+      </ScrollView>
+
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
+
+        {activeTab === "overview" && <OverviewTab />}
+
+        {activeTab === "timeline" && <PlaceholderTab title="Timeline" text="Siia tuleb patsiendi ajapõhine kulg ja avaldatud sündmused." />}
+
+        {activeTab === "labs" && <PlaceholderTab title="Labs" text="Siia tulevad laboritulemused, mis avatakse reageerijate tegevuse alusel." />}
+
+        {activeTab === "imaging" && <PlaceholderTab title="Imaging" text="Siia tulevad XR, CT, EKG, ultraheli ja muud failid." />}
+
+        {activeTab === "questions" && <PlaceholderTab title="Questions" text="Siia tulevad teemade kaupa vastused, mida CM avaldab ainult küsimise peale." />}
+
+        {activeTab === "notes" && <PlaceholderTab title="CM Notes" text="Siia tulevad ainult Case Managerile nähtavad märkmed ja truth file." />}
+
+      </ScrollView>
+
+      <Pressable style={styles.secondaryButton} onPress={() => router.push("/dashboard")}>
+
+        <Text style={styles.secondaryButtonText}>Back to Dashboard</Text>
 
       </Pressable>
 
-      <Pressable style={styles.button}>
+    </View>
 
-        <Text style={styles.buttonText}>Questions</Text>
+  );
 
-      </Pressable>
+}
 
-      <Pressable style={styles.button}>
+function TabButton({
 
-        <Text style={styles.buttonText}>Timeline</Text>
+  label,
 
-      </Pressable>
+  value,
 
-      <Pressable style={styles.button}>
+  activeTab,
 
-        <Text style={styles.buttonText}>Labs</Text>
+  setActiveTab,
 
-      </Pressable>
+}: {
 
-      <Pressable style={styles.button}>
+  label: string;
 
-        <Text style={styles.buttonText}>Imaging</Text>
+  value: PatientTab;
 
-      </Pressable>
+  activeTab: PatientTab;
 
-      <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
+  setActiveTab: (value: PatientTab) => void;
 
-        <Text style={styles.secondaryButtonText}>Back</Text>
+}) {
 
-      </Pressable>
+  const isActive = activeTab === value;
+
+  return (
+
+    <Pressable
+
+      style={[styles.tabButton, isActive && styles.tabButtonActive]}
+
+      onPress={() => setActiveTab(value)}
+
+    >
+
+      <Text style={[styles.tabButtonText, isActive && styles.tabButtonTextActive]}>
+
+        {label}
+
+      </Text>
+
+    </Pressable>
+
+  );
+
+}
+
+function OverviewTab() {
+
+  return (
+
+    <View style={styles.card}>
+
+      <Text style={styles.sectionTitle}>MIST</Text>
+
+      <Text style={styles.row}>M – Haigestus kodus, saabus EMO-sse omal jalal.</Text>
+
+      <Text style={styles.row}>I – Nägemishäire, nõrkus, neelamisel ebamugavus.</Text>
+
+      <Text style={styles.row}>S – RR 138/82, HR 92, SpO₂ 97%, GCS 15.</Text>
+
+      <Text style={styles.row}>T – Ravi veel puudub.</Text>
+
+      <View style={styles.divider} />
+
+      <Text style={styles.sectionTitle}>Critical reminders</Text>
+
+      <Text style={styles.row}>• Ära avalda Mimino vihjet enne toiduanamneesi küsimist.</Text>
+
+      <Text style={styles.row}>• Kui küsitakse hingamist, ava VC/NIF.</Text>
+
+    </View>
+
+  );
+
+}
+
+function PlaceholderTab({ title, text }: { title: string; text: string }) {
+
+  return (
+
+    <View style={styles.card}>
+
+      <Text style={styles.sectionTitle}>{title}</Text>
+
+      <Text style={styles.row}>{text}</Text>
 
     </View>
 
@@ -78,31 +214,125 @@ const styles = StyleSheet.create({
 
     flex: 1,
 
-    backgroundColor: "white",
+    backgroundColor: "#ffffff",
 
     padding: 24,
 
-    paddingTop: 120,
+    paddingTop: 108,
 
   },
 
-  title: {
+  headerBlock: {
 
-    fontSize: 38,
+    backgroundColor: "#f2f4f7",
+
+    borderRadius: 16,
+
+    padding: 18,
+
+    marginBottom: 14,
+
+  },
+
+  patientId: {
+
+    fontSize: 18,
 
     fontWeight: "bold",
 
-    marginBottom: 8,
+    color: "#005BBB",
 
   },
 
-  subtitle: {
+  patientName: {
+
+    fontSize: 32,
+
+    fontWeight: "bold",
+
+    marginTop: 4,
+
+  },
+
+  patientMeta: {
 
     fontSize: 18,
 
     color: "#555",
 
-    marginBottom: 20,
+    marginTop: 6,
+
+  },
+
+  cmLine: {
+
+    fontSize: 16,
+
+    color: "#777",
+
+    marginTop: 6,
+
+  },
+
+  tabs: {
+
+    maxHeight: 48,
+
+    marginBottom: 12,
+
+  },
+
+  tabsContent: {
+
+    gap: 8,
+
+  },
+
+  tabButton: {
+
+    borderWidth: 2,
+
+    borderColor: "#005BBB",
+
+    borderRadius: 12,
+
+    paddingVertical: 10,
+
+    paddingHorizontal: 14,
+
+  },
+
+  tabButtonActive: {
+
+    backgroundColor: "#005BBB",
+
+  },
+
+  tabButtonText: {
+
+    color: "#005BBB",
+
+    fontWeight: "bold",
+
+    fontSize: 15,
+
+  },
+
+  tabButtonTextActive: {
+
+    color: "#ffffff",
+
+  },
+
+  content: {
+
+    flex: 1,
+
+  },
+
+  contentInner: {
+
+    paddingBottom: 16,
 
   },
 
@@ -114,19 +344,17 @@ const styles = StyleSheet.create({
 
     padding: 18,
 
-    marginBottom: 20,
-
     gap: 8,
 
   },
 
   sectionTitle: {
 
-    fontSize: 20,
+    fontSize: 22,
 
     fontWeight: "bold",
 
-    marginBottom: 6,
+    marginBottom: 4,
 
   },
 
@@ -136,29 +364,27 @@ const styles = StyleSheet.create({
 
     color: "#444",
 
-  },
-
-  button: {
-
-    backgroundColor: "#005BBB",
-
-    paddingVertical: 16,
-
-    paddingHorizontal: 20,
-
-    borderRadius: 12,
-
-    marginBottom: 12,
+    lineHeight: 23,
 
   },
 
-  buttonText: {
+  divider: {
 
-    color: "white",
+    height: 1,
+
+    backgroundColor: "#d0d5dd",
+
+    marginVertical: 10,
+
+  },
+
+  title: {
+
+    fontSize: 34,
 
     fontWeight: "bold",
 
-    fontSize: 18,
+    marginBottom: 24,
 
   },
 
