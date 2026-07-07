@@ -42,7 +42,7 @@ export const allPatients: Patient[] = [
 
         description: "Patsient saabub omal jalal. Kaebab nägemise hägustumist ja nõrkust.",
 
-        revealed: true,
+        visibility: "revealed",
 
       },
 
@@ -56,7 +56,7 @@ export const allPatients: Patient[] = [
 
         description: "Kui CM otsustab kulgu arendada, muutub patsiendi kõne nasaalseks.",
 
-        revealed: false,
+        visibility: "hidden",
 
       },
 
@@ -70,7 +70,7 @@ export const allPatients: Patient[] = [
 
         description: "Patsient ütleb, et vesi läheb kurku valesti.",
 
-        revealed: false,
+        visibility: "hidden",
 
       },
 
@@ -88,7 +88,7 @@ export const allPatients: Patient[] = [
 
         value: "7.36",
 
-        revealed: false,
+        visibility: "hidden",
 
       },
 
@@ -104,7 +104,7 @@ export const allPatients: Patient[] = [
 
         unit: "mmHg",
 
-        revealed: false,
+        visibility: "hidden",
 
       },
 
@@ -122,7 +122,7 @@ export const allPatients: Patient[] = [
 
         description: "Ägedat infiltraati ei nähtu. Aspiratsiooni tunnused puuduvad.",
 
-        revealed: false,
+        visibility: "hidden",
 
       },
 
@@ -140,7 +140,7 @@ export const allPatients: Patient[] = [
 
         answer: "Jah, sõi eile õhtul väljas.",
 
-        revealed: false,
+        visibility: "hidden",
 
       },
 
@@ -154,7 +154,7 @@ export const allPatients: Patient[] = [
 
         answer: "Gruusia restoranis. Täpsemal küsimisel: Jõhvis.",
 
-        revealed: false,
+        visibility: "hidden",
 
       },
 
@@ -168,7 +168,7 @@ export const allPatients: Patient[] = [
 
         answer: "Jah, patsient kirjeldab kahelinägemist.",
 
-        revealed: false,
+        visibility: "hidden",
 
       },
 

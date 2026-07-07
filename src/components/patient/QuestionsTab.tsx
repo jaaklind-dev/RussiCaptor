@@ -38,7 +38,7 @@ export default function QuestionsTab({ questions, onReveal }: Props) {
 
           </Pressable>
 
-          {question.revealed && (
+          {question.visibility === "revealed" && (
 
             <Text style={styles.answer}>{question.answer}</Text>
 

@@ -1,3 +1,4 @@
+import { Visibility } from "@/models/Visibility";
 export type TriageCategory = "P1" | "P2" | "P3" | "P4";
 
 export type PatientStatus =
@@ -20,7 +21,7 @@ export type TimelineEvent = {
 
   description: string;
 
-  revealed: boolean;
+  visibility: "hidden",;
 
 };
 
@@ -36,7 +37,7 @@ export type LabResult = {
 
   unit?: string;
 
-  revealed: boolean;
+  visibility: "hidden",
 
 };
 
@@ -52,7 +53,7 @@ export type ImagingStudy = {
 
   file?: string;
 
-  revealed: boolean;
+  visibility: "hidden",
 
 };
 
@@ -66,7 +67,7 @@ export type QuestionItem = {
 
   answer: string;
 
-  revealed: boolean;
+visibility: Visibility;
 
 };
 
@@ -120,4 +121,4 @@ export type Patient = {
 
   notes: PatientNote[];
 
-};
+});

@@ -12,7 +12,7 @@ export function revealQuestion(
 
     question.id === questionId
 
-      ? { ...question, revealed: true }
+      ? { ...question, visibility: "revealed" }
 
       : question
 
