@@ -8,6 +8,7 @@ import AppHeader from "@/components/AppHeader";
 
 import QuestionsTab from "@/components/patient/QuestionsTab";
 import { findPatientById } from "@/services/PatientRepository";
+import { revealQuestion } from "@/services/RevealService";
 type PatientTab = "overview" | "timeline" | "labs" | "imaging" | "questions" | "notes";
 
 export default function PatientWorkspaceScreen() {
@@ -17,6 +18,7 @@ export default function PatientWorkspaceScreen() {
   const [activeTab, setActiveTab] = useState<PatientTab>("overview");
 
   const patient = findPatientById(id ?? "");
+  const [questions, setQuestions] = useState(patient?.questions ?? []);
 
   if (!patient) {
 
@@ -90,7 +92,21 @@ export default function PatientWorkspaceScreen() {
         {activeTab === "imaging" && <PlaceholderTab title="Imaging" text="Siia tulevad XR, CT, EKG, ultraheli ja muud failid." />}
 
 {activeTab === "questions" && (
-  <QuestionsTab questions={patient.questions} />
+ <QuestionsTab
+
+  questions={questions}
+
+  onReveal={(questionId) => {
+
+    setQuestions((currentQuestions) =>
+
+      revealQuestion(currentQuestions, questionId)
+
+    );
+
+  }}
+
+/>
 )}
 
         {activeTab === "notes" && <PlaceholderTab title="CM Notes" text="Siia tulevad ainult Case Managerile nähtavad märkmed ja truth file." />}
