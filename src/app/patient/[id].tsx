@@ -6,8 +6,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import AppHeader from "@/components/AppHeader";
 
+import QuestionsTab from "@/components/patient/QuestionsTab";
 import { findPatientById } from "@/services/PatientRepository";
-
 type PatientTab = "overview" | "timeline" | "labs" | "imaging" | "questions" | "notes";
 
 export default function PatientWorkspaceScreen() {
@@ -90,15 +90,7 @@ export default function PatientWorkspaceScreen() {
         {activeTab === "imaging" && <PlaceholderTab title="Imaging" text="Siia tulevad XR, CT, EKG, ultraheli ja muud failid." />}
 
 {activeTab === "questions" && (
-
-  <PlaceholderTab
-
-    title="Questions"
-
-    text="Siia tulevad teemade kaupa vastused, mida CM avaldab ainult küsimise peale."
-
-  />
-
+  <QuestionsTab questions={patient.questions} />
 )}
 
         {activeTab === "notes" && <PlaceholderTab title="CM Notes" text="Siia tulevad ainult Case Managerile nähtavad märkmed ja truth file." />}
