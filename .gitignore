@@ -41,3 +41,8 @@ example
 # generated native folders
 /ios
 /android
+# JetBrains IDE
+.idea/
+
+# VS Code / Android Studio search files
+*.code-search
