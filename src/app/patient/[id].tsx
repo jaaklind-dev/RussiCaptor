@@ -183,7 +183,7 @@ function OverviewTab() {
 
       <Text style={styles.sectionTitle}>Critical reminders</Text>
 
-      <Text style={styles.row}>• Ära avalda Mimino vihjet enne toiduanamneesi küsimist.</Text>
+      <Text style={styles.row}>• Ära avalda restorani vihjet enne toiduanamneesi küsimist.</Text>
 
       <Text style={styles.row}>• Kui küsitakse hingamist, ava VC/NIF.</Text>
 

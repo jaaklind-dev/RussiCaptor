@@ -54,7 +54,7 @@ export const allPatients: Patient[] = [
 
         title: "Kõne muutub nasaalseks",
 
-        description: "Kui CM otsustab kulgu avaldada, muutub patsiendi kõne nasaalseks.",
+        description: "Kui CM otsustab kulgu arendada, muutub patsiendi kõne nasaalseks.",
 
         revealed: false,
 
@@ -152,7 +152,7 @@ export const allPatients: Patient[] = [
 
         prompt: "Kus patsient sõi?",
 
-        answer: "Gruusia restoranis. Täpsemal küsimisel: Mimino Jõhvis.",
+        answer: "Gruusia restoranis. Täpsemal küsimisel: Jõhvis.",
 
         revealed: false,
 
@@ -182,7 +182,7 @@ export const allPatients: Patient[] = [
 
         title: "CM truth file",
 
-        text: "Tegelik stsenaariumi kahtlus on botulism. Ära avalda Mimino vihjet enne, kui reageerijad küsivad toitumise või restorani kohta.",
+        text: "Tegelik stsenaariumi kahtlus on botulism. Ära avalda restorani vihjet enne, kui reageerijad küsivad toitumise või restorani kohta.",
 
       },
 
