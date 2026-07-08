@@ -1,17 +1,18 @@
-import { QuestionItem } from "@/models/Patient";
+import { setQuestionVisibility } from "@/repositories/QuestionRepository";
 import { logQuestionRevealed } from "@/repositories/TimelineRepository";
 
 export function revealQuestion(
-  questions: QuestionItem[],
   patientId: string,
   questionId: string
-): QuestionItem[] {
+): void {
+  setQuestionVisibility(
+    patientId,
+    questionId,
+    "revealed"
+  );
 
-  logQuestionRevealed(patientId, questionId);
-
-  return questions.map((question) =>
-    question.id === questionId
-      ? { ...question, visibility: "revealed" }
-      : question
+  logQuestionRevealed(
+    patientId,
+    questionId
   );
 }

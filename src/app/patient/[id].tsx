@@ -100,20 +100,12 @@ const [questions, setQuestions] = useState(
 
 {activeTab === "questions" && (
  <QuestionsTab
-
-  questions={questions}
-
-  onReveal={(questionId) => {
-
-    setQuestions((currentQuestions) =>
-
-   revealQuestion(currentQuestions, patient.id, questionId)
-
-    );
-
-  }}
-
-/>
+   questions={questions}
+   onReveal={(questionId) => {
+     revealQuestion(patient.id, questionId);
+     setQuestions(getQuestions(patient.id));
+   }}
+ />
 )}
 
         {activeTab === "notes" && <PlaceholderTab title="CM Notes" text="Siia tulevad ainult Case Managerile nähtavad märkmed ja truth file." />}

@@ -7,14 +7,29 @@ export function getQuestions(patientId: string): Question[] {
     .sort((a, b) => a.order - b.order);
 }
 
-export function revealQuestion(
+export function getQuestion(
   patientId: string,
   questionId: string
-): Question[] {
-  return questions.map((question) =>
-    question.patientId === patientId &&
-    question.id === questionId
-      ? { ...question, visibility: "revealed" }
-      : question
+): Question | undefined {
+  return questions.find(
+    (question) =>
+      question.patientId === patientId &&
+      question.id === questionId
   );
+}
+
+export function setQuestionVisibility(
+  patientId: string,
+  questionId: string,
+  visibility: Question["visibility"]
+): void {
+  const question = questions.find(
+    (question) =>
+      question.patientId === patientId &&
+      question.id === questionId
+  );
+
+  if (question) {
+    question.visibility = visibility;
+  }
 }
