@@ -9,6 +9,8 @@ import AppHeader from "@/components/AppHeader";
 import QuestionsTab from "@/components/patient/QuestionsTab";
 import { findPatientById } from "@/repositories/PatientRepository";
 import { revealQuestion } from "@/services/RevealService";
+import TimelineTab from "@/components/patient/TimelineTab";
+import { getTimelineEvents } from "@/repositories/TimelineRepository";
 type PatientTab = "overview" | "timeline" | "labs" | "imaging" | "questions" | "notes";
 
 export default function PatientWorkspaceScreen() {
@@ -85,7 +87,9 @@ export default function PatientWorkspaceScreen() {
 
         {activeTab === "overview" && <OverviewTab />}
 
-        {activeTab === "timeline" && <PlaceholderTab title="Timeline" text="Siia tuleb patsiendi ajapõhine kulg ja avaldatud sündmused." />}
+        {activeTab === "timeline" && (
+          <TimelineTab events={getTimelineEvents(patient.id)} />
+        )}
 
         {activeTab === "labs" && <PlaceholderTab title="Labs" text="Siia tulevad laboritulemused, mis avatakse reageerijate tegevuse alusel." />}
 
