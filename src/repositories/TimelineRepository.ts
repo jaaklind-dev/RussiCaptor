@@ -11,3 +11,28 @@ export function getTimelineEvents(patientId: string): TimelineEvent[] {
 export function addTimelineEvent(event: TimelineEvent): void {
   events.push(event);
 }
+
+export function logQuestionRevealed(
+  patientId: string,
+  questionId: string
+): void {
+  addTimelineEvent({
+    id: `TL-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+
+    exerciseId: "demo",
+
+    patientId,
+
+    timestamp: new Date().toISOString(),
+
+    type: "question",
+
+    title: "Question revealed",
+
+    description: `Question ${questionId} was revealed.`,
+
+    author: "CM",
+
+    visibility: "revealed",
+  });
+}

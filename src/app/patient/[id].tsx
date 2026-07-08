@@ -100,7 +100,7 @@ export default function PatientWorkspaceScreen() {
 
     setQuestions((currentQuestions) =>
 
-      revealQuestion(currentQuestions, questionId)
+   revealQuestion(currentQuestions, patient.id, questionId)
 
     );
 
