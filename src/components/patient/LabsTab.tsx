@@ -6,6 +6,8 @@ type Props = {
 };
 
 export default function LabsTab({ labs }: Props) {
+  const panels = [...new Set(labs.map((lab) => lab.panel))];
+
   return (
     <View style={styles.card}>
       <Text style={styles.title}>Laboratory Results</Text>
@@ -13,21 +15,45 @@ export default function LabsTab({ labs }: Props) {
       {labs.length === 0 ? (
         <Text style={styles.empty}>No laboratory results.</Text>
       ) : (
-        labs.map((lab) => (
-          <View key={lab.id} style={styles.row}>
-            <Text style={styles.name}>
-              {lab.panel} • {lab.name}
-            </Text>
+        panels.map((panel) => {
+          const panelLabs = labs.filter(
+            (lab) => lab.panel === panel
+          );
 
-            <Text style={styles.status}>{lab.status}</Text>
+          const status = panelLabs[0].status;
 
-            {lab.visibility === "revealed" && (
-              <Text style={styles.value}>
-                {lab.value} {lab.unit}
-              </Text>
-            )}
-          </View>
-        ))
+          return (
+            <View key={panel} style={styles.panel}>
+              <View style={styles.panelHeader}>
+                <Text style={styles.panelTitle}>
+                  {panel}
+                </Text>
+
+                <Text style={styles.status}>
+                  {status}
+                </Text>
+              </View>
+
+              {panelLabs.map((lab) => (
+                <View key={lab.id} style={styles.row}>
+                  <Text style={styles.name}>
+                    {lab.name}
+                  </Text>
+
+                  {lab.visibility === "revealed" ? (
+                    <Text style={styles.value}>
+                      {lab.value} {lab.unit}
+                    </Text>
+                  ) : (
+                    <Text style={styles.hidden}>
+                      Hidden
+                    </Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          );
+        })
       )}
     </View>
   );
@@ -39,30 +65,59 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
   },
+
   title: {
     fontSize: 22,
     fontWeight: "bold",
     marginBottom: 14,
   },
+
   empty: {
     color: "#666",
     fontStyle: "italic",
   },
-  row: {
-    borderTopWidth: 1,
-    borderTopColor: "#ddd",
-    paddingTop: 10,
-    marginTop: 10,
+
+  panel: {
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: "#d0d5dd",
+    borderRadius: 10,
+    padding: 12,
+    backgroundColor: "#fff",
   },
-  name: {
+
+  panelHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+
+  panelTitle: {
     fontWeight: "bold",
+    fontSize: 18,
   },
+
   status: {
     color: "#666",
-    marginTop: 2,
+    fontWeight: "600",
   },
+
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+  },
+
+  name: {
+    fontWeight: "500",
+  },
+
   value: {
-    marginTop: 6,
-    fontSize: 16,
+    fontWeight: "bold",
+  },
+
+  hidden: {
+    color: "#999",
+    fontStyle: "italic",
   },
 });

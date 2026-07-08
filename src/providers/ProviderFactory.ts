@@ -1,3 +1,8 @@
-import { DemoDataProvider } from "@/providers/DemoDataProvider";
+import { DemoDataProvider } from "./DemoDataProvider";
+import { OneDriveProvider } from "./OneDriveProvider";
 
-export const dataProvider = new DemoDataProvider();
+const USE_DEMO_DATA = true;
+
+export const dataProvider = USE_DEMO_DATA
+  ? new DemoDataProvider()
+  : new OneDriveProvider();

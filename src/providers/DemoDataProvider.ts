@@ -1,20 +1,20 @@
 import { Patient } from "@/models/Patient";
-import { allPatients } from "@/data/demoPatient";
+import { patients } from "@/data/patients";
 import { DataProvider } from "./DataProvider";
 
 export class DemoDataProvider implements DataProvider {
   getPatients(): Patient[] {
-    return allPatients;
+    return patients;
   }
 
   getPatientById(id: string): Patient | undefined {
-    return allPatients.find((p) => p.id === id);
+    return patients.find((p) => p.id === id);
   }
 
   getPatientByNationalId(
     nationalId: string
   ): Patient | undefined {
-    return allPatients.find(
+    return patients.find(
       (p) => p.isikukood === nationalId
     );
   }
