@@ -1,6 +1,21 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { LabResult } from "@/models/LabResult";
+import { et } from "@/locales/et";
+function getStatusLabel(status: LabResult["status"]) {
+  switch (status) {
+    case "processing":
+      return et.lab.status.processing;
 
+    case "available":
+      return et.lab.status.available;
+
+    case "viewed":
+      return et.lab.status.viewed;
+
+    default:
+      return status;
+  }
+}
 type Props = {
   labs: LabResult[];
   onOpenPanel: (panel: string) => void;
@@ -11,10 +26,10 @@ export default function LabsTab({ labs, onOpenPanel }: Props) {
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>Laboratory Results</Text>
+      <Text style={styles.title}>{et.lab.title}</Text>
 
       {labs.length === 0 ? (
-        <Text style={styles.empty}>No laboratory results.</Text>
+        <Text style={styles.empty}>{et.common.noData}</Text>
       ) : (
         panels.map((panel) => {
           const panelLabs = labs.filter((lab) => lab.panel === panel);
@@ -28,7 +43,9 @@ export default function LabsTab({ labs, onOpenPanel }: Props) {
               <View style={styles.panelHeader}>
                 <View>
                   <Text style={styles.panelTitle}>{panel}</Text>
-                  <Text style={styles.status}>{status}</Text>
+                 <Text style={styles.status}>
+                   {getStatusLabel(status)}
+                 </Text>
                 </View>
 
                 {!isRevealed && status === "available" && (
@@ -36,7 +53,7 @@ export default function LabsTab({ labs, onOpenPanel }: Props) {
                     style={styles.openButton}
                     onPress={() => onOpenPanel(panel)}
                   >
-                    <Text style={styles.openButtonText}>Open</Text>
+                    <Text style={styles.openButtonText}>{et.common.open}</Text>
                   </Pressable>
                 )}
               </View>
@@ -50,7 +67,7 @@ export default function LabsTab({ labs, onOpenPanel }: Props) {
                       {lab.value} {lab.unit}
                     </Text>
                   ) : (
-                    <Text style={styles.hidden}>Hidden</Text>
+                    <Text style={styles.hidden}>{et.common.hidden}</Text>
                   )}
                 </View>
               ))}
