@@ -11,6 +11,7 @@ import { findPatientById } from "@/repositories/PatientRepository";
 import { revealQuestion } from "@/services/RevealService";
 import TimelineTab from "@/components/patient/TimelineTab";
 import { getTimelineEvents } from "@/repositories/TimelineRepository";
+import { getQuestions } from "@/repositories/QuestionRepository";
 type PatientTab = "overview" | "timeline" | "labs" | "imaging" | "questions" | "notes";
 
 export default function PatientWorkspaceScreen() {
@@ -20,7 +21,9 @@ export default function PatientWorkspaceScreen() {
   const [activeTab, setActiveTab] = useState<PatientTab>("overview");
 
   const patient = findPatientById(id ?? "");
-  const [questions, setQuestions] = useState(patient?.questions ?? []);
+const [questions, setQuestions] = useState(
+  patient ? getQuestions(patient.id) : []
+);
 
   if (!patient) {
 
