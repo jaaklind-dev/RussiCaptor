@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -15,6 +15,7 @@ import { getQuestions } from "@/repositories/QuestionRepository";
 import LabsTab from "@/components/patient/LabsTab";
 import { getLabResults } from "@/repositories/LabRepository";
 import { openLabPanel } from "@/services/LabService";
+import { subscribeToSync } from "@/services/SyncService";
 type PatientTab = "overview" | "timeline" | "labs" | "imaging" | "questions" | "notes";
 
 export default function PatientWorkspaceScreen() {
@@ -23,6 +24,11 @@ export default function PatientWorkspaceScreen() {
 
   const [activeTab, setActiveTab] = useState<PatientTab>("overview");
 const [refreshKey, setRefreshKey] = useState(0);
+useEffect(() => {
+  return subscribeToSync(() => {
+    setRefreshKey((k) => k + 1);
+  });
+}, []);
   const patient = findPatientById(id ?? "");
 const [questions, setQuestions] = useState(
   patient ? getQuestions(patient.id) : []
@@ -102,7 +108,6 @@ const [questions, setQuestions] = useState(
            labs={getLabResults(patient.id)}
            onOpenPanel={(panel) => {
              openLabPanel(patient.id, panel);
-             setRefreshKey((k) => k + 1);
            }}
          />
        )}
