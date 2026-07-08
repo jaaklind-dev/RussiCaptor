@@ -16,11 +16,5 @@ export const patients: Patient[] = [
       signs: "RR 138/82, HR 92, SpO₂ 97%, GCS 15.",
       treatment: "Ravi veel puudub.",
     },
-
-    timeline: [],
-    labs: [],
-    imaging: [],
-    questions: [],
-    notes: [],
   },
 ];
