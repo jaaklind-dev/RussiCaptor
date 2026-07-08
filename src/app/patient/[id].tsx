@@ -12,6 +12,8 @@ import { revealQuestion } from "@/services/RevealService";
 import TimelineTab from "@/components/patient/TimelineTab";
 import { getTimelineEvents } from "@/repositories/TimelineRepository";
 import { getQuestions } from "@/repositories/QuestionRepository";
+import LabsTab from "@/components/patient/LabsTab";
+import { getLabResults } from "@/repositories/LabRepository";
 type PatientTab = "overview" | "timeline" | "labs" | "imaging" | "questions" | "notes";
 
 export default function PatientWorkspaceScreen() {
@@ -94,7 +96,9 @@ const [questions, setQuestions] = useState(
           <TimelineTab events={getTimelineEvents(patient.id)} />
         )}
 
-        {activeTab === "labs" && <PlaceholderTab title="Labs" text="Siia tulevad laboritulemused, mis avatakse reageerijate tegevuse alusel." />}
+       {activeTab === "labs" && (
+         <LabsTab labs={getLabResults(patient.id)} />
+       )}
 
         {activeTab === "imaging" && <PlaceholderTab title="Imaging" text="Siia tulevad XR, CT, EKG, ultraheli ja muud failid." />}
 

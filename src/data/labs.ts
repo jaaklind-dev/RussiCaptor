@@ -1,0 +1,42 @@
+import { LabResult } from "@/models/LabResult";
+
+export const labs: LabResult[] = [
+  {
+    id: "LAB-001",
+    exerciseId: "demo",
+    patientId: "PT-001",
+    panel: "ABG",
+    name: "pH",
+    value: "7.36",
+    unit: "",
+    referenceRange: "7.35–7.45",
+    status: "available",
+    visibility: "hidden",
+    releasedAt: "09:35",
+  },
+  {
+    id: "LAB-002",
+    exerciseId: "demo",
+    patientId: "PT-001",
+    panel: "ABG",
+    name: "pCO₂",
+    value: "47",
+    unit: "mmHg",
+    referenceRange: "35–45",
+    status: "available",
+    visibility: "hidden",
+    releasedAt: "09:35",
+  },
+  {
+    id: "LAB-003",
+    exerciseId: "demo",
+    patientId: "PT-001",
+    panel: "CBC",
+    name: "WBC",
+    value: "16.2",
+    unit: "x10⁹/L",
+    referenceRange: "4.0–10.0",
+    status: "processing",
+    visibility: "hidden",
+  },
+];
