@@ -1,4 +1,5 @@
 import { setLabVisibility } from "@/repositories/LabRepository";
+import { logLabPanelViewed } from "@/repositories/TimelineRepository";
 
 export function openLabPanel(
   patientId: string,
@@ -8,5 +9,10 @@ export function openLabPanel(
     patientId,
     panel,
     "revealed"
+  );
+
+  logLabPanelViewed(
+    patientId,
+    panel
   );
 }

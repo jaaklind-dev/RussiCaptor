@@ -14,6 +14,7 @@ import { getTimelineEvents } from "@/repositories/TimelineRepository";
 import { getQuestions } from "@/repositories/QuestionRepository";
 import LabsTab from "@/components/patient/LabsTab";
 import { getLabResults } from "@/repositories/LabRepository";
+import { openLabPanel } from "@/services/LabService";
 type PatientTab = "overview" | "timeline" | "labs" | "imaging" | "questions" | "notes";
 
 export default function PatientWorkspaceScreen() {
@@ -21,7 +22,7 @@ export default function PatientWorkspaceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [activeTab, setActiveTab] = useState<PatientTab>("overview");
-
+const [refreshKey, setRefreshKey] = useState(0);
   const patient = findPatientById(id ?? "");
 const [questions, setQuestions] = useState(
   patient ? getQuestions(patient.id) : []
@@ -97,7 +98,13 @@ const [questions, setQuestions] = useState(
         )}
 
        {activeTab === "labs" && (
-         <LabsTab labs={getLabResults(patient.id)} />
+         <LabsTab
+           labs={getLabResults(patient.id)}
+           onOpenPanel={(panel) => {
+             openLabPanel(patient.id, panel);
+             setRefreshKey((k) => k + 1);
+           }}
+         />
        )}
 
         {activeTab === "imaging" && <PlaceholderTab title="Imaging" text="Siia tulevad XR, CT, EKG, ultraheli ja muud failid." />}

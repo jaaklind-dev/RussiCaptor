@@ -36,3 +36,27 @@ export function logQuestionRevealed(
     visibility: "revealed",
   });
 }
+export function logLabPanelViewed(
+  patientId: string,
+  panel: string
+): void {
+  addTimelineEvent({
+    id: `TL-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+
+    exerciseId: "demo",
+
+    patientId,
+
+    timestamp: new Date().toISOString(),
+
+    type: "lab",
+
+    title: `${panel} viewed`,
+
+    description: `${panel} laboratory panel was opened.`,
+
+    author: "CM",
+
+    visibility: "revealed",
+  });
+}
