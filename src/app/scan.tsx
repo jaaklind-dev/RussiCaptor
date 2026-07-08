@@ -7,7 +7,7 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 import AppHeader from "@/components/AppHeader";
 
 import { assignPatientToMe } from "@/services/AssignmentRepository";
-import { findPatientByNationalId } from "@/services/PatientRepository";
+import { findPatientByNationalId } from "@/repositories/PatientRepository";
 
 export default function ScanScreen() {
 

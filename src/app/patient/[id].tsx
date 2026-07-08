@@ -7,7 +7,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import AppHeader from "@/components/AppHeader";
 
 import QuestionsTab from "@/components/patient/QuestionsTab";
-import { findPatientById } from "@/services/PatientRepository";
+import { findPatientById } from "@/repositories/PatientRepository";
 import { revealQuestion } from "@/services/RevealService";
 type PatientTab = "overview" | "timeline" | "labs" | "imaging" | "questions" | "notes";
 

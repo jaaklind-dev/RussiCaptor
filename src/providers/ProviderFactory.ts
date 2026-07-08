@@ -1,13 +1,3 @@
-import { dataProvider } from "@/providers/ProviderFactory";
+import { DemoDataProvider } from "@/providers/DemoDataProvider";
 
-export function findPatientByNationalId(nationalId: string) {
-  return dataProvider.getPatientByNationalId(nationalId.trim());
-}
-
-export function findPatientById(patientId: string) {
-  return dataProvider.getPatientById(patientId);
-}
-
-export function getAllPatients() {
-  return dataProvider.getPatients();
-}
+export const dataProvider = new DemoDataProvider();

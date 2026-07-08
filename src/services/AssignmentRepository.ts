@@ -1,4 +1,4 @@
-import { findPatientById } from "@/services/PatientRepository";
+import { findPatientById } from "@/repositories/PatientRepository";
 
 let assignedPatientIds: string[] = [];
 
