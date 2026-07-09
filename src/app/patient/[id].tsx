@@ -5,16 +5,18 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import AppHeader from "@/components/AppHeader";
-
-import QuestionsTab from "@/components/patient/QuestionsTab";
-import { findPatientById } from "@/repositories/PatientRepository";
-import { revealQuestion } from "@/services/RevealService";
-import TimelineTab from "@/components/patient/TimelineTab";
-import { getTimelineEvents } from "@/repositories/TimelineRepository";
-import { getQuestions } from "@/repositories/QuestionRepository";
+import ImagingTab from "@/components/patient/ImagingTab";
 import LabsTab from "@/components/patient/LabsTab";
+import QuestionsTab from "@/components/patient/QuestionsTab";
+import TimelineTab from "@/components/patient/TimelineTab";
+import { getImagingStudies } from "@/repositories/ImagingRepository";
 import { getLabResults } from "@/repositories/LabRepository";
+import { findPatientById } from "@/repositories/PatientRepository";
+import { getQuestions } from "@/repositories/QuestionRepository";
+import { getTimelineEvents } from "@/repositories/TimelineRepository";
+import { openImagingStudy } from "@/services/ImagingService";
 import { openLabPanel } from "@/services/LabService";
+import { revealQuestion } from "@/services/RevealService";
 import { subscribeToSync } from "@/services/SyncService";
 type PatientTab = "overview" | "timeline" | "labs" | "imaging" | "questions" | "notes";
 
@@ -32,6 +34,9 @@ useEffect(() => {
   const patient = findPatientById(id ?? "");
 const [questions, setQuestions] = useState(
   patient ? getQuestions(patient.id) : []
+);
+const [imagingStudies, setImagingStudies] = useState(
+  patient ? getImagingStudies(patient.id) : []
 );
 
   if (!patient) {
@@ -112,7 +117,15 @@ const [questions, setQuestions] = useState(
          />
        )}
 
-        {activeTab === "imaging" && <PlaceholderTab title="Imaging" text="Siia tulevad XR, CT, EKG, ultraheli ja muud failid." />}
+       {activeTab === "imaging" && (
+  <ImagingTab
+    studies={imagingStudies}
+    onOpenStudy={(study) => {
+      openImagingStudy(patient.id, study.id, study.title);
+      setImagingStudies(getImagingStudies(patient.id));
+    }}
+  />
+)}
 
 {activeTab === "questions" && (
  <QuestionsTab
