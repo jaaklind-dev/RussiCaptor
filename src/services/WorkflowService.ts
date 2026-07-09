@@ -2,7 +2,7 @@ import { setImagingStatus } from "@/repositories/ImagingRepository";
 import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { getCurrentExercise } from "@/repositories/ExerciseRepository";
 import { createId } from "@/utils/id";
-
+import { runScenarioEvents } from "@/services/ScenarioEngine";
 export function processOrder(
   patientId: string,
   orderId: string
@@ -38,4 +38,5 @@ export function processOrder(
       visibility: "revealed",
     });
   }
+runScenarioEvents(patientId);
 }

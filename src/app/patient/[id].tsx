@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-
+import { runScenarioEvents } from "@/services/ScenarioEngine";
 import { useEffect, useState } from "react";
 import OrdersTab from "@/components/patient/OrdersTab";
 import { getOrders } from "@/repositories/OrderRepository";
