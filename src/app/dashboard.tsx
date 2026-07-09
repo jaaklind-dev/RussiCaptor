@@ -61,6 +61,12 @@ export default function DashboardScreen() {
         <Text style={styles.secondaryButtonText}>History</Text>
 
       </Pressable>
+      <Pressable
+        style={styles.secondaryButton}
+        onPress={() => router.push("/excon")}
+      >
+        <Text style={styles.secondaryButtonText}>EXCON</Text>
+      </Pressable>
 
     </View>
 

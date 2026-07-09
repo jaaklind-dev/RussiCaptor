@@ -22,6 +22,11 @@ import { openLabPanel } from "@/services/LabService";
 import { revealQuestion } from "@/services/RevealService";
 import { subscribeToSync } from "@/services/SyncService";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { tickExerciseClock } from "@/services/ClockService";
+import {
+  getExerciseSession,
+  startExerciseSession,
+} from "@/repositories/ExerciseSessionRepository";
 type PatientTab =
   | "overview"
   | "timeline"
