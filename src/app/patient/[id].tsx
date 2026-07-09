@@ -1,7 +1,9 @@
 import { router, useLocalSearchParams } from "expo-router";
 
 import { useEffect, useState } from "react";
-
+import OrdersTab from "@/components/patient/OrdersTab";
+import { getOrders } from "@/repositories/OrderRepository";
+import { placeOrder } from "@/services/OrderService";
 import AppHeader from "@/components/AppHeader";
 import ImagingTab from "@/components/patient/ImagingTab";
 import LabsTab from "@/components/patient/LabsTab";
@@ -20,7 +22,14 @@ import { openLabPanel } from "@/services/LabService";
 import { revealQuestion } from "@/services/RevealService";
 import { subscribeToSync } from "@/services/SyncService";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-type PatientTab = "overview" | "timeline" | "labs" | "imaging" | "questions" | "notes";
+type PatientTab =
+  | "overview"
+  | "timeline"
+  | "labs"
+  | "imaging"
+  | "orders"
+  | "questions"
+  | "notes";
 
 export default function PatientWorkspaceScreen() {
 
@@ -99,6 +108,7 @@ const [imagingStudies, setImagingStudies] = useState(
         <TabButton label="Questions" value="questions" activeTab={activeTab} setActiveTab={setActiveTab} />
 
         <TabButton label="Notes" value="notes" activeTab={activeTab} setActiveTab={setActiveTab} />
+        <TabButton label="Orders" value="orders" activeTab={activeTab} setActiveTab={setActiveTab} />
 
    </View>
 
@@ -141,6 +151,15 @@ const [imagingStudies, setImagingStudies] = useState(
      setQuestions(getQuestions(patient.id));
    }}
  />
+)}
+{activeTab === "orders" && (
+  <OrdersTab
+    orders={getOrders(patient.id)}
+    onPlaceOrder={(order) => {
+      placeOrder(patient.id, order.id, order.title);
+      setRefreshKey((k) => k + 1);
+    }}
+  />
 )}
 
         {activeTab === "notes" && <PlaceholderTab title="CM Notes" text="Siia tulevad ainult Case Managerile nähtavad märkmed ja truth file." />}
