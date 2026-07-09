@@ -49,6 +49,9 @@ const [questions, setQuestions] = useState(
 const [imagingStudies, setImagingStudies] = useState(
   patient ? getImagingStudies(patient.id) : []
 );
+const [orders, setOrders] = useState(
+  patient ? getOrders(patient.id) : []
+);
 
   if (!patient) {
 
@@ -154,10 +157,10 @@ const [imagingStudies, setImagingStudies] = useState(
 )}
 {activeTab === "orders" && (
   <OrdersTab
-    orders={getOrders(patient.id)}
+    orders={orders}
     onPlaceOrder={(order) => {
       placeOrder(patient.id, order.id, order.title);
-      setRefreshKey((k) => k + 1);
+      setOrders(getOrders(patient.id));
     }}
   />
 )}

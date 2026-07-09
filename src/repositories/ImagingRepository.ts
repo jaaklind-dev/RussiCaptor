@@ -32,3 +32,18 @@ export function setImagingReportVisibility(
     study.reportVisibility = visibility;
   }
 }
+export function setImagingStatus(
+  patientId: string,
+  imagingId: string,
+  status: ImagingStudy["status"]
+): void {
+  const study = imagingStudies.find(
+    (study) =>
+      study.patientId === patientId &&
+      study.id === imagingId
+  );
+
+  if (study) {
+    study.status = status;
+  }
+}

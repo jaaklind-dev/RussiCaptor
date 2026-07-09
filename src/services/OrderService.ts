@@ -3,7 +3,7 @@ import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { getCurrentExercise } from "@/repositories/ExerciseRepository";
 import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
-
+import { processOrder } from "@/services/WorkflowService";
 export function placeOrder(
   patientId: string,
   orderId: string,
@@ -22,6 +22,6 @@ export function placeOrder(
     author: "CM",
     visibility: "revealed",
   });
-
+processOrder(patientId, orderId);
   notifySync();
 }
