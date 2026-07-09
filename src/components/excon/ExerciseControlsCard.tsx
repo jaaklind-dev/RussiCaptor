@@ -11,6 +11,7 @@ import {
 import { notifySync } from "@/services/SyncService";
 
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { advanceExerciseMinutes } from "@/services/ClockService";
 
 export default function ExerciseControlsCard() {
 
