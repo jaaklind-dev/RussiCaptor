@@ -2,8 +2,6 @@ import { router, useLocalSearchParams } from "expo-router";
 
 import { useEffect, useState } from "react";
 
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-
 import AppHeader from "@/components/AppHeader";
 import ImagingTab from "@/components/patient/ImagingTab";
 import LabsTab from "@/components/patient/LabsTab";
@@ -14,10 +12,14 @@ import { getLabResults } from "@/repositories/LabRepository";
 import { findPatientById } from "@/repositories/PatientRepository";
 import { getQuestions } from "@/repositories/QuestionRepository";
 import { getTimelineEvents } from "@/repositories/TimelineRepository";
-import { openImagingStudy } from "@/services/ImagingService";
+import {
+  openImagingImage,
+  openImagingReport,
+} from "@/services/ImagingService";
 import { openLabPanel } from "@/services/LabService";
 import { revealQuestion } from "@/services/RevealService";
 import { subscribeToSync } from "@/services/SyncService";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 type PatientTab = "overview" | "timeline" | "labs" | "imaging" | "questions" | "notes";
 
 export default function PatientWorkspaceScreen() {
@@ -117,11 +119,15 @@ const [imagingStudies, setImagingStudies] = useState(
          />
        )}
 
-       {activeTab === "imaging" && (
+   {activeTab === "imaging" && (
   <ImagingTab
     studies={imagingStudies}
-    onOpenStudy={(study) => {
-      openImagingStudy(patient.id, study.id, study.title);
+    onOpenImage={(study) => {
+      openImagingImage(patient.id, study.id, study.title);
+      setImagingStudies(getImagingStudies(patient.id));
+    }}
+    onOpenReport={(study) => {
+      openImagingReport(patient.id, study.id, study.title);
       setImagingStudies(getImagingStudies(patient.id));
     }}
   />

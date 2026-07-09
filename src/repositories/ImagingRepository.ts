@@ -1,26 +1,34 @@
-import { ImagingStudy } from "@/models/ImagingStudy";
 import { imagingStudies } from "@/data/imaging";
+import { ImagingStudy } from "@/models/ImagingStudy";
 
-export function getImagingStudies(
-  patientId: string
-): ImagingStudy[] {
-  return imagingStudies.filter(
-    (study) => study.patientId === patientId
-  );
+export function getImagingStudies(patientId: string): ImagingStudy[] {
+  return imagingStudies.filter((study) => study.patientId === patientId);
 }
 
-export function setImagingVisibility(
+export function setImagingImageVisibility(
   patientId: string,
   imagingId: string,
-  visibility: ImagingStudy["visibility"]
+  visibility: ImagingStudy["imageVisibility"]
 ): void {
   const study = imagingStudies.find(
-    (study) =>
-      study.patientId === patientId &&
-      study.id === imagingId
+    (study) => study.patientId === patientId && study.id === imagingId
   );
 
   if (study) {
-    study.visibility = visibility;
+    study.imageVisibility = visibility;
+  }
+}
+
+export function setImagingReportVisibility(
+  patientId: string,
+  imagingId: string,
+  visibility: ImagingStudy["reportVisibility"]
+): void {
+  const study = imagingStudies.find(
+    (study) => study.patientId === patientId && study.id === imagingId
+  );
+
+  if (study) {
+    study.reportVisibility = visibility;
   }
 }

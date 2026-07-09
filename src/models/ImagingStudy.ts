@@ -23,7 +23,9 @@ export type ImagingStudy = {
   attachment?: string;
 
   status: ImagingStatus;
-  visibility: Visibility;
 
-  releasedAt?: string;
+imageVisibility: Visibility;
+reportVisibility: Visibility;
+
+releasedAt?: string;
 };

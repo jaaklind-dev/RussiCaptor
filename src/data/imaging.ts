@@ -2,22 +2,27 @@ import { ImagingStudy } from "@/models/ImagingStudy";
 
 export const imagingStudies: ImagingStudy[] = [
   {
-    id: "IMG-001",
-    exerciseId: "demo",
-    patientId: "PT-001",
 
-    modality: "CT",
-    title: "CT Head",
+  id: "IMG-001",
 
-    report:
-      "No acute intracranial haemorrhage. No mass effect. Basal cisterns preserved.",
+  exerciseId: "demo",
 
-    status: "available",
-    visibility: "hidden",
+  patientId: "PT-001",
 
-    releasedAt: "09:45",
-  },
+  modality: "CT",
 
+  title: "KT pea",
+
+  report: "Ägeda intrakraniaalse verejooksu tunnuseid ei ole. Massiefekti ei ole. Basaaltsisternid on vabad.",
+
+attachment: "image01.jpg",
+
+  status: "available",
+
+  imageVisibility: "hidden",
+reportVisibility: "hidden",
+
+},
   {
     id: "IMG-002",
     exerciseId: "demo",
@@ -30,6 +35,7 @@ export const imagingStudies: ImagingStudy[] = [
       "No focal infiltrates. Cardiomediastinal silhouette within normal limits.",
 
     status: "processing",
-    visibility: "hidden",
+    imageVisibility: "hidden",
+reportVisibility: "hidden",
   },
 ];
