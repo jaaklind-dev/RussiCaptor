@@ -1,9 +1,9 @@
+import { imagingAssets } from "../../assets/imaging";
 import ImageViewer from "@/components/viewers/ImageViewer";
 import { t } from "@/locales";
 import { ImagingStudy } from "@/models/ImagingStudy";
 import { getStatusLabel } from "@/utils/status";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-
 type Props = {
   studies: ImagingStudy[];
   onOpenImage: (study: ImagingStudy) => void;
@@ -43,23 +43,21 @@ export default function ImagingTab({
                 </Pressable>
               )}
 
-              {study.reportVisibility !== "revealed" && (
-                <Pressable
-                  style={styles.button}
-                  onPress={() => onOpenReport(study)}
-                >
-                  <Text style={styles.buttonText}>Ava raport</Text>
-                </Pressable>
-              )}
-            </View>
+             {study.reportVisibility !== "revealed" && (
+  <Pressable
+    style={styles.button}
+    onPress={() => onOpenReport(study)}
+  >
+    <Text style={styles.buttonText}>Ava raport</Text>
+  </Pressable>
+)}
+</View>
 
-            {study.imageVisibility === "revealed" &&
-              study.attachment === "image01.jpg" && (
-                <ImageViewer
-                  source={require("../../../assets/imaging/image01.jpg")}
-                />
-              )}
-
+{study.imageVisibility === "revealed" &&
+  study.attachment &&
+  imagingAssets[study.attachment] && (
+    <ImageViewer source={imagingAssets[study.attachment]} />
+  )}
             {study.reportVisibility === "revealed" ? (
               <Text style={styles.report}>{study.report}</Text>
             ) : (
