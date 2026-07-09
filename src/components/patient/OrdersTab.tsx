@@ -1,6 +1,6 @@
 import { Order } from "@/models/Order";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-
+import { getOrderStatusLabel } from "@/utils/status";
 type Props = {
   orders: Order[];
   onPlaceOrder: (order: Order) => void;
@@ -18,7 +18,9 @@ export default function OrdersTab({ orders, onPlaceOrder }: Props) {
           <View key={order.id} style={styles.row}>
             <View>
               <Text style={styles.orderTitle}>{order.title}</Text>
-              <Text style={styles.meta}>{order.category} · {order.status}</Text>
+             <Text style={styles.meta}>
+               {order.category} · {getOrderStatusLabel(order.status)}
+             </Text>
             </View>
 
             {order.status === "available" && (

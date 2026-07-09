@@ -14,3 +14,21 @@ export function getStatusLabel(
       return t.lab.status.viewed;
   }
 }
+export function getOrderStatusLabel(status: string): string {
+  switch (status) {
+    case "available":
+      return "Tellimata";
+
+    case "ordered":
+      return "Tellitud";
+
+    case "processing":
+      return "Täitmisel";
+
+    case "completed":
+      return "Valmis";
+
+    default:
+      return status;
+  }
+}
