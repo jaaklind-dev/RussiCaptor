@@ -1,5 +1,7 @@
 import {
+  getExerciseSession,
   pauseExerciseSession,
+  setExerciseSpeed,
   startExerciseSession,
   stopExerciseSession,
 } from "@/repositories/ExerciseSessionRepository";
@@ -7,7 +9,11 @@ import { advanceExerciseMinutes } from "@/services/ClockService";
 import { notifySync } from "@/services/SyncService";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+const SPEEDS = [1, 2, 5, 10] as const;
+
 export default function ExerciseControlsCard() {
+  const session = getExerciseSession();
+
   function refresh(): void {
     notifySync();
   }
@@ -61,6 +67,31 @@ export default function ExerciseControlsCard() {
           <Text style={styles.buttonText}>+5 min</Text>
         </Pressable>
       </View>
+
+      <Text style={styles.sectionLabel}>Kiirus</Text>
+
+      <View style={styles.row}>
+        {SPEEDS.map((speed) => (
+          <Pressable
+            key={speed}
+            style={
+
+              session.speed === speed
+
+                ? styles.activeSmallButton
+
+                : styles.smallButton
+
+            }
+            onPress={() => {
+              setExerciseSpeed(speed);
+              refresh();
+            }}
+          >
+            <Text style={styles.buttonText}>×{speed}</Text>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 }
@@ -78,6 +109,13 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "bold",
     marginBottom: 16,
+  },
+
+  sectionLabel: {
+    marginTop: 16,
+    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: "600",
   },
 
   button: {
@@ -100,6 +138,20 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: "center",
+  },
+
+  activeSmallButton: {
+
+    flex: 1,
+
+    backgroundColor: "#2E7D32",
+
+    paddingVertical: 12,
+
+    borderRadius: 12,
+
+    alignItems: "center",
+
   },
 
   buttonText: {

@@ -36,11 +36,9 @@ export default function ExconScreen() {
 
       <Text style={styles.subtitle}>Õppuse juhtimiskeskus</Text>
 
-      <ExerciseStatusCard key={`status-${refreshKey}`} />
-
-      <ExerciseControlsCard />
-
-      <UpcomingEventsCard key={`events-${refreshKey}`} />
+     <ExerciseStatusCard key={`status-${refreshKey}`} />
+     <ExerciseControlsCard key={`controls-${refreshKey}`} />
+     <UpcomingEventsCard key={`events-${refreshKey}`} />
 
     </ScrollView>
 

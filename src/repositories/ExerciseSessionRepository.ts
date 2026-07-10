@@ -1,6 +1,5 @@
 import { ExerciseSession } from "@/models/ExerciseSession";
 import { getCurrentExercise } from "@/repositories/ExerciseRepository";
-
 const session: ExerciseSession = {
   exerciseId: getCurrentExercise().id,
   state: "stopped",
