@@ -51,3 +51,8 @@ export function setScenarioTriggerMinute(
     event.triggerMinute = triggerMinute;
   }
 }
+export function getAllPendingScenarioEvents(): ScenarioEvent[] {
+  return scenarioEvents.filter(
+    (event) => event.executed === false
+  );
+}

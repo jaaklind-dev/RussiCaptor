@@ -1,9 +1,7 @@
 import {
-
-  getPendingScenarioEvents,
+  getAllPendingScenarioEvents,
 
   markScenarioEventExecuted,
-
 } from "@/repositories/ScenarioRepository";
 
 import { notifySync } from "@/services/SyncService";
@@ -12,13 +10,11 @@ import { executeScenarioEvent } from "@/services/WorkflowExecutor";
 
 export function runScenarioEvents(
 
-  patientId: string,
-
   currentMinute: number
 
 ): void {
 
-  const events = getPendingScenarioEvents(patientId);
+  const events = getAllPendingScenarioEvents();
 
   events.forEach((event) => {
 

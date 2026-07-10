@@ -5,10 +5,7 @@ import {
 
 import { notifySync } from "@/services/SyncService";
 import { runScenarioEvents } from "@/services/ScenarioEngine";
-eexport function advanceExerciseMinutes(
-   patientId: string,
-   minutes: number
- ): void {
+export function tickExerciseClock(): void {
    const session = getExerciseSession();
 
    if (session.state !== "running") {
@@ -19,7 +16,7 @@ eexport function advanceExerciseMinutes(
 
    setExerciseMinute(newMinute);
 
-   runScenarioEvents(patientId, newMinute);
+   runScenarioEvents(newMinute);
 
    notifySync();
  }
