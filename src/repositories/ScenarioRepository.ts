@@ -56,3 +56,10 @@ export function getAllPendingScenarioEvents(): ScenarioEvent[] {
     (event) => event.executed === false
   );
 }
+export function getUpcomingScenarioEvents(): ScenarioEvent[] {
+  return scenarioEvents
+    .filter((event) => !event.executed)
+    .sort(
+      (a, b) => a.triggerMinute - b.triggerMinute
+    );
+}

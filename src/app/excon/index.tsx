@@ -6,7 +6,13 @@ import { subscribeToSync } from "@/services/SyncService";
 
 import { useEffect, useState } from "react";
 
-import { StyleSheet, Text, View } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+} from "react-native";
+import UpcomingEventsCard from "@/components/excon/UpcomingEventsCard";
+
 
 export default function ExconScreen() {
 
@@ -24,17 +30,19 @@ export default function ExconScreen() {
 
   return (
 
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
 
       <Text style={styles.title}>EXCON</Text>
 
       <Text style={styles.subtitle}>Õppuse juhtimiskeskus</Text>
 
-      <ExerciseStatusCard key={refreshKey} />
+      <ExerciseStatusCard key={`status-${refreshKey}`} />
 
       <ExerciseControlsCard />
 
-    </View>
+      <UpcomingEventsCard key={`events-${refreshKey}`} />
+
+    </ScrollView>
 
   );
 
@@ -44,7 +52,7 @@ const styles = StyleSheet.create({
 
   container: {
 
-    flex: 1,
+    flexGrow: 1,
 
     padding: 24,
 
