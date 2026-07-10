@@ -2,6 +2,12 @@ import { getExerciseSession } from "@/repositories/ExerciseSessionRepository";
 
 import { StyleSheet, Text, View } from "react-native";
 
+function formatExerciseTime(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
 export default function ExerciseStatusCard() {
 
   const session = getExerciseSession();
@@ -14,11 +20,24 @@ export default function ExerciseStatusCard() {
 
       <Text style={styles.label}>Staatus</Text>
 
-      <Text style={styles.value}>{session.state}</Text>
+    <Text
+      style={[
+        styles.status,
+        session.state === "running"
+          ? styles.running
+          : session.state === "paused"
+          ? styles.paused
+          : styles.stopped,
+      ]}
+    >
+      {session.state.toUpperCase()}
+    </Text>
 
       <Text style={styles.label}>Aeg</Text>
 
-      <Text style={styles.value}>{session.currentMinute} min</Text>
+     <Text style={styles.timeValue}>
+       {formatExerciseTime(session.currentMinute)}
+     </Text>
 
       <Text style={styles.label}>Kiirus</Text>
 
@@ -71,5 +90,27 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
 
   },
+timeValue: {
+  fontSize: 32,
+  fontWeight: "bold",
+  fontVariant: ["tabular-nums"],
+},
+status: {
+  fontSize: 20,
+  fontWeight: "bold",
+  marginBottom: 8,
+},
+
+running: {
+  color: "#2E7D32",
+},
+
+paused: {
+  color: "#F9A825",
+},
+
+stopped: {
+  color: "#C62828",
+},
 
 });
