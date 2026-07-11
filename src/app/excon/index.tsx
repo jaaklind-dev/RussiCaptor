@@ -2,27 +2,41 @@ import ExerciseControlsCard from "@/components/excon/ExerciseControlsCard";
 
 import ExerciseStatusCard from "@/components/excon/ExerciseStatusCard";
 
+import UpcomingEventsCard from "@/components/excon/UpcomingEventsCard";
+
+import { getExerciseSession } from "@/repositories/ExerciseSessionRepository";
+
 import { subscribeToSync } from "@/services/SyncService";
 
 import { useEffect, useState } from "react";
 
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-} from "react-native";
-import UpcomingEventsCard from "@/components/excon/UpcomingEventsCard";
-
+import { ScrollView, StyleSheet, Text } from "react-native";
 
 export default function ExconScreen() {
 
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [session, setSession] = useState({
 
+    ...getExerciseSession(),
+
+  });
+function refreshSession(): void {
+
+  setSession({
+
+    ...getExerciseSession(),
+
+  });
+
+}
   useEffect(() => {
 
     return subscribeToSync(() => {
 
-      setRefreshKey((k) => k + 1);
+      setSession({
+
+        ...getExerciseSession(),
+
+      });
 
     });
 
@@ -36,9 +50,11 @@ export default function ExconScreen() {
 
       <Text style={styles.subtitle}>Õppuse juhtimiskeskus</Text>
 
-     <ExerciseStatusCard key={`status-${refreshKey}`} />
-     <ExerciseControlsCard key={`controls-${refreshKey}`} />
-     <UpcomingEventsCard key={`events-${refreshKey}`} />
+      <ExerciseStatusCard session={session} />
+
+<ExerciseControlsCard onSessionChange={refreshSession} />
+
+      <UpcomingEventsCard />
 
     </ScrollView>
 

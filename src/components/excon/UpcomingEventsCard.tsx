@@ -1,6 +1,8 @@
 import { getUpcomingScenarioEvents } from "@/repositories/ScenarioRepository";
-import { StyleSheet, Text, View } from "react-native";
 
+import { adjustScenarioEventTime } from "@/services/ScenarioControlService";
+
+import { Pressable, StyleSheet, Text, View } from "react-native";
 export default function UpcomingEventsCard() {
   const events = getUpcomingScenarioEvents().slice(0, 5);
 
@@ -12,21 +14,39 @@ export default function UpcomingEventsCard() {
         <Text style={styles.empty}>Sündmusi ei ole.</Text>
       ) : (
         events.map((event) => (
-          <View key={event.id} style={styles.row}>
-            <Text style={styles.minute}>
-              {event.triggerMinute} min
-            </Text>
+     <View key={event.id} style={styles.eventBlock}>
+       <View style={styles.row}>
+         <Text style={styles.minute}>
+           {event.triggerMinute} min
+         </Text>
 
-            <View style={styles.info}>
-              <Text style={styles.eventTitle}>
-                {event.title}
-              </Text>
+         <View style={styles.info}>
+           <Text style={styles.eventTitle}>
+             {event.title}
+           </Text>
 
-              <Text style={styles.patient}>
-                {event.patientId}
-              </Text>
-            </View>
-          </View>
+           <Text style={styles.patient}>
+             {event.patientId}
+           </Text>
+         </View>
+       </View>
+
+       <View style={styles.controls}>
+         <Pressable
+           style={styles.controlButton}
+           onPress={() => adjustScenarioEventTime(event.id, -1)}
+         >
+           <Text style={styles.controlButtonText}>−1 min</Text>
+         </Pressable>
+
+         <Pressable
+           style={styles.controlButton}
+           onPress={() => adjustScenarioEventTime(event.id, 1)}
+         >
+           <Text style={styles.controlButtonText}>+1 min</Text>
+         </Pressable>
+       </View>
+     </View>
         ))
       )}
     </View>
@@ -76,4 +96,26 @@ const styles = StyleSheet.create({
   empty: {
     color: "#666",
   },
+eventBlock: {
+  marginBottom: 16,
+},
+
+controls: {
+  flexDirection: "row",
+  gap: 8,
+  marginTop: 8,
+  marginLeft: 70,
+},
+
+controlButton: {
+  backgroundColor: "#005BBB",
+  paddingVertical: 8,
+  paddingHorizontal: 12,
+  borderRadius: 8,
+},
+
+controlButtonText: {
+  color: "#fff",
+  fontWeight: "bold",
+},
 });
