@@ -8,7 +8,10 @@ import {
 import { advanceExerciseMinutes } from "@/services/ClockService";
 import { notifySync } from "@/services/SyncService";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-
+import {
+  startClockRunner,
+  stopClockRunner,
+} from "@/services/ClockRunner";
 const SPEEDS = [1, 2, 5, 10] as const;
 
 export default function ExerciseControlsCard() {
@@ -26,6 +29,7 @@ export default function ExerciseControlsCard() {
         style={styles.button}
         onPress={() => {
           startExerciseSession();
+          startClockRunner();
           refresh();
         }}
       >
@@ -46,6 +50,7 @@ export default function ExerciseControlsCard() {
         style={styles.button}
         onPress={() => {
           stopExerciseSession();
+          stopClockRunner();
           refresh();
         }}
       >
