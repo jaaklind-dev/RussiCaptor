@@ -9,17 +9,7 @@ export function tickExerciseClock(): void {
 
   const session = getExerciseSession();
 
-  console.log(
 
-    "TICK SERVICE",
-
-    session.state,
-
-    session.currentMinute,
-
-    session.speed
-
-  );
 
   if (session.state !== "running") {
 

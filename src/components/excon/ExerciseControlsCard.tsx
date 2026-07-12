@@ -59,14 +59,11 @@ export default function ExerciseControlsCard({
       <Pressable
         style={styles.button}
         onPress={() => {
-          console.log("START PRESSED");
+
 
           startExerciseSession();
 
-          console.log(
-            "SESSION AFTER START",
-            getExerciseSession().state
-          );
+         
 
           startClockRunner();
           refresh();
