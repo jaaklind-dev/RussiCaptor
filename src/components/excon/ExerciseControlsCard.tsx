@@ -63,7 +63,7 @@ export default function ExerciseControlsCard({
 
           startExerciseSession();
 
-         
+
 
           startClockRunner();
           refresh();

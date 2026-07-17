@@ -54,7 +54,7 @@ function refreshSession(): void {
 
 <ExerciseControlsCard onSessionChange={refreshSession} />
 
-      <UpcomingEventsCard />
+      <UpcomingEventsCard session={session} />
 
     </ScrollView>
 
