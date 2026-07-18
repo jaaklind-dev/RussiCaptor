@@ -25,8 +25,6 @@ export default function ScanScreen() {
 
     }
 
-   assignPatientToMe(patient.id);
-
 assignPatientToMe(patient.id);
 
 router.push(`/patient/${patient.id}`);

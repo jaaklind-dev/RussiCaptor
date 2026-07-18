@@ -6,7 +6,7 @@ export const scenarioEvents: ScenarioEvent[] = [
     exerciseId: "demo",
     patientId: "PT-001",
 
-    triggerAt: "+2m",
+    triggerMinute: 2,
 
     action: "imaging.available",
     targetId: "IMG-001",

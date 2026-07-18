@@ -1,5 +1,4 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { runScenarioEvents } from "@/services/ScenarioEngine";
 import { useEffect, useState } from "react";
 import OrdersTab from "@/components/patient/OrdersTab";
 import { getOrders } from "@/repositories/OrderRepository";
@@ -9,6 +8,7 @@ import ImagingTab from "@/components/patient/ImagingTab";
 import LabsTab from "@/components/patient/LabsTab";
 import QuestionsTab from "@/components/patient/QuestionsTab";
 import TimelineTab from "@/components/patient/TimelineTab";
+import OverviewTab from "@/components/patient/OverviewTab";
 import { getImagingStudies } from "@/repositories/ImagingRepository";
 import { getLabResults } from "@/repositories/LabRepository";
 import { findPatientById } from "@/repositories/PatientRepository";
@@ -22,11 +22,6 @@ import { openLabPanel } from "@/services/LabService";
 import { revealQuestion } from "@/services/RevealService";
 import { subscribeToSync } from "@/services/SyncService";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { tickExerciseClock } from "@/services/ClockService";
-import {
-  getExerciseSession,
-  startExerciseSession,
-} from "@/repositories/ExerciseSessionRepository";
 type PatientTab =
   | "overview"
   | "timeline"
@@ -41,7 +36,7 @@ export default function PatientWorkspaceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [activeTab, setActiveTab] = useState<PatientTab>("overview");
-const [refreshKey, setRefreshKey] = useState(0);
+const [, setRefreshKey] = useState(0);
 useEffect(() => {
   return subscribeToSync(() => {
     setRefreshKey((k) => k + 1);
@@ -94,7 +89,7 @@ const [orders, setOrders] = useState(
 
         <Text style={styles.patientMeta}>
 
-          {patient.triage} · {patient.location} · Active
+          {patient.triage} · {patient.location} · {patient.status}
 
         </Text>
 
@@ -122,7 +117,7 @@ const [orders, setOrders] = useState(
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
 
-        {activeTab === "overview" && <OverviewTab />}
+        {activeTab === "overview" && <OverviewTab patient={patient} />}
 
         {activeTab === "timeline" && (
           <TimelineTab events={getTimelineEvents(patient.id)} />
@@ -227,36 +222,6 @@ function TabButton({
       </Text>
 
     </Pressable>
-
-  );
-
-}
-
-function OverviewTab() {
-
-  return (
-
-    <View style={styles.card}>
-
-      <Text style={styles.sectionTitle}>MIST</Text>
-
-      <Text style={styles.row}>M – Haigestus kodus, saabus EMO-sse omal jalal.</Text>
-
-      <Text style={styles.row}>I – Nägemishäire, nõrkus, neelamisel ebamugavus.</Text>
-
-      <Text style={styles.row}>S – RR 138/82, HR 92, SpO₂ 97%, GCS 15.</Text>
-
-      <Text style={styles.row}>T – Ravi veel puudub.</Text>
-
-      <View style={styles.divider} />
-
-      <Text style={styles.sectionTitle}>Critical reminders</Text>
-
-      <Text style={styles.row}>• Ära avalda restorani vihjet enne toiduanamneesi küsimist.</Text>
-
-      <Text style={styles.row}>• Kui küsitakse hingamist, ava VC/NIF.</Text>
-
-    </View>
 
   );
 

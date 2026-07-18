@@ -4,9 +4,14 @@ import { adjustScenarioEventTime } from "@/services/ScenarioControlService";
 
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { getExerciseSession } from "@/repositories/ExerciseSessionRepository";
 import { subscribeToSync } from "@/services/SyncService";
-export default function UpcomingEventsCard({ session }) {
+import { ExerciseSession } from "@/models/ExerciseSession";
+
+type Props = {
+  session: ExerciseSession;
+};
+
+export default function UpcomingEventsCard({ session }: Props) {
     const [, setRefreshKey] = useState(0);
 
     useEffect(() => {
@@ -24,14 +29,12 @@ const currentMinute = session.currentMinute;
         <Text style={styles.empty}>Sündmusi ei ole.</Text>
       ) : (
         events.map((event) => {
-          const eventMinute = Number(
-            event.triggerAt.replace("+", "").replace("m", "")
-          );
+          const eventMinute = event.triggerMinute;
 
           const remainingMinutes = eventMinute - currentMinute;
 const isNextEvent = remainingMinutes >= 0 && remainingMinutes === Math.min(
   ...events
-    .map(e => Number(e.triggerAt.replace("+", "").replace("m", "")) - currentMinute)
+    .map(e => e.triggerMinute - currentMinute)
     .filter(m => m >= 0)
 );
 const status =

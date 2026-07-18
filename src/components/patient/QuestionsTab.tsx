@@ -1,10 +1,10 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { QuestionItem } from "@/models/Patient";
+import { Question } from "@/models/Question";
 
 type Props = {
 
-  questions: QuestionItem[];
+  questions: Question[];
 
   onReveal: (questionId: string) => void;
 

@@ -1,5 +1,7 @@
-import { getUpcomingScenarioEvents } from "@/repositories/ScenarioRepository";
-import { setScenarioTriggerMinute } from "@/repositories/ScenarioRepository";
+import {
+  getUpcomingScenarioEvents,
+  setScenarioTriggerMinute,
+} from "@/repositories/ScenarioRepository";
 import { notifySync } from "@/services/SyncService";
 
 export function adjustScenarioEventTime(
