@@ -6,8 +6,13 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 
 import AppHeader from "@/components/AppHeader";
 
-import { assignPatientToMe } from "@/services/AssignmentRepository";
+import {
+  assignPatientToMe,
+  getPendingPatientTransfer,
+  requestPatientTakeover,
+} from "@/services/AssignmentRepository";
 import { findPatientByNationalId } from "@/repositories/PatientRepository";
+import { getCurrentCaseManager } from "@/services/CurrentUserService";
 
 export default function ScanScreen() {
 
@@ -38,9 +43,29 @@ if (assignmentResult.status === "unavailable") {
 }
 
 if (assignmentResult.status === "assigned-to-other") {
+  const pendingTransfer = getPendingPatientTransfer(patient.id);
+
+  if (pendingTransfer?.toCaseManagerId === getCurrentCaseManager().id) {
+    Alert.alert(
+      "Ülevõtmistaotlus on saadetud",
+      `Ootab Case Manageri ${pendingTransfer.fromCaseManagerName} otsust.`
+    );
+    return;
+  }
+
   Alert.alert(
-    "Patsient on juba määratud",
-    `Praegune Case Manager: ${assignmentResult.assignment.caseManagerName}. Patsiendi ülevõtmiseks on vaja eraldi üleandmist.`
+    "Taotle patsiendi ülevõtmist?",
+    `Praegune Case Manager: ${assignmentResult.assignment.caseManagerName}.`,
+    [
+      { text: "Katkesta", style: "cancel" },
+      {
+        text: "Saada taotlus",
+        onPress: () => requestPatientTakeover(
+          patient.id,
+          getCurrentCaseManager()
+        ),
+      },
+    ]
   );
   return;
 }

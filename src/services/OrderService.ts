@@ -7,7 +7,7 @@ import { createId } from "@/utils/id";
 import { processOrder } from "@/services/WorkflowService";
 import { findPatientById } from "@/repositories/PatientRepository";
 import { canCurrentCaseManagerEditPatient } from "@/services/AssignmentRepository";
-import { currentCaseManager } from "@/services/CurrentUserService";
+import { getCurrentCaseManager } from "@/services/CurrentUserService";
 export function placeOrder(
   order: Order
 ): void {
@@ -31,7 +31,7 @@ export function placeOrder(
     type: "order",
     title: `${order.title} tellitud`,
     description: `Tellimus "${order.title}" esitati.`,
-    author: currentCaseManager.name,
+    author: getCurrentCaseManager().name,
     visibility: "revealed",
   });
 

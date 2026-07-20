@@ -10,6 +10,7 @@ import { resetNotes } from "@/repositories/NoteRepository";
 import { clearAssignments } from "@/services/AssignmentRepository";
 import { stopClockRunner } from "@/services/ClockRunner";
 import { notifySync } from "@/services/SyncService";
+import { resetCurrentCaseManager } from "@/services/CurrentUserService";
 
 export function resetExercise(): void {
   stopClockRunner();
@@ -23,5 +24,6 @@ export function resetExercise(): void {
   clearTimelineEvents();
   resetPatients();
   clearAssignments();
+  resetCurrentCaseManager();
   notifySync();
 }

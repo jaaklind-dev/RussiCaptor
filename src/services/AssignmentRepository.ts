@@ -9,9 +9,11 @@ import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
 import type { CaseManager } from "@/models/CaseManager";
 import type { PatientAssignment } from "@/models/PatientAssignment";
-import { currentCaseManager } from "@/services/CurrentUserService";
+import type { PatientTransfer } from "@/models/PatientTransfer";
+import { getCurrentCaseManager } from "@/services/CurrentUserService";
 
 let assignments: PatientAssignment[] = [];
+let transfers: PatientTransfer[] = [];
 
 export type AssignmentResult =
   | { status: "assigned" | "already-assigned"; assignment: PatientAssignment }
@@ -19,7 +21,7 @@ export type AssignmentResult =
   | { status: "unavailable" };
 
 export function assignPatientToMe(patientId: string): AssignmentResult {
-  return assignPatient(patientId, currentCaseManager);
+  return assignPatient(patientId, getCurrentCaseManager());
 }
 
 export function assignPatient(
@@ -84,11 +86,17 @@ export function unassignPatient(
     assignment.endedAt = new Date().toISOString();
     assignment.endReason = endReason;
   }
+
+  const pendingTransfer = getPendingPatientTransfer(patientId);
+  if (pendingTransfer) {
+    pendingTransfer.status = "cancelled";
+    pendingTransfer.cancelledAt = new Date().toISOString();
+  }
 }
 
-export function transferPatient(
+export function requestPatientTakeover(
   patientId: string,
-  targetCaseManager: CaseManager
+  requestingCaseManager: CaseManager
 ): boolean {
   const patient = findPatientById(patientId);
   const currentAssignment = getPatientAssignment(patientId);
@@ -98,38 +106,144 @@ export function transferPatient(
     patient.status !== "Active" ||
     !currentAssignment ||
     currentAssignment.endedAt ||
-    currentAssignment.caseManagerId === targetCaseManager.id
+    currentAssignment.caseManagerId === requestingCaseManager.id ||
+    Boolean(getPendingPatientTransfer(patientId))
   ) {
     return false;
   }
 
-  const transferredAt = new Date().toISOString();
-  currentAssignment.endedAt = transferredAt;
-  currentAssignment.endReason = "transferred";
-  currentAssignment.transferredToCaseManagerId = targetCaseManager.id;
-  currentAssignment.transferredToCaseManagerName = targetCaseManager.name;
-
-  assignments.push({
+  const requestedAt = new Date().toISOString();
+  transfers.push({
+    id: createId("TRANSFER"),
     patientId,
-    caseManagerId: targetCaseManager.id,
-    caseManagerName: targetCaseManager.name,
-    assignedAt: transferredAt,
+    fromCaseManagerId: currentAssignment.caseManagerId,
+    fromCaseManagerName: currentAssignment.caseManagerName,
+    toCaseManagerId: requestingCaseManager.id,
+    toCaseManagerName: requestingCaseManager.name,
+    status: "pending",
+    requestedAt,
   });
 
   addTimelineEvent({
     id: createId("TL"),
     exerciseId: getCurrentExercise().id,
     patientId,
-    timestamp: transferredAt,
+    timestamp: requestedAt,
     type: "transfer",
-    title: "Patsient üle antud",
-    description: `Patsient anti üle: ${currentAssignment.caseManagerName} → ${targetCaseManager.name}.`,
-    author: currentAssignment.caseManagerName,
+    title: "Ülevõtmistaotlus saadetud",
+    description: `${requestingCaseManager.name} taotles patsiendi ülevõtmist CM-ilt ${currentAssignment.caseManagerName}.`,
+    author: requestingCaseManager.name,
     visibility: "revealed",
   });
 
   notifySync();
   return true;
+}
+
+export function acceptPatientTransfer(
+  patientId: string,
+  approvingCaseManager: CaseManager
+): boolean {
+  const transfer = getPendingPatientTransfer(patientId);
+  const currentAssignment = getPatientAssignment(patientId);
+  const patient = findPatientById(patientId);
+
+  if (
+    !patient ||
+    patient.status !== "Active" ||
+    !transfer ||
+    transfer.fromCaseManagerId !== approvingCaseManager.id ||
+    !currentAssignment ||
+    currentAssignment.endedAt ||
+    currentAssignment.caseManagerId !== transfer.fromCaseManagerId
+  ) {
+    return false;
+  }
+
+  const acceptedAt = new Date().toISOString();
+  transfer.status = "accepted";
+  transfer.acceptedAt = acceptedAt;
+  currentAssignment.endedAt = acceptedAt;
+  currentAssignment.endReason = "transferred";
+  currentAssignment.transferredToCaseManagerId = transfer.toCaseManagerId;
+  currentAssignment.transferredToCaseManagerName = transfer.toCaseManagerName;
+
+  assignments.push({
+    patientId,
+    caseManagerId: transfer.toCaseManagerId,
+    caseManagerName: transfer.toCaseManagerName,
+    assignedAt: acceptedAt,
+  });
+
+  addTimelineEvent({
+    id: createId("TL"),
+    exerciseId: getCurrentExercise().id,
+    patientId,
+    timestamp: acceptedAt,
+    type: "transfer",
+    title: "Patsiendi üleandmine vastu võetud",
+    description: `Patsient anti üle: ${currentAssignment.caseManagerName} → ${transfer.toCaseManagerName}.`,
+    author: approvingCaseManager.name,
+    visibility: "revealed",
+  });
+
+  notifySync();
+  return true;
+}
+
+export function rejectPatientTransfer(
+  patientId: string,
+  rejectingCaseManager: CaseManager
+): boolean {
+  const transfer = getPendingPatientTransfer(patientId);
+  const currentAssignment = getPatientAssignment(patientId);
+
+  if (
+    !transfer ||
+    transfer.fromCaseManagerId !== rejectingCaseManager.id ||
+    !currentAssignment ||
+    currentAssignment.endedAt ||
+    currentAssignment.caseManagerId !== rejectingCaseManager.id
+  ) {
+    return false;
+  }
+
+  const rejectedAt = new Date().toISOString();
+  transfer.status = "rejected";
+  transfer.rejectedAt = rejectedAt;
+
+  addTimelineEvent({
+    id: createId("TL"),
+    exerciseId: getCurrentExercise().id,
+    patientId,
+    timestamp: rejectedAt,
+    type: "transfer",
+    title: "Ülevõtmistaotlus tagasi lükatud",
+    description: `${rejectingCaseManager.name} lükkas CM-i ${transfer.toCaseManagerName} ülevõtmistaotluse tagasi.`,
+    author: rejectingCaseManager.name,
+    visibility: "revealed",
+  });
+
+  notifySync();
+  return true;
+}
+
+export function getPendingPatientTransfer(
+  patientId: string
+): PatientTransfer | undefined {
+  return transfers.find(
+    (transfer) => transfer.patientId === patientId && transfer.status === "pending"
+  );
+}
+
+export function getMyIncomingTakeoverRequests(): PatientTransfer[] {
+  return transfers
+    .filter(
+      (transfer) =>
+        transfer.status === "pending" &&
+        transfer.fromCaseManagerId === getCurrentCaseManager().id
+    )
+    .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
 }
 
 export function getPatientAssignment(
@@ -146,7 +260,7 @@ export function canCurrentCaseManagerEditPatient(patientId: string): boolean {
   return Boolean(
     assignment &&
       !assignment.endedAt &&
-      assignment.caseManagerId === currentCaseManager.id
+      assignment.caseManagerId === getCurrentCaseManager().id
   );
 }
 
@@ -154,7 +268,7 @@ export function getMyPatients() {
 
   return assignments
 
-    .filter((assignment) => assignment.caseManagerId === currentCaseManager.id)
+    .filter((assignment) => assignment.caseManagerId === getCurrentCaseManager().id)
 
     .filter((assignment) => !assignment.endedAt)
 
@@ -168,7 +282,7 @@ export function getMyClosedAssignments(): PatientAssignment[] {
   return assignments
     .filter(
       (assignment) =>
-        assignment.caseManagerId === currentCaseManager.id &&
+        assignment.caseManagerId === getCurrentCaseManager().id &&
         Boolean(assignment.endedAt)
     )
     .sort((a, b) => (b.endedAt ?? "").localeCompare(a.endedAt ?? ""));
@@ -182,7 +296,7 @@ export function getDashboardStats() {
 
     active: assignments.filter(
       (assignment) =>
-        assignment.caseManagerId === currentCaseManager.id &&
+        assignment.caseManagerId === getCurrentCaseManager().id &&
         !assignment.endedAt &&
         findPatientById(assignment.patientId)?.status === "Active"
     ).length,
@@ -191,13 +305,13 @@ export function getDashboardStats() {
 
     transferred: assignments.filter(
       (assignment) =>
-        assignment.caseManagerId === currentCaseManager.id &&
+        assignment.caseManagerId === getCurrentCaseManager().id &&
         assignment.endReason === "transferred"
     ).length,
 
     completed: assignments.filter(
       (assignment) =>
-        assignment.caseManagerId === currentCaseManager.id &&
+        assignment.caseManagerId === getCurrentCaseManager().id &&
         assignment.endReason === "completed"
     ).length,
 
@@ -207,4 +321,5 @@ export function getDashboardStats() {
 
 export function clearAssignments(): void {
   assignments = [];
+  transfers = [];
 }

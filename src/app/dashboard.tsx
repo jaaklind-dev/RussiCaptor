@@ -1,17 +1,37 @@
 import { router, useFocusEffect } from "expo-router";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import AppHeader from "@/components/AppHeader";
 
-import { getDashboardStats } from "@/services/AssignmentRepository";
-import { currentCaseManager } from "@/services/CurrentUserService";
+import {
+  getDashboardStats,
+  getMyIncomingTakeoverRequests,
+} from "@/services/AssignmentRepository";
+import {
+  demoCaseManagers,
+  getCurrentCaseManager,
+  setCurrentCaseManager,
+} from "@/services/CurrentUserService";
+import { subscribeToSync } from "@/services/SyncService";
+import TakeoverRequestsCard from "@/components/dashboard/TakeoverRequestsCard";
 
 export default function DashboardScreen() {
 
   const [stats, setStats] = useState(getDashboardStats());
+  const [selectedCaseManager, setSelectedCaseManager] = useState(
+    getCurrentCaseManager
+  );
+  const takeoverRequestCount = getMyIncomingTakeoverRequests().length;
+
+  useEffect(() => {
+    return subscribeToSync(() => {
+      setStats(getDashboardStats());
+      setSelectedCaseManager({ ...getCurrentCaseManager() });
+    });
+  }, []);
 
   useFocusEffect(
 
@@ -25,13 +45,50 @@ export default function DashboardScreen() {
 
   return (
 
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
 
       <AppHeader />
 
       <Text style={styles.title}>CM Dashboard</Text>
 
-      <Text style={styles.subtitle}>Case Manager: {currentCaseManager.name}</Text>
+      <Text style={styles.subtitle}>
+        Case Manager: {selectedCaseManager.name}
+      </Text>
+
+      <View style={styles.demoUserBlock}>
+        <Text style={styles.demoUserLabel}>Demo CM</Text>
+        <View style={styles.demoUserRow}>
+          {demoCaseManagers.map((caseManagerOption) => {
+            const isCurrent =
+              caseManagerOption.id === selectedCaseManager.id;
+            return (
+              <Pressable
+                key={caseManagerOption.id}
+                style={[
+                  styles.demoUserButton,
+                  isCurrent && styles.demoUserButtonActive,
+                ]}
+                onPress={() => {
+                  setCurrentCaseManager(caseManagerOption);
+                  setSelectedCaseManager({ ...caseManagerOption });
+                  setStats(getDashboardStats());
+                }}
+              >
+                <Text
+                  style={[
+                    styles.demoUserButtonText,
+                    isCurrent && styles.demoUserButtonTextActive,
+                  ]}
+                >
+                  {caseManagerOption.name}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <TakeoverRequestsCard />
 
       <View style={styles.card}>
 
@@ -53,7 +110,12 @@ export default function DashboardScreen() {
 
       <Pressable style={styles.secondaryButton} onPress={() => router.push("/patients")}>
 
-        <Text style={styles.secondaryButtonText}>My Patients</Text>
+        <Text style={styles.secondaryButtonText}>
+          My Patients
+          {takeoverRequestCount > 0
+            ? ` · ${takeoverRequestCount} taotlus(t)`
+            : ""}
+        </Text>
 
       </Pressable>
 
@@ -69,7 +131,7 @@ export default function DashboardScreen() {
         <Text style={styles.secondaryButtonText}>EXCON</Text>
       </Pressable>
 
-    </View>
+    </ScrollView>
 
   );
 
@@ -79,7 +141,7 @@ const styles = StyleSheet.create({
 
   container: {
 
-    flex: 1,
+    flexGrow: 1,
 
     backgroundColor: "#ffffff",
 
@@ -129,6 +191,46 @@ const styles = StyleSheet.create({
 
     gap: 12,
 
+  },
+
+  demoUserBlock: {
+    width: "100%",
+    maxWidth: 360,
+    marginTop: 16,
+  },
+
+  demoUserLabel: {
+    color: "#667085",
+    fontWeight: "600",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+
+  demoUserRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  demoUserButton: {
+    flex: 1,
+    borderColor: "#005BBB",
+    borderWidth: 2,
+    borderRadius: 10,
+    paddingVertical: 9,
+    alignItems: "center",
+  },
+
+  demoUserButtonActive: {
+    backgroundColor: "#005BBB",
+  },
+
+  demoUserButtonText: {
+    color: "#005BBB",
+    fontWeight: "bold",
+  },
+
+  demoUserButtonTextActive: {
+    color: "#fff",
   },
 
   row: {

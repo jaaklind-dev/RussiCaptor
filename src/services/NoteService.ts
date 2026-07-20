@@ -4,7 +4,7 @@ import { findPatientById } from "@/repositories/PatientRepository";
 import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
-import { currentCaseManager } from "@/services/CurrentUserService";
+import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { canCurrentCaseManagerEditPatient } from "@/services/AssignmentRepository";
 
 export function addPatientNote(patientId: string, text: string): boolean {
@@ -28,7 +28,7 @@ export function addPatientNote(patientId: string, text: string): boolean {
     exerciseId,
     patientId,
     text: trimmedText,
-    author: currentCaseManager.name,
+    author: getCurrentCaseManager().name,
     createdAt,
   });
 
@@ -40,7 +40,7 @@ export function addPatientNote(patientId: string, text: string): boolean {
     type: "note",
     title: "CM märge lisatud",
     description: trimmedText,
-    author: currentCaseManager.name,
+    author: getCurrentCaseManager().name,
     visibility: "revealed",
   });
 

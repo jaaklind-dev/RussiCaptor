@@ -257,13 +257,25 @@ Finishing a patient closes the assignment with `endedAt` instead of deleting
 it, preserving the responsible CM in History while excluding the patient from
 active counts and work lists.
 
-EXCON can transfer an active patient from the demo current CM (`Jaak`) to the
-demo target CM (`Mari`) after confirmation. Transfer closes the source
-assignment with reason `transferred`, creates a new active assignment for the
-target CM, keeps the patient clinically `Active`, and adds one transfer event
-to the patient timeline. Jaak's Dashboard then counts the patient under
-`Transferred` instead of `Active`. A production UI will replace the single demo
-target with a server-backed CM selector.
+Patient transfer is a CM workflow, not a normal EXCON action. When a new CM
+scans a patient owned by another CM, the scanner can send a takeover request.
+The current owner sees the request in the patient workspace and accepts or
+rejects it. Ownership and edit access remain unchanged until acceptance. On
+acceptance the source assignment closes, the requesting CM becomes owner, and
+the previous CM's Dashboard moves from `Active` to `Transferred`. Request,
+acceptance, and rejection are separately audited. EXCON retains patient Finish
+and scenario control.
+If EXCON finishes a patient while a transfer request is pending, the request is
+cancelled and can no longer be accepted.
+
+Until authentication exists, Dashboard has an explicit `Demo CM` switch for
+`Jaak` and `Mari`. It allows the complete takeover-request workflow to be
+tested on one device. Exercise `Stop` resets the demo identity to Jaak.
+
+Incoming takeover requests are surfaced prominently on the current owner's
+Dashboard. The card shows the patient and requesting CM and provides `Vaata`,
+`Nõustu`, and `Keeldu` actions. `My Patients` also displays the pending request
+count, while the patient workspace retains the detailed request card.
 
 Patient mutations are now owner-enforced. After transfer, the previous CM's
 open patient workspace switches to read-only mode through the sync boundary.

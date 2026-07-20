@@ -17,7 +17,8 @@
 - Case Manager patient notes with timeline and reset behavior
 - Audited, idempotent patient assignment workflow
 - Patient ownership and cross-CM assignment conflict detection
-- EXCON patient transfer between Case Managers
+- Scanner-initiated, owner-approved patient takeover
+- Dashboard takeover request inbox and actions
 - Owner-enforced read-only patient workspace after transfer
 - Case Manager-scoped completed and transferred patient history
 - Initial automated service tests

@@ -26,9 +26,13 @@ import { subscribeToSync } from "@/services/SyncService";
 import { addPatientNote } from "@/services/NoteService";
 import {
   canCurrentCaseManagerEditPatient,
+  acceptPatientTransfer,
   getPatientAssignment,
+  getPendingPatientTransfer,
+  rejectPatientTransfer,
 } from "@/services/AssignmentRepository";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { getCurrentCaseManager } from "@/services/CurrentUserService";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 type PatientTab =
   | "overview"
   | "timeline"
@@ -52,6 +56,7 @@ useEffect(() => {
   const patient = findPatientById(id ?? "");
 const isCompleted = patient?.status === "Completed";
 const assignment = patient ? getPatientAssignment(patient.id) : undefined;
+const pendingTransfer = patient ? getPendingPatientTransfer(patient.id) : undefined;
 const isReadOnly = patient
   ? isCompleted || !canCurrentCaseManagerEditPatient(patient.id)
   : true;
@@ -119,6 +124,60 @@ const [orders, setOrders] = useState(
           <Text style={styles.readOnlyNotice}>
             Määratud CM-ile {assignment?.caseManagerName ?? "–"} · vaatamisrežiim
           </Text>
+        )}
+
+        {!isReadOnly && pendingTransfer && (
+          <View style={styles.takeoverCard}>
+            <Text style={styles.takeoverTitle}>Ülevõtmistaotlus</Text>
+            <Text style={styles.takeoverText}>
+              {pendingTransfer.toCaseManagerName} soovib patsiendi üle võtta.
+            </Text>
+            <View style={styles.takeoverActions}>
+              <Pressable
+                style={styles.rejectButton}
+                onPress={() => {
+                  Alert.alert(
+                    "Keeldu ülevõtmisest?",
+                    `${pendingTransfer.toCaseManagerName} ei saa patsiendi omanikuks.`,
+                    [
+                      { text: "Katkesta", style: "cancel" },
+                      {
+                        text: "Keeldu",
+                        style: "destructive",
+                        onPress: () => rejectPatientTransfer(
+                          patient.id,
+                          getCurrentCaseManager()
+                        ),
+                      },
+                    ]
+                  );
+                }}
+              >
+                <Text style={styles.transferButtonText}>Keeldu</Text>
+              </Pressable>
+              <Pressable
+                style={styles.acceptButton}
+                onPress={() => {
+                  Alert.alert(
+                    "Nõustu ülevõtmisega?",
+                    `Patsiendi uus Case Manager on ${pendingTransfer.toCaseManagerName}.`,
+                    [
+                      { text: "Katkesta", style: "cancel" },
+                      {
+                        text: "Nõustu",
+                        onPress: () => acceptPatientTransfer(
+                          patient.id,
+                          getCurrentCaseManager()
+                        ),
+                      },
+                    ]
+                  );
+                }}
+              >
+                <Text style={styles.transferButtonText}>Nõustu</Text>
+              </Pressable>
+            </View>
+          </View>
         )}
 
       </View>
@@ -349,6 +408,46 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     fontWeight: "bold",
     marginTop: 10,
+  },
+
+  takeoverCard: {
+    backgroundColor: "#fff7ed",
+    borderColor: "#f59e0b",
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 12,
+  },
+  takeoverTitle: {
+    color: "#92400e",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  takeoverText: {
+    color: "#92400e",
+    marginTop: 4,
+  },
+  takeoverActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+  acceptButton: {
+    backgroundColor: "#166534",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  rejectButton: {
+    backgroundColor: "#b42318",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+
+  transferButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
   },
 
   tabs: {

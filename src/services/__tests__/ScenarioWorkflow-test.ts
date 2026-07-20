@@ -14,12 +14,16 @@ import {
 } from "@/repositories/ScenarioRepository";
 import { getTimelineEvents } from "@/repositories/TimelineRepository";
 import {
+  acceptPatientTransfer,
   assignPatient,
   assignPatientToMe,
   getDashboardStats,
-  getPatientAssignment,
   getMyClosedAssignments,
-  transferPatient,
+  getMyIncomingTakeoverRequests,
+  getPatientAssignment,
+  getPendingPatientTransfer,
+  rejectPatientTransfer,
+  requestPatientTakeover,
 } from "@/services/AssignmentRepository";
 import { advanceExerciseMinutes } from "@/services/ClockService";
 import { resetExercise } from "@/services/ExerciseResetService";
@@ -34,7 +38,10 @@ import {
 import { triggerScenarioEventNow } from "@/services/ScenarioControlService";
 import { getNotes } from "@/repositories/NoteRepository";
 import { addPatientNote } from "@/services/NoteService";
-import { demoTransferTarget } from "@/services/CurrentUserService";
+import {
+  demoTransferTarget,
+  getCurrentCaseManager,
+} from "@/services/CurrentUserService";
 
 const patientId = "PT-001";
 
@@ -153,7 +160,28 @@ describe("order-driven scenario workflow", () => {
   test("patient transfer changes owner and preserves an audit trail", () => {
     expect(assignPatientToMe(patientId).status).toBe("assigned");
 
-    expect(transferPatient(patientId, demoTransferTarget)).toBe(true);
+    expect(requestPatientTakeover(patientId, demoTransferTarget)).toBe(true);
+    expect(getPatientAssignment(patientId)?.caseManagerName).toBe("Jaak");
+    expect(getDashboardStats()).toEqual(
+      expect.objectContaining({ active: 1, transferred: 0 })
+    );
+    expect(getPendingPatientTransfer(patientId)).toEqual(
+      expect.objectContaining({
+        fromCaseManagerName: "Jaak",
+        toCaseManagerName: "Mari",
+        status: "pending",
+      })
+    );
+    expect(getMyIncomingTakeoverRequests()).toEqual([
+      expect.objectContaining({
+        patientId,
+        fromCaseManagerName: "Jaak",
+        toCaseManagerName: "Mari",
+      }),
+    ]);
+
+    expect(acceptPatientTransfer(patientId, getCurrentCaseManager())).toBe(true);
+    expect(getMyIncomingTakeoverRequests()).toHaveLength(0);
     expect(findPatientById(patientId)?.status).toBe("Active");
     expect(getPatientAssignment(patientId)).toEqual(
       expect.objectContaining({
@@ -177,7 +205,8 @@ describe("order-driven scenario workflow", () => {
     );
     expect(getTimelineEvents(patientId).map((event) => event.title)).toEqual([
       "Patsient määratud Case Managerile",
-      "Patsient üle antud",
+      "Ülevõtmistaotlus saadetud",
+      "Patsiendi üleandmine vastu võetud",
     ]);
 
     const blockedOrder = getOrders(patientId).find((item) => item.id === "ORD-001")!;
@@ -189,6 +218,31 @@ describe("order-driven scenario workflow", () => {
       getQuestions(patientId).find((question) => question.id === "Q-001")
         ?.visibility
     ).toBe("hidden");
+  });
+
+  test("current owner can reject a takeover request", () => {
+    assignPatientToMe(patientId);
+    expect(requestPatientTakeover(patientId, demoTransferTarget)).toBe(true);
+
+    expect(rejectPatientTransfer(patientId, getCurrentCaseManager())).toBe(true);
+    expect(getPendingPatientTransfer(patientId)).toBeUndefined();
+    expect(getPatientAssignment(patientId)?.caseManagerName).toBe("Jaak");
+    expect(getDashboardStats()).toEqual(
+      expect.objectContaining({ active: 1, transferred: 0 })
+    );
+    expect(getTimelineEvents(patientId).at(-1)?.title).toBe(
+      "Ülevõtmistaotlus tagasi lükatud"
+    );
+  });
+
+  test("Finish cancels a pending patient transfer", () => {
+    assignPatientToMe(patientId);
+    expect(requestPatientTakeover(patientId, demoTransferTarget)).toBe(true);
+
+    expect(finishPatient(patientId)).toBe(true);
+    expect(getPendingPatientTransfer(patientId)).toBeUndefined();
+    expect(acceptPatientTransfer(patientId, getCurrentCaseManager())).toBe(false);
+    expect(findPatientById(patientId)?.status).toBe("Completed");
   });
 
   test("Pause preserves exercise progress and pending events", () => {
