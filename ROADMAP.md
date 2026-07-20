@@ -11,6 +11,7 @@
 - Order-driven scenario workflow
 - Exercise reset semantics
 - Patient completion from EXCON
+- Completed patient history and read-only review
 - Initial automated service tests
 
 ## 🚧 In progress

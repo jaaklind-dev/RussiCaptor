@@ -8,12 +8,14 @@ type Props = {
   studies: ImagingStudy[];
   onOpenImage: (study: ImagingStudy) => void;
   onOpenReport: (study: ImagingStudy) => void;
+  readOnly?: boolean;
 };
 
 export default function ImagingTab({
   studies,
   onOpenImage,
   onOpenReport,
+  readOnly = false,
 }: Props) {
   return (
     <View style={styles.card}>
@@ -34,7 +36,7 @@ export default function ImagingTab({
             </View>
 
             <View style={styles.buttonRow}>
-              {study.attachment && study.imageVisibility !== "revealed" && (
+              {!readOnly && study.attachment && study.imageVisibility !== "revealed" && (
                 <Pressable
                   style={styles.button}
                   onPress={() => onOpenImage(study)}
@@ -43,7 +45,7 @@ export default function ImagingTab({
                 </Pressable>
               )}
 
-             {study.reportVisibility !== "revealed" && (
+             {!readOnly && study.reportVisibility !== "revealed" && (
   <Pressable
     style={styles.button}
     onPress={() => onOpenReport(study)}

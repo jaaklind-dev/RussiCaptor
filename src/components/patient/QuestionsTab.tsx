@@ -8,9 +8,11 @@ type Props = {
 
   onReveal: (questionId: string) => void;
 
+  readOnly?: boolean;
+
 };
 
-export default function QuestionsTab({ questions, onReveal }: Props) {
+export default function QuestionsTab({ questions, onReveal, readOnly = false }: Props) {
 
   return (
 
@@ -26,7 +28,7 @@ export default function QuestionsTab({ questions, onReveal }: Props) {
 
           <Text style={styles.prompt}>{question.prompt}</Text>
 
-          <Pressable
+          {!readOnly && question.visibility !== "revealed" && <Pressable
 
             style={styles.revealButton}
 
@@ -36,7 +38,7 @@ export default function QuestionsTab({ questions, onReveal }: Props) {
 
             <Text style={styles.revealButtonText}>Reveal answer</Text>
 
-          </Pressable>
+          </Pressable>}
 
           {question.visibility === "revealed" && (
 

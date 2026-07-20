@@ -16,7 +16,10 @@ import { resetExercise } from "@/services/ExerciseResetService";
 import { placeOrder } from "@/services/OrderService";
 import { revealQuestion } from "@/services/RevealService";
 import { finishPatient } from "@/services/PatientCompletionService";
-import { findPatientById } from "@/repositories/PatientRepository";
+import {
+  findPatientById,
+  getAllPatients,
+} from "@/repositories/PatientRepository";
 
 const patientId = "PT-001";
 
@@ -116,6 +119,9 @@ describe("order-driven scenario workflow", () => {
 
     expect(finishPatient(patientId)).toBe(true);
     expect(findPatientById(patientId)?.status).toBe("Completed");
+    expect(
+      getAllPatients().filter((patient) => patient.status === "Completed")
+    ).toEqual([expect.objectContaining({ id: patientId })]);
     expect(getDashboardStats()).toEqual(
       expect.objectContaining({ active: 0, completed: 1 })
     );

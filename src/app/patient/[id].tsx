@@ -43,6 +43,7 @@ useEffect(() => {
   });
 }, []);
   const patient = findPatientById(id ?? "");
+const isCompleted = patient?.status === "Completed";
 const [questions, setQuestions] = useState(
   patient ? getQuestions(patient.id) : []
 );
@@ -95,6 +96,12 @@ const [orders, setOrders] = useState(
 
         <Text style={styles.cmLine}>Current CM: Jaak</Text>
 
+        {isCompleted && (
+          <Text style={styles.completedNotice}>
+            Käsitlus lõpetatud · vaatamisrežiim
+          </Text>
+        )}
+
       </View>
 
    <View style={styles.tabs}>
@@ -126,6 +133,7 @@ const [orders, setOrders] = useState(
        {activeTab === "labs" && (
          <LabsTab
            labs={getLabResults(patient.id)}
+           readOnly={isCompleted}
            onOpenPanel={(panel) => {
              openLabPanel(patient.id, panel);
            }}
@@ -135,6 +143,7 @@ const [orders, setOrders] = useState(
    {activeTab === "imaging" && (
   <ImagingTab
     studies={imagingStudies}
+    readOnly={isCompleted}
     onOpenImage={(study) => {
       openImagingImage(patient.id, study.id, study.title);
       setImagingStudies(getImagingStudies(patient.id));
@@ -149,6 +158,7 @@ const [orders, setOrders] = useState(
 {activeTab === "questions" && (
  <QuestionsTab
    questions={questions}
+   readOnly={isCompleted}
    onReveal={(questionId) => {
      revealQuestion(patient.id, questionId);
      setQuestions(getQuestions(patient.id));
@@ -158,7 +168,7 @@ const [orders, setOrders] = useState(
 {activeTab === "orders" && (
   <OrdersTab
     orders={orders}
-    readOnly={patient.status === "Completed"}
+    readOnly={isCompleted}
     onPlaceOrder={(order) => {
       placeOrder(order);
       setOrders(getOrders(patient.id));
@@ -308,6 +318,17 @@ const styles = StyleSheet.create({
 
     marginTop: 6,
 
+  },
+
+  completedNotice: {
+    alignSelf: "flex-start",
+    backgroundColor: "#dcfce7",
+    color: "#166534",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    fontWeight: "bold",
+    marginTop: 10,
   },
 
   tabs: {

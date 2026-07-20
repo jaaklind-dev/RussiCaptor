@@ -222,6 +222,10 @@ adds an EXCON status entry to the timeline. Clinical data and existing history
 remain unchanged. This is separate from exercise `Stop`, which still restores
 the complete demo baseline, including patient statuses.
 
+Completed patients are listed under `History`. Opening one shows the preserved
+patient workspace in read-only mode: already revealed clinical information and
+the timeline remain visible, while reveal controls and new orders are disabled.
+
 ## Working conventions
 
 - Read `AGENTS.md` before changing code. It requires using the exact Expo 57

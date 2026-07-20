@@ -19,9 +19,10 @@ function getStatusLabel(status: LabResult["status"]) {
 type Props = {
   labs: LabResult[];
   onOpenPanel: (panel: string) => void;
+  readOnly?: boolean;
 };
 
-export default function LabsTab({ labs, onOpenPanel }: Props) {
+export default function LabsTab({ labs, onOpenPanel, readOnly = false }: Props) {
   const panels = [...new Set(labs.map((lab) => lab.panel))];
 
   return (
@@ -48,7 +49,7 @@ export default function LabsTab({ labs, onOpenPanel }: Props) {
                  </Text>
                 </View>
 
-                {!isRevealed && status === "available" && (
+                {!readOnly && !isRevealed && status === "available" && (
                   <Pressable
                     style={styles.openButton}
                     onPress={() => onOpenPanel(panel)}
