@@ -199,6 +199,20 @@ Recommended continuation: add automated service-level tests and define reset
 semantics for stopping or restarting an exercise before expanding the remaining
 scenario actions.
 
+## Exercise reset and automated tests completed on 2026-07-20
+
+The EXCON controls now have explicit lifecycle semantics:
+
+- `Pause` preserves the exercise minute, speed, assignments, clinical state,
+  timeline, orders, and pending events.
+- `Stop` stops the clock and restores the complete demo exercise baseline:
+  minute zero, speed ×1, no assignments, no timeline or pending events, hidden
+  questions, unplaced orders, and unreleased lab/imaging results.
+
+Jest is configured through the Expo-recommended `jest-expo` preset. Service
+tests cover the order-to-result workflow, full Stop reset, and Pause state
+preservation. Run them with `npm test`.
+
 ## Working conventions
 
 - Read `AGENTS.md` before changing code. It requires using the exact Expo 57

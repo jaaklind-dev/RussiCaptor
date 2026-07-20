@@ -1,6 +1,8 @@
 import { imagingStudies } from "@/data/imaging";
 import { ImagingStudy } from "@/models/ImagingStudy";
 
+const initialImagingStudies = imagingStudies.map((study) => ({ ...study }));
+
 export function getImagingStudies(patientId: string): ImagingStudy[] {
   return imagingStudies.filter((study) => study.patientId === patientId);
 }
@@ -46,4 +48,12 @@ export function setImagingStatus(
   if (study) {
     study.status = status;
   }
+}
+
+export function resetImagingStudies(): void {
+  imagingStudies.splice(
+    0,
+    imagingStudies.length,
+    ...initialImagingStudies.map((study) => ({ ...study }))
+  );
 }

@@ -1,6 +1,8 @@
 import { Question } from "@/models/Question";
 import { questions } from "@/data/questions";
 
+const initialQuestions = questions.map((question) => ({ ...question }));
+
 export function getQuestions(patientId: string): Question[] {
   return questions
     .filter((question) => question.patientId === patientId)
@@ -32,4 +34,12 @@ export function setQuestionVisibility(
   if (question) {
     question.visibility = visibility;
   }
+}
+
+export function resetQuestions(): void {
+  questions.splice(
+    0,
+    questions.length,
+    ...initialQuestions.map((question) => ({ ...question }))
+  );
 }

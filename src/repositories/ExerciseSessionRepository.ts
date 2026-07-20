@@ -20,9 +20,11 @@ export function pauseExerciseSession(): void {
   session.state = "paused";
 }
 
-export function stopExerciseSession(): void {
+export function resetExerciseSession(): void {
   session.state = "stopped";
   session.currentMinute = 0;
+  session.speed = 1;
+  delete session.startedAt;
 }
 
 export function setExerciseMinute(

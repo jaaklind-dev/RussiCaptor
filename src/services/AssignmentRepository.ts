@@ -37,3 +37,7 @@ export function getDashboardStats() {
   };
 
 }
+
+export function clearAssignments(): void {
+  assignedPatientIds = [];
+}

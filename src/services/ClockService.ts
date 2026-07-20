@@ -29,21 +29,9 @@ export function tickExerciseClock(): void {
 export function advanceExerciseMinutes(minutes: number): void {
   const session = getExerciseSession();
 
-  console.log(
-    "ADVANCE BEFORE",
-    session.currentMinute,
-    "ADD",
-    minutes
-  );
-
   const newMinute = session.currentMinute + minutes;
 
   setExerciseMinute(newMinute);
-
-  console.log(
-    "ADVANCE AFTER",
-    getExerciseSession().currentMinute
-  );
 
   runScenarioEvents(newMinute);
   notifySync();

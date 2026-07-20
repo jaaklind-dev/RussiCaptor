@@ -8,8 +8,6 @@ import {
 
   startExerciseSession,
 
-  stopExerciseSession,
-
 } from "@/repositories/ExerciseSessionRepository";
 
 import { advanceExerciseMinutes } from "@/services/ClockService";
@@ -18,9 +16,9 @@ import {
 
   startClockRunner,
 
-  stopClockRunner,
-
 } from "@/services/ClockRunner";
+
+import { resetExercise } from "@/services/ExerciseResetService";
 
 import { notifySync } from "@/services/SyncService";
 
@@ -96,11 +94,8 @@ export default function ExerciseControlsCard({
 
         onPress={() => {
 
-          stopExerciseSession();
-
-          stopClockRunner();
-
-          refresh();
+          resetExercise();
+          onSessionChange();
 
         }}
 

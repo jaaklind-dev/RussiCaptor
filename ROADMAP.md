@@ -5,15 +5,19 @@
 - Timeline
 - Provider abstraction
 - Repository layer
-- Initial Lab Engine
+- Panel-based Lab Engine
+- Imaging and Orders demo flows
+- EXCON exercise clock and controls
+- Order-driven scenario workflow
+- Exercise reset semantics
+- Initial automated service tests
 
 ## 🚧 In progress
-- OneDrive Provider
-- Panel-based Labs
+- Remaining scenario actions
+- Provider abstraction for non-patient domains
 
 ## 📋 Planned
-- Imaging
-- Orders
+- OneDrive / Microsoft Graph Provider
 - Notes
 - Sync status
 - Multi-user support

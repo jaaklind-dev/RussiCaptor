@@ -17,6 +17,10 @@ import { TimelineEvent } from "@/models/TimelineEvent";
    events.push(event);
  }
 
+ export function clearTimelineEvents(): void {
+   events.splice(0, events.length);
+ }
+
  export function logQuestionRevealed(
    patientId: string,
    questionId: string

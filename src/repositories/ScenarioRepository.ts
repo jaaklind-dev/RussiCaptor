@@ -43,6 +43,10 @@ export function markScenarioEventExecuted(
 export function addScenarioEvent(event: ScenarioEvent): void {
   scenarioEvents.push(event);
 }
+
+export function clearScenarioEvents(): void {
+  scenarioEvents.splice(0, scenarioEvents.length);
+}
 export function setScenarioTriggerMinute(
   eventId: string,
   triggerMinute: number

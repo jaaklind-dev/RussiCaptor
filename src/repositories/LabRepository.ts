@@ -1,6 +1,8 @@
 import { LabResult } from "@/models/LabResult";
 import { labs } from "@/data/labs";
 
+const initialLabs = labs.map((lab) => ({ ...lab }));
+
 export function getLabResults(
   patientId: string
 ): LabResult[] {
@@ -50,4 +52,12 @@ export function setLabPanelStatus(
   getLabPanel(patientId, panel).forEach((lab) => {
     lab.status = status;
   });
+}
+
+export function resetLabResults(): void {
+  labs.splice(
+    0,
+    labs.length,
+    ...initialLabs.map((lab) => ({ ...lab }))
+  );
 }
