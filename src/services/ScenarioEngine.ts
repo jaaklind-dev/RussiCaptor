@@ -23,7 +23,7 @@ export function runScenarioEvents(
       const wasExecuted = executeScenarioEvent(event);
 
       if (wasExecuted) {
-        markScenarioEventExecuted(event.id);
+        markScenarioEventExecuted(event.id, currentMinute);
       }
 
     }

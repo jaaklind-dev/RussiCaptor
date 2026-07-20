@@ -21,8 +21,8 @@ export function getPendingScenarioEvents(
 }
 
 export function markScenarioEventExecuted(
-
-  eventId: string
+  eventId: string,
+  resolvedAtMinute: number
 
 ): void {
 
@@ -35,6 +35,7 @@ export function markScenarioEventExecuted(
   if (event) {
 
     event.executed = true;
+    event.resolvedAtMinute = resolvedAtMinute;
 
   }
 
@@ -47,7 +48,10 @@ export function addScenarioEvent(event: ScenarioEvent): void {
 export function clearScenarioEvents(): void {
   scenarioEvents.splice(0, scenarioEvents.length);
 }
-export function cancelPendingScenarioEvents(patientId: string): void {
+export function cancelPendingScenarioEvents(
+  patientId: string,
+  resolvedAtMinute: number
+): void {
   scenarioEvents.forEach((event) => {
     if (
       event.patientId === patientId &&
@@ -55,6 +59,7 @@ export function cancelPendingScenarioEvents(patientId: string): void {
       event.cancelled !== true
     ) {
       event.cancelled = true;
+      event.resolvedAtMinute = resolvedAtMinute;
     }
   });
 }
@@ -80,5 +85,13 @@ export function getUpcomingScenarioEvents(): ScenarioEvent[] {
     .filter((event) => !event.executed && event.cancelled !== true)
     .sort(
       (a, b) => a.triggerMinute - b.triggerMinute
+    );
+}
+
+export function getResolvedScenarioEvents(): ScenarioEvent[] {
+  return scenarioEvents
+    .filter((event) => event.executed || event.cancelled === true)
+    .sort(
+      (a, b) => (b.resolvedAtMinute ?? 0) - (a.resolvedAtMinute ?? 0)
     );
 }

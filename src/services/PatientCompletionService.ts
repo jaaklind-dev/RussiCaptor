@@ -5,6 +5,7 @@ import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { unassignPatient } from "@/services/AssignmentRepository";
 import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
+import { getExerciseSession } from "@/repositories/ExerciseSessionRepository";
 
 export function finishPatient(patientId: string): boolean {
   const patient = findPatientById(patientId);
@@ -13,7 +14,10 @@ export function finishPatient(patientId: string): boolean {
     return false;
   }
 
-  cancelPendingScenarioEvents(patientId);
+  cancelPendingScenarioEvents(
+    patientId,
+    getExerciseSession().currentMinute
+  );
   setPatientStatus(patientId, "Completed");
   unassignPatient(patientId);
 

@@ -8,7 +8,10 @@ import { getImagingStudies } from "@/repositories/ImagingRepository";
 import { getLabResults } from "@/repositories/LabRepository";
 import { getOrders } from "@/repositories/OrderRepository";
 import { getQuestions } from "@/repositories/QuestionRepository";
-import { getUpcomingScenarioEvents } from "@/repositories/ScenarioRepository";
+import {
+  getResolvedScenarioEvents,
+  getUpcomingScenarioEvents,
+} from "@/repositories/ScenarioRepository";
 import { getTimelineEvents } from "@/repositories/TimelineRepository";
 import { assignPatientToMe, getDashboardStats } from "@/services/AssignmentRepository";
 import { advanceExerciseMinutes } from "@/services/ClockService";
@@ -51,6 +54,13 @@ describe("order-driven scenario workflow", () => {
     advanceExerciseMinutes(1);
     expect(order!.status).toBe("completed");
     expect(getUpcomingScenarioEvents()).toHaveLength(0);
+    expect(getResolvedScenarioEvents()).toEqual([
+      expect.objectContaining({
+        orderId: "ORD-003",
+        executed: true,
+        resolvedAtMinute: 3,
+      }),
+    ]);
     expect(
       getImagingStudies(patientId).find((study) => study.id === "IMG-001")
         ?.status
@@ -82,6 +92,7 @@ describe("order-driven scenario workflow", () => {
     });
     expect(getDashboardStats().active).toBe(0);
     expect(getUpcomingScenarioEvents()).toHaveLength(0);
+    expect(getResolvedScenarioEvents()).toHaveLength(0);
     expect(getTimelineEvents(patientId)).toHaveLength(0);
     expect(getOrders(patientId).every((item) => item.status === "available")).toBe(true);
     expect(getQuestions(patientId).every((item) => item.visibility === "hidden")).toBe(true);
@@ -122,6 +133,9 @@ describe("order-driven scenario workflow", () => {
     expect(triggerScenarioEventNow(event.id, 0)).toBe(true);
     expect(order.status).toBe("completed");
     expect(getUpcomingScenarioEvents()).toHaveLength(0);
+    expect(getResolvedScenarioEvents()).toEqual([
+      expect.objectContaining({ executed: true, resolvedAtMinute: 0 }),
+    ]);
     expect(
       getLabResults(patientId)
         .filter((lab) => lab.panel === "CBC")
@@ -147,6 +161,9 @@ describe("order-driven scenario workflow", () => {
       expect.objectContaining({ active: 0, completed: 1 })
     );
     expect(getUpcomingScenarioEvents()).toHaveLength(0);
+    expect(getResolvedScenarioEvents()).toEqual([
+      expect.objectContaining({ cancelled: true, resolvedAtMinute: 0 }),
+    ]);
     expect(order.status).toBe("processing");
     expect(getTimelineEvents(patientId).map((event) => event.title)).toEqual([
       "KT pea tellitud",

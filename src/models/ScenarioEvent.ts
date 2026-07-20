@@ -34,4 +34,6 @@ export type ScenarioEvent = {
 
   cancelled?: boolean;
 
+  resolvedAtMinute?: number;
+
 };

@@ -231,6 +231,11 @@ action asks for confirmation and then uses the normal scenario engine, so the
 clinical result, originating order, pending-event list, and timeline remain in
 sync without advancing the exercise clock.
 
+EXCON keeps a visible in-memory history of resolved scenario events, including
+whether each event was executed or cancelled and the exercise minute when that
+happened. The history is cleared by exercise `Stop` with the rest of the demo
+session state.
+
 ## Working conventions
 
 - Read `AGENTS.md` before changing code. It requires using the exact Expo 57

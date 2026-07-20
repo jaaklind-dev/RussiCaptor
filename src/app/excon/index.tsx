@@ -4,6 +4,7 @@ import ExerciseStatusCard from "@/components/excon/ExerciseStatusCard";
 
 import UpcomingEventsCard from "@/components/excon/UpcomingEventsCard";
 import ActivePatientsCard from "@/components/excon/ActivePatientsCard";
+import EventHistoryCard from "@/components/excon/EventHistoryCard";
 
 import { getExerciseSession } from "@/repositories/ExerciseSessionRepository";
 
@@ -58,6 +59,8 @@ function refreshSession(): void {
       <ActivePatientsCard />
 
       <UpcomingEventsCard session={session} />
+
+      <EventHistoryCard />
 
     </ScrollView>
 
