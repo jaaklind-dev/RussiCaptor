@@ -9,11 +9,13 @@ import LabsTab from "@/components/patient/LabsTab";
 import QuestionsTab from "@/components/patient/QuestionsTab";
 import TimelineTab from "@/components/patient/TimelineTab";
 import OverviewTab from "@/components/patient/OverviewTab";
+import NotesTab from "@/components/patient/NotesTab";
 import { getImagingStudies } from "@/repositories/ImagingRepository";
 import { getLabResults } from "@/repositories/LabRepository";
 import { findPatientById } from "@/repositories/PatientRepository";
 import { getQuestions } from "@/repositories/QuestionRepository";
 import { getTimelineEvents } from "@/repositories/TimelineRepository";
+import { getNotes } from "@/repositories/NoteRepository";
 import {
   openImagingImage,
   openImagingReport,
@@ -21,6 +23,7 @@ import {
 import { openLabPanel } from "@/services/LabService";
 import { revealQuestion } from "@/services/RevealService";
 import { subscribeToSync } from "@/services/SyncService";
+import { addPatientNote } from "@/services/NoteService";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 type PatientTab =
   | "overview"
@@ -176,7 +179,13 @@ const [orders, setOrders] = useState(
   />
 )}
 
-        {activeTab === "notes" && <PlaceholderTab title="CM Notes" text="Siia tulevad ainult Case Managerile nähtavad märkmed ja truth file." />}
+        {activeTab === "notes" && (
+          <NotesTab
+            notes={getNotes(patient.id)}
+            readOnly={isCompleted}
+            onAddNote={(text) => addPatientNote(patient.id, text)}
+          />
+        )}
 
       </ScrollView>
 
@@ -233,22 +242,6 @@ function TabButton({
       </Text>
 
     </Pressable>
-
-  );
-
-}
-
-function PlaceholderTab({ title, text }: { title: string; text: string }) {
-
-  return (
-
-    <View style={styles.card}>
-
-      <Text style={styles.sectionTitle}>{title}</Text>
-
-      <Text style={styles.row}>{text}</Text>
-
-    </View>
 
   );
 

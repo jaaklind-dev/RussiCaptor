@@ -236,6 +236,11 @@ whether each event was executed or cancelled and the exercise minute when that
 happened. The history is cleared by exercise `Stop` with the rest of the demo
 session state.
 
+The patient `Notes` tab supports Case Manager-authored text notes. Each note is
+stored separately by `exerciseId` and `patientId` and produces a patient
+timeline entry. Notes remain visible after patient `Finish`, become read-only
+in History, and are cleared by exercise `Stop` with other demo session data.
+
 ## Working conventions
 
 - Read `AGENTS.md` before changing code. It requires using the exact Expo 57

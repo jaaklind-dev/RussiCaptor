@@ -24,6 +24,8 @@ import {
   getAllPatients,
 } from "@/repositories/PatientRepository";
 import { triggerScenarioEventNow } from "@/services/ScenarioControlService";
+import { getNotes } from "@/repositories/NoteRepository";
+import { addPatientNote } from "@/services/NoteService";
 
 const patientId = "PT-001";
 
@@ -144,6 +146,26 @@ describe("order-driven scenario workflow", () => {
     expect(getTimelineEvents(patientId).at(-1)?.title).toBe(
       "Täisvere analüüs valmis"
     );
+  });
+
+  test("CM notes survive Finish and are cleared by Stop", () => {
+    assignPatientToMe(patientId);
+
+    expect(addPatientNote(patientId, "  Patsient vajab kordushindamist.  ")).toBe(true);
+    expect(getNotes(patientId)).toEqual([
+      expect.objectContaining({
+        text: "Patsient vajab kordushindamist.",
+        author: "Jaak",
+      }),
+    ]);
+    expect(getTimelineEvents(patientId).at(-1)?.title).toBe("CM märge lisatud");
+
+    finishPatient(patientId);
+    expect(getNotes(patientId)).toHaveLength(1);
+    expect(addPatientNote(patientId, "Seda ei lisata.")).toBe(false);
+
+    resetExercise();
+    expect(getNotes(patientId)).toHaveLength(0);
   });
 
   test("Finish completes one patient without resetting their history", () => {
