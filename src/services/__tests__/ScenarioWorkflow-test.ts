@@ -22,6 +22,7 @@ import { finishPatient } from "@/services/PatientCompletionService";
 import {
   findPatientById,
   getAllPatients,
+  setPatientStatus,
 } from "@/repositories/PatientRepository";
 import { triggerScenarioEventNow } from "@/services/ScenarioControlService";
 import { getNotes } from "@/repositories/NoteRepository";
@@ -100,6 +101,23 @@ describe("order-driven scenario workflow", () => {
     expect(getQuestions(patientId).every((item) => item.visibility === "hidden")).toBe(true);
     expect(getLabResults(patientId).every((item) => item.status === "processing")).toBe(true);
     expect(getImagingStudies(patientId).every((item) => item.status === "processing")).toBe(true);
+  });
+
+  test("patient assignment is audited once and activates an incoming patient", () => {
+    setPatientStatus(patientId, "Incoming");
+
+    expect(assignPatientToMe(patientId)).toBe("assigned");
+    expect(assignPatientToMe(patientId)).toBe("already-assigned");
+    expect(findPatientById(patientId)?.status).toBe("Active");
+    expect(getDashboardStats()).toEqual(
+      expect.objectContaining({ active: 1, incoming: 0 })
+    );
+    expect(getTimelineEvents(patientId)).toEqual([
+      expect.objectContaining({
+        type: "assignment",
+        title: "Patsient määratud Case Managerile",
+      }),
+    ]);
   });
 
   test("Pause preserves exercise progress and pending events", () => {
@@ -188,6 +206,7 @@ describe("order-driven scenario workflow", () => {
     ]);
     expect(order.status).toBe("processing");
     expect(getTimelineEvents(patientId).map((event) => event.title)).toEqual([
+      "Patsient määratud Case Managerile",
       "KT pea tellitud",
       "KT pea täitmisel",
       "Patsiendi käsitlus lõpetatud",

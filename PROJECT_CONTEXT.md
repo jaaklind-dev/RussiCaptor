@@ -241,6 +241,12 @@ stored separately by `exerciseId` and `patientId` and produces a patient
 timeline entry. Notes remain visible after patient `Finish`, become read-only
 in History, and are cleared by exercise `Stop` with other demo session data.
 
+Patient lookup now uses an idempotent assignment workflow. A new assignment
+adds exactly one timeline entry, changes an `Incoming` patient to `Active`, and
+notifies the UI. Repeated scans open the same patient without duplicating the
+assignment or audit entry. Completed and transferred patients cannot be added
+to the active list; the scan screen explains where completed history is found.
+
 ## Working conventions
 
 - Read `AGENTS.md` before changing code. It requires using the exact Expo 57

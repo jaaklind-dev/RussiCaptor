@@ -25,7 +25,17 @@ export default function ScanScreen() {
 
     }
 
-assignPatientToMe(patient.id);
+const assignmentResult = assignPatientToMe(patient.id);
+
+if (assignmentResult === "unavailable") {
+  Alert.alert(
+    "Patsienti ei saa määrata",
+    patient.status === "Completed"
+      ? "Patsiendi käsitlus on lõpetatud. Säilinud andmed leiad History vaatest."
+      : "Patsient on üle antud ja teda ei saa aktiivnimekirja lisada."
+  );
+  return;
+}
 
 router.push(`/patient/${patient.id}`);
 

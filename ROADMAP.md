@@ -15,6 +15,7 @@
 - Manual EXCON triggering for pending scenario events
 - EXCON history for executed and cancelled scenario events
 - Case Manager patient notes with timeline and reset behavior
+- Audited, idempotent patient assignment workflow
 - Initial automated service tests
 
 ## 🚧 In progress
