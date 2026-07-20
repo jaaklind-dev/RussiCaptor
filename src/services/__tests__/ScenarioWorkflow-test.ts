@@ -18,6 +18,7 @@ import {
   assignPatientToMe,
   getDashboardStats,
   getPatientAssignment,
+  getMyClosedAssignments,
   transferPatient,
 } from "@/services/AssignmentRepository";
 import { advanceExerciseMinutes } from "@/services/ClockService";
@@ -164,6 +165,13 @@ describe("order-driven scenario workflow", () => {
     expect(getDashboardStats()).toEqual(
       expect.objectContaining({ active: 0, transferred: 1 })
     );
+    expect(getMyClosedAssignments()).toEqual([
+      expect.objectContaining({
+        patientId,
+        endReason: "transferred",
+        transferredToCaseManagerName: "Mari",
+      }),
+    ]);
     expect(assignPatient(patientId, demoTransferTarget).status).toBe(
       "already-assigned"
     );
@@ -271,6 +279,9 @@ describe("order-driven scenario workflow", () => {
     expect(getDashboardStats()).toEqual(
       expect.objectContaining({ active: 0, completed: 1 })
     );
+    expect(getMyClosedAssignments()).toEqual([
+      expect.objectContaining({ patientId, endReason: "completed" }),
+    ]);
     expect(getUpcomingScenarioEvents()).toHaveLength(0);
     expect(getResolvedScenarioEvents()).toEqual([
       expect.objectContaining({ cancelled: true, resolvedAtMinute: 0 }),

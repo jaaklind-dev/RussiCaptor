@@ -271,6 +271,12 @@ Orders, notes, question reveals, lab opening, and imaging opening also verify
 the active assignment in their service layer, so stale UI or direct service
 calls cannot modify a patient owned by another CM.
 
+`History` is scoped to the current Case Manager's closed assignments and has
+separate `Lõpetatud` and `Üle antud` sections. Transferred entries show the
+target CM and open the patient in owner-enforced read-only mode. Dashboard
+completed and transferred counts use the same assignment history, preventing
+another CM's closed patients from appearing in Jaak's statistics.
+
 ## Working conventions
 
 - Read `AGENTS.md` before changing code. It requires using the exact Expo 57

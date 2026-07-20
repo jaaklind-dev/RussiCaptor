@@ -19,6 +19,7 @@
 - Patient ownership and cross-CM assignment conflict detection
 - EXCON patient transfer between Case Managers
 - Owner-enforced read-only patient workspace after transfer
+- Case Manager-scoped completed and transferred patient history
 - Initial automated service tests
 
 ## 🚧 In progress

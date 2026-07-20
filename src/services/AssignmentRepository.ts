@@ -164,6 +164,16 @@ export function getMyPatients() {
 
 }
 
+export function getMyClosedAssignments(): PatientAssignment[] {
+  return assignments
+    .filter(
+      (assignment) =>
+        assignment.caseManagerId === currentCaseManager.id &&
+        Boolean(assignment.endedAt)
+    )
+    .sort((a, b) => (b.endedAt ?? "").localeCompare(a.endedAt ?? ""));
+}
+
 export function getDashboardStats() {
 
   const patients = getAllPatients();
@@ -185,7 +195,11 @@ export function getDashboardStats() {
         assignment.endReason === "transferred"
     ).length,
 
-    completed: patients.filter((patient) => patient.status === "Completed").length,
+    completed: assignments.filter(
+      (assignment) =>
+        assignment.caseManagerId === currentCaseManager.id &&
+        assignment.endReason === "completed"
+    ).length,
 
   };
 
