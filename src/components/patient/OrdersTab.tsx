@@ -4,12 +4,17 @@ import { getOrderStatusLabel } from "@/utils/status";
 type Props = {
   orders: Order[];
   onPlaceOrder: (order: Order) => void;
+  readOnly?: boolean;
 };
 
-export default function OrdersTab({ orders, onPlaceOrder }: Props) {
+export default function OrdersTab({ orders, onPlaceOrder, readOnly = false }: Props) {
   return (
     <View style={styles.card}>
       <Text style={styles.title}>Tellimused</Text>
+
+      {readOnly && (
+        <Text style={styles.readOnly}>Patsiendi käsitlus on lõpetatud. Uusi tellimusi lisada ei saa.</Text>
+      )}
 
       {orders.length === 0 ? (
         <Text style={styles.empty}>Tellimusi ei ole.</Text>
@@ -23,7 +28,7 @@ export default function OrdersTab({ orders, onPlaceOrder }: Props) {
              </Text>
             </View>
 
-            {order.status === "available" && (
+            {order.status === "available" && !readOnly && (
               <Pressable
                 style={styles.button}
                 onPress={() => onPlaceOrder(order)}
@@ -52,6 +57,11 @@ const styles = StyleSheet.create({
   empty: {
     color: "#666",
     fontStyle: "italic",
+  },
+  readOnly: {
+    color: "#b42318",
+    marginBottom: 14,
+    lineHeight: 21,
   },
   row: {
     backgroundColor: "#fff",

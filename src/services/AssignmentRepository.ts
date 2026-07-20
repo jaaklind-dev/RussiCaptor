@@ -1,8 +1,14 @@
-import { findPatientById } from "@/repositories/PatientRepository";
+import { findPatientById, getAllPatients } from "@/repositories/PatientRepository";
 
 let assignedPatientIds: string[] = [];
 
 export function assignPatientToMe(patientId: string) {
+
+  const patient = findPatientById(patientId);
+
+  if (!patient || patient.status === "Completed") {
+    return;
+  }
 
   if (!assignedPatientIds.includes(patientId)) {
 
@@ -10,6 +16,10 @@ export function assignPatientToMe(patientId: string) {
 
   }
 
+}
+
+export function unassignPatient(patientId: string): void {
+  assignedPatientIds = assignedPatientIds.filter((id) => id !== patientId);
 }
 
 export function getMyPatients() {
@@ -24,15 +34,19 @@ export function getMyPatients() {
 
 export function getDashboardStats() {
 
+  const patients = getAllPatients();
+
   return {
 
-    active: assignedPatientIds.length,
+    active: assignedPatientIds.filter(
+      (patientId) => findPatientById(patientId)?.status === "Active"
+    ).length,
 
-    incoming: 0,
+    incoming: patients.filter((patient) => patient.status === "Incoming").length,
 
-    transferred: 0,
+    transferred: patients.filter((patient) => patient.status === "Transferred").length,
 
-    completed: 0,
+    completed: patients.filter((patient) => patient.status === "Completed").length,
 
   };
 

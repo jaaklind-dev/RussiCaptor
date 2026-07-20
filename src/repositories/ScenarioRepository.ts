@@ -13,8 +13,8 @@ export function getPendingScenarioEvents(
     (event) =>
 
       event.patientId === patientId &&
-
-      event.executed === false
+      event.executed === false &&
+      event.cancelled !== true
 
   );
 
@@ -47,6 +47,17 @@ export function addScenarioEvent(event: ScenarioEvent): void {
 export function clearScenarioEvents(): void {
   scenarioEvents.splice(0, scenarioEvents.length);
 }
+export function cancelPendingScenarioEvents(patientId: string): void {
+  scenarioEvents.forEach((event) => {
+    if (
+      event.patientId === patientId &&
+      event.executed === false &&
+      event.cancelled !== true
+    ) {
+      event.cancelled = true;
+    }
+  });
+}
 export function setScenarioTriggerMinute(
   eventId: string,
   triggerMinute: number
@@ -61,12 +72,12 @@ export function setScenarioTriggerMinute(
 }
 export function getAllPendingScenarioEvents(): ScenarioEvent[] {
   return scenarioEvents.filter(
-    (event) => event.executed === false
+    (event) => event.executed === false && event.cancelled !== true
   );
 }
 export function getUpcomingScenarioEvents(): ScenarioEvent[] {
   return scenarioEvents
-    .filter((event) => !event.executed)
+    .filter((event) => !event.executed && event.cancelled !== true)
     .sort(
       (a, b) => a.triggerMinute - b.triggerMinute
     );

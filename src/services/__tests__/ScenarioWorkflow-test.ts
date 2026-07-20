@@ -15,6 +15,8 @@ import { advanceExerciseMinutes } from "@/services/ClockService";
 import { resetExercise } from "@/services/ExerciseResetService";
 import { placeOrder } from "@/services/OrderService";
 import { revealQuestion } from "@/services/RevealService";
+import { finishPatient } from "@/services/PatientCompletionService";
+import { findPatientById } from "@/repositories/PatientRepository";
 
 const patientId = "PT-001";
 
@@ -104,5 +106,33 @@ describe("order-driven scenario workflow", () => {
         triggerMinute: 4,
       }),
     ]);
+  });
+
+  test("Finish completes one patient without resetting their history", () => {
+    const order = getOrders(patientId).find((item) => item.id === "ORD-003")!;
+
+    assignPatientToMe(patientId);
+    placeOrder(order);
+
+    expect(finishPatient(patientId)).toBe(true);
+    expect(findPatientById(patientId)?.status).toBe("Completed");
+    expect(getDashboardStats()).toEqual(
+      expect.objectContaining({ active: 0, completed: 1 })
+    );
+    expect(getUpcomingScenarioEvents()).toHaveLength(0);
+    expect(order.status).toBe("processing");
+    expect(getTimelineEvents(patientId).map((event) => event.title)).toEqual([
+      "KT pea tellitud",
+      "KT pea täitmisel",
+      "Patsiendi käsitlus lõpetatud",
+    ]);
+
+    const blockedOrder = getOrders(patientId).find((item) => item.id === "ORD-001")!;
+    placeOrder(blockedOrder);
+    expect(blockedOrder.status).toBe("available");
+
+    resetExercise();
+    expect(findPatientById(patientId)?.status).toBe("Active");
+    expect(getDashboardStats().completed).toBe(0);
   });
 });

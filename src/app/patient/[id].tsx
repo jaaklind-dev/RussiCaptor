@@ -158,6 +158,7 @@ const [orders, setOrders] = useState(
 {activeTab === "orders" && (
   <OrdersTab
     orders={orders}
+    readOnly={patient.status === "Completed"}
     onPlaceOrder={(order) => {
       placeOrder(order);
       setOrders(getOrders(patient.id));

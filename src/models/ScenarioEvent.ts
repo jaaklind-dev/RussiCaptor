@@ -32,4 +32,6 @@ export type ScenarioEvent = {
 
   executed: boolean;
 
+  cancelled?: boolean;
+
 };

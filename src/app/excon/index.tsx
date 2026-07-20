@@ -3,6 +3,7 @@ import ExerciseControlsCard from "@/components/excon/ExerciseControlsCard";
 import ExerciseStatusCard from "@/components/excon/ExerciseStatusCard";
 
 import UpcomingEventsCard from "@/components/excon/UpcomingEventsCard";
+import ActivePatientsCard from "@/components/excon/ActivePatientsCard";
 
 import { getExerciseSession } from "@/repositories/ExerciseSessionRepository";
 
@@ -53,6 +54,8 @@ function refreshSession(): void {
       <ExerciseStatusCard session={session} />
 
 <ExerciseControlsCard onSessionChange={refreshSession} />
+
+      <ActivePatientsCard />
 
       <UpcomingEventsCard session={session} />
 

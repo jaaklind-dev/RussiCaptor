@@ -5,10 +5,13 @@ import { getCurrentExercise } from "@/repositories/ExerciseRepository";
 import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
 import { processOrder } from "@/services/WorkflowService";
+import { findPatientById } from "@/repositories/PatientRepository";
 export function placeOrder(
   order: Order
 ): void {
-  if (order.status !== "available") {
+  const patient = findPatientById(order.patientId);
+
+  if (order.status !== "available" || patient?.status === "Completed") {
     return;
   }
 

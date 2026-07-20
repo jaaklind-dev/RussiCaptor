@@ -1,5 +1,5 @@
 import { DataProvider } from "./DataProvider";
-import { Patient } from "@/models/Patient";
+import { Patient, PatientStatus } from "@/models/Patient";
 
 export class OneDriveProvider implements DataProvider {
   getPatients(): Patient[] {
@@ -13,6 +13,14 @@ export class OneDriveProvider implements DataProvider {
   getPatientByNationalId(
     nationalId: string
   ): Patient | undefined {
+    throw new Error("OneDrive provider not implemented yet.");
+  }
+
+  setPatientStatus(id: string, status: PatientStatus): void {
+    throw new Error("OneDrive provider not implemented yet.");
+  }
+
+  resetPatients(): void {
     throw new Error("OneDrive provider not implemented yet.");
   }
 }

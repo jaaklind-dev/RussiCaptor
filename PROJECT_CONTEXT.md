@@ -213,6 +213,15 @@ Jest is configured through the Expo-recommended `jest-expo` preset. Service
 tests cover the order-to-result workflow, full Stop reset, and Pause state
 preservation. Run them with `npm test`.
 
+## Patient completion added on 2026-07-20
+
+EXCON has a patient-specific `Finish` action for assigned active patients.
+Finishing a patient sets the status to `Completed`, removes the patient from the
+Case Manager's active list, cancels that patient's pending scenario events, and
+adds an EXCON status entry to the timeline. Clinical data and existing history
+remain unchanged. This is separate from exercise `Stop`, which still restores
+the complete demo baseline, including patient statuses.
+
 ## Working conventions
 
 - Read `AGENTS.md` before changing code. It requires using the exact Expo 57

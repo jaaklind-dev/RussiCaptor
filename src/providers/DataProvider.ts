@@ -1,4 +1,4 @@
-import { Patient } from "@/models/Patient";
+import { Patient, PatientStatus } from "@/models/Patient";
 
 export interface DataProvider {
   getPatients(): Patient[];
@@ -8,4 +8,8 @@ export interface DataProvider {
   getPatientByNationalId(
     nationalId: string
   ): Patient | undefined;
+
+  setPatientStatus(id: string, status: PatientStatus): void;
+
+  resetPatients(): void;
 }

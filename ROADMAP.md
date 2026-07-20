@@ -10,6 +10,7 @@
 - EXCON exercise clock and controls
 - Order-driven scenario workflow
 - Exercise reset semantics
+- Patient completion from EXCON
 - Initial automated service tests
 
 ## 🚧 In progress
