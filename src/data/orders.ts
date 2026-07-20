@@ -11,6 +11,13 @@ export const orders: Order[] = [
 
     status: "available",
     visibility: "revealed",
+    workflow: {
+      resultAction: "lab.available",
+      resultTargetId: "ABG",
+      delayMinutes: 2,
+      resultTitle: "Veregaasid valmis",
+      resultDescription: "Veregaaside tulemused on nüüd kättesaadavad.",
+    },
   },
 
   {
@@ -23,6 +30,13 @@ export const orders: Order[] = [
 
     status: "available",
     visibility: "revealed",
+    workflow: {
+      resultAction: "lab.available",
+      resultTargetId: "CBC",
+      delayMinutes: 5,
+      resultTitle: "Täisvere analüüs valmis",
+      resultDescription: "Täisvere analüüsi tulemused on nüüd kättesaadavad.",
+    },
   },
 
   {
@@ -35,6 +49,13 @@ export const orders: Order[] = [
 
     status: "available",
     visibility: "revealed",
+    workflow: {
+      resultAction: "imaging.available",
+      resultTargetId: "IMG-001",
+      delayMinutes: 3,
+      resultTitle: "KT pea valmis",
+      resultDescription: "KT pea uuring on nüüd kättesaadav.",
+    },
   },
 
   {
@@ -47,5 +68,12 @@ export const orders: Order[] = [
 
     status: "available",
     visibility: "revealed",
+    workflow: {
+      resultAction: "imaging.available",
+      resultTargetId: "IMG-002",
+      delayMinutes: 4,
+      resultTitle: "Rindkere röntgen valmis",
+      resultDescription: "Rindkere röntgenuuring on nüüd kättesaadav.",
+    },
   },
 ];

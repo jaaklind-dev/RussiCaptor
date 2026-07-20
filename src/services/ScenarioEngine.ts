@@ -20,9 +20,11 @@ export function runScenarioEvents(
 
     if (event.triggerMinute <= currentMinute) {
 
-      executeScenarioEvent(event);
+      const wasExecuted = executeScenarioEvent(event);
 
-      markScenarioEventExecuted(event.id);
+      if (wasExecuted) {
+        markScenarioEventExecuted(event.id);
+      }
 
     }
 

@@ -41,3 +41,13 @@ export function setLabVisibility(
       lab.visibility = visibility;
     });
 }
+
+export function setLabPanelStatus(
+  patientId: string,
+  panel: string,
+  status: LabResult["status"]
+): void {
+  getLabPanel(patientId, panel).forEach((lab) => {
+    lab.status = status;
+  });
+}

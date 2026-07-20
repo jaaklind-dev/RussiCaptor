@@ -159,7 +159,7 @@ const [orders, setOrders] = useState(
   <OrdersTab
     orders={orders}
     onPlaceOrder={(order) => {
-      placeOrder(patient.id, order.id, order.title);
+      placeOrder(order);
       setOrders(getOrders(patient.id));
     }}
   />

@@ -1,4 +1,5 @@
 import { Visibility } from "@/models/Visibility";
+import type { ScenarioAction } from "@/models/ScenarioEvent";
 
 export type OrderCategory =
   | "lab"
@@ -12,6 +13,17 @@ export type OrderStatus =
   | "ordered"
   | "processing"
   | "completed";
+
+export type OrderWorkflow = {
+  resultAction: Extract<
+    ScenarioAction,
+    "lab.available" | "imaging.available"
+  >;
+  resultTargetId: string;
+  delayMinutes: number;
+  resultTitle: string;
+  resultDescription: string;
+};
 
 export type Order = {
   id: string;
@@ -27,6 +39,8 @@ export type Order = {
   status: OrderStatus;
 
   visibility: Visibility;
+
+  workflow: OrderWorkflow;
 
   createdAt?: string;
   completedAt?: string;

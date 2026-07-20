@@ -17,7 +17,7 @@ export const imagingStudies: ImagingStudy[] = [
 
 attachment: "image01.jpg",
 
-  status: "available",
+  status: "processing",
 
   imageVisibility: "hidden",
 reportVisibility: "hidden",

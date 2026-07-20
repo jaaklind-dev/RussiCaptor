@@ -39,6 +39,10 @@ export function markScenarioEventExecuted(
   }
 
 }
+
+export function addScenarioEvent(event: ScenarioEvent): void {
+  scenarioEvents.push(event);
+}
 export function setScenarioTriggerMinute(
   eventId: string,
   triggerMinute: number

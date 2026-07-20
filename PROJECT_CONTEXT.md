@@ -174,6 +174,31 @@ Suggested implementation order:
 6. Verify the full workflow in both the EXCON and patient screens.
 7. Only then expand the provider abstraction and implement OneDrive/Graph.
 
+## Order-to-result workflow completed on 2026-07-20
+
+The first end-to-end EXCON scenario workflow is implemented locally:
+
+- Demo orders define their result action, target, delay, title, and description.
+- Placing an order moves it to `processing` and schedules a scenario event at
+  the current exercise minute plus the configured delay.
+- EXCON displays the generated event and allows its trigger time to be adjusted.
+- Reaching the trigger minute makes the lab panel or imaging study available,
+  completes the originating order, and creates one result timeline entry.
+- Unsupported scenario actions remain pending instead of being marked executed.
+
+The Android verification used the CT head order and confirmed the visible flow:
+
+```text
+Tellimata -> Täitmisel -> EXCON: 3 min pärast -> Valmis
+```
+
+The patient timeline contained exactly `KT pea tellitud`, `KT pea täitmisel`,
+and `KT pea valmis`.
+
+Recommended continuation: add automated service-level tests and define reset
+semantics for stopping or restarting an exercise before expanding the remaining
+scenario actions.
+
 ## Working conventions
 
 - Read `AGENTS.md` before changing code. It requires using the exact Expo 57

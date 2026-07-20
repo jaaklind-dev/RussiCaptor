@@ -24,6 +24,8 @@ export type ScenarioEvent = {
 
   targetId: string;
 
+  orderId?: string;
+
   title: string;
 
   description: string;

@@ -1,40 +1,57 @@
+import type { Order } from "@/models/Order";
+import { getExerciseSession } from "@/repositories/ExerciseSessionRepository";
 import { setImagingStatus } from "@/repositories/ImagingRepository";
+import { setLabPanelStatus } from "@/repositories/LabRepository";
+import { setOrderStatus } from "@/repositories/OrderRepository";
+import { addScenarioEvent } from "@/repositories/ScenarioRepository";
 import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { getCurrentExercise } from "@/repositories/ExerciseRepository";
 import { createId } from "@/utils/id";
 export function processOrder(
-  patientId: string,
-  orderId: string
+  order: Order
 ): void {
-  if (orderId === "ORD-003") {
-    setImagingStatus(patientId, "IMG-001", "available");
+  const workflow = order.workflow;
 
-    addTimelineEvent({
-      id: createId("TL"),
-      exerciseId: getCurrentExercise().id,
-      patientId,
-      timestamp: new Date().toISOString(),
-      type: "imaging",
-      title: "KT pea valmis",
-      description: "Tellitud KT pea uuring muutus kättesaadavaks.",
-      author: "System",
-      visibility: "revealed",
-    });
+  setOrderStatus(order.patientId, order.id, "processing");
+
+  if (workflow.resultAction === "imaging.available") {
+    setImagingStatus(
+      order.patientId,
+      workflow.resultTargetId,
+      "processing"
+    );
+  } else {
+    setLabPanelStatus(
+      order.patientId,
+      workflow.resultTargetId,
+      "processing"
+    );
   }
 
-  if (orderId === "ORD-004") {
-    setImagingStatus(patientId, "IMG-002", "processing");
+  const currentMinute = getExerciseSession().currentMinute;
 
-    addTimelineEvent({
-      id: createId("TL"),
-      exerciseId: getCurrentExercise().id,
-      patientId,
-      timestamp: new Date().toISOString(),
-      type: "imaging",
-      title: "Rindkere röntgen töös",
-      description: "Tellitud rindkere röntgen suunati töösse.",
-      author: "System",
-      visibility: "revealed",
-    });
-  }
+  addScenarioEvent({
+    id: createId("SE"),
+    exerciseId: getCurrentExercise().id,
+    patientId: order.patientId,
+    triggerMinute: currentMinute + workflow.delayMinutes,
+    action: workflow.resultAction,
+    targetId: workflow.resultTargetId,
+    orderId: order.id,
+    title: workflow.resultTitle,
+    description: workflow.resultDescription,
+    executed: false,
+  });
+
+  addTimelineEvent({
+    id: createId("TL"),
+    exerciseId: getCurrentExercise().id,
+    patientId: order.patientId,
+    timestamp: new Date().toISOString(),
+    type: "order",
+    title: `${order.title} täitmisel`,
+    description: `Tellimuse "${order.title}" töötlemine algas.`,
+    author: "System",
+    visibility: "revealed",
+  });
 }
