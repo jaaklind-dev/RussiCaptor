@@ -257,6 +257,14 @@ Finishing a patient closes the assignment with `endedAt` instead of deleting
 it, preserving the responsible CM in History while excluding the patient from
 active counts and work lists.
 
+EXCON can transfer an active patient from the demo current CM (`Jaak`) to the
+demo target CM (`Mari`) after confirmation. Transfer closes the source
+assignment with reason `transferred`, creates a new active assignment for the
+target CM, keeps the patient clinically `Active`, and adds one transfer event
+to the patient timeline. Jaak's Dashboard then counts the patient under
+`Transferred` instead of `Active`. A production UI will replace the single demo
+target with a server-backed CM selector.
+
 ## Working conventions
 
 - Read `AGENTS.md` before changing code. It requires using the exact Expo 57

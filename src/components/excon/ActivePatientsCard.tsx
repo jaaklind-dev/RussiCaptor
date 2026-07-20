@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { getMyPatients } from "@/services/AssignmentRepository";
+import {
+  getMyPatients,
+  transferPatient,
+} from "@/services/AssignmentRepository";
 import { finishPatient } from "@/services/PatientCompletionService";
 import { subscribeToSync } from "@/services/SyncService";
+import { demoTransferTarget } from "@/services/CurrentUserService";
 
 export default function ActivePatientsCard() {
   const [, setRefreshKey] = useState(0);
@@ -29,6 +33,20 @@ export default function ActivePatientsCard() {
     );
   }
 
+  function confirmTransfer(patientId: string, patientName: string): void {
+    Alert.alert(
+      "Anna patsient üle?",
+      `${patientId} · ${patientName}\n\nUus Case Manager: ${demoTransferTarget.name}`,
+      [
+        { text: "Katkesta", style: "cancel" },
+        {
+          text: "Anna üle",
+          onPress: () => transferPatient(patientId, demoTransferTarget),
+        },
+      ]
+    );
+  }
+
   return (
     <View style={styles.card}>
       <Text style={styles.title}>Aktiivsed patsiendid</Text>
@@ -42,12 +60,20 @@ export default function ActivePatientsCard() {
               <Text style={styles.patientName}>{patient.id} · {patient.name}</Text>
               <Text style={styles.patientMeta}>{patient.triage} · {patient.location}</Text>
             </View>
-            <Pressable
-              style={styles.finishButton}
-              onPress={() => confirmFinish(patient.id, patient.name)}
-            >
-              <Text style={styles.finishButtonText}>Finish</Text>
-            </Pressable>
+            <View style={styles.actions}>
+              <Pressable
+                style={styles.transferButton}
+                onPress={() => confirmTransfer(patient.id, patient.name)}
+              >
+                <Text style={styles.actionButtonText}>Anna üle</Text>
+              </Pressable>
+              <Pressable
+                style={styles.finishButton}
+                onPress={() => confirmFinish(patient.id, patient.name)}
+              >
+                <Text style={styles.actionButtonText}>Finish</Text>
+              </Pressable>
+            </View>
           </View>
         ))
       )}
@@ -98,7 +124,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 10,
   },
-  finishButtonText: {
+  transferButton: {
+    backgroundColor: "#005BBB",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  actions: {
+    gap: 8,
+  },
+  actionButtonText: {
     color: "#fff",
     fontWeight: "bold",
   },

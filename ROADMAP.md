@@ -17,6 +17,7 @@
 - Case Manager patient notes with timeline and reset behavior
 - Audited, idempotent patient assignment workflow
 - Patient ownership and cross-CM assignment conflict detection
+- EXCON patient transfer between Case Managers
 - Initial automated service tests
 
 ## 🚧 In progress

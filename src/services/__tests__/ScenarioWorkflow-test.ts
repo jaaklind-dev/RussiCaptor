@@ -18,6 +18,7 @@ import {
   assignPatientToMe,
   getDashboardStats,
   getPatientAssignment,
+  transferPatient,
 } from "@/services/AssignmentRepository";
 import { advanceExerciseMinutes } from "@/services/ClockService";
 import { resetExercise } from "@/services/ExerciseResetService";
@@ -32,6 +33,7 @@ import {
 import { triggerScenarioEventNow } from "@/services/ScenarioControlService";
 import { getNotes } from "@/repositories/NoteRepository";
 import { addPatientNote } from "@/services/NoteService";
+import { demoTransferTarget } from "@/services/CurrentUserService";
 
 const patientId = "PT-001";
 
@@ -143,6 +145,30 @@ describe("order-driven scenario workflow", () => {
     });
     expect(getPatientAssignment(patientId)?.caseManagerName).toBe("Jaak");
     expect(getTimelineEvents(patientId)).toHaveLength(1);
+  });
+
+  test("patient transfer changes owner and preserves an audit trail", () => {
+    expect(assignPatientToMe(patientId).status).toBe("assigned");
+
+    expect(transferPatient(patientId, demoTransferTarget)).toBe(true);
+    expect(findPatientById(patientId)?.status).toBe("Active");
+    expect(getPatientAssignment(patientId)).toEqual(
+      expect.objectContaining({
+        caseManagerId: "CM-002",
+        caseManagerName: "Mari",
+      })
+    );
+    expect(getPatientAssignment(patientId)?.endedAt).toBeUndefined();
+    expect(getDashboardStats()).toEqual(
+      expect.objectContaining({ active: 0, transferred: 1 })
+    );
+    expect(assignPatient(patientId, demoTransferTarget).status).toBe(
+      "already-assigned"
+    );
+    expect(getTimelineEvents(patientId).map((event) => event.title)).toEqual([
+      "Patsient määratud Case Managerile",
+      "Patsient üle antud",
+    ]);
   });
 
   test("Pause preserves exercise progress and pending events", () => {
