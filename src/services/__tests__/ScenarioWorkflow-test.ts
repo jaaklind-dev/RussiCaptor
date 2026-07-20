@@ -17,6 +17,7 @@ import {
   acceptPatientTransfer,
   assignPatient,
   assignPatientToMe,
+  getAllActivePatientAssignments,
   getDashboardStats,
   getMyClosedAssignments,
   getMyIncomingTakeoverRequests,
@@ -154,6 +155,12 @@ describe("order-driven scenario workflow", () => {
       }),
     });
     expect(getPatientAssignment(patientId)?.caseManagerName).toBe("Jaak");
+    expect(getAllActivePatientAssignments()).toEqual([
+      expect.objectContaining({
+        assignment: expect.objectContaining({ caseManagerName: "Jaak" }),
+        patient: expect.objectContaining({ id: patientId }),
+      }),
+    ]);
     expect(getTimelineEvents(patientId)).toHaveLength(1);
   });
 
@@ -190,6 +197,12 @@ describe("order-driven scenario workflow", () => {
       })
     );
     expect(getPatientAssignment(patientId)?.endedAt).toBeUndefined();
+    expect(getAllActivePatientAssignments()).toEqual([
+      expect.objectContaining({
+        assignment: expect.objectContaining({ caseManagerName: "Mari" }),
+        patient: expect.objectContaining({ id: patientId }),
+      }),
+    ]);
     expect(getDashboardStats()).toEqual(
       expect.objectContaining({ active: 0, transferred: 1 })
     );

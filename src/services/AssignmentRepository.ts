@@ -278,6 +278,20 @@ export function getMyPatients() {
 
 }
 
+export function getAllActivePatientAssignments() {
+  return assignments.flatMap((assignment) => {
+    if (assignment.endedAt) {
+      return [];
+    }
+
+    const patient = findPatientById(assignment.patientId);
+
+    return patient?.status === "Active"
+      ? [{ assignment, patient }]
+      : [];
+  });
+}
+
 export function getMyClosedAssignments(): PatientAssignment[] {
   return assignments
     .filter(

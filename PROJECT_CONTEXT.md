@@ -277,6 +277,14 @@ Dashboard. The card shows the patient and requesting CM and provides `Vaata`,
 `Nõustu`, and `Keeldu` actions. `My Patients` also displays the pending request
 count, while the patient workspace retains the detailed request card.
 
+EXCON patient visibility is global and does not use the selected CM's
+`My Patients` filter. Its active-patient card lists every active assignment and
+shows the owning Case Manager, including patients owned by Mari while the demo
+UI is currently switched to Jaak (and vice versa).
+
+The EXCON screen ends with an explicit `Back to Dashboard` action, so leaving
+exercise control does not depend on the Android system back gesture or button.
+
 Patient mutations are now owner-enforced. After transfer, the previous CM's
 open patient workspace switches to read-only mode through the sync boundary.
 Orders, notes, question reveals, lab opening, and imaging opening also verify

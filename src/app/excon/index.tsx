@@ -12,7 +12,9 @@ import { subscribeToSync } from "@/services/SyncService";
 
 import { useEffect, useState } from "react";
 
-import { ScrollView, StyleSheet, Text } from "react-native";
+import { router } from "expo-router";
+
+import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
 
 export default function ExconScreen() {
 
@@ -62,6 +64,13 @@ function refreshSession(): void {
 
       <EventHistoryCard />
 
+      <Pressable
+        style={styles.backButton}
+        onPress={() => router.replace("/dashboard")}
+      >
+        <Text style={styles.backButtonText}>Back to Dashboard</Text>
+      </Pressable>
+
     </ScrollView>
 
   );
@@ -96,6 +105,23 @@ const styles = StyleSheet.create({
 
     color: "#666",
 
+  },
+
+  backButton: {
+    width: "100%",
+    borderColor: "#005BBB",
+    borderWidth: 2,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 20,
+    marginBottom: 12,
+  },
+
+  backButtonText: {
+    color: "#005BBB",
+    fontWeight: "bold",
+    fontSize: 18,
   },
 
 });

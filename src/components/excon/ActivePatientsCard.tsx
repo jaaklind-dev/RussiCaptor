@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { getMyPatients } from "@/services/AssignmentRepository";
+import { getAllActivePatientAssignments } from "@/services/AssignmentRepository";
 import { finishPatient } from "@/services/PatientCompletionService";
 import { subscribeToSync } from "@/services/SyncService";
 
@@ -12,7 +12,7 @@ export default function ActivePatientsCard() {
     return subscribeToSync(() => setRefreshKey((value) => value + 1));
   }, []);
 
-  const patients = getMyPatients().filter((patient) => patient.status === "Active");
+  const activeAssignments = getAllActivePatientAssignments();
 
   function confirmFinish(patientId: string, patientName: string): void {
     Alert.alert(
@@ -33,14 +33,19 @@ export default function ActivePatientsCard() {
     <View style={styles.card}>
       <Text style={styles.title}>Aktiivsed patsiendid</Text>
 
-      {patients.length === 0 ? (
+      {activeAssignments.length === 0 ? (
         <Text style={styles.empty}>Aktiivseid patsiente ei ole.</Text>
       ) : (
-        patients.map((patient) => (
+        activeAssignments.map(({ assignment, patient }) => (
           <View key={patient.id} style={styles.patientRow}>
             <View style={styles.patientInfo}>
               <Text style={styles.patientName}>{patient.id} · {patient.name}</Text>
-              <Text style={styles.patientMeta}>{patient.triage} · {patient.location}</Text>
+              <Text style={styles.patientMeta}>
+                {patient.triage} · {patient.location}
+              </Text>
+              <Text style={styles.owner}>
+                Case Manager: {assignment.caseManagerName}
+              </Text>
             </View>
             <Pressable
               style={styles.finishButton}
@@ -90,6 +95,11 @@ const styles = StyleSheet.create({
   },
   patientMeta: {
     color: "#666",
+    marginTop: 4,
+  },
+  owner: {
+    color: "#005BBB",
+    fontWeight: "600",
     marginTop: 4,
   },
   finishButton: {
