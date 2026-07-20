@@ -3,6 +3,7 @@ import {
   setScenarioTriggerMinute,
 } from "@/repositories/ScenarioRepository";
 import { notifySync } from "@/services/SyncService";
+import { runScenarioEvents } from "@/services/ScenarioEngine";
 
 export function adjustScenarioEventTime(
   eventId: string,
@@ -27,4 +28,22 @@ export function adjustScenarioEventTime(
   );
 
   notifySync();
+}
+
+export function triggerScenarioEventNow(
+  eventId: string,
+  currentMinute: number
+): boolean {
+  const event = getUpcomingScenarioEvents().find(
+    (item) => item.id === eventId
+  );
+
+  if (!event) {
+    return false;
+  }
+
+  setScenarioTriggerMinute(eventId, currentMinute);
+  runScenarioEvents(currentMinute);
+
+  return !getUpcomingScenarioEvents().some((item) => item.id === eventId);
 }

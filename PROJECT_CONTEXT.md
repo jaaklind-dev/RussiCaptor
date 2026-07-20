@@ -226,6 +226,11 @@ Completed patients are listed under `History`. Opening one shows the preserved
 patient workspace in read-only mode: already revealed clinical information and
 the timeline remain visible, while reveal controls and new orders are disabled.
 
+EXCON can also trigger any pending supported scenario event immediately. The
+action asks for confirmation and then uses the normal scenario engine, so the
+clinical result, originating order, pending-event list, and timeline remain in
+sync without advancing the exercise clock.
+
 ## Working conventions
 
 - Read `AGENTS.md` before changing code. It requires using the exact Expo 57

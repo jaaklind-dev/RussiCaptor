@@ -20,6 +20,7 @@ import {
   findPatientById,
   getAllPatients,
 } from "@/repositories/PatientRepository";
+import { triggerScenarioEventNow } from "@/services/ScenarioControlService";
 
 const patientId = "PT-001";
 
@@ -109,6 +110,26 @@ describe("order-driven scenario workflow", () => {
         triggerMinute: 4,
       }),
     ]);
+  });
+
+  test("EXCON can trigger a pending result immediately", () => {
+    const order = getOrders(patientId).find((item) => item.id === "ORD-002")!;
+
+    placeOrder(order);
+    const event = getUpcomingScenarioEvents()[0];
+
+    expect(event.triggerMinute).toBe(5);
+    expect(triggerScenarioEventNow(event.id, 0)).toBe(true);
+    expect(order.status).toBe("completed");
+    expect(getUpcomingScenarioEvents()).toHaveLength(0);
+    expect(
+      getLabResults(patientId)
+        .filter((lab) => lab.panel === "CBC")
+        .every((lab) => lab.status === "available")
+    ).toBe(true);
+    expect(getTimelineEvents(patientId).at(-1)?.title).toBe(
+      "Täisvere analüüs valmis"
+    );
   });
 
   test("Finish completes one patient without resetting their history", () => {

@@ -12,6 +12,7 @@
 - Exercise reset semantics
 - Patient completion from EXCON
 - Completed patient history and read-only review
+- Manual EXCON triggering for pending scenario events
 - Initial automated service tests
 
 ## 🚧 In progress

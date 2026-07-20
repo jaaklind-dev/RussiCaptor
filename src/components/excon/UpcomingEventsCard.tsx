@@ -1,9 +1,12 @@
 import { getUpcomingScenarioEvents } from "@/repositories/ScenarioRepository";
 
-import { adjustScenarioEventTime } from "@/services/ScenarioControlService";
+import {
+  adjustScenarioEventTime,
+  triggerScenarioEventNow,
+} from "@/services/ScenarioControlService";
 
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { subscribeToSync } from "@/services/SyncService";
 import { ExerciseSession } from "@/models/ExerciseSession";
 
@@ -109,6 +112,25 @@ const status =
          >
            <Text style={styles.controlButtonText}>+1 min</Text>
          </Pressable>
+
+         <Pressable
+           style={styles.triggerButton}
+           onPress={() => {
+             Alert.alert(
+               "Käivita sündmus kohe?",
+               `${event.patientId} · ${event.title}`,
+               [
+                 { text: "Katkesta", style: "cancel" },
+                 {
+                   text: "Käivita kohe",
+                   onPress: () => triggerScenarioEventNow(event.id, currentMinute),
+                 },
+               ]
+             );
+           }}
+         >
+           <Text style={styles.triggerButtonText}>Käivita kohe</Text>
+         </Pressable>
        </View>
         </View>
              );
@@ -180,6 +202,17 @@ controlButton: {
 },
 
 controlButtonText: {
+  color: "#fff",
+  fontWeight: "bold",
+},
+triggerButton: {
+  backgroundColor: "#b45309",
+  paddingVertical: 8,
+  paddingHorizontal: 12,
+  borderRadius: 8,
+},
+
+triggerButtonText: {
   color: "#fff",
   fontWeight: "bold",
 },
