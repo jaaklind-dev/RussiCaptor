@@ -24,7 +24,10 @@ import { openLabPanel } from "@/services/LabService";
 import { revealQuestion } from "@/services/RevealService";
 import { subscribeToSync } from "@/services/SyncService";
 import { addPatientNote } from "@/services/NoteService";
-import { getPatientAssignment } from "@/services/AssignmentRepository";
+import {
+  canCurrentCaseManagerEditPatient,
+  getPatientAssignment,
+} from "@/services/AssignmentRepository";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 type PatientTab =
   | "overview"
@@ -49,6 +52,9 @@ useEffect(() => {
   const patient = findPatientById(id ?? "");
 const isCompleted = patient?.status === "Completed";
 const assignment = patient ? getPatientAssignment(patient.id) : undefined;
+const isReadOnly = patient
+  ? isCompleted || !canCurrentCaseManagerEditPatient(patient.id)
+  : true;
 const [questions, setQuestions] = useState(
   patient ? getQuestions(patient.id) : []
 );
@@ -109,6 +115,12 @@ const [orders, setOrders] = useState(
           </Text>
         )}
 
+        {!isCompleted && isReadOnly && (
+          <Text style={styles.readOnlyNotice}>
+            Määratud CM-ile {assignment?.caseManagerName ?? "–"} · vaatamisrežiim
+          </Text>
+        )}
+
       </View>
 
    <View style={styles.tabs}>
@@ -140,7 +152,7 @@ const [orders, setOrders] = useState(
        {activeTab === "labs" && (
          <LabsTab
            labs={getLabResults(patient.id)}
-           readOnly={isCompleted}
+           readOnly={isReadOnly}
            onOpenPanel={(panel) => {
              openLabPanel(patient.id, panel);
            }}
@@ -150,7 +162,7 @@ const [orders, setOrders] = useState(
    {activeTab === "imaging" && (
   <ImagingTab
     studies={imagingStudies}
-    readOnly={isCompleted}
+    readOnly={isReadOnly}
     onOpenImage={(study) => {
       openImagingImage(patient.id, study.id, study.title);
       setImagingStudies(getImagingStudies(patient.id));
@@ -165,7 +177,7 @@ const [orders, setOrders] = useState(
 {activeTab === "questions" && (
  <QuestionsTab
    questions={questions}
-   readOnly={isCompleted}
+   readOnly={isReadOnly}
    onReveal={(questionId) => {
      revealQuestion(patient.id, questionId);
      setQuestions(getQuestions(patient.id));
@@ -175,7 +187,7 @@ const [orders, setOrders] = useState(
 {activeTab === "orders" && (
   <OrdersTab
     orders={orders}
-    readOnly={isCompleted}
+    readOnly={isReadOnly}
     onPlaceOrder={(order) => {
       placeOrder(order);
       setOrders(getOrders(patient.id));
@@ -186,7 +198,7 @@ const [orders, setOrders] = useState(
         {activeTab === "notes" && (
           <NotesTab
             notes={getNotes(patient.id)}
-            readOnly={isCompleted}
+            readOnly={isReadOnly}
             onAddNote={(text) => addPatientNote(patient.id, text)}
           />
         )}
@@ -321,6 +333,17 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: "#dcfce7",
     color: "#166534",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    fontWeight: "bold",
+    marginTop: 10,
+  },
+
+  readOnlyNotice: {
+    alignSelf: "flex-start",
+    backgroundColor: "#fef3c7",
+    color: "#92400e",
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,

@@ -6,12 +6,18 @@ import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
 import { processOrder } from "@/services/WorkflowService";
 import { findPatientById } from "@/repositories/PatientRepository";
+import { canCurrentCaseManagerEditPatient } from "@/services/AssignmentRepository";
+import { currentCaseManager } from "@/services/CurrentUserService";
 export function placeOrder(
   order: Order
 ): void {
   const patient = findPatientById(order.patientId);
 
-  if (order.status !== "available" || patient?.status === "Completed") {
+  if (
+    order.status !== "available" ||
+    patient?.status === "Completed" ||
+    !canCurrentCaseManagerEditPatient(order.patientId)
+  ) {
     return;
   }
 
@@ -25,7 +31,7 @@ export function placeOrder(
     type: "order",
     title: `${order.title} tellitud`,
     description: `Tellimus "${order.title}" esitati.`,
-    author: "CM",
+    author: currentCaseManager.name,
     visibility: "revealed",
   });
 

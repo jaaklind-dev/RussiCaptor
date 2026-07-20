@@ -6,11 +6,16 @@ import {
 import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
+import { canCurrentCaseManagerEditPatient } from "@/services/AssignmentRepository";
 export function openImagingImage(
   patientId: string,
   imagingId: string,
   title: string
 ): void {
+  if (!canCurrentCaseManagerEditPatient(patientId)) {
+    return;
+  }
+
   setImagingImageVisibility(
     patientId,
     imagingId,
@@ -37,6 +42,10 @@ export function openImagingReport(
   imagingId: string,
   title: string
 ): void {
+  if (!canCurrentCaseManagerEditPatient(patientId)) {
+    return;
+  }
+
   setImagingReportVisibility(
     patientId,
     imagingId,

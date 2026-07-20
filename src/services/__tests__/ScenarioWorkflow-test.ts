@@ -46,6 +46,7 @@ describe("order-driven scenario workflow", () => {
     const order = getOrders(patientId).find((item) => item.id === "ORD-003");
 
     expect(order).toBeDefined();
+    assignPatientToMe(patientId);
     placeOrder(order!);
 
     expect(order!.status).toBe("processing");
@@ -76,6 +77,7 @@ describe("order-driven scenario workflow", () => {
         ?.status
     ).toBe("available");
     expect(getTimelineEvents(patientId).map((event) => event.title)).toEqual([
+      "Patsient määratud Case Managerile",
       "KT pea tellitud",
       "KT pea täitmisel",
       "KT pea valmis",
@@ -169,11 +171,22 @@ describe("order-driven scenario workflow", () => {
       "Patsient määratud Case Managerile",
       "Patsient üle antud",
     ]);
+
+    const blockedOrder = getOrders(patientId).find((item) => item.id === "ORD-001")!;
+    placeOrder(blockedOrder);
+    expect(blockedOrder.status).toBe("available");
+    expect(addPatientNote(patientId, "Jaak ei tohi seda lisada.")).toBe(false);
+    revealQuestion(patientId, "Q-001");
+    expect(
+      getQuestions(patientId).find((question) => question.id === "Q-001")
+        ?.visibility
+    ).toBe("hidden");
   });
 
   test("Pause preserves exercise progress and pending events", () => {
     const order = getOrders(patientId).find((item) => item.id === "ORD-004")!;
 
+    assignPatientToMe(patientId);
     placeOrder(order);
     startExerciseSession();
     advanceExerciseMinutes(2);
@@ -197,6 +210,7 @@ describe("order-driven scenario workflow", () => {
   test("EXCON can trigger a pending result immediately", () => {
     const order = getOrders(patientId).find((item) => item.id === "ORD-002")!;
 
+    assignPatientToMe(patientId);
     placeOrder(order);
     const event = getUpcomingScenarioEvents()[0];
 

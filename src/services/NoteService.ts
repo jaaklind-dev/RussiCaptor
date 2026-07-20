@@ -5,12 +5,18 @@ import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
 import { currentCaseManager } from "@/services/CurrentUserService";
+import { canCurrentCaseManagerEditPatient } from "@/services/AssignmentRepository";
 
 export function addPatientNote(patientId: string, text: string): boolean {
   const patient = findPatientById(patientId);
   const trimmedText = text.trim();
 
-  if (!patient || patient.status === "Completed" || trimmedText.length === 0) {
+  if (
+    !patient ||
+    patient.status === "Completed" ||
+    trimmedText.length === 0 ||
+    !canCurrentCaseManagerEditPatient(patientId)
+  ) {
     return false;
   }
 

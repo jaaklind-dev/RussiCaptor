@@ -140,6 +140,16 @@ export function getPatientAssignment(
     .find((item) => item.patientId === patientId);
 }
 
+export function canCurrentCaseManagerEditPatient(patientId: string): boolean {
+  const assignment = getPatientAssignment(patientId);
+
+  return Boolean(
+    assignment &&
+      !assignment.endedAt &&
+      assignment.caseManagerId === currentCaseManager.id
+  );
+}
+
 export function getMyPatients() {
 
   return assignments

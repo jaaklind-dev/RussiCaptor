@@ -265,6 +265,12 @@ to the patient timeline. Jaak's Dashboard then counts the patient under
 `Transferred` instead of `Active`. A production UI will replace the single demo
 target with a server-backed CM selector.
 
+Patient mutations are now owner-enforced. After transfer, the previous CM's
+open patient workspace switches to read-only mode through the sync boundary.
+Orders, notes, question reveals, lab opening, and imaging opening also verify
+the active assignment in their service layer, so stale UI or direct service
+calls cannot modify a patient owned by another CM.
+
 ## Working conventions
 
 - Read `AGENTS.md` before changing code. It requires using the exact Expo 57
