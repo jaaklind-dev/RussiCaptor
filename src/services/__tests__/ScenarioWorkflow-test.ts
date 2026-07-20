@@ -13,7 +13,12 @@ import {
   getUpcomingScenarioEvents,
 } from "@/repositories/ScenarioRepository";
 import { getTimelineEvents } from "@/repositories/TimelineRepository";
-import { assignPatientToMe, getDashboardStats } from "@/services/AssignmentRepository";
+import {
+  assignPatient,
+  assignPatientToMe,
+  getDashboardStats,
+  getPatientAssignment,
+} from "@/services/AssignmentRepository";
 import { advanceExerciseMinutes } from "@/services/ClockService";
 import { resetExercise } from "@/services/ExerciseResetService";
 import { placeOrder } from "@/services/OrderService";
@@ -106,8 +111,8 @@ describe("order-driven scenario workflow", () => {
   test("patient assignment is audited once and activates an incoming patient", () => {
     setPatientStatus(patientId, "Incoming");
 
-    expect(assignPatientToMe(patientId)).toBe("assigned");
-    expect(assignPatientToMe(patientId)).toBe("already-assigned");
+    expect(assignPatientToMe(patientId).status).toBe("assigned");
+    expect(assignPatientToMe(patientId).status).toBe("already-assigned");
     expect(findPatientById(patientId)?.status).toBe("Active");
     expect(getDashboardStats()).toEqual(
       expect.objectContaining({ active: 1, incoming: 0 })
@@ -118,6 +123,26 @@ describe("order-driven scenario workflow", () => {
         title: "Patsient määratud Case Managerile",
       }),
     ]);
+  });
+
+  test("a second Case Manager receives the existing assignment owner", () => {
+    expect(assignPatientToMe(patientId).status).toBe("assigned");
+
+    const result = assignPatient(patientId, {
+      id: "CM-002",
+      name: "Mari",
+    });
+
+    expect(result).toEqual({
+      status: "assigned-to-other",
+      assignment: expect.objectContaining({
+        patientId,
+        caseManagerId: "CM-001",
+        caseManagerName: "Jaak",
+      }),
+    });
+    expect(getPatientAssignment(patientId)?.caseManagerName).toBe("Jaak");
+    expect(getTimelineEvents(patientId)).toHaveLength(1);
   });
 
   test("Pause preserves exercise progress and pending events", () => {
@@ -194,6 +219,12 @@ describe("order-driven scenario workflow", () => {
 
     expect(finishPatient(patientId)).toBe(true);
     expect(findPatientById(patientId)?.status).toBe("Completed");
+    expect(getPatientAssignment(patientId)).toEqual(
+      expect.objectContaining({
+        caseManagerName: "Jaak",
+        endedAt: expect.any(String),
+      })
+    );
     expect(
       getAllPatients().filter((patient) => patient.status === "Completed")
     ).toEqual([expect.objectContaining({ id: patientId })]);

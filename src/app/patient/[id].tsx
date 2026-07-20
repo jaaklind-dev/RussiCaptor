@@ -24,6 +24,7 @@ import { openLabPanel } from "@/services/LabService";
 import { revealQuestion } from "@/services/RevealService";
 import { subscribeToSync } from "@/services/SyncService";
 import { addPatientNote } from "@/services/NoteService";
+import { getPatientAssignment } from "@/services/AssignmentRepository";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 type PatientTab =
   | "overview"
@@ -47,6 +48,7 @@ useEffect(() => {
 }, []);
   const patient = findPatientById(id ?? "");
 const isCompleted = patient?.status === "Completed";
+const assignment = patient ? getPatientAssignment(patient.id) : undefined;
 const [questions, setQuestions] = useState(
   patient ? getQuestions(patient.id) : []
 );
@@ -97,7 +99,9 @@ const [orders, setOrders] = useState(
 
         </Text>
 
-        <Text style={styles.cmLine}>Current CM: Jaak</Text>
+        <Text style={styles.cmLine}>
+          Current CM: {assignment?.caseManagerName ?? "Määramata"}
+        </Text>
 
         {isCompleted && (
           <Text style={styles.completedNotice}>

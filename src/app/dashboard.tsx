@@ -7,6 +7,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import AppHeader from "@/components/AppHeader";
 
 import { getDashboardStats } from "@/services/AssignmentRepository";
+import { currentCaseManager } from "@/services/CurrentUserService";
 
 export default function DashboardScreen() {
 
@@ -30,7 +31,7 @@ export default function DashboardScreen() {
 
       <Text style={styles.title}>CM Dashboard</Text>
 
-      <Text style={styles.subtitle}>Case Manager: Jaak</Text>
+      <Text style={styles.subtitle}>Case Manager: {currentCaseManager.name}</Text>
 
       <View style={styles.card}>
 

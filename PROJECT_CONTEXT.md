@@ -247,6 +247,16 @@ notifies the UI. Repeated scans open the same patient without duplicating the
 assignment or audit entry. Completed and transferred patients cannot be added
 to the active list; the scan screen explains where completed history is found.
 
+Assignments now store a Case Manager ID, display name, and assignment time.
+The demo identity is `CM-001` / `Jaak`, provided centrally rather than repeated
+through the UI. Assignment is owner-aware: the same CM can reopen the patient,
+while a different CM receives an `assigned-to-other` conflict containing the
+current owner's identity. This is local in-memory conflict logic; a production
+provider must perform the same check atomically against shared server state.
+Finishing a patient closes the assignment with `endedAt` instead of deleting
+it, preserving the responsible CM in History while excluding the patient from
+active counts and work lists.
+
 ## Working conventions
 
 - Read `AGENTS.md` before changing code. It requires using the exact Expo 57

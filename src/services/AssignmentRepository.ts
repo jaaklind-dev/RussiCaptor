@@ -7,12 +7,25 @@ import { getCurrentExercise } from "@/repositories/ExerciseRepository";
 import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
+import type { CaseManager } from "@/models/CaseManager";
+import type { PatientAssignment } from "@/models/PatientAssignment";
+import { currentCaseManager } from "@/services/CurrentUserService";
 
-let assignedPatientIds: string[] = [];
+let assignments: PatientAssignment[] = [];
 
-export type AssignmentResult = "assigned" | "already-assigned" | "unavailable";
+export type AssignmentResult =
+  | { status: "assigned" | "already-assigned"; assignment: PatientAssignment }
+  | { status: "assigned-to-other"; assignment: PatientAssignment }
+  | { status: "unavailable" };
 
 export function assignPatientToMe(patientId: string): AssignmentResult {
+  return assignPatient(patientId, currentCaseManager);
+}
+
+export function assignPatient(
+  patientId: string,
+  caseManager: CaseManager
+): AssignmentResult {
 
   const patient = findPatientById(patientId);
 
@@ -21,14 +34,25 @@ export function assignPatientToMe(patientId: string): AssignmentResult {
     patient.status === "Completed" ||
     patient.status === "Transferred"
   ) {
-    return "unavailable";
+    return { status: "unavailable" };
   }
 
-  if (assignedPatientIds.includes(patientId)) {
-    return "already-assigned";
+  const existingAssignment = getPatientAssignment(patientId);
+
+  if (existingAssignment && !existingAssignment.endedAt) {
+    return existingAssignment.caseManagerId === caseManager.id
+      ? { status: "already-assigned", assignment: existingAssignment }
+      : { status: "assigned-to-other", assignment: existingAssignment };
   }
 
-  assignedPatientIds.push(patientId);
+  const assignment: PatientAssignment = {
+    patientId,
+    caseManagerId: caseManager.id,
+    caseManagerName: caseManager.name,
+    assignedAt: new Date().toISOString(),
+  };
+
+  assignments.push(assignment);
 
   if (patient.status === "Incoming") {
     setPatientStatus(patientId, "Active");
@@ -41,24 +65,38 @@ export function assignPatientToMe(patientId: string): AssignmentResult {
     timestamp: new Date().toISOString(),
     type: "assignment",
     title: "Patsient määratud Case Managerile",
-    description: "Patsient määrati Case Manager Jaagule.",
-    author: "Jaak",
+    description: `Patsient määrati Case Managerile ${caseManager.name}.`,
+    author: caseManager.name,
     visibility: "revealed",
   });
 
   notifySync();
-  return "assigned";
+  return { status: "assigned", assignment };
 }
 
 export function unassignPatient(patientId: string): void {
-  assignedPatientIds = assignedPatientIds.filter((id) => id !== patientId);
+  const assignment = getPatientAssignment(patientId);
+
+  if (assignment && !assignment.endedAt) {
+    assignment.endedAt = new Date().toISOString();
+  }
+}
+
+export function getPatientAssignment(
+  patientId: string
+): PatientAssignment | undefined {
+  return assignments.find((item) => item.patientId === patientId);
 }
 
 export function getMyPatients() {
 
-  return assignedPatientIds
+  return assignments
 
-    .map((patientId) => findPatientById(patientId))
+    .filter((assignment) => assignment.caseManagerId === currentCaseManager.id)
+
+    .filter((assignment) => !assignment.endedAt)
+
+    .map((assignment) => findPatientById(assignment.patientId))
 
     .filter((patient) => patient !== undefined);
 
@@ -70,8 +108,11 @@ export function getDashboardStats() {
 
   return {
 
-    active: assignedPatientIds.filter(
-      (patientId) => findPatientById(patientId)?.status === "Active"
+    active: assignments.filter(
+      (assignment) =>
+        assignment.caseManagerId === currentCaseManager.id &&
+        !assignment.endedAt &&
+        findPatientById(assignment.patientId)?.status === "Active"
     ).length,
 
     incoming: patients.filter((patient) => patient.status === "Incoming").length,
@@ -85,5 +126,5 @@ export function getDashboardStats() {
 }
 
 export function clearAssignments(): void {
-  assignedPatientIds = [];
+  assignments = [];
 }

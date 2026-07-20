@@ -27,12 +27,20 @@ export default function ScanScreen() {
 
 const assignmentResult = assignPatientToMe(patient.id);
 
-if (assignmentResult === "unavailable") {
+if (assignmentResult.status === "unavailable") {
   Alert.alert(
     "Patsienti ei saa määrata",
     patient.status === "Completed"
       ? "Patsiendi käsitlus on lõpetatud. Säilinud andmed leiad History vaatest."
       : "Patsient on üle antud ja teda ei saa aktiivnimekirja lisada."
+  );
+  return;
+}
+
+if (assignmentResult.status === "assigned-to-other") {
+  Alert.alert(
+    "Patsient on juba määratud",
+    `Praegune Case Manager: ${assignmentResult.assignment.caseManagerName}. Patsiendi ülevõtmiseks on vaja eraldi üleandmist.`
   );
   return;
 }

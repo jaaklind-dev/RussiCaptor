@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import AppHeader from "@/components/AppHeader";
 
 import { getMyPatients } from "@/services/AssignmentRepository";
+import { currentCaseManager } from "@/services/CurrentUserService";
 
 export default function PatientsScreen() {
 
@@ -18,7 +19,7 @@ export default function PatientsScreen() {
 
       <Text style={styles.title}>My Patients</Text>
 
-      <Text style={styles.subtitle}>Case Manager: Jaak</Text>
+      <Text style={styles.subtitle}>Case Manager: {currentCaseManager.name}</Text>
 
       {myPatients.length === 0 ? (
 
