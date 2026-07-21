@@ -5,15 +5,16 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 import AppHeader from "@/components/AppHeader";
 import { findLocationZoneByCode } from "@/repositories/LocationRepository";
 import { setCurrentLocationZone } from "@/services/CurrentLocationService";
+import QrScanner from "@/components/QrScanner";
 
 export default function LocationScanScreen() {
   const [code, setCode] = useState("LOC-ICU-2");
 
-  function applyLocation(): void {
-    const zone = findLocationZoneByCode(code);
+  function applyLocation(value = code): void {
+    const zone = findLocationZoneByCode(value);
 
     if (!zone) {
-      Alert.alert("Asukohatsooni ei leitud", code.trim());
+      Alert.alert("Asukohatsooni ei leitud", value.trim());
       return;
     }
 
@@ -26,6 +27,13 @@ export default function LocationScanScreen() {
       <AppHeader />
       <Text style={styles.title}>Scan Location</Text>
       <Text style={styles.subtitle}>Skaneeri või sisesta asukohatsooni kood</Text>
+      <QrScanner
+        buttonLabel="Scan Location QR"
+        onScanned={(data) => {
+          setCode(data);
+          applyLocation(data);
+        }}
+      />
       <TextInput
         style={styles.input}
         value={code}
@@ -33,7 +41,7 @@ export default function LocationScanScreen() {
         autoCapitalize="characters"
         placeholder="Tsooni kood"
       />
-      <Pressable style={styles.button} onPress={applyLocation}>
+      <Pressable style={styles.button} onPress={() => applyLocation()}>
         <Text style={styles.buttonText}>Set CM Location</Text>
       </Pressable>
       <Pressable style={styles.secondaryButton} onPress={() => router.back()}>

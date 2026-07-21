@@ -14,18 +14,19 @@ import {
 import { findPatientByNationalId } from "@/repositories/PatientRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { updatePatientLocationFromCurrentCm } from "@/services/PatientLocationService";
+import QrScanner from "@/components/QrScanner";
 
 export default function ScanScreen() {
 
   const [nationalId, setNationalId] = useState("38701032343");
 
-  function handleFindPatient() {
+  function handleFindPatient(value = nationalId) {
 
-    const patient = findPatientByNationalId(nationalId);
+    const patient = findPatientByNationalId(value);
 
     if (!patient) {
 
-      Alert.alert("Patsienti ei leitud", nationalId);
+      Alert.alert("Patsienti ei leitud", value);
 
       return;
 
@@ -87,6 +88,14 @@ router.push(`/patient/${patient.id}`);
 
       <Text style={styles.subtitle}>Sisesta või skaneeri patsiendi isikukood</Text>
 
+      <QrScanner
+        buttonLabel="Scan Patient QR"
+        onScanned={(data) => {
+          setNationalId(data);
+          handleFindPatient(data);
+        }}
+      />
+
       <TextInput
 
         style={styles.input}
@@ -101,7 +110,7 @@ router.push(`/patient/${patient.id}`);
 
       />
 
-      <Pressable style={styles.button} onPress={handleFindPatient}>
+      <Pressable style={styles.button} onPress={() => handleFindPatient()}>
 
         <Text style={styles.buttonText}>Find Patient</Text>
 
