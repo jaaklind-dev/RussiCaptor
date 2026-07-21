@@ -337,3 +337,21 @@ export function clearAssignments(): void {
   assignments = [];
   transfers = [];
 }
+
+export function getAssignmentState(): {
+  assignments: PatientAssignment[];
+  transfers: PatientTransfer[];
+} {
+  return {
+    assignments: assignments.map((assignment) => ({ ...assignment })),
+    transfers: transfers.map((transfer) => ({ ...transfer })),
+  };
+}
+
+export function restoreAssignmentState(state: {
+  assignments: PatientAssignment[];
+  transfers: PatientTransfer[];
+}): void {
+  assignments = state.assignments.map((assignment) => ({ ...assignment }));
+  transfers = state.transfers.map((transfer) => ({ ...transfer }));
+}

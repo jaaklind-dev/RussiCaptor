@@ -38,3 +38,11 @@ export function setExerciseSpeed(
 ): void {
   session.speed = speed;
 }
+
+export function restoreExerciseSession(restored: ExerciseSession): void {
+  Object.assign(session, restored);
+
+  if (!restored.startedAt) {
+    delete session.startedAt;
+  }
+}

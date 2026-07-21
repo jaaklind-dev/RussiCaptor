@@ -27,3 +27,11 @@ export function setCurrentCaseManager(caseManager: CaseManager): void {
 export function resetCurrentCaseManager(): void {
   currentCaseManager = { ...jaak };
 }
+
+export function restoreCurrentCaseManager(caseManager: CaseManager): void {
+  const knownCaseManager = demoCaseManagers.find(
+    (candidate) => candidate.id === caseManager.id
+  );
+
+  currentCaseManager = { ...(knownCaseManager ?? caseManager) };
+}

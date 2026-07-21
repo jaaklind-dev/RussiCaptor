@@ -21,6 +21,14 @@ import { TimelineEvent } from "@/models/TimelineEvent";
    events.splice(0, events.length);
  }
 
+ export function getAllTimelineEvents(): TimelineEvent[] {
+   return events.map((event) => ({ ...event }));
+ }
+
+ export function restoreTimelineEvents(restored: TimelineEvent[]): void {
+   events.splice(0, events.length, ...restored.map((event) => ({ ...event })));
+ }
+
  export function logQuestionRevealed(
    patientId: string,
    questionId: string
