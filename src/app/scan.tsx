@@ -13,6 +13,7 @@ import {
 } from "@/services/AssignmentRepository";
 import { findPatientByNationalId } from "@/repositories/PatientRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
+import { updatePatientLocationFromCurrentCm } from "@/services/PatientLocationService";
 
 export default function ScanScreen() {
 
@@ -69,6 +70,8 @@ if (assignmentResult.status === "assigned-to-other") {
   );
   return;
 }
+
+updatePatientLocationFromCurrentCm(patient.id);
 
 router.push(`/patient/${patient.id}`);
 

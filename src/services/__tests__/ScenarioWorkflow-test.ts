@@ -50,6 +50,12 @@ import {
   getMedicationOptions,
 } from "@/repositories/MedicationRepository";
 import { administerMedication } from "@/services/MedicationService";
+import { findLocationZoneByCode } from "@/repositories/LocationRepository";
+import {
+  getCurrentLocationZone,
+  setCurrentLocationZone,
+} from "@/services/CurrentLocationService";
+import { updatePatientLocationFromCurrentCm } from "@/services/PatientLocationService";
 import {
   demoTransferTarget,
   getCurrentCaseManager,
@@ -454,6 +460,27 @@ describe("order-driven scenario workflow", () => {
 
     resetExercise();
     expect(getMedicationAdministrations(patientId)).toHaveLength(0);
+  });
+
+  test("updates patient location from the current CM zone", () => {
+    assignPatientToMe(patientId);
+    const intensiveCare = findLocationZoneByCode("loc-icu-2")!;
+
+    setCurrentLocationZone(intensiveCare);
+    expect(getCurrentLocationZone()?.name).toBe("Intensiivravi");
+    expect(updatePatientLocationFromCurrentCm(patientId)).toBe(true);
+    expect(findPatientById(patientId)?.location).toBe("Intensiivravi");
+    expect(getTimelineEvents(patientId).at(-1)).toEqual(
+      expect.objectContaining({
+        title: "Patsiendi asukoht muutus",
+        description: "EMO triaaž → Intensiivravi",
+      })
+    );
+    expect(updatePatientLocationFromCurrentCm(patientId)).toBe(false);
+
+    resetExercise();
+    expect(findPatientById(patientId)?.location).toBe("EMO triaaž");
+    expect(getCurrentLocationZone()?.name).toBe("EMO triaaž");
   });
 
   test("Finish completes one patient without resetting their history", () => {

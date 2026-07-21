@@ -18,6 +18,7 @@ import {
 import { subscribeToSync } from "@/services/SyncService";
 import TakeoverRequestsCard from "@/components/dashboard/TakeoverRequestsCard";
 import LocalSaveStatusCard from "@/components/dashboard/LocalSaveStatusCard";
+import { getCurrentLocationZone } from "@/services/CurrentLocationService";
 
 export default function DashboardScreen() {
 
@@ -54,6 +55,9 @@ export default function DashboardScreen() {
 
       <Text style={styles.subtitle}>
         Case Manager: {selectedCaseManager.name}
+      </Text>
+      <Text style={styles.locationLine}>
+        Asukoht: {getCurrentLocationZone()?.name ?? "Määramata"}
       </Text>
 
       <View style={styles.demoUserBlock}>
@@ -109,6 +113,13 @@ export default function DashboardScreen() {
 
         <Text style={styles.buttonText}>Scan Patient</Text>
 
+      </Pressable>
+
+      <Pressable
+        style={styles.secondaryButton}
+        onPress={() => router.push("/location")}
+      >
+        <Text style={styles.secondaryButtonText}>Scan Location</Text>
       </Pressable>
 
       <Pressable style={styles.secondaryButton} onPress={() => router.push("/patients")}>
@@ -176,6 +187,10 @@ const styles = StyleSheet.create({
 
     marginBottom: 8,
 
+  },
+  locationLine: {
+    fontSize: 16,
+    color: "#667085",
   },
 
   card: {

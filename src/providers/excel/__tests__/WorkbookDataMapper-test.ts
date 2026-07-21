@@ -19,6 +19,10 @@ function createWorkbookRows(): WorkbookRows {
       MistSigns: "GCS 15",
       MistTreatment: "Ravi puudub",
     }],
+    Locations: [{
+      ExerciseId: "demo", LocationId: "LOC-001", Code: "LOC-EMO-TRIAGE",
+      Name: "EMO triaaž", Building: "Haigla", Floor: "1", Visibility: "available",
+    }],
     InterventionOptions: [{
       ExerciseId: "demo", PatientId: "PT-001", OptionId: "INTOPT-001",
       Type: "airway", Label: "Hingamistee tagamine", Visibility: "available",

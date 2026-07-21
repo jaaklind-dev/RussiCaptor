@@ -21,6 +21,10 @@ import { subscribeToSync } from "@/services/SyncService";
 import type { CaseManager } from "@/models/CaseManager";
 import type { Intervention } from "@/models/Intervention";
 import type { MedicationAdministration } from "@/models/Medication";
+import {
+  getCaseManagerLocationState,
+  restoreCaseManagerLocationState,
+} from "@/services/CurrentLocationService";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
@@ -42,6 +46,7 @@ type PersistedState = {
   timelineEvents: TimelineEvent[];
   interventions?: Intervention[];
   medicationAdministrations?: MedicationAdministration[];
+  caseManagerZoneIds?: Record<string, string>;
 };
 
 let saveChain = Promise.resolve();
@@ -116,6 +121,7 @@ function createSnapshot(): PersistedState {
     medicationAdministrations: medicationAdministrations.map((item) => ({
       ...item,
     })),
+    caseManagerZoneIds: getCaseManagerLocationState(),
   };
 }
 
@@ -141,6 +147,7 @@ export async function loadPersistedState(): Promise<void> {
     restoreExerciseSession(restored.exerciseSession);
     replaceItems(dataProvider.getPatients(), restored.patients);
     restoreAssignmentState(restored);
+    restoreCaseManagerLocationState(restored.caseManagerZoneIds ?? {});
     replaceItems(clinicalDataProvider.getQuestions(), restored.questions);
     replaceItems(clinicalDataProvider.getLabs(), restored.labs);
     replaceItems(

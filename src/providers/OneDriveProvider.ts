@@ -20,6 +20,10 @@ export class OneDriveProvider implements DataProvider {
     throw new Error("OneDrive provider not implemented yet.");
   }
 
+  setPatientLocation(id: string, location: string): void {
+    throw new Error("OneDrive provider not implemented yet.");
+  }
+
   resetPatients(): void {
     throw new Error("OneDrive provider not implemented yet.");
   }

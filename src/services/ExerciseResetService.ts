@@ -9,6 +9,7 @@ import { resetPatients } from "@/repositories/PatientRepository";
 import { resetNotes } from "@/repositories/NoteRepository";
 import { resetInterventions } from "@/repositories/InterventionRepository";
 import { resetMedicationAdministrations } from "@/repositories/MedicationRepository";
+import { resetCaseManagerLocations } from "@/services/CurrentLocationService";
 import { clearAssignments } from "@/services/AssignmentRepository";
 import { stopClockRunner } from "@/services/ClockRunner";
 import { notifySync } from "@/services/SyncService";
@@ -29,5 +30,6 @@ export function resetExercise(): void {
   resetPatients();
   clearAssignments();
   resetCurrentCaseManager();
+  resetCaseManagerLocations();
   notifySync();
 }

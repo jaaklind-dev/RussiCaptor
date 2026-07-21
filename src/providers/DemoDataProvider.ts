@@ -32,6 +32,18 @@ export class DemoDataProvider implements DataProvider {
     }
   }
 
+  setPatientLocation(id: string, location: string): void {
+    const patient = patients.find((item) => item.id === id);
+
+    if (patient) {
+      patient.location = location;
+      patient.lastSeen = new Date().toLocaleTimeString("et-EE", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+  }
+
   resetPatients(): void {
     patients.splice(
       0,

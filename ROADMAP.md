@@ -28,6 +28,7 @@
 - Complete scenario action handling
 - Initial responder intervention recording
 - Patient-specific expected interventions and medications
+- Excel-driven CM location zones and patient location updates
 
 ## 🚧 In progress
 - OneDrive provider preparation

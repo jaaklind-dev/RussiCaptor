@@ -14,11 +14,13 @@ import type {
   MedicationAdministration,
   MedicationOption,
 } from "@/models/Medication";
+import type { LocationZone } from "@/models/LocationZone";
 
 export type WorkbookRow = Record<string, unknown>;
 
 export type WorkbookRows = {
   Patients: WorkbookRow[];
+  Locations: WorkbookRow[];
   InterventionOptions: WorkbookRow[];
   Interventions: WorkbookRow[];
   MedicationOptions: WorkbookRow[];
@@ -32,6 +34,7 @@ export type WorkbookRows = {
 
 export type WorkbookData = {
   patients: Patient[];
+  locations: LocationZone[];
   interventionOptions: InterventionOption[];
   interventions: Intervention[];
   medicationOptions: MedicationOption[];
@@ -178,6 +181,7 @@ function validateUniqueIds(
 ): void {
   const idColumns: Record<keyof WorkbookRows, string> = {
     Patients: "PatientId",
+    Locations: "LocationId",
     InterventionOptions: "OptionId",
     Interventions: "InterventionId",
     MedicationOptions: "OptionId",
@@ -333,6 +337,34 @@ export function mapWorkbookData(rows: WorkbookRows): WorkbookMappingResult {
     if (!allDefined([exerciseId, id, isikukood, name, triage, status, location, lastSeen, mechanism, injuries, signs, treatment])) return undefined;
     return { id: id!, isikukood: isikukood!, name: name!, triage: triage!, status: status!, location: location!, lastSeen: lastSeen!, mist: { mechanism: mechanism!, injuries: injuries!, signs: signs!, treatment: treatment! } };
   });
+
+  const locations = mapRows<LocationZone>(
+    "Locations",
+    rows.Locations,
+    errors,
+    (row, context) => {
+      const exerciseId = requiredString(row, "ExerciseId", context);
+      const id = requiredString(row, "LocationId", context);
+      const code = requiredString(row, "Code", context);
+      const name = requiredString(row, "Name", context);
+      const visibility = enumValue(
+        row,
+        "Visibility",
+        ["hidden", "available"] as const,
+        context
+      );
+      if (!allDefined([exerciseId, id, code, name, visibility])) return undefined;
+      return {
+        exerciseId: exerciseId!,
+        id: id!,
+        code: code!,
+        name: name!,
+        building: optionalString(row, "Building"),
+        floor: optionalString(row, "Floor"),
+        visibility: visibility!,
+      };
+    }
+  );
 
   const interventions = mapRows<Intervention>(
     "Interventions",
@@ -506,6 +538,7 @@ export function mapWorkbookData(rows: WorkbookRows): WorkbookMappingResult {
     ok: true,
     data: {
       patients,
+      locations,
       interventionOptions,
       interventions,
       medicationOptions,

@@ -17,6 +17,10 @@ export function setPatientStatus(patientId: string, status: PatientStatus): void
   dataProvider.setPatientStatus(patientId, status);
 }
 
+export function setPatientLocation(patientId: string, location: string): void {
+  dataProvider.setPatientLocation(patientId, location);
+}
+
 export function resetPatients(): void {
   dataProvider.resetPatients();
 }

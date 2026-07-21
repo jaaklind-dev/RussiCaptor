@@ -11,5 +11,7 @@ export interface DataProvider {
 
   setPatientStatus(id: string, status: PatientStatus): void;
 
+  setPatientLocation(id: string, location: string): void;
+
   resetPatients(): void;
 }
