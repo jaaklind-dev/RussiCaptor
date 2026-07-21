@@ -17,7 +17,14 @@ import { findPatientById } from "@/repositories/PatientRepository";
 import { getQuestions } from "@/repositories/QuestionRepository";
 import { getTimelineEvents } from "@/repositories/TimelineRepository";
 import { getNotes } from "@/repositories/NoteRepository";
-import { getInterventions } from "@/repositories/InterventionRepository";
+import {
+  getInterventions,
+  getInterventionOptions,
+} from "@/repositories/InterventionRepository";
+import {
+  getMedicationAdministrations,
+  getMedicationOptions,
+} from "@/repositories/MedicationRepository";
 import {
   openImagingImage,
   openImagingReport,
@@ -27,6 +34,7 @@ import { revealQuestion } from "@/services/RevealService";
 import { subscribeToSync } from "@/services/SyncService";
 import { addPatientNote } from "@/services/NoteService";
 import { recordIntervention } from "@/services/InterventionService";
+import { administerMedication } from "@/services/MedicationService";
 import {
   canCurrentCaseManagerEditPatient,
   acceptPatientTransfer,
@@ -270,8 +278,14 @@ const [orders, setOrders] = useState(
         {activeTab === "actions" && (
           <InterventionsTab
             interventions={getInterventions(patient.id)}
+            interventionOptions={getInterventionOptions(patient.id)}
+            medicationOptions={getMedicationOptions(patient.id)}
+            medicationAdministrations={getMedicationAdministrations(patient.id)}
             readOnly={isReadOnly}
-            onRecord={(type) => recordIntervention(patient.id, type)}
+            onRecord={(optionId) => recordIntervention(patient.id, optionId)}
+            onAdministerMedication={(optionId) =>
+              administerMedication(patient.id, optionId)
+            }
           />
         )}
 

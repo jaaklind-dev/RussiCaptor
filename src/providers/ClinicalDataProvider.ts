@@ -5,7 +5,11 @@ import type { Order } from "@/models/Order";
 import type { Question } from "@/models/Question";
 import type { ScenarioEvent } from "@/models/ScenarioEvent";
 import type { TimelineEvent } from "@/models/TimelineEvent";
-import type { Intervention } from "@/models/Intervention";
+import type { Intervention, InterventionOption } from "@/models/Intervention";
+import type {
+  MedicationAdministration,
+  MedicationOption,
+} from "@/models/Medication";
 
 export interface ClinicalDataProvider {
   getQuestions(): Question[];
@@ -16,6 +20,9 @@ export interface ClinicalDataProvider {
   getScenarioEvents(): ScenarioEvent[];
   getTimelineEvents(): TimelineEvent[];
   getInterventions(): Intervention[];
+  getInterventionOptions(): InterventionOption[];
+  getMedicationOptions(): MedicationOption[];
+  getMedicationAdministrations(): MedicationAdministration[];
   resetQuestions(): void;
   resetLabs(): void;
   resetImagingStudies(): void;
@@ -24,4 +31,5 @@ export interface ClinicalDataProvider {
   resetScenarioEvents(): void;
   resetTimelineEvents(): void;
   resetInterventions(): void;
+  resetMedicationAdministrations(): void;
 }

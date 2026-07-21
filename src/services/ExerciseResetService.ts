@@ -8,6 +8,7 @@ import { clearTimelineEvents } from "@/repositories/TimelineRepository";
 import { resetPatients } from "@/repositories/PatientRepository";
 import { resetNotes } from "@/repositories/NoteRepository";
 import { resetInterventions } from "@/repositories/InterventionRepository";
+import { resetMedicationAdministrations } from "@/repositories/MedicationRepository";
 import { clearAssignments } from "@/services/AssignmentRepository";
 import { stopClockRunner } from "@/services/ClockRunner";
 import { notifySync } from "@/services/SyncService";
@@ -22,6 +23,7 @@ export function resetExercise(): void {
   resetQuestions();
   resetNotes();
   resetInterventions();
+  resetMedicationAdministrations();
   clearScenarioEvents();
   clearTimelineEvents();
   resetPatients();

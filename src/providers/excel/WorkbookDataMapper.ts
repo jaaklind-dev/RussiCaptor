@@ -5,13 +5,24 @@ import type { Order, OrderCategory, OrderStatus } from "@/models/Order";
 import type { Patient, PatientStatus, TriageCategory } from "@/models/Patient";
 import type { Question } from "@/models/Question";
 import type { Visibility } from "@/models/Visibility";
-import type { Intervention, InterventionType } from "@/models/Intervention";
+import type {
+  Intervention,
+  InterventionOption,
+  InterventionType,
+} from "@/models/Intervention";
+import type {
+  MedicationAdministration,
+  MedicationOption,
+} from "@/models/Medication";
 
 export type WorkbookRow = Record<string, unknown>;
 
 export type WorkbookRows = {
   Patients: WorkbookRow[];
+  InterventionOptions: WorkbookRow[];
   Interventions: WorkbookRow[];
+  MedicationOptions: WorkbookRow[];
+  MedicationAdministrations: WorkbookRow[];
   Questions: WorkbookRow[];
   Labs: WorkbookRow[];
   Imaging: WorkbookRow[];
@@ -21,7 +32,10 @@ export type WorkbookRows = {
 
 export type WorkbookData = {
   patients: Patient[];
+  interventionOptions: InterventionOption[];
   interventions: Intervention[];
+  medicationOptions: MedicationOption[];
+  medicationAdministrations: MedicationAdministration[];
   questions: Question[];
   labs: LabResult[];
   imagingStudies: ImagingStudy[];
@@ -164,7 +178,10 @@ function validateUniqueIds(
 ): void {
   const idColumns: Record<keyof WorkbookRows, string> = {
     Patients: "PatientId",
+    InterventionOptions: "OptionId",
     Interventions: "InterventionId",
+    MedicationOptions: "OptionId",
+    MedicationAdministrations: "AdministrationId",
     Questions: "QuestionId",
     Labs: "LabId",
     Imaging: "ImagingId",
@@ -230,7 +247,7 @@ function validatePatientReferences(
     rows.Patients.map((row) => rawText(row, "PatientId")).filter(Boolean)
   );
 
-  (["Interventions", "Questions", "Labs", "Imaging", "Notes", "Orders"] as const).forEach(
+  (["InterventionOptions", "Interventions", "MedicationOptions", "MedicationAdministrations", "Questions", "Labs", "Imaging", "Notes", "Orders"] as const).forEach(
     (sheet) => {
       rows[sheet].forEach((row, index) => {
         const patientId = rawText(row, "PatientId");
@@ -355,6 +372,58 @@ export function mapWorkbookData(rows: WorkbookRows): WorkbookMappingResult {
     }
   );
 
+  const interventionOptions = mapRows<InterventionOption>(
+    "InterventionOptions",
+    rows.InterventionOptions,
+    errors,
+    (row, context) => {
+      const exerciseId = requiredString(row, "ExerciseId", context);
+      const patientId = requiredString(row, "PatientId", context);
+      const id = requiredString(row, "OptionId", context);
+      const type = enumValue(row, "Type", interventionTypeValues, context);
+      const label = requiredString(row, "Label", context);
+      const visibility = enumValue(row, "Visibility", visibilityValues, context);
+      if (!allDefined([exerciseId, patientId, id, type, label, visibility])) return undefined;
+      return { exerciseId: exerciseId!, patientId: patientId!, id: id!, type: type!, label: label!, visibility: visibility! };
+    }
+  );
+
+  const medicationOptions = mapRows<MedicationOption>(
+    "MedicationOptions",
+    rows.MedicationOptions,
+    errors,
+    (row, context) => {
+      const exerciseId = requiredString(row, "ExerciseId", context);
+      const patientId = requiredString(row, "PatientId", context);
+      const id = requiredString(row, "OptionId", context);
+      const name = requiredString(row, "Name", context);
+      const dose = requiredString(row, "Dose", context);
+      const route = requiredString(row, "Route", context);
+      const visibility = enumValue(row, "Visibility", visibilityValues, context);
+      if (!allDefined([exerciseId, patientId, id, name, dose, route, visibility])) return undefined;
+      return { exerciseId: exerciseId!, patientId: patientId!, id: id!, name: name!, dose: dose!, route: route!, visibility: visibility! };
+    }
+  );
+
+  const medicationAdministrations = mapRows<MedicationAdministration>(
+    "MedicationAdministrations",
+    rows.MedicationAdministrations,
+    errors,
+    (row, context) => {
+      const exerciseId = requiredString(row, "ExerciseId", context);
+      const patientId = requiredString(row, "PatientId", context);
+      const id = requiredString(row, "AdministrationId", context);
+      const medicationOptionId = requiredString(row, "MedicationOptionId", context);
+      const name = requiredString(row, "Name", context);
+      const dose = requiredString(row, "Dose", context);
+      const route = requiredString(row, "Route", context);
+      const administeredBy = requiredString(row, "AdministeredBy", context);
+      const administeredAt = requiredString(row, "AdministeredAt", context);
+      if (!allDefined([exerciseId, patientId, id, medicationOptionId, name, dose, route, administeredBy, administeredAt])) return undefined;
+      return { exerciseId: exerciseId!, patientId: patientId!, id: id!, medicationOptionId: medicationOptionId!, name: name!, dose: dose!, route: route!, administeredBy: administeredBy!, administeredAt: administeredAt! };
+    }
+  );
+
   const questions = mapRows("Questions", rows.Questions, errors, (row, context) => {
     const exerciseId = requiredString(row, "ExerciseId", context);
     const patientId = requiredString(row, "PatientId", context);
@@ -437,7 +506,10 @@ export function mapWorkbookData(rows: WorkbookRows): WorkbookMappingResult {
     ok: true,
     data: {
       patients,
+      interventionOptions,
       interventions,
+      medicationOptions,
+      medicationAdministrations,
       questions,
       labs,
       imagingStudies,

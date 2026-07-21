@@ -1,20 +1,29 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import type { Intervention, InterventionType } from "@/models/Intervention";
-import { interventionLabels } from "@/services/InterventionService";
+import type { Intervention, InterventionOption } from "@/models/Intervention";
+import type {
+  MedicationAdministration,
+  MedicationOption,
+} from "@/models/Medication";
 
 type Props = {
   interventions: Intervention[];
+  interventionOptions: InterventionOption[];
+  medicationOptions: MedicationOption[];
+  medicationAdministrations: MedicationAdministration[];
   readOnly?: boolean;
-  onRecord: (type: InterventionType) => boolean;
+  onRecord: (optionId: string) => boolean;
+  onAdministerMedication: (optionId: string) => boolean;
 };
-
-const interventionTypes = Object.keys(interventionLabels) as InterventionType[];
 
 export default function InterventionsTab({
   interventions,
+  interventionOptions,
+  medicationOptions,
+  medicationAdministrations,
   readOnly = false,
   onRecord,
+  onAdministerMedication,
 }: Props) {
   return (
     <View style={styles.card}>
@@ -25,17 +34,53 @@ export default function InterventionsTab({
 
       {!readOnly && (
         <View style={styles.actions}>
-          {interventionTypes.map((type) => (
+          {interventionOptions.map((option) => (
             <Pressable
-              key={type}
+              key={option.id}
               style={styles.actionButton}
-              onPress={() => onRecord(type)}
+              onPress={() => onRecord(option.id)}
             >
-              <Text style={styles.actionButtonText}>{interventionLabels[type]}</Text>
+              <Text style={styles.actionButtonText}>{option.label}</Text>
             </Pressable>
           ))}
+          {interventionOptions.length === 0 && (
+            <Text style={styles.empty}>Oodatavaid tegevusi ei ole.</Text>
+          )}
         </View>
       )}
+
+      <Text style={styles.historyTitle}>Ravimid</Text>
+      {!readOnly && (
+        <View style={styles.actions}>
+          {medicationOptions.map((option) => (
+            <Pressable
+              key={option.id}
+              style={styles.medicationButton}
+              onPress={() => onAdministerMedication(option.id)}
+            >
+              <Text style={styles.actionButtonText}>{option.name}</Text>
+              <Text style={styles.medicationDetails}>
+                {option.dose} · {option.route}
+              </Text>
+            </Pressable>
+          ))}
+          {medicationOptions.length === 0 && (
+            <Text style={styles.empty}>Oodatavaid ravimeid ei ole.</Text>
+          )}
+        </View>
+      )}
+
+      {medicationAdministrations.map((item) => (
+        <View key={item.id} style={styles.intervention}>
+          <Text style={styles.interventionLabel}>{item.name}</Text>
+          <Text>{item.dose} · {item.route}</Text>
+          <Text style={styles.meta}>
+            {item.administeredBy} · {new Date(
+              item.administeredAt
+            ).toLocaleString("et-EE")}
+          </Text>
+        </View>
+      ))}
 
       <Text style={styles.historyTitle}>Tegevuste ajalugu</Text>
       {interventions.length === 0 ? (
@@ -81,6 +126,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 13,
     alignItems: "center",
+  },
+  medicationButton: {
+    backgroundColor: "#6941C6",
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+  medicationDetails: {
+    color: "#E9D7FE",
+    marginTop: 3,
   },
   actionButtonText: {
     color: "#fff",

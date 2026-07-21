@@ -40,8 +40,16 @@ import {
 import { triggerScenarioEventNow } from "@/services/ScenarioControlService";
 import { getNotes } from "@/repositories/NoteRepository";
 import { addPatientNote } from "@/services/NoteService";
-import { getInterventions } from "@/repositories/InterventionRepository";
+import {
+  getInterventions,
+  getInterventionOptions,
+} from "@/repositories/InterventionRepository";
 import { recordIntervention } from "@/services/InterventionService";
+import {
+  getMedicationAdministrations,
+  getMedicationOptions,
+} from "@/repositories/MedicationRepository";
+import { administerMedication } from "@/services/MedicationService";
 import {
   demoTransferTarget,
   getCurrentCaseManager,
@@ -388,8 +396,13 @@ describe("order-driven scenario workflow", () => {
   test("records responder interventions with ownership and reset rules", () => {
     assignPatientToMe(patientId);
 
-    expect(recordIntervention(patientId, "cpr")).toBe(true);
-    expect(recordIntervention(patientId, "iv_access")).toBe(true);
+    expect(getInterventionOptions(patientId).map((option) => option.type)).toEqual([
+      "airway",
+      "iv_access",
+    ]);
+    expect(recordIntervention(patientId, "INTOPT-001")).toBe(true);
+    expect(recordIntervention(patientId, "INTOPT-002")).toBe(true);
+    expect(recordIntervention(patientId, "not-expected")).toBe(false);
     expect(getInterventions(patientId)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -398,21 +411,49 @@ describe("order-driven scenario workflow", () => {
           performedBy: "Jaak",
           status: "completed",
         }),
-        expect.objectContaining({ type: "cpr", label: "CPR" }),
+        expect.objectContaining({ type: "airway", label: "Hingamistee tagamine" }),
       ])
     );
     expect(getTimelineEvents(patientId).map((event) => event.title)).toEqual([
       "Patsient määratud Case Managerile",
-      "CPR",
+      "Hingamistee tagamine",
       "Veenitee rajamine",
     ]);
 
     finishPatient(patientId);
-    expect(recordIntervention(patientId, "airway")).toBe(false);
+    expect(recordIntervention(patientId, "INTOPT-001")).toBe(false);
     expect(getInterventions(patientId)).toHaveLength(2);
 
     resetExercise();
     expect(getInterventions(patientId)).toHaveLength(0);
+  });
+
+  test("shows and records only configured medication options", () => {
+    assignPatientToMe(patientId);
+
+    expect(getMedicationOptions(patientId).map((option) => option.id)).toEqual([
+      "MEDOPT-001",
+      "MEDOPT-002",
+    ]);
+    expect(administerMedication(patientId, "MEDOPT-001")).toBe(true);
+    expect(administerMedication(patientId, "not-expected")).toBe(false);
+    expect(getMedicationAdministrations(patientId)).toEqual([
+      expect.objectContaining({
+        name: "Botulismi antitoksiin",
+        dose: "1 viaal",
+        route: "IV",
+        administeredBy: "Jaak",
+      }),
+    ]);
+    expect(getTimelineEvents(patientId).at(-1)).toEqual(
+      expect.objectContaining({
+        type: "medication",
+        title: "Botulismi antitoksiin",
+      })
+    );
+
+    resetExercise();
+    expect(getMedicationAdministrations(patientId)).toHaveLength(0);
   });
 
   test("Finish completes one patient without resetting their history", () => {

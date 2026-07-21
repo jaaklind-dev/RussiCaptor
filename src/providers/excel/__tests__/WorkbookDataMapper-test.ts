@@ -19,6 +19,10 @@ function createWorkbookRows(): WorkbookRows {
       MistSigns: "GCS 15",
       MistTreatment: "Ravi puudub",
     }],
+    InterventionOptions: [{
+      ExerciseId: "demo", PatientId: "PT-001", OptionId: "INTOPT-001",
+      Type: "airway", Label: "Hingamistee tagamine", Visibility: "available",
+    }],
     Interventions: [{
       ExerciseId: "demo",
       PatientId: "PT-001",
@@ -28,6 +32,15 @@ function createWorkbookRows(): WorkbookRows {
       Status: "completed",
       PerformedBy: "Jaak",
       PerformedAt: "2026-07-21T10:00:00.000Z",
+    }],
+    MedicationOptions: [{
+      ExerciseId: "demo", PatientId: "PT-001", OptionId: "MEDOPT-001",
+      Name: "Antitoksiin", Dose: "1 viaal", Route: "IV", Visibility: "available",
+    }],
+    MedicationAdministrations: [{
+      ExerciseId: "demo", PatientId: "PT-001", AdministrationId: "MED-001",
+      MedicationOptionId: "MEDOPT-001", Name: "Antitoksiin", Dose: "1 viaal",
+      Route: "IV", AdministeredBy: "Jaak", AdministeredAt: "2026-07-21T10:00:00.000Z",
     }],
     Questions: [{
       ExerciseId: "demo",

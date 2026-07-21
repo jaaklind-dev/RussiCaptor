@@ -1,8 +1,8 @@
 import { getCurrentExercise } from "@/repositories/ExerciseRepository";
 import {
-  addIntervention,
-  getInterventionOption,
-} from "@/repositories/InterventionRepository";
+  addMedicationAdministration,
+  getMedicationOption,
+} from "@/repositories/MedicationRepository";
 import { findPatientById } from "@/repositories/PatientRepository";
 import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { canCurrentCaseManagerEditPatient } from "@/services/AssignmentRepository";
@@ -10,12 +10,12 @@ import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
 
-export function recordIntervention(
+export function administerMedication(
   patientId: string,
   optionId: string
 ): boolean {
   const patient = findPatientById(patientId);
-  const option = getInterventionOption(patientId, optionId);
+  const option = getMedicationOption(patientId, optionId);
 
   if (
     !patient ||
@@ -28,28 +28,28 @@ export function recordIntervention(
 
   const exerciseId = getCurrentExercise().id;
   const caseManager = getCurrentCaseManager();
-  const performedAt = new Date().toISOString();
-  const label = option.label;
+  const administeredAt = new Date().toISOString();
 
-  addIntervention({
-    id: createId("INT"),
+  addMedicationAdministration({
+    id: createId("MED"),
     exerciseId,
     patientId,
-    type: option.type,
-    label,
-    status: "completed",
-    performedBy: caseManager.name,
-    performedAt,
+    medicationOptionId: option.id,
+    name: option.name,
+    dose: option.dose,
+    route: option.route,
+    administeredBy: caseManager.name,
+    administeredAt,
   });
 
   addTimelineEvent({
     id: createId("TL"),
     exerciseId,
     patientId,
-    timestamp: performedAt,
-    type: "intervention",
-    title: label,
-    description: `${label} teostatud.`,
+    timestamp: administeredAt,
+    type: "medication",
+    title: option.name,
+    description: `${option.name} ${option.dose} ${option.route} manustatud.`,
     author: caseManager.name,
     visibility: "revealed",
   });

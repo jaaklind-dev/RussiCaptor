@@ -14,3 +14,12 @@ export type Intervention = {
   performedBy: string;
   performedAt: string;
 };
+
+export type InterventionOption = {
+  id: string;
+  exerciseId: string;
+  patientId: string;
+  type: InterventionType;
+  label: string;
+  visibility: "hidden" | "available" | "revealed";
+};

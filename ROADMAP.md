@@ -27,6 +27,7 @@
 - Provider abstraction for non-patient domains
 - Complete scenario action handling
 - Initial responder intervention recording
+- Patient-specific expected interventions and medications
 
 ## 🚧 In progress
 - OneDrive provider preparation

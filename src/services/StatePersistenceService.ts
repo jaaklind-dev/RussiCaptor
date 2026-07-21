@@ -20,6 +20,7 @@ import { getCurrentCaseManager, restoreCurrentCaseManager } from "@/services/Cur
 import { subscribeToSync } from "@/services/SyncService";
 import type { CaseManager } from "@/models/CaseManager";
 import type { Intervention } from "@/models/Intervention";
+import type { MedicationAdministration } from "@/models/Medication";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
@@ -40,6 +41,7 @@ type PersistedState = {
   scenarioEvents: ScenarioEvent[];
   timelineEvents: TimelineEvent[];
   interventions?: Intervention[];
+  medicationAdministrations?: MedicationAdministration[];
 };
 
 let saveChain = Promise.resolve();
@@ -92,6 +94,8 @@ function createSnapshot(): PersistedState {
   const notes = clinicalDataProvider.getNotes();
   const scenarioEvents = clinicalDataProvider.getScenarioEvents();
   const interventions = clinicalDataProvider.getInterventions();
+  const medicationAdministrations =
+    clinicalDataProvider.getMedicationAdministrations();
 
   return {
     version: STATE_VERSION,
@@ -109,6 +113,9 @@ function createSnapshot(): PersistedState {
     scenarioEvents: scenarioEvents.map((event) => ({ ...event })),
     timelineEvents: getAllTimelineEvents(),
     interventions: interventions.map((intervention) => ({ ...intervention })),
+    medicationAdministrations: medicationAdministrations.map((item) => ({
+      ...item,
+    })),
   };
 }
 
@@ -158,6 +165,10 @@ export async function loadPersistedState(): Promise<void> {
     replaceItems(
       clinicalDataProvider.getInterventions(),
       restored.interventions ?? []
+    );
+    replaceItems(
+      clinicalDataProvider.getMedicationAdministrations(),
+      restored.medicationAdministrations ?? []
     );
 
     if (restored.exerciseSession.state === "running") {

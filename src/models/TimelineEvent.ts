@@ -9,7 +9,8 @@ export type TimelineEventType =
   | "order"
   | "transfer"
   | "status"
-  | "intervention";
+  | "intervention"
+  | "medication";
 
 export type TimelineEvent = {
   id: string;
