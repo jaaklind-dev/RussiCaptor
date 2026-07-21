@@ -9,6 +9,7 @@ import { getLabResults } from "@/repositories/LabRepository";
 import { getOrders } from "@/repositories/OrderRepository";
 import { getQuestions } from "@/repositories/QuestionRepository";
 import {
+  addScenarioEvent,
   getResolvedScenarioEvents,
   getUpcomingScenarioEvents,
 } from "@/repositories/ScenarioRepository";
@@ -304,6 +305,62 @@ describe("order-driven scenario workflow", () => {
     expect(getTimelineEvents(patientId).at(-1)?.title).toBe(
       "Täisvere analüüs valmis"
     );
+  });
+
+  test("executes the remaining supported scenario actions", () => {
+    const order = getOrders(patientId).find((item) => item.id === "ORD-001")!;
+
+    addScenarioEvent({
+      id: "EVT-PROCESSING",
+      exerciseId: "demo",
+      patientId,
+      triggerMinute: 1,
+      action: "imaging.processing",
+      targetId: "IMG-001",
+      title: "KT pea töötlemisel",
+      description: "KT pea uuring on töötlemisel.",
+      executed: false,
+    });
+    addScenarioEvent({
+      id: "EVT-ORDER",
+      exerciseId: "demo",
+      patientId,
+      triggerMinute: 2,
+      action: "order.completed",
+      targetId: order.id,
+      title: "Tellimus lõpetatud",
+      description: "Tellimuse töövoog lõpetati.",
+      executed: false,
+    });
+    addScenarioEvent({
+      id: "EVT-NOTE",
+      exerciseId: "demo",
+      patientId,
+      triggerMinute: 3,
+      action: "note.available",
+      targetId: "NOTE-SYSTEM-001",
+      title: "EXCON teade",
+      description: "Patsient vajab uut hindamist.",
+      executed: false,
+    });
+
+    advanceExerciseMinutes(3);
+
+    expect(order.status).toBe("completed");
+    expect(getNotes(patientId)).toEqual([
+      expect.objectContaining({
+        id: "NOTE-SYSTEM-001",
+        text: "Patsient vajab uut hindamist.",
+        author: "System",
+      }),
+    ]);
+    expect(getResolvedScenarioEvents()).toHaveLength(3);
+    expect(getResolvedScenarioEvents().every((event) => event.executed)).toBe(true);
+    expect(getTimelineEvents(patientId).map((event) => event.title)).toEqual([
+      "KT pea töötlemisel",
+      "Tellimus lõpetatud",
+      "EXCON teade",
+    ]);
   });
 
   test("CM notes survive Finish and are cleared by Stop", () => {

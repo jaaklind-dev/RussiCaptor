@@ -25,9 +25,10 @@
 - Persistent local exercise state
 - Dashboard local-save status
 - Provider abstraction for non-patient domains
+- Complete scenario action handling
 
 ## 🚧 In progress
-- Remaining scenario actions
+- OneDrive provider preparation
 
 ## 📋 Planned
 - OneDrive / Microsoft Graph Provider
