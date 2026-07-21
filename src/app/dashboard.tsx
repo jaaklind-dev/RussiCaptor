@@ -17,6 +17,7 @@ import {
 } from "@/services/CurrentUserService";
 import { subscribeToSync } from "@/services/SyncService";
 import TakeoverRequestsCard from "@/components/dashboard/TakeoverRequestsCard";
+import LocalSaveStatusCard from "@/components/dashboard/LocalSaveStatusCard";
 
 export default function DashboardScreen() {
 
@@ -87,6 +88,8 @@ export default function DashboardScreen() {
           })}
         </View>
       </View>
+
+      <LocalSaveStatusCard />
 
       <TakeoverRequestsCard />
 

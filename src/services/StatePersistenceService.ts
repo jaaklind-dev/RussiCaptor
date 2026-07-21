@@ -47,6 +47,40 @@ type PersistedState = {
 };
 
 let saveChain = Promise.resolve();
+let pendingSaveCount = 0;
+
+export type LocalSaveStatus = {
+  state: "ready" | "saving" | "saved" | "error";
+  savedAt?: string;
+};
+
+type LocalSaveListener = (status: LocalSaveStatus) => void;
+
+let localSaveStatus: LocalSaveStatus = { state: "ready" };
+const localSaveListeners: LocalSaveListener[] = [];
+
+function setLocalSaveStatus(status: LocalSaveStatus): void {
+  localSaveStatus = status;
+  localSaveListeners.forEach((listener) => listener(status));
+}
+
+export function getLocalSaveStatus(): LocalSaveStatus {
+  return { ...localSaveStatus };
+}
+
+export function subscribeToLocalSaveStatus(
+  listener: LocalSaveListener
+): () => void {
+  localSaveListeners.push(listener);
+
+  return () => {
+    const index = localSaveListeners.indexOf(listener);
+
+    if (index >= 0) {
+      localSaveListeners.splice(index, 1);
+    }
+  };
+}
 
 function replaceItems<T>(target: T[], restored: T[]): void {
   target.splice(0, target.length, ...restored.map((item) => ({ ...item })));
@@ -89,6 +123,8 @@ export async function loadPersistedState(): Promise<void> {
       return;
     }
 
+    setLocalSaveStatus({ state: "saved", savedAt: restored.savedAt });
+
     restoreCurrentCaseManager(restored.currentCaseManager);
     restoreExerciseSession(restored.exerciseSession);
     replaceItems(patients, restored.patients);
@@ -119,12 +155,30 @@ export async function loadPersistedState(): Promise<void> {
 export function startStatePersistence(): () => void {
   return subscribeToSync(() => {
     const snapshot = createSnapshot();
+    pendingSaveCount += 1;
+
+    setLocalSaveStatus({
+      state: "saving",
+      savedAt: localSaveStatus.savedAt,
+    });
 
     saveChain = saveChain
       .then(() =>
         FileSystem.writeAsStringAsync(stateFileUri, JSON.stringify(snapshot))
       )
+      .then(() => {
+        pendingSaveCount -= 1;
+
+        if (pendingSaveCount === 0) {
+          setLocalSaveStatus({ state: "saved", savedAt: snapshot.savedAt });
+        }
+      })
       .catch((error) => {
+        pendingSaveCount = Math.max(0, pendingSaveCount - 1);
+        setLocalSaveStatus({
+          state: "error",
+          savedAt: localSaveStatus.savedAt,
+        });
         console.warn("Exercise state could not be saved.", error);
       });
   });
