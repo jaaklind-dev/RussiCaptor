@@ -1,16 +1,16 @@
-import { notes } from "@/data/notes";
 import type { Note } from "@/models/Note";
+import { clinicalDataProvider } from "@/providers/ProviderFactory";
 
 export function getNotes(patientId: string): Note[] {
-  return notes
+  return clinicalDataProvider.getNotes()
     .filter((note) => note.patientId === patientId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export function addNote(note: Note): void {
-  notes.push(note);
+  clinicalDataProvider.getNotes().push(note);
 }
 
 export function resetNotes(): void {
-  notes.splice(0, notes.length);
+  clinicalDataProvider.resetNotes();
 }

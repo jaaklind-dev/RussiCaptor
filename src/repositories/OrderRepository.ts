@@ -1,13 +1,8 @@
 import { Order } from "@/models/Order";
-import { orders } from "@/data/orders";
-
-const initialOrders = orders.map((order) => ({
-  ...order,
-  workflow: { ...order.workflow },
-}));
+import { clinicalDataProvider } from "@/providers/ProviderFactory";
 
 export function getOrders(patientId: string): Order[] {
-  return orders
+  return clinicalDataProvider.getOrders()
     .filter(
       (order) =>
         order.patientId === patientId &&
@@ -21,7 +16,7 @@ export function setOrderStatus(
   orderId: string,
   status: Order["status"]
 ): void {
-  const order = orders.find(
+  const order = clinicalDataProvider.getOrders().find(
     (order) =>
       order.patientId === patientId &&
       order.id === orderId
@@ -33,12 +28,5 @@ export function setOrderStatus(
 }
 
 export function resetOrders(): void {
-  orders.splice(
-    0,
-    orders.length,
-    ...initialOrders.map((order) => ({
-      ...order,
-      workflow: { ...order.workflow },
-    }))
-  );
+  clinicalDataProvider.resetOrders();
 }

@@ -22,12 +22,14 @@
 - Owner-enforced read-only patient workspace after transfer
 - Case Manager-scoped completed and transferred patient history
 - Initial automated service tests
+- Persistent local exercise state
+- Dashboard local-save status
+- Provider abstraction for non-patient domains
 
 ## 🚧 In progress
 - Remaining scenario actions
-- Provider abstraction for non-patient domains
 
 ## 📋 Planned
 - OneDrive / Microsoft Graph Provider
-- Sync status
+- Server sync status
 - Multi-user support

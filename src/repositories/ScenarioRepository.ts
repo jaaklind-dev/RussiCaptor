@@ -1,6 +1,9 @@
-import { scenarioEvents } from "@/data/scenarioEvents";
-
 import { ScenarioEvent } from "@/models/ScenarioEvent";
+import { clinicalDataProvider } from "@/providers/ProviderFactory";
+
+function getScenarioEvents(): ScenarioEvent[] {
+  return clinicalDataProvider.getScenarioEvents();
+}
 
 export function getPendingScenarioEvents(
 
@@ -8,7 +11,7 @@ export function getPendingScenarioEvents(
 
 ): ScenarioEvent[] {
 
-  return scenarioEvents.filter(
+  return getScenarioEvents().filter(
 
     (event) =>
 
@@ -26,7 +29,7 @@ export function markScenarioEventExecuted(
 
 ): void {
 
-  const event = scenarioEvents.find(
+  const event = getScenarioEvents().find(
 
     (event) => event.id === eventId
 
@@ -42,17 +45,17 @@ export function markScenarioEventExecuted(
 }
 
 export function addScenarioEvent(event: ScenarioEvent): void {
-  scenarioEvents.push(event);
+  getScenarioEvents().push(event);
 }
 
 export function clearScenarioEvents(): void {
-  scenarioEvents.splice(0, scenarioEvents.length);
+  clinicalDataProvider.resetScenarioEvents();
 }
 export function cancelPendingScenarioEvents(
   patientId: string,
   resolvedAtMinute: number
 ): void {
-  scenarioEvents.forEach((event) => {
+  getScenarioEvents().forEach((event) => {
     if (
       event.patientId === patientId &&
       event.executed === false &&
@@ -67,7 +70,7 @@ export function setScenarioTriggerMinute(
   eventId: string,
   triggerMinute: number
 ): void {
-  const event = scenarioEvents.find(
+  const event = getScenarioEvents().find(
     (event) => event.id === eventId
   );
 
@@ -76,12 +79,12 @@ export function setScenarioTriggerMinute(
   }
 }
 export function getAllPendingScenarioEvents(): ScenarioEvent[] {
-  return scenarioEvents.filter(
+  return getScenarioEvents().filter(
     (event) => event.executed === false && event.cancelled !== true
   );
 }
 export function getUpcomingScenarioEvents(): ScenarioEvent[] {
-  return scenarioEvents
+  return getScenarioEvents()
     .filter((event) => !event.executed && event.cancelled !== true)
     .sort(
       (a, b) => a.triggerMinute - b.triggerMinute
@@ -89,7 +92,7 @@ export function getUpcomingScenarioEvents(): ScenarioEvent[] {
 }
 
 export function getResolvedScenarioEvents(): ScenarioEvent[] {
-  return scenarioEvents
+  return getScenarioEvents()
     .filter((event) => event.executed || event.cancelled === true)
     .sort(
       (a, b) => (b.resolvedAtMinute ?? 0) - (a.resolvedAtMinute ?? 0)

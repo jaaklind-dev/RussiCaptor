@@ -1,10 +1,8 @@
 import { Question } from "@/models/Question";
-import { questions } from "@/data/questions";
-
-const initialQuestions = questions.map((question) => ({ ...question }));
+import { clinicalDataProvider } from "@/providers/ProviderFactory";
 
 export function getQuestions(patientId: string): Question[] {
-  return questions
+  return clinicalDataProvider.getQuestions()
     .filter((question) => question.patientId === patientId)
     .sort((a, b) => a.order - b.order);
 }
@@ -13,7 +11,7 @@ export function getQuestion(
   patientId: string,
   questionId: string
 ): Question | undefined {
-  return questions.find(
+  return clinicalDataProvider.getQuestions().find(
     (question) =>
       question.patientId === patientId &&
       question.id === questionId
@@ -25,7 +23,7 @@ export function setQuestionVisibility(
   questionId: string,
   visibility: Question["visibility"]
 ): void {
-  const question = questions.find(
+  const question = clinicalDataProvider.getQuestions().find(
     (question) =>
       question.patientId === patientId &&
       question.id === questionId
@@ -37,9 +35,5 @@ export function setQuestionVisibility(
 }
 
 export function resetQuestions(): void {
-  questions.splice(
-    0,
-    questions.length,
-    ...initialQuestions.map((question) => ({ ...question }))
-  );
+  clinicalDataProvider.resetQuestions();
 }

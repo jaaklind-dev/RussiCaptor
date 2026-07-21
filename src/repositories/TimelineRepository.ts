@@ -1,31 +1,35 @@
 import { TimelineEvent } from "@/models/TimelineEvent";
  import { getCurrentExercise } from "@/repositories/ExerciseRepository";
+ import { clinicalDataProvider } from "@/providers/ProviderFactory";
 
- const events: TimelineEvent[] = [];
+ function getEvents(): TimelineEvent[] {
+   return clinicalDataProvider.getTimelineEvents();
+ }
 
  function createTimelineId(): string {
    return `TL-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
  }
 
  export function getTimelineEvents(patientId: string): TimelineEvent[] {
-   return events
+   return getEvents()
      .filter((event) => event.patientId === patientId)
      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
  }
 
  export function addTimelineEvent(event: TimelineEvent): void {
-   events.push(event);
+   getEvents().push(event);
  }
 
  export function clearTimelineEvents(): void {
-   events.splice(0, events.length);
+   clinicalDataProvider.resetTimelineEvents();
  }
 
  export function getAllTimelineEvents(): TimelineEvent[] {
-   return events.map((event) => ({ ...event }));
+   return getEvents().map((event) => ({ ...event }));
  }
 
  export function restoreTimelineEvents(restored: TimelineEvent[]): void {
+   const events = getEvents();
    events.splice(0, events.length, ...restored.map((event) => ({ ...event })));
  }
 

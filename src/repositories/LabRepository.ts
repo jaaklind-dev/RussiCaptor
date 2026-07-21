@@ -1,12 +1,10 @@
 import { LabResult } from "@/models/LabResult";
-import { labs } from "@/data/labs";
-
-const initialLabs = labs.map((lab) => ({ ...lab }));
+import { clinicalDataProvider } from "@/providers/ProviderFactory";
 
 export function getLabResults(
   patientId: string
 ): LabResult[] {
-  return labs
+  return clinicalDataProvider.getLabs()
     .filter((lab) => lab.patientId === patientId)
     .sort((a, b) => {
       if (a.panel !== b.panel) {
@@ -21,7 +19,7 @@ export function getLabPanel(
   patientId: string,
   panel: string
 ): LabResult[] {
-  return labs.filter(
+  return clinicalDataProvider.getLabs().filter(
     (lab) =>
       lab.patientId === patientId &&
       lab.panel === panel
@@ -33,7 +31,7 @@ export function setLabVisibility(
   panel: string,
   visibility: LabResult["visibility"]
 ): void {
-  labs
+  clinicalDataProvider.getLabs()
     .filter(
       (lab) =>
         lab.patientId === patientId &&
@@ -55,9 +53,5 @@ export function setLabPanelStatus(
 }
 
 export function resetLabResults(): void {
-  labs.splice(
-    0,
-    labs.length,
-    ...initialLabs.map((lab) => ({ ...lab }))
-  );
+  clinicalDataProvider.resetLabs();
 }

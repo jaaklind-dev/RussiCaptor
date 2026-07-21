@@ -1,10 +1,10 @@
-import { imagingStudies } from "@/data/imaging";
 import { ImagingStudy } from "@/models/ImagingStudy";
-
-const initialImagingStudies = imagingStudies.map((study) => ({ ...study }));
+import { clinicalDataProvider } from "@/providers/ProviderFactory";
 
 export function getImagingStudies(patientId: string): ImagingStudy[] {
-  return imagingStudies.filter((study) => study.patientId === patientId);
+  return clinicalDataProvider
+    .getImagingStudies()
+    .filter((study) => study.patientId === patientId);
 }
 
 export function setImagingImageVisibility(
@@ -12,7 +12,7 @@ export function setImagingImageVisibility(
   imagingId: string,
   visibility: ImagingStudy["imageVisibility"]
 ): void {
-  const study = imagingStudies.find(
+  const study = clinicalDataProvider.getImagingStudies().find(
     (study) => study.patientId === patientId && study.id === imagingId
   );
 
@@ -26,7 +26,7 @@ export function setImagingReportVisibility(
   imagingId: string,
   visibility: ImagingStudy["reportVisibility"]
 ): void {
-  const study = imagingStudies.find(
+  const study = clinicalDataProvider.getImagingStudies().find(
     (study) => study.patientId === patientId && study.id === imagingId
   );
 
@@ -39,7 +39,7 @@ export function setImagingStatus(
   imagingId: string,
   status: ImagingStudy["status"]
 ): void {
-  const study = imagingStudies.find(
+  const study = clinicalDataProvider.getImagingStudies().find(
     (study) =>
       study.patientId === patientId &&
       study.id === imagingId
@@ -51,9 +51,5 @@ export function setImagingStatus(
 }
 
 export function resetImagingStudies(): void {
-  imagingStudies.splice(
-    0,
-    imagingStudies.length,
-    ...initialImagingStudies.map((study) => ({ ...study }))
-  );
+  clinicalDataProvider.resetImagingStudies();
 }

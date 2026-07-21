@@ -1,12 +1,5 @@
 import * as FileSystem from "expo-file-system/legacy";
 
-import { imagingStudies } from "@/data/imaging";
-import { labs } from "@/data/labs";
-import { notes } from "@/data/notes";
-import { orders } from "@/data/orders";
-import { patients } from "@/data/patients";
-import { questions } from "@/data/questions";
-import { scenarioEvents } from "@/data/scenarioEvents";
 import type { ExerciseSession } from "@/models/ExerciseSession";
 import type { ImagingStudy } from "@/models/ImagingStudy";
 import type { LabResult } from "@/models/LabResult";
@@ -18,6 +11,7 @@ import type { PatientTransfer } from "@/models/PatientTransfer";
 import type { Question } from "@/models/Question";
 import type { ScenarioEvent } from "@/models/ScenarioEvent";
 import type { TimelineEvent } from "@/models/TimelineEvent";
+import { clinicalDataProvider, dataProvider } from "@/providers/ProviderFactory";
 import { getExerciseSession, restoreExerciseSession } from "@/repositories/ExerciseSessionRepository";
 import { getAllTimelineEvents, restoreTimelineEvents } from "@/repositories/TimelineRepository";
 import { getAssignmentState, restoreAssignmentState } from "@/services/AssignmentRepository";
@@ -88,6 +82,13 @@ function replaceItems<T>(target: T[], restored: T[]): void {
 
 function createSnapshot(): PersistedState {
   const assignmentState = getAssignmentState();
+  const patients = dataProvider.getPatients();
+  const questions = clinicalDataProvider.getQuestions();
+  const labs = clinicalDataProvider.getLabs();
+  const imagingStudies = clinicalDataProvider.getImagingStudies();
+  const orders = clinicalDataProvider.getOrders();
+  const notes = clinicalDataProvider.getNotes();
+  const scenarioEvents = clinicalDataProvider.getScenarioEvents();
 
   return {
     version: STATE_VERSION,
@@ -127,11 +128,15 @@ export async function loadPersistedState(): Promise<void> {
 
     restoreCurrentCaseManager(restored.currentCaseManager);
     restoreExerciseSession(restored.exerciseSession);
-    replaceItems(patients, restored.patients);
+    replaceItems(dataProvider.getPatients(), restored.patients);
     restoreAssignmentState(restored);
-    replaceItems(questions, restored.questions);
-    replaceItems(labs, restored.labs);
-    replaceItems(imagingStudies, restored.imagingStudies);
+    replaceItems(clinicalDataProvider.getQuestions(), restored.questions);
+    replaceItems(clinicalDataProvider.getLabs(), restored.labs);
+    replaceItems(
+      clinicalDataProvider.getImagingStudies(),
+      restored.imagingStudies
+    );
+    const orders = clinicalDataProvider.getOrders();
     orders.splice(
       0,
       orders.length,
@@ -140,8 +145,11 @@ export async function loadPersistedState(): Promise<void> {
         workflow: { ...order.workflow },
       }))
     );
-    replaceItems(notes, restored.notes);
-    replaceItems(scenarioEvents, restored.scenarioEvents);
+    replaceItems(clinicalDataProvider.getNotes(), restored.notes);
+    replaceItems(
+      clinicalDataProvider.getScenarioEvents(),
+      restored.scenarioEvents
+    );
     restoreTimelineEvents(restored.timelineEvents);
 
     if (restored.exerciseSession.state === "running") {
