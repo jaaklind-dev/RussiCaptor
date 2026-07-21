@@ -114,4 +114,30 @@ describe("Excel workbook data mapping", () => {
       ])
     );
   });
+
+  test("rejects broken workbook relationships and duplicate identifiers", () => {
+    const rows = createWorkbookRows();
+    rows.Labs.push({ ...rows.Labs[0] });
+    rows.Questions[0].PatientId = "PT-UNKNOWN";
+    rows.Orders[0].ResultTargetId = "MISSING-PANEL";
+    rows.Notes[0].ExerciseId = "another-exercise";
+
+    const result = mapWorkbookData(rows);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sheet: "Labs", row: 3, column: "LabId" }),
+        expect.objectContaining({
+          sheet: "Questions",
+          column: "PatientId",
+          message: "Unknown patient: PT-UNKNOWN.",
+        }),
+        expect.objectContaining({ sheet: "Orders", column: "ResultTargetId" }),
+        expect.objectContaining({ sheet: "Notes", column: "ExerciseId" }),
+      ])
+    );
+  });
 });

@@ -144,10 +144,153 @@ function allDefined(values: unknown[]): boolean {
   return values.every((value) => value !== undefined);
 }
 
+function rawText(row: WorkbookRow, column: string): string | undefined {
+  const value = row[column];
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+}
+
+function validateUniqueIds(
+  rows: WorkbookRows,
+  errors: WorkbookValidationError[]
+): void {
+  const idColumns: Record<keyof WorkbookRows, string> = {
+    Patients: "PatientId",
+    Questions: "QuestionId",
+    Labs: "LabId",
+    Imaging: "ImagingId",
+    Notes: "NoteId",
+    Orders: "OrderId",
+  };
+
+  (Object.keys(rows) as (keyof WorkbookRows)[]).forEach((sheet) => {
+    const seenIds = new Set<string>();
+    const idColumn = idColumns[sheet];
+
+    rows[sheet].forEach((row, index) => {
+      const id = rawText(row, idColumn);
+
+      if (!id) return;
+
+      if (seenIds.has(id)) {
+        errors.push({
+          sheet,
+          row: index + 2,
+          column: idColumn,
+          message: `Duplicate identifier: ${id}.`,
+        });
+      }
+
+      seenIds.add(id);
+    });
+  });
+}
+
+function validateExerciseIds(
+  rows: WorkbookRows,
+  errors: WorkbookValidationError[]
+): void {
+  const exerciseIds = (Object.keys(rows) as (keyof WorkbookRows)[]).flatMap(
+    (sheet) => rows[sheet].map((row) => rawText(row, "ExerciseId")).filter(Boolean)
+  ) as string[];
+  const expectedExerciseId = exerciseIds[0];
+
+  if (!expectedExerciseId) return;
+
+  (Object.keys(rows) as (keyof WorkbookRows)[]).forEach((sheet) => {
+    rows[sheet].forEach((row, index) => {
+      const exerciseId = rawText(row, "ExerciseId");
+
+      if (exerciseId && exerciseId !== expectedExerciseId) {
+        errors.push({
+          sheet,
+          row: index + 2,
+          column: "ExerciseId",
+          message: `Expected exercise ${expectedExerciseId}, received ${exerciseId}.`,
+        });
+      }
+    });
+  });
+}
+
+function validatePatientReferences(
+  rows: WorkbookRows,
+  errors: WorkbookValidationError[]
+): void {
+  const patientIds = new Set(
+    rows.Patients.map((row) => rawText(row, "PatientId")).filter(Boolean)
+  );
+
+  (["Questions", "Labs", "Imaging", "Notes", "Orders"] as const).forEach(
+    (sheet) => {
+      rows[sheet].forEach((row, index) => {
+        const patientId = rawText(row, "PatientId");
+
+        if (patientId && !patientIds.has(patientId)) {
+          errors.push({
+            sheet,
+            row: index + 2,
+            column: "PatientId",
+            message: `Unknown patient: ${patientId}.`,
+          });
+        }
+      });
+    }
+  );
+}
+
+function validateOrderTargets(
+  rows: WorkbookRows,
+  errors: WorkbookValidationError[]
+): void {
+  rows.Orders.forEach((row, index) => {
+    const patientId = rawText(row, "PatientId");
+    const resultAction = rawText(row, "ResultAction");
+    const targetId = rawText(row, "ResultTargetId");
+
+    if (!patientId || !targetId) return;
+
+    const targetExists = resultAction === "lab.available"
+      ? rows.Labs.some(
+          (lab) =>
+            rawText(lab, "PatientId") === patientId &&
+            rawText(lab, "Panel") === targetId
+        )
+      : resultAction === "imaging.available"
+        ? rows.Imaging.some(
+            (study) =>
+              rawText(study, "PatientId") === patientId &&
+              rawText(study, "ImagingId") === targetId
+          )
+        : true;
+
+    if (!targetExists) {
+      errors.push({
+        sheet: "Orders",
+        row: index + 2,
+        column: "ResultTargetId",
+        message: `No matching ${resultAction} target: ${targetId}.`,
+      });
+    }
+  });
+}
+
+function validateWorkbookIntegrity(
+  rows: WorkbookRows,
+  errors: WorkbookValidationError[]
+): void {
+  validateUniqueIds(rows, errors);
+  validateExerciseIds(rows, errors);
+  validatePatientReferences(rows, errors);
+  validateOrderTargets(rows, errors);
+}
+
 export function mapWorkbookData(rows: WorkbookRows): WorkbookMappingResult {
   const errors: WorkbookValidationError[] = [];
 
+  validateWorkbookIntegrity(rows, errors);
+
   const patients = mapRows("Patients", rows.Patients, errors, (row, context) => {
+    const exerciseId = requiredString(row, "ExerciseId", context);
     const id = requiredString(row, "PatientId", context);
     const isikukood = requiredString(row, "NationalId", context);
     const name = requiredString(row, "Name", context);
@@ -160,7 +303,7 @@ export function mapWorkbookData(rows: WorkbookRows): WorkbookMappingResult {
     const signs = requiredString(row, "MistSigns", context);
     const treatment = requiredString(row, "MistTreatment", context);
 
-    if (!allDefined([id, isikukood, name, triage, status, location, lastSeen, mechanism, injuries, signs, treatment])) return undefined;
+    if (!allDefined([exerciseId, id, isikukood, name, triage, status, location, lastSeen, mechanism, injuries, signs, treatment])) return undefined;
     return { id: id!, isikukood: isikukood!, name: name!, triage: triage!, status: status!, location: location!, lastSeen: lastSeen!, mist: { mechanism: mechanism!, injuries: injuries!, signs: signs!, treatment: treatment! } };
   });
 
