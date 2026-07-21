@@ -19,6 +19,7 @@ import { startClockRunner } from "@/services/ClockRunner";
 import { getCurrentCaseManager, restoreCurrentCaseManager } from "@/services/CurrentUserService";
 import { subscribeToSync } from "@/services/SyncService";
 import type { CaseManager } from "@/models/CaseManager";
+import type { Intervention } from "@/models/Intervention";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
@@ -38,6 +39,7 @@ type PersistedState = {
   notes: Note[];
   scenarioEvents: ScenarioEvent[];
   timelineEvents: TimelineEvent[];
+  interventions?: Intervention[];
 };
 
 let saveChain = Promise.resolve();
@@ -89,6 +91,7 @@ function createSnapshot(): PersistedState {
   const orders = clinicalDataProvider.getOrders();
   const notes = clinicalDataProvider.getNotes();
   const scenarioEvents = clinicalDataProvider.getScenarioEvents();
+  const interventions = clinicalDataProvider.getInterventions();
 
   return {
     version: STATE_VERSION,
@@ -105,6 +108,7 @@ function createSnapshot(): PersistedState {
     notes: notes.map((note) => ({ ...note })),
     scenarioEvents: scenarioEvents.map((event) => ({ ...event })),
     timelineEvents: getAllTimelineEvents(),
+    interventions: interventions.map((intervention) => ({ ...intervention })),
   };
 }
 
@@ -151,6 +155,10 @@ export async function loadPersistedState(): Promise<void> {
       restored.scenarioEvents
     );
     restoreTimelineEvents(restored.timelineEvents);
+    replaceItems(
+      clinicalDataProvider.getInterventions(),
+      restored.interventions ?? []
+    );
 
     if (restored.exerciseSession.state === "running") {
       startClockRunner();

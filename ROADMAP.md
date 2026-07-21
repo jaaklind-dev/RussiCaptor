@@ -26,6 +26,7 @@
 - Dashboard local-save status
 - Provider abstraction for non-patient domains
 - Complete scenario action handling
+- Initial responder intervention recording
 
 ## 🚧 In progress
 - OneDrive provider preparation

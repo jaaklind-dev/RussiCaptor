@@ -6,6 +6,7 @@ import { questions } from "@/data/questions";
 import { scenarioEvents } from "@/data/scenarioEvents";
 import type { TimelineEvent } from "@/models/TimelineEvent";
 import type { ClinicalDataProvider } from "@/providers/ClinicalDataProvider";
+import { interventions } from "@/data/interventions";
 
 const timelineEvents: TimelineEvent[] = [];
 
@@ -44,6 +45,10 @@ export class DemoClinicalDataProvider implements ClinicalDataProvider {
 
   getTimelineEvents() {
     return timelineEvents;
+  }
+
+  getInterventions() {
+    return interventions;
   }
 
   resetQuestions(): void {
@@ -91,5 +96,9 @@ export class DemoClinicalDataProvider implements ClinicalDataProvider {
 
   resetTimelineEvents(): void {
     timelineEvents.splice(0, timelineEvents.length);
+  }
+
+  resetInterventions(): void {
+    interventions.splice(0, interventions.length);
   }
 }

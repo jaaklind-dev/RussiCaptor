@@ -19,6 +19,16 @@ function createWorkbookRows(): WorkbookRows {
       MistSigns: "GCS 15",
       MistTreatment: "Ravi puudub",
     }],
+    Interventions: [{
+      ExerciseId: "demo",
+      PatientId: "PT-001",
+      InterventionId: "INT-001",
+      Type: "airway",
+      Label: "Hingamistee tagamine",
+      Status: "completed",
+      PerformedBy: "Jaak",
+      PerformedAt: "2026-07-21T10:00:00.000Z",
+    }],
     Questions: [{
       ExerciseId: "demo",
       PatientId: "PT-001",
@@ -90,6 +100,13 @@ describe("Excel workbook data mapping", () => {
       expect.objectContaining({
         imageVisibility: "hidden",
         reportVisibility: "hidden",
+      })
+    );
+    expect(result.data.interventions[0]).toEqual(
+      expect.objectContaining({
+        id: "INT-001",
+        type: "airway",
+        performedBy: "Jaak",
       })
     );
     expect(result.data.orders[0].workflow).toEqual(

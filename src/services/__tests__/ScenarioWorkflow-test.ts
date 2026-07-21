@@ -40,6 +40,8 @@ import {
 import { triggerScenarioEventNow } from "@/services/ScenarioControlService";
 import { getNotes } from "@/repositories/NoteRepository";
 import { addPatientNote } from "@/services/NoteService";
+import { getInterventions } from "@/repositories/InterventionRepository";
+import { recordIntervention } from "@/services/InterventionService";
 import {
   demoTransferTarget,
   getCurrentCaseManager,
@@ -381,6 +383,36 @@ describe("order-driven scenario workflow", () => {
 
     resetExercise();
     expect(getNotes(patientId)).toHaveLength(0);
+  });
+
+  test("records responder interventions with ownership and reset rules", () => {
+    assignPatientToMe(patientId);
+
+    expect(recordIntervention(patientId, "cpr")).toBe(true);
+    expect(recordIntervention(patientId, "iv_access")).toBe(true);
+    expect(getInterventions(patientId)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "iv_access",
+          label: "Veenitee rajamine",
+          performedBy: "Jaak",
+          status: "completed",
+        }),
+        expect.objectContaining({ type: "cpr", label: "CPR" }),
+      ])
+    );
+    expect(getTimelineEvents(patientId).map((event) => event.title)).toEqual([
+      "Patsient määratud Case Managerile",
+      "CPR",
+      "Veenitee rajamine",
+    ]);
+
+    finishPatient(patientId);
+    expect(recordIntervention(patientId, "airway")).toBe(false);
+    expect(getInterventions(patientId)).toHaveLength(2);
+
+    resetExercise();
+    expect(getInterventions(patientId)).toHaveLength(0);
   });
 
   test("Finish completes one patient without resetting their history", () => {

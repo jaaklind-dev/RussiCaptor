@@ -10,12 +10,14 @@ import QuestionsTab from "@/components/patient/QuestionsTab";
 import TimelineTab from "@/components/patient/TimelineTab";
 import OverviewTab from "@/components/patient/OverviewTab";
 import NotesTab from "@/components/patient/NotesTab";
+import InterventionsTab from "@/components/patient/InterventionsTab";
 import { getImagingStudies } from "@/repositories/ImagingRepository";
 import { getLabResults } from "@/repositories/LabRepository";
 import { findPatientById } from "@/repositories/PatientRepository";
 import { getQuestions } from "@/repositories/QuestionRepository";
 import { getTimelineEvents } from "@/repositories/TimelineRepository";
 import { getNotes } from "@/repositories/NoteRepository";
+import { getInterventions } from "@/repositories/InterventionRepository";
 import {
   openImagingImage,
   openImagingReport,
@@ -24,6 +26,7 @@ import { openLabPanel } from "@/services/LabService";
 import { revealQuestion } from "@/services/RevealService";
 import { subscribeToSync } from "@/services/SyncService";
 import { addPatientNote } from "@/services/NoteService";
+import { recordIntervention } from "@/services/InterventionService";
 import {
   canCurrentCaseManagerEditPatient,
   acceptPatientTransfer,
@@ -40,7 +43,8 @@ type PatientTab =
   | "imaging"
   | "orders"
   | "questions"
-  | "notes";
+  | "notes"
+  | "actions";
 
 export default function PatientWorkspaceScreen() {
 
@@ -196,6 +200,7 @@ const [orders, setOrders] = useState(
         <TabButton label="Questions" value="questions" activeTab={activeTab} setActiveTab={setActiveTab} />
 
         <TabButton label="Notes" value="notes" activeTab={activeTab} setActiveTab={setActiveTab} />
+        <TabButton label="Actions" value="actions" activeTab={activeTab} setActiveTab={setActiveTab} />
         <TabButton label="Orders" value="orders" activeTab={activeTab} setActiveTab={setActiveTab} />
 
    </View>
@@ -259,6 +264,14 @@ const [orders, setOrders] = useState(
             notes={getNotes(patient.id)}
             readOnly={isReadOnly}
             onAddNote={(text) => addPatientNote(patient.id, text)}
+          />
+        )}
+
+        {activeTab === "actions" && (
+          <InterventionsTab
+            interventions={getInterventions(patient.id)}
+            readOnly={isReadOnly}
+            onRecord={(type) => recordIntervention(patient.id, type)}
           />
         )}
 
