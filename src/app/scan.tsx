@@ -23,11 +23,23 @@ export default function ScanScreen() {
 
   function handleFindPatient(value = nationalId) {
 
-    const patient = findPatientByNationalId(value);
+    const qrResult = readQrCode(value, "patient");
+
+    if (qrResult.status !== "valid") {
+      Alert.alert(
+        "Patsienti ei leitud",
+        qrResult.status === "wrong-type"
+          ? "See on asukoha QR-kood."
+          : value.trim()
+      );
+      return;
+    }
+
+    const patient = findPatientByNationalId(qrResult.value);
 
     if (!patient) {
 
-      Alert.alert("Patsienti ei leitud", value);
+      Alert.alert("Patsienti ei leitud", qrResult.value);
 
       return;
 
@@ -117,7 +129,7 @@ router.push(`/patient/${patient.id}`);
 
         onChangeText={setNationalId}
 
-        keyboardType="number-pad"
+        autoCapitalize="characters"
 
         placeholder="Isikukood"
 

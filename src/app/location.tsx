@@ -12,10 +12,22 @@ export default function LocationScanScreen() {
   const [code, setCode] = useState("LOC-ICU-2");
 
   function applyLocation(value = code): void {
-    const zone = findLocationZoneByCode(value);
+    const qrResult = readQrCode(value, "location");
+
+    if (qrResult.status !== "valid") {
+      Alert.alert(
+        "Asukohatsooni ei leitud",
+        qrResult.status === "wrong-type"
+          ? "See on patsiendi QR-kood."
+          : value.trim()
+      );
+      return;
+    }
+
+    const zone = findLocationZoneByCode(qrResult.value);
 
     if (!zone) {
-      Alert.alert("Asukohatsooni ei leitud", value.trim());
+      Alert.alert("Asukohatsooni ei leitud", qrResult.value);
       return;
     }
 

@@ -8,7 +8,9 @@ export function getLocationZones() {
 export function findLocationZoneByCode(code: string) {
   const normalizedCode = code.trim().toUpperCase();
   return getLocationZones().find(
-    (zone) => zone.code.toUpperCase() === normalizedCode
+    (zone) =>
+      zone.code.toUpperCase() === normalizedCode ||
+      zone.id.toUpperCase() === normalizedCode
   );
 }
 
