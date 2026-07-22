@@ -2,6 +2,13 @@
 
 One exercise = one Excel workbook.
 
+Editable demo template:
+
+`outputs/russicaptor-template/Exercise_Demo.xlsx`
+
+The `Instructions` sheet contains editing guidance, allowed code values, QR examples,
+and automatic row-count checks. The remaining sheets are imported by the app.
+
 Example:
 
 Exercise_Demo.xlsx
