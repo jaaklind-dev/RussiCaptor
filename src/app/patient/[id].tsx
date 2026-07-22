@@ -63,6 +63,7 @@ export default function PatientWorkspaceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [activeTab, setActiveTab] = useState<PatientTab>("overview");
+  const [showMoreTabs, setShowMoreTabs] = useState(false);
 const [, setRefreshKey] = useState(0);
 useEffect(() => {
   return subscribeToSync(() => {
@@ -198,30 +199,49 @@ const [orders, setOrders] = useState(
 
       </View>
 
-   <View style={styles.tabs}>
+      <View style={styles.tabs}>
+        <TabButton label="Ülevaade" value="overview" activeTab={activeTab} setActiveTab={(value) => {
+          setShowMoreTabs(false);
+          setActiveTab(value);
+        }} />
+        <TabButton label="Näitajad" value="vitals" activeTab={activeTab} setActiveTab={(value) => {
+          setShowMoreTabs(false);
+          setActiveTab(value);
+        }} />
+        <TabButton label="Tegevused" value="actions" activeTab={activeTab} setActiveTab={(value) => {
+          setShowMoreTabs(false);
+          setActiveTab(value);
+        }} />
+        <Pressable
+          style={[styles.tabButton, showMoreTabs && styles.tabButtonActive]}
+          onPress={() => setShowMoreTabs((current) => !current)}
+        >
+          <Text style={[styles.tabButtonText, showMoreTabs && styles.tabButtonTextActive]}>
+            Rohkem {showMoreTabs ? "▲" : "▼"}
+          </Text>
+        </Pressable>
+      </View>
 
-
-        <TabButton label="Overview" value="overview" activeTab={activeTab} setActiveTab={setActiveTab} />
-
-        <TabButton label="Vitals" value="vitals" activeTab={activeTab} setActiveTab={setActiveTab} />
-
-        <TabButton label="Timeline" value="timeline" activeTab={activeTab} setActiveTab={setActiveTab} />
-
-        <TabButton label="Labs" value="labs" activeTab={activeTab} setActiveTab={setActiveTab} />
-
-        <TabButton label="Imaging" value="imaging" activeTab={activeTab} setActiveTab={setActiveTab} />
-
-        <TabButton label="Questions" value="questions" activeTab={activeTab} setActiveTab={setActiveTab} />
-
-        <TabButton label="Notes" value="notes" activeTab={activeTab} setActiveTab={setActiveTab} />
-        <TabButton label="Actions" value="actions" activeTab={activeTab} setActiveTab={setActiveTab} />
-        <TabButton label="Orders" value="orders" activeTab={activeTab} setActiveTab={setActiveTab} />
-
-   </View>
+      {showMoreTabs && (
+        <View style={styles.moreTabs}>
+          <TabButton label="Ajalugu" value="timeline" activeTab={activeTab} setActiveTab={setActiveTab} />
+          <TabButton label="Analüüsid" value="labs" activeTab={activeTab} setActiveTab={setActiveTab} />
+          <TabButton label="Uuringud" value="imaging" activeTab={activeTab} setActiveTab={setActiveTab} />
+          <TabButton label="Küsimused" value="questions" activeTab={activeTab} setActiveTab={setActiveTab} />
+          <TabButton label="Märkmed" value="notes" activeTab={activeTab} setActiveTab={setActiveTab} />
+          <TabButton label="Tellimused" value="orders" activeTab={activeTab} setActiveTab={setActiveTab} />
+        </View>
+      )}
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
 
-        {activeTab === "overview" && <OverviewTab patient={patient} />}
+        {activeTab === "overview" && (
+          <OverviewTab
+            patient={patient}
+            latestVitals={getVitalSigns(patient.id)[0]}
+            recentEvents={getTimelineEvents(patient.id).slice(-3).reverse()}
+          />
+        )}
 
         {activeTab === "vitals" && (
           <VitalsTab
@@ -504,6 +524,17 @@ const styles = StyleSheet.create({
   marginBottom: 12,
 
 },
+
+  moreTabs: {
+    width: "100%",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    backgroundColor: "#f2f4f7",
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+  },
 
   tabButton: {
 
