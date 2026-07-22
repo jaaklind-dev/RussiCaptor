@@ -1,4 +1,6 @@
-type SyncListener = () => void;
+export type SyncSource = "local" | "remote";
+
+type SyncListener = (source: SyncSource) => void;
 
 const listeners: SyncListener[] = [];
 
@@ -16,6 +18,6 @@ export function subscribeToSync(
   };
 }
 
-export function notifySync(): void {
-  listeners.forEach((listener) => listener());
+export function notifySync(source: SyncSource = "local"): void {
+  listeners.forEach((listener) => listener(source));
 }

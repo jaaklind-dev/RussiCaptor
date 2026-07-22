@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { Stack } from "expo-router";
 import { loadPersistedState, startStatePersistence } from "@/services/StatePersistenceService";
+import { startCloudSync } from "@/services/CloudSyncService";
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    let unsubscribe = () => {};
+    let unsubscribeLocal = () => {};
+    let unsubscribeCloud = () => {};
     let mounted = true;
 
     loadPersistedState().finally(() => {
@@ -15,13 +17,21 @@ export default function RootLayout() {
         return;
       }
 
-      unsubscribe = startStatePersistence();
+      unsubscribeLocal = startStatePersistence();
+      void startCloudSync().then((unsubscribe) => {
+        if (mounted) {
+          unsubscribeCloud = unsubscribe;
+        } else {
+          unsubscribe();
+        }
+      });
       setIsReady(true);
     });
 
     return () => {
       mounted = false;
-      unsubscribe();
+      unsubscribeLocal();
+      unsubscribeCloud();
     };
   }, []);
 

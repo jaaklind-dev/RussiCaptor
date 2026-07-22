@@ -50,7 +50,7 @@ export default function LocalSaveStatusCard() {
         <Text style={[styles.title, hasError && styles.errorText]}>
           {getStatusText(status)}
         </Text>
-        <Text style={styles.caption}>Andmed on praegu ainult selles seadmes</Text>
+        <Text style={styles.caption}>Kohalik koopia töötab ka internetiühenduseta</Text>
       </View>
     </View>
   );

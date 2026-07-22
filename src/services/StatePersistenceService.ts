@@ -15,7 +15,7 @@ import { clinicalDataProvider, dataProvider } from "@/providers/ProviderFactory"
 import { getExerciseSession, restoreExerciseSession } from "@/repositories/ExerciseSessionRepository";
 import { getAllTimelineEvents, restoreTimelineEvents } from "@/repositories/TimelineRepository";
 import { getAssignmentState, restoreAssignmentState } from "@/services/AssignmentRepository";
-import { startClockRunner } from "@/services/ClockRunner";
+import { startClockRunner, stopClockRunner } from "@/services/ClockRunner";
 import { getCurrentCaseManager, restoreCurrentCaseManager } from "@/services/CurrentUserService";
 import { subscribeToSync } from "@/services/SyncService";
 import type { CaseManager } from "@/models/CaseManager";
@@ -34,10 +34,7 @@ import {
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
 
-type PersistedState = {
-  version: typeof STATE_VERSION;
-  savedAt: string;
-  currentCaseManager: CaseManager;
+export type SharedExerciseState = {
   exerciseSession: ExerciseSession;
   patients: Patient[];
   assignments: PatientAssignment[];
@@ -53,6 +50,12 @@ type PersistedState = {
   medicationAdministrations?: MedicationAdministration[];
   caseManagerZoneIds?: Record<string, string>;
   installedWorkbook?: InstalledWorkbook;
+};
+
+type PersistedState = SharedExerciseState & {
+  version: typeof STATE_VERSION;
+  savedAt: string;
+  currentCaseManager: CaseManager;
 };
 
 let saveChain = Promise.resolve();
@@ -130,6 +133,47 @@ function createSnapshot(): PersistedState {
     caseManagerZoneIds: getCaseManagerLocationState(),
     installedWorkbook: getInstalledWorkbook(),
   };
+}
+
+export function createSharedExerciseSnapshot(): SharedExerciseState {
+  const { version: _version, savedAt: _savedAt, currentCaseManager: _currentCaseManager, ...shared } =
+    createSnapshot();
+  return shared;
+}
+
+export function restoreSharedExerciseState(restored: SharedExerciseState): void {
+  stopClockRunner();
+  restoreInstalledWorkbook(restored.installedWorkbook);
+  restoreExerciseSession(restored.exerciseSession);
+  replaceItems(dataProvider.getPatients(), restored.patients);
+  restoreAssignmentState(restored);
+  restoreCaseManagerLocationState(restored.caseManagerZoneIds ?? {});
+  replaceItems(clinicalDataProvider.getQuestions(), restored.questions);
+  replaceItems(clinicalDataProvider.getLabs(), restored.labs);
+  replaceItems(clinicalDataProvider.getImagingStudies(), restored.imagingStudies);
+
+  const orders = clinicalDataProvider.getOrders();
+  orders.splice(
+    0,
+    orders.length,
+    ...restored.orders.map((order) => ({
+      ...order,
+      workflow: { ...order.workflow },
+    }))
+  );
+
+  replaceItems(clinicalDataProvider.getNotes(), restored.notes);
+  replaceItems(clinicalDataProvider.getScenarioEvents(), restored.scenarioEvents);
+  restoreTimelineEvents(restored.timelineEvents);
+  replaceItems(clinicalDataProvider.getInterventions(), restored.interventions ?? []);
+  replaceItems(
+    clinicalDataProvider.getMedicationAdministrations(),
+    restored.medicationAdministrations ?? []
+  );
+
+  if (restored.exerciseSession.state === "running") {
+    startClockRunner();
+  }
 }
 
 export async function loadPersistedState(): Promise<void> {
