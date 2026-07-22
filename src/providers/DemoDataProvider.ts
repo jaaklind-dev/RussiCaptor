@@ -3,7 +3,7 @@ import { patients } from "@/data/patients";
 import { DataProvider } from "./DataProvider";
 
 export class DemoDataProvider implements DataProvider {
-  private readonly initialPatients = patients.map((patient) => ({
+  private initialPatients = patients.map((patient) => ({
     ...patient,
     mist: { ...patient.mist },
   }));
@@ -53,5 +53,13 @@ export class DemoDataProvider implements DataProvider {
         mist: { ...patient.mist },
       }))
     );
+  }
+
+  installPatients(installedPatients: Patient[]): void {
+    this.initialPatients = installedPatients.map((patient) => ({
+      ...patient,
+      mist: { ...patient.mist },
+    }));
+    this.resetPatients();
   }
 }

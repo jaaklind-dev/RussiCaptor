@@ -27,4 +27,8 @@ export class OneDriveProvider implements DataProvider {
   resetPatients(): void {
     throw new Error("OneDrive provider not implemented yet.");
   }
+
+  installPatients(_patients: Patient[]): void {
+    throw new Error("OneDrive provider not implemented yet.");
+  }
 }

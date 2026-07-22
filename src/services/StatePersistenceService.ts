@@ -21,6 +21,11 @@ import { subscribeToSync } from "@/services/SyncService";
 import type { CaseManager } from "@/models/CaseManager";
 import type { Intervention } from "@/models/Intervention";
 import type { MedicationAdministration } from "@/models/Medication";
+import type { InstalledWorkbook } from "@/services/WorkbookImportService";
+import {
+  getInstalledWorkbook,
+  restoreInstalledWorkbook,
+} from "@/services/WorkbookImportService";
 import {
   getCaseManagerLocationState,
   restoreCaseManagerLocationState,
@@ -47,6 +52,7 @@ type PersistedState = {
   interventions?: Intervention[];
   medicationAdministrations?: MedicationAdministration[];
   caseManagerZoneIds?: Record<string, string>;
+  installedWorkbook?: InstalledWorkbook;
 };
 
 let saveChain = Promise.resolve();
@@ -122,6 +128,7 @@ function createSnapshot(): PersistedState {
       ...item,
     })),
     caseManagerZoneIds: getCaseManagerLocationState(),
+    installedWorkbook: getInstalledWorkbook(),
   };
 }
 
@@ -143,6 +150,7 @@ export async function loadPersistedState(): Promise<void> {
 
     setLocalSaveStatus({ state: "saved", savedAt: restored.savedAt });
 
+    restoreInstalledWorkbook(restored.installedWorkbook);
     restoreCurrentCaseManager(restored.currentCaseManager);
     restoreExerciseSession(restored.exerciseSession);
     replaceItems(dataProvider.getPatients(), restored.patients);

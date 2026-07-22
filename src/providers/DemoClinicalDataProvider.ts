@@ -16,13 +16,18 @@ import {
 const timelineEvents: TimelineEvent[] = [];
 
 export class DemoClinicalDataProvider implements ClinicalDataProvider {
-  private readonly initialQuestions = questions.map((question) => ({ ...question }));
-  private readonly initialLabs = labs.map((lab) => ({ ...lab }));
-  private readonly initialImagingStudies = imagingStudies.map((study) => ({ ...study }));
-  private readonly initialOrders = orders.map((order) => ({
+  private initialQuestions = questions.map((question) => ({ ...question }));
+  private initialLabs = labs.map((lab) => ({ ...lab }));
+  private initialImagingStudies = imagingStudies.map((study) => ({ ...study }));
+  private initialOrders = orders.map((order) => ({
     ...order,
     workflow: { ...order.workflow },
   }));
+  private initialNotes = notes.map((note) => ({ ...note }));
+  private initialInterventions = interventions.map((item) => ({ ...item }));
+  private initialMedicationAdministrations = medicationAdministrations.map(
+    (item) => ({ ...item })
+  );
 
   getQuestions() {
     return questions;
@@ -104,7 +109,11 @@ export class DemoClinicalDataProvider implements ClinicalDataProvider {
   }
 
   resetNotes(): void {
-    notes.splice(0, notes.length);
+    notes.splice(
+      0,
+      notes.length,
+      ...this.initialNotes.map((note) => ({ ...note }))
+    );
   }
 
   resetScenarioEvents(): void {
@@ -116,10 +125,63 @@ export class DemoClinicalDataProvider implements ClinicalDataProvider {
   }
 
   resetInterventions(): void {
-    interventions.splice(0, interventions.length);
+    interventions.splice(
+      0,
+      interventions.length,
+      ...this.initialInterventions.map((item) => ({ ...item }))
+    );
   }
 
   resetMedicationAdministrations(): void {
-    medicationAdministrations.splice(0, medicationAdministrations.length);
+    medicationAdministrations.splice(
+      0,
+      medicationAdministrations.length,
+      ...this.initialMedicationAdministrations.map((item) => ({ ...item }))
+    );
+  }
+
+  installData(data: {
+    questions: typeof questions;
+    labs: typeof labs;
+    imagingStudies: typeof imagingStudies;
+    orders: typeof orders;
+    notes: typeof notes;
+    interventions: typeof interventions;
+    interventionOptions: typeof interventionOptions;
+    medicationOptions: typeof medicationOptions;
+    medicationAdministrations: typeof medicationAdministrations;
+  }): void {
+    this.initialQuestions = data.questions.map((item) => ({ ...item }));
+    this.initialLabs = data.labs.map((item) => ({ ...item }));
+    this.initialImagingStudies = data.imagingStudies.map((item) => ({ ...item }));
+    this.initialOrders = data.orders.map((item) => ({
+      ...item,
+      workflow: { ...item.workflow },
+    }));
+    this.initialNotes = data.notes.map((item) => ({ ...item }));
+    this.initialInterventions = data.interventions.map((item) => ({ ...item }));
+    this.initialMedicationAdministrations = data.medicationAdministrations.map(
+      (item) => ({ ...item })
+    );
+
+    interventionOptions.splice(
+      0,
+      interventionOptions.length,
+      ...data.interventionOptions.map((item) => ({ ...item }))
+    );
+    medicationOptions.splice(
+      0,
+      medicationOptions.length,
+      ...data.medicationOptions.map((item) => ({ ...item }))
+    );
+    this.resetQuestions();
+    this.resetLabs();
+    this.resetImagingStudies();
+    this.resetOrders();
+    this.resetNotes();
+    this.resetInterventions();
+    this.resetMedicationAdministrations();
+    this.resetScenarioEvents();
+    this.resetTimelineEvents();
   }
 }

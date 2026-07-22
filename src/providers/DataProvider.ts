@@ -14,4 +14,6 @@ export interface DataProvider {
   setPatientLocation(id: string, location: string): void;
 
   resetPatients(): void;
+
+  installPatients(patients: Patient[]): void;
 }

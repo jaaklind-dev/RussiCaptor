@@ -5,6 +5,7 @@ import ExerciseStatusCard from "@/components/excon/ExerciseStatusCard";
 import UpcomingEventsCard from "@/components/excon/UpcomingEventsCard";
 import ActivePatientsCard from "@/components/excon/ActivePatientsCard";
 import EventHistoryCard from "@/components/excon/EventHistoryCard";
+import WorkbookImportCard from "@/components/excon/WorkbookImportCard";
 
 import { getExerciseSession } from "@/repositories/ExerciseSessionRepository";
 
@@ -55,6 +56,8 @@ function refreshSession(): void {
       <Text style={styles.subtitle}>Õppuse juhtimiskeskus</Text>
 
       <ExerciseStatusCard session={session} />
+
+      <WorkbookImportCard onImported={refreshSession} />
 
 <ExerciseControlsCard onSessionChange={refreshSession} />
 

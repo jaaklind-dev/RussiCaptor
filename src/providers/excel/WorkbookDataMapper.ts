@@ -33,6 +33,7 @@ export type WorkbookRows = {
 };
 
 export type WorkbookData = {
+  exerciseId: string;
   patients: Patient[];
   locations: LocationZone[];
   interventionOptions: InterventionOption[];
@@ -315,6 +316,17 @@ function validateWorkbookIntegrity(
   validateOrderTargets(rows, errors);
 }
 
+function getWorkbookExerciseId(rows: WorkbookRows): string {
+  for (const sheet of Object.keys(rows) as (keyof WorkbookRows)[]) {
+    for (const row of rows[sheet]) {
+      const exerciseId = rawText(row, "ExerciseId");
+      if (exerciseId) return exerciseId;
+    }
+  }
+
+  return "demo";
+}
+
 export function mapWorkbookData(rows: WorkbookRows): WorkbookMappingResult {
   const errors: WorkbookValidationError[] = [];
 
@@ -537,6 +549,7 @@ export function mapWorkbookData(rows: WorkbookRows): WorkbookMappingResult {
   return {
     ok: true,
     data: {
+      exerciseId: getWorkbookExerciseId(rows),
       patients,
       locations,
       interventionOptions,

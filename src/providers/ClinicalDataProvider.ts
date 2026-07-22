@@ -32,4 +32,15 @@ export interface ClinicalDataProvider {
   resetTimelineEvents(): void;
   resetInterventions(): void;
   resetMedicationAdministrations(): void;
+  installData(data: {
+    questions: Question[];
+    labs: LabResult[];
+    imagingStudies: ImagingStudy[];
+    orders: Order[];
+    notes: Note[];
+    interventions: Intervention[];
+    interventionOptions: InterventionOption[];
+    medicationOptions: MedicationOption[];
+    medicationAdministrations: MedicationAdministration[];
+  }): void;
 }

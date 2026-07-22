@@ -19,3 +19,10 @@ export function getCurrentExercise(): Exercise {
   return currentExercise;
 
 }
+
+export function installCurrentExercise(id: string, name: string): void {
+  currentExercise.id = id;
+  currentExercise.name = name;
+  currentExercise.description = "Excelist imporditud harjutus";
+  currentExercise.status = "draft";
+}
