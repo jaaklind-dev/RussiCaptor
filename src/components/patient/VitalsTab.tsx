@@ -30,6 +30,10 @@ const fields: Field[] = [
   { key: "painScore", label: "Valu", unit: "/10" },
 ];
 
+// Keep the manual-entry workflow available for a later pilot without exposing
+// it in the current CM interface.
+const manualVitalSignsEntryEnabled = false;
+
 function measurementValue(measurement: VitalSigns, field: Field): string {
   const value = measurement[field.key];
   return typeof value === "number" ? `${value}${field.unit ? ` ${field.unit}` : ""}` : "–";
@@ -109,7 +113,7 @@ export default function VitalsTab({ measurements, readOnly = false, onRecord }: 
         )}
       </View>
 
-      {!readOnly && (
+      {manualVitalSignsEntryEnabled && !readOnly && (
         <View style={styles.card}>
           <Text style={styles.subtitle}>Lisa mõõtmine</Text>
           <View style={styles.formGrid}>
