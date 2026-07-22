@@ -27,12 +27,15 @@ export default function DashboardScreen() {
   const [selectedCaseManager, setSelectedCaseManager] = useState(
     getCurrentCaseManager
   );
-  const takeoverRequestCount = getMyIncomingTakeoverRequests().length;
+  const [takeoverRequestCount, setTakeoverRequestCount] = useState(
+    () => getMyIncomingTakeoverRequests().length
+  );
 
   useEffect(() => {
     return subscribeToSync(() => {
       setStats(getDashboardStats());
       setSelectedCaseManager({ ...getCurrentCaseManager() });
+      setTakeoverRequestCount(getMyIncomingTakeoverRequests().length);
     });
   }, []);
 
@@ -41,6 +44,7 @@ export default function DashboardScreen() {
     useCallback(() => {
 
       setStats(getDashboardStats());
+      setTakeoverRequestCount(getMyIncomingTakeoverRequests().length);
 
     }, [])
 
@@ -78,6 +82,9 @@ export default function DashboardScreen() {
                   setCurrentCaseManager(caseManagerOption);
                   setSelectedCaseManager({ ...caseManagerOption });
                   setStats(getDashboardStats());
+                  setTakeoverRequestCount(
+                    getMyIncomingTakeoverRequests().length
+                  );
                 }}
               >
                 <Text

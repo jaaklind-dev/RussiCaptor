@@ -21,7 +21,7 @@ export function getCurrentCaseManager(): CaseManager {
 
 export function setCurrentCaseManager(caseManager: CaseManager): void {
   currentCaseManager = { ...caseManager };
-  notifySync();
+  notifySync("device");
 }
 
 export function resetCurrentCaseManager(): void {

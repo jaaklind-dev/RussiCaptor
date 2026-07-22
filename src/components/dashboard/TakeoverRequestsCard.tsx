@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { findPatientById } from "@/repositories/PatientRepository";
@@ -8,8 +9,16 @@ import {
   rejectPatientTransfer,
 } from "@/services/AssignmentRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
+import { subscribeToSync } from "@/services/SyncService";
 
 export default function TakeoverRequestsCard() {
+  const [, setRefreshKey] = useState(0);
+
+  useEffect(
+    () => subscribeToSync(() => setRefreshKey((value) => value + 1)),
+    []
+  );
+
   const requests = getMyIncomingTakeoverRequests();
 
   if (requests.length === 0) {

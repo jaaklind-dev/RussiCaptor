@@ -1,4 +1,4 @@
-export type SyncSource = "local" | "remote";
+export type SyncSource = "local" | "remote" | "device";
 
 type SyncListener = (source: SyncSource) => void;
 
