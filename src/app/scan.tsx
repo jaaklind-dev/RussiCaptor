@@ -15,6 +15,7 @@ import { findPatientByNationalId } from "@/repositories/PatientRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { updatePatientLocationFromCurrentCm } from "@/services/PatientLocationService";
 import QrScanner from "@/components/QrScanner";
+import { readQrCode } from "@/services/QrCodeService";
 
 export default function ScanScreen() {
 
@@ -91,8 +92,20 @@ router.push(`/patient/${patient.id}`);
       <QrScanner
         buttonLabel="Scan Patient QR"
         onScanned={(data) => {
-          setNationalId(data);
-          handleFindPatient(data);
+          const result = readQrCode(data, "patient");
+
+          if (result.status === "wrong-type") {
+            Alert.alert("Vale QR-kood", "See on asukoha QR-kood.");
+            return;
+          }
+
+          if (result.status === "invalid") {
+            Alert.alert("QR-koodi ei saanud lugeda");
+            return;
+          }
+
+          setNationalId(result.value);
+          handleFindPatient(result.value);
         }}
       />
 

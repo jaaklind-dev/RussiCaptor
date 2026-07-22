@@ -6,6 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import { findLocationZoneByCode } from "@/repositories/LocationRepository";
 import { setCurrentLocationZone } from "@/services/CurrentLocationService";
 import QrScanner from "@/components/QrScanner";
+import { readQrCode } from "@/services/QrCodeService";
 
 export default function LocationScanScreen() {
   const [code, setCode] = useState("LOC-ICU-2");
@@ -30,8 +31,20 @@ export default function LocationScanScreen() {
       <QrScanner
         buttonLabel="Scan Location QR"
         onScanned={(data) => {
-          setCode(data);
-          applyLocation(data);
+          const result = readQrCode(data, "location");
+
+          if (result.status === "wrong-type") {
+            Alert.alert("Vale QR-kood", "See on patsiendi QR-kood.");
+            return;
+          }
+
+          if (result.status === "invalid") {
+            Alert.alert("QR-koodi ei saanud lugeda");
+            return;
+          }
+
+          setCode(result.value);
+          applyLocation(result.value);
         }}
       />
       <TextInput
