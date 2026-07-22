@@ -10,6 +10,7 @@ import type {
   MedicationAdministration,
   MedicationOption,
 } from "@/models/Medication";
+import type { VitalSigns } from "@/models/VitalSigns";
 
 export interface ClinicalDataProvider {
   getQuestions(): Question[];
@@ -23,6 +24,7 @@ export interface ClinicalDataProvider {
   getInterventionOptions(): InterventionOption[];
   getMedicationOptions(): MedicationOption[];
   getMedicationAdministrations(): MedicationAdministration[];
+  getVitalSigns(): VitalSigns[];
   resetQuestions(): void;
   resetLabs(): void;
   resetImagingStudies(): void;
@@ -32,6 +34,7 @@ export interface ClinicalDataProvider {
   resetTimelineEvents(): void;
   resetInterventions(): void;
   resetMedicationAdministrations(): void;
+  resetVitalSigns(): void;
   installData(data: {
     questions: Question[];
     labs: LabResult[];
@@ -42,5 +45,6 @@ export interface ClinicalDataProvider {
     interventionOptions: InterventionOption[];
     medicationOptions: MedicationOption[];
     medicationAdministrations: MedicationAdministration[];
+    vitalSigns: VitalSigns[];
   }): void;
 }

@@ -60,6 +60,8 @@ import {
   demoTransferTarget,
   getCurrentCaseManager,
 } from "@/services/CurrentUserService";
+import { getVitalSigns } from "@/repositories/VitalSignsRepository";
+import { recordVitalSigns } from "@/services/VitalSignsService";
 
 const patientId = "PT-001";
 
@@ -481,6 +483,38 @@ describe("order-driven scenario workflow", () => {
     resetExercise();
     expect(findPatientById(patientId)?.location).toBe("EMO triaaž");
     expect(getCurrentLocationZone()?.name).toBe("EMO triaaž");
+  });
+
+  test("reveals scheduled vitals and records a CM measurement", () => {
+    expect(getVitalSigns(patientId)).toHaveLength(1);
+    expect(getVitalSigns(patientId)[0]).toEqual(
+      expect.objectContaining({ exerciseMinute: 0, heartRate: 92, gcs: 15 })
+    );
+
+    advanceExerciseMinutes(10);
+    expect(getVitalSigns(patientId)[0]).toEqual(
+      expect.objectContaining({ exerciseMinute: 10, oxygenSaturation: 93 })
+    );
+
+    assignPatientToMe(patientId);
+    expect(recordVitalSigns(patientId, {
+      heartRate: 96,
+      systolicBloodPressure: 130,
+      diastolicBloodPressure: 76,
+      respiratoryRate: 20,
+      oxygenSaturation: 95,
+      temperature: 36.9,
+      gcs: 15,
+    })).toBe(true);
+    expect(getVitalSigns(patientId)[0]).toEqual(
+      expect.objectContaining({ source: "manual", recordedBy: "Jaak", heartRate: 96 })
+    );
+    expect(getTimelineEvents(patientId).at(-1)).toEqual(
+      expect.objectContaining({ type: "vitals", title: "Elulised näitajad mõõdetud" })
+    );
+
+    resetExercise();
+    expect(getVitalSigns(patientId)).toHaveLength(1);
   });
 
   test("Finish completes one patient without resetting their history", () => {

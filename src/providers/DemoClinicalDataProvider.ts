@@ -12,6 +12,7 @@ import {
   medicationAdministrations,
   medicationOptions,
 } from "@/data/medications";
+import { vitalSigns } from "@/data/vitalSigns";
 
 const timelineEvents: TimelineEvent[] = [];
 
@@ -28,6 +29,7 @@ export class DemoClinicalDataProvider implements ClinicalDataProvider {
   private initialMedicationAdministrations = medicationAdministrations.map(
     (item) => ({ ...item })
   );
+  private initialVitalSigns = vitalSigns.map((item) => ({ ...item }));
 
   getQuestions() {
     return questions;
@@ -71,6 +73,10 @@ export class DemoClinicalDataProvider implements ClinicalDataProvider {
 
   getMedicationAdministrations() {
     return medicationAdministrations;
+  }
+
+  getVitalSigns() {
+    return vitalSigns;
   }
 
   resetQuestions(): void {
@@ -140,6 +146,14 @@ export class DemoClinicalDataProvider implements ClinicalDataProvider {
     );
   }
 
+  resetVitalSigns(): void {
+    vitalSigns.splice(
+      0,
+      vitalSigns.length,
+      ...this.initialVitalSigns.map((item) => ({ ...item }))
+    );
+  }
+
   installData(data: {
     questions: typeof questions;
     labs: typeof labs;
@@ -150,6 +164,7 @@ export class DemoClinicalDataProvider implements ClinicalDataProvider {
     interventionOptions: typeof interventionOptions;
     medicationOptions: typeof medicationOptions;
     medicationAdministrations: typeof medicationAdministrations;
+    vitalSigns: typeof vitalSigns;
   }): void {
     this.initialQuestions = data.questions.map((item) => ({ ...item }));
     this.initialLabs = data.labs.map((item) => ({ ...item }));
@@ -163,6 +178,8 @@ export class DemoClinicalDataProvider implements ClinicalDataProvider {
     this.initialMedicationAdministrations = data.medicationAdministrations.map(
       (item) => ({ ...item })
     );
+    // Workbooks persisted by older app versions do not contain vitalSigns yet.
+    this.initialVitalSigns = (data.vitalSigns ?? []).map((item) => ({ ...item }));
 
     interventionOptions.splice(
       0,
@@ -181,6 +198,7 @@ export class DemoClinicalDataProvider implements ClinicalDataProvider {
     this.resetNotes();
     this.resetInterventions();
     this.resetMedicationAdministrations();
+    this.resetVitalSigns();
     this.resetScenarioEvents();
     this.resetTimelineEvents();
   }

@@ -22,6 +22,7 @@ import type { CaseManager } from "@/models/CaseManager";
 import type { Intervention } from "@/models/Intervention";
 import type { MedicationAdministration } from "@/models/Medication";
 import type { InstalledWorkbook } from "@/services/WorkbookImportService";
+import type { VitalSigns } from "@/models/VitalSigns";
 import {
   getInstalledWorkbook,
   restoreInstalledWorkbook,
@@ -48,6 +49,7 @@ export type SharedExerciseState = {
   timelineEvents: TimelineEvent[];
   interventions?: Intervention[];
   medicationAdministrations?: MedicationAdministration[];
+  vitalSigns?: VitalSigns[];
   caseManagerZoneIds?: Record<string, string>;
   installedWorkbook?: InstalledWorkbook;
 };
@@ -110,6 +112,7 @@ function createSnapshot(): PersistedState {
   const interventions = clinicalDataProvider.getInterventions();
   const medicationAdministrations =
     clinicalDataProvider.getMedicationAdministrations();
+  const vitalSigns = clinicalDataProvider.getVitalSigns();
 
   return {
     version: STATE_VERSION,
@@ -130,6 +133,7 @@ function createSnapshot(): PersistedState {
     medicationAdministrations: medicationAdministrations.map((item) => ({
       ...item,
     })),
+    vitalSigns: vitalSigns.map((item) => ({ ...item })),
     caseManagerZoneIds: getCaseManagerLocationState(),
     installedWorkbook: getInstalledWorkbook(),
   };
@@ -170,6 +174,9 @@ export function restoreSharedExerciseState(restored: SharedExerciseState): void 
     clinicalDataProvider.getMedicationAdministrations(),
     restored.medicationAdministrations ?? []
   );
+  if (restored.vitalSigns) {
+    replaceItems(clinicalDataProvider.getVitalSigns(), restored.vitalSigns);
+  }
 
   if (restored.exerciseSession.state === "running") {
     startClockRunner();
@@ -229,6 +236,9 @@ export async function loadPersistedState(): Promise<void> {
       clinicalDataProvider.getMedicationAdministrations(),
       restored.medicationAdministrations ?? []
     );
+    if (restored.vitalSigns) {
+      replaceItems(clinicalDataProvider.getVitalSigns(), restored.vitalSigns);
+    }
 
     if (restored.exerciseSession.state === "running") {
       startClockRunner();

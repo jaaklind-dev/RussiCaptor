@@ -15,6 +15,7 @@ import type {
   MedicationOption,
 } from "@/models/Medication";
 import type { LocationZone } from "@/models/LocationZone";
+import type { VitalSigns, VitalSource } from "@/models/VitalSigns";
 
 export type WorkbookRow = Record<string, unknown>;
 
@@ -25,6 +26,7 @@ export type WorkbookRows = {
   Interventions: WorkbookRow[];
   MedicationOptions: WorkbookRow[];
   MedicationAdministrations: WorkbookRow[];
+  Vitals: WorkbookRow[];
   Questions: WorkbookRow[];
   Labs: WorkbookRow[];
   Imaging: WorkbookRow[];
@@ -40,6 +42,7 @@ export type WorkbookData = {
   interventions: Intervention[];
   medicationOptions: MedicationOption[];
   medicationAdministrations: MedicationAdministration[];
+  vitalSigns: VitalSigns[];
   questions: Question[];
   labs: LabResult[];
   imagingStudies: ImagingStudy[];
@@ -89,6 +92,7 @@ const interventionTypeValues: InterventionType[] = [
   "defibrillation",
   "iv_access",
 ];
+const vitalSourceValues: VitalSource[] = ["scenario", "manual"];
 
 type MappingContext = {
   sheet: keyof WorkbookRows;
@@ -155,6 +159,28 @@ function nonNegativeNumber(
   return value;
 }
 
+function numberInRange(
+  row: WorkbookRow,
+  column: string,
+  minimum: number,
+  maximum: number,
+  context: MappingContext,
+  required = true
+): number | undefined {
+  const rawValue = row[column];
+
+  if (!required && (rawValue === null || rawValue === undefined || rawValue === "")) {
+    return undefined;
+  }
+
+  const value = typeof rawValue === "number" ? rawValue : Number(rawValue);
+  if (!Number.isFinite(value) || value < minimum || value > maximum) {
+    addError(context, column, `Expected a number from ${minimum} to ${maximum}.`);
+    return undefined;
+  }
+  return value;
+}
+
 function mapRows<T>(
   sheet: keyof WorkbookRows,
   rows: WorkbookRow[],
@@ -187,6 +213,7 @@ function validateUniqueIds(
     Interventions: "InterventionId",
     MedicationOptions: "OptionId",
     MedicationAdministrations: "AdministrationId",
+    Vitals: "VitalId",
     Questions: "QuestionId",
     Labs: "LabId",
     Imaging: "ImagingId",
@@ -252,7 +279,7 @@ function validatePatientReferences(
     rows.Patients.map((row) => rawText(row, "PatientId")).filter(Boolean)
   );
 
-  (["InterventionOptions", "Interventions", "MedicationOptions", "MedicationAdministrations", "Questions", "Labs", "Imaging", "Notes", "Orders"] as const).forEach(
+  (["InterventionOptions", "Interventions", "MedicationOptions", "MedicationAdministrations", "Vitals", "Questions", "Labs", "Imaging", "Notes", "Orders"] as const).forEach(
     (sheet) => {
       rows[sheet].forEach((row, index) => {
         const patientId = rawText(row, "PatientId");
@@ -306,6 +333,29 @@ function validateOrderTargets(
   });
 }
 
+function validateInitialVitalSigns(
+  rows: WorkbookRows,
+  errors: WorkbookValidationError[]
+): void {
+  rows.Patients.forEach((patient, index) => {
+    const patientId = rawText(patient, "PatientId");
+    if (!patientId) return;
+    const hasInitialVitals = rows.Vitals.some(
+      (vital) =>
+        rawText(vital, "PatientId") === patientId &&
+        Number(vital.ExerciseMinute) === 0
+    );
+    if (!hasInitialVitals) {
+      errors.push({
+        sheet: "Patients",
+        row: index + 2,
+        column: "PatientId",
+        message: `Patient ${patientId} needs a Vitals row at ExerciseMinute 0.`,
+      });
+    }
+  });
+}
+
 function validateWorkbookIntegrity(
   rows: WorkbookRows,
   errors: WorkbookValidationError[]
@@ -314,6 +364,7 @@ function validateWorkbookIntegrity(
   validateExerciseIds(rows, errors);
   validatePatientReferences(rows, errors);
   validateOrderTargets(rows, errors);
+  validateInitialVitalSigns(rows, errors);
 }
 
 function getWorkbookExerciseId(rows: WorkbookRows): string {
@@ -468,6 +519,64 @@ export function mapWorkbookData(rows: WorkbookRows): WorkbookMappingResult {
     }
   );
 
+  const vitalSigns = mapRows<VitalSigns>(
+    "Vitals",
+    rows.Vitals,
+    errors,
+    (row, context) => {
+      const exerciseId = requiredString(row, "ExerciseId", context);
+      const patientId = requiredString(row, "PatientId", context);
+      const id = requiredString(row, "VitalId", context);
+      const exerciseMinute = nonNegativeNumber(row, "ExerciseMinute", context);
+      const source = enumValue(row, "Source", vitalSourceValues, context);
+      const heartRate = numberInRange(row, "HeartRate", 0, 300, context);
+      const systolicBloodPressure = numberInRange(row, "SystolicBP", 0, 300, context);
+      const diastolicBloodPressure = numberInRange(row, "DiastolicBP", 0, 200, context);
+      const respiratoryRate = numberInRange(row, "RespiratoryRate", 0, 100, context);
+      const oxygenSaturation = numberInRange(row, "SpO2", 0, 100, context);
+      const temperature = numberInRange(row, "Temperature", 25, 45, context);
+      const gcs = numberInRange(row, "GCS", 3, 15, context);
+      const bloodGlucose = numberInRange(row, "BloodGlucose", 0, 50, context, false);
+      const etco2 = numberInRange(row, "EtCO2", 0, 100, context, false);
+      const painScore = numberInRange(row, "PainScore", 0, 10, context, false);
+
+      if (!allDefined([
+        exerciseId,
+        patientId,
+        id,
+        exerciseMinute,
+        source,
+        heartRate,
+        systolicBloodPressure,
+        diastolicBloodPressure,
+        respiratoryRate,
+        oxygenSaturation,
+        temperature,
+        gcs,
+      ])) return undefined;
+
+      return {
+        exerciseId: exerciseId!,
+        patientId: patientId!,
+        id: id!,
+        exerciseMinute: exerciseMinute!,
+        source: source!,
+        recordedAt: optionalString(row, "RecordedAt"),
+        recordedBy: optionalString(row, "RecordedBy"),
+        heartRate,
+        systolicBloodPressure,
+        diastolicBloodPressure,
+        respiratoryRate,
+        oxygenSaturation,
+        temperature,
+        gcs,
+        bloodGlucose,
+        etco2,
+        painScore,
+      };
+    }
+  );
+
   const questions = mapRows("Questions", rows.Questions, errors, (row, context) => {
     const exerciseId = requiredString(row, "ExerciseId", context);
     const patientId = requiredString(row, "PatientId", context);
@@ -556,6 +665,7 @@ export function mapWorkbookData(rows: WorkbookRows): WorkbookMappingResult {
       interventions,
       medicationOptions,
       medicationAdministrations,
+      vitalSigns,
       questions,
       labs,
       imagingStudies,

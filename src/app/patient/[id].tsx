@@ -44,8 +44,12 @@ import {
 } from "@/services/AssignmentRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import VitalsTab from "@/components/patient/VitalsTab";
+import { getVitalSigns } from "@/repositories/VitalSignsRepository";
+import { recordVitalSigns } from "@/services/VitalSignsService";
 type PatientTab =
   | "overview"
+  | "vitals"
   | "timeline"
   | "labs"
   | "imaging"
@@ -199,6 +203,8 @@ const [orders, setOrders] = useState(
 
         <TabButton label="Overview" value="overview" activeTab={activeTab} setActiveTab={setActiveTab} />
 
+        <TabButton label="Vitals" value="vitals" activeTab={activeTab} setActiveTab={setActiveTab} />
+
         <TabButton label="Timeline" value="timeline" activeTab={activeTab} setActiveTab={setActiveTab} />
 
         <TabButton label="Labs" value="labs" activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -216,6 +222,14 @@ const [orders, setOrders] = useState(
       <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
 
         {activeTab === "overview" && <OverviewTab patient={patient} />}
+
+        {activeTab === "vitals" && (
+          <VitalsTab
+            measurements={getVitalSigns(patient.id)}
+            readOnly={isReadOnly}
+            onRecord={(values) => recordVitalSigns(patient.id, values)}
+          />
+        )}
 
         {activeTab === "timeline" && (
           <TimelineTab events={getTimelineEvents(patient.id)} />

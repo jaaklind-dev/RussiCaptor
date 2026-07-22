@@ -3,6 +3,7 @@ import {
   workbookSheetNames,
   type WorkbookSheetInput,
 } from "@/providers/excel/WorkbookFileParser";
+import { readSheet } from "read-excel-file/node";
 
 function createWorkbookSheets(): WorkbookSheetInput[] {
   const sheets: WorkbookSheetInput[] = workbookSheetNames.map((sheet) => ({
@@ -39,6 +40,15 @@ function createWorkbookSheets(): WorkbookSheetInput[] {
     "ExerciseId", "PatientId", "AdministrationId", "MedicationOptionId", "Name",
     "Dose", "Route", "AdministeredBy", "AdministeredAt",
   ]]);
+  replace("Vitals", [[
+    "ExerciseId", "PatientId", "VitalId", "ExerciseMinute", "RecordedAt",
+    "RecordedBy", "Source", "HeartRate", "SystolicBP", "DiastolicBP",
+    "RespiratoryRate", "SpO2", "Temperature", "GCS", "BloodGlucose",
+    "EtCO2", "PainScore",
+  ], [
+    "demo", "PT-001", "VITAL-001", 0, "09:22", "EXCON", "scenario",
+    92, 138, 82, 18, 97, 36.8, 15, 6.1, null, 1,
+  ]]);
   replace("Questions", [[
     "ExerciseId", "PatientId", "QuestionId", "Category", "Order", "Prompt",
     "Answer", "Visibility",
@@ -63,6 +73,28 @@ function createWorkbookSheets(): WorkbookSheetInput[] {
 }
 
 describe("Excel workbook file parsing", () => {
+  test("reads the integrated demo workbook including vital signs", async () => {
+    const workbookPath = `${process.cwd()}/outputs/russicaptor-template/Exercise_Demo.xlsx`;
+    const sheets = await Promise.all(
+      workbookSheetNames.map(async (sheet) => ({
+        sheet,
+        data: await readSheet(workbookPath, sheet, { trim: false }) as unknown[][],
+      }))
+    );
+
+    const result = parseWorkbookSheets(sheets);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.vitalSigns).toHaveLength(2);
+    expect(result.data.vitalSigns[0]).toEqual(expect.objectContaining({
+      patientId: "PT-001",
+      exerciseMinute: 0,
+      heartRate: 92,
+      oxygenSaturation: 97,
+    }));
+  });
+
   test("maps a workbook and ignores completely blank rows", () => {
     const sheets = createWorkbookSheets();
     sheets.find((sheet) => sheet.sheet === "Patients")!.data.push(

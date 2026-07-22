@@ -13,6 +13,7 @@ export const workbookSheetNames = [
   "Interventions",
   "MedicationOptions",
   "MedicationAdministrations",
+  "Vitals",
   "Questions",
   "Labs",
   "Imaging",

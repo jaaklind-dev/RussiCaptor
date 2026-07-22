@@ -46,6 +46,13 @@ function createWorkbookRows(): WorkbookRows {
       MedicationOptionId: "MEDOPT-001", Name: "Antitoksiin", Dose: "1 viaal",
       Route: "IV", AdministeredBy: "Jaak", AdministeredAt: "2026-07-21T10:00:00.000Z",
     }],
+    Vitals: [{
+      ExerciseId: "demo", PatientId: "PT-001", VitalId: "VITAL-001",
+      ExerciseMinute: 0, RecordedAt: "09:22", RecordedBy: "EXCON",
+      Source: "scenario", HeartRate: 92, SystolicBP: 138, DiastolicBP: 82,
+      RespiratoryRate: 18, SpO2: 97, Temperature: 36.8, GCS: 15,
+      BloodGlucose: 6.1, EtCO2: "", PainScore: 1,
+    }],
     Questions: [{
       ExerciseId: "demo",
       PatientId: "PT-001",
@@ -128,6 +135,9 @@ describe("Excel workbook data mapping", () => {
     );
     expect(result.data.orders[0].workflow).toEqual(
       expect.objectContaining({ delayMinutes: 2, resultAction: "lab.available" })
+    );
+    expect(result.data.vitalSigns[0]).toEqual(
+      expect.objectContaining({ heartRate: 92, oxygenSaturation: 97, gcs: 15 })
     );
   });
 
