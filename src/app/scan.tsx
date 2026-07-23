@@ -16,21 +16,26 @@ import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { updatePatientLocationFromCurrentCm } from "@/services/PatientLocationService";
 import QrScanner from "@/components/QrScanner";
 import { readQrCode } from "@/services/QrCodeService";
+import { getInstalledWorkbook } from "@/services/WorkbookImportService";
+import { getPatientNotFoundMessage } from "@/services/PatientLookupFeedback";
 
 export default function ScanScreen() {
 
-  const [nationalId, setNationalId] = useState("38701032343");
+  const [nationalId, setNationalId] = useState("");
 
   function handleFindPatient(value = nationalId) {
 
     const qrResult = readQrCode(value, "patient");
 
-    if (qrResult.status !== "valid") {
+    if (qrResult.status === "wrong-type") {
+      Alert.alert("Vale QR-kood", "See on asukoha QR-kood.");
+      return;
+    }
+
+    if (qrResult.status === "invalid") {
       Alert.alert(
-        "Patsienti ei leitud",
-        qrResult.status === "wrong-type"
-          ? "See on asukoha QR-kood."
-          : value.trim()
+        "Isikukood puudub",
+        "Sisesta patsiendi isikukood või skaneeri patsiendi QR-kood."
       );
       return;
     }
@@ -39,7 +44,13 @@ export default function ScanScreen() {
 
     if (!patient) {
 
-      Alert.alert("Patsienti ei leitud", qrResult.value);
+      Alert.alert(
+        "Patsienti ei leitud",
+        getPatientNotFoundMessage(
+          qrResult.value,
+          getInstalledWorkbook()?.fileName
+        )
+      );
 
       return;
 
@@ -130,6 +141,8 @@ router.push(`/patient/${patient.id}`);
         onChangeText={setNationalId}
 
         autoCapitalize="characters"
+
+        autoCorrect={false}
 
         placeholder="Isikukood"
 
