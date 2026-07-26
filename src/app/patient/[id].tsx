@@ -62,14 +62,9 @@ export default function PatientWorkspaceScreen() {
 
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const [activeTab, setActiveTab] = useState<PatientTab>("overview");
-  const [showMoreTabs, setShowMoreTabs] = useState(false);
+const [activeTab, setActiveTab] = useState<PatientTab>("overview");
+const [showMoreTabs, setShowMoreTabs] = useState(false);
 const [, setRefreshKey] = useState(0);
-useEffect(() => {
-  return subscribeToSync(() => {
-    setRefreshKey((k) => k + 1);
-  });
-}, []);
   const patient = findPatientById(id ?? "");
 const isCompleted = patient?.status === "Completed";
 const assignment = patient ? getPatientAssignment(patient.id) : undefined;
@@ -86,6 +81,17 @@ const [imagingStudies, setImagingStudies] = useState(
 const [orders, setOrders] = useState(
   patient ? getOrders(patient.id) : []
 );
+useEffect(() => {
+  return subscribeToSync(() => {
+    setRefreshKey((k) => k + 1);
+
+    if (id) {
+      setQuestions(getQuestions(id));
+      setImagingStudies(getImagingStudies(id));
+      setOrders(getOrders(id));
+    }
+  });
+}, [id]);
 
   if (!patient) {
 

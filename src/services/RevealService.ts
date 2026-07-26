@@ -1,6 +1,7 @@
 import { setQuestionVisibility } from "@/repositories/QuestionRepository";
 import { logQuestionRevealed } from "@/repositories/TimelineRepository";
 import { canCurrentCaseManagerEditPatient } from "@/services/AssignmentRepository";
+import { notifySync } from "@/services/SyncService";
 
 export function revealQuestion(
   patientId: string,
@@ -20,4 +21,6 @@ export function revealQuestion(
     patientId,
     questionId
   );
+
+  notifySync();
 }
