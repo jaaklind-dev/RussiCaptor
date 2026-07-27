@@ -137,11 +137,17 @@ export function parseModuleManifest(sheets: ManifestSheets): ModuleImportManifes
   const ownershipRules: OwnershipRule[] = tableRows(
     sheets,
     "OwnershipMap",
-    ["ObjectType", "ObjectOrField", "CanonicalOwner"]
+    [
+      "ObjectType", "ObjectOrField", "CanonicalOwner", "ContributionAllowedFrom",
+      "AggregationOrWriteRule", "ConflictAction",
+    ]
   ).map((row) => ({
     objectType: text(row.ObjectType),
     objectOrField: text(row.ObjectOrField),
     canonicalOwner: text(row.CanonicalOwner),
+    contributionAllowedFrom: text(row.ContributionAllowedFrom),
+    aggregationOrWriteRule: text(row.AggregationOrWriteRule),
+    conflictAction: text(row.ConflictAction),
   }));
 
   // Parsing this sheet is deliberate: its presence and schema are part of the
@@ -291,6 +297,14 @@ export function validateModuleManifest(
   for (const duplicate of duplicateValues(ownershipKeys)) {
     const [, field] = duplicate.split("\u0000");
     fatal("OWNERSHIP_CONFLICT", `${field} omanik on määratud mitu korda.`);
+  }
+  for (const rule of manifest.ownershipRules) {
+    if (
+      !rule.canonicalOwner || !rule.contributionAllowedFrom ||
+      !rule.aggregationOrWriteRule || !rule.conflictAction
+    ) {
+      fatal("OWNERSHIP_RULE_INCOMPLETE", `${rule.objectOrField} ownership-reegel pole täielik.`);
+    }
   }
 
   const selected = new Set(selectedFileNames);

@@ -60,6 +60,9 @@ export type OwnershipRule = {
   objectType: string;
   objectOrField: string;
   canonicalOwner: string;
+  contributionAllowedFrom: string;
+  aggregationOrWriteRule: string;
+  conflictAction: string;
 };
 
 export type ModuleImportManifest = {
@@ -111,4 +114,3 @@ export type ModulePackageImportResult =
       warnings: ModuleImportIssue[];
     }
   | { ok: false; issues: ModuleImportIssue[] };
-

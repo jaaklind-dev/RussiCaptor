@@ -33,8 +33,12 @@ function createManifestSheets(): ManifestSheets {
       "ImportClass", "EnabledForExercise",
     ], [[100, "IU-PATIENTS", "TEST_EXERCISE", "Exercise.xlsx", "PatientRoster", "EXERCISE_DATA", "TRUE"]]),
     OwnershipMap: sheet([
-      "ObjectType", "ObjectOrField", "CanonicalOwner",
-    ], [["ExerciseObject", "Patient", "TEST_EXERCISE"]]),
+      "ObjectType", "ObjectOrField", "CanonicalOwner", "ContributionAllowedFrom",
+      "AggregationOrWriteRule", "ConflictAction",
+    ], [[
+      "ExerciseObject", "Patient", "TEST_EXERCISE", "CORE_ENGINE services",
+      "Exercise owns definition; core owns runtime.", "REJECT_CROSS_EXERCISE_COLLISION",
+    ]]),
     DuplicatePolicies: sheet([
       "ObjectNamespace", "Key", "Policy", "Severity",
     ], [["Patient", "ExerciseID + PatientID", "REJECT", "FATAL"]]),
