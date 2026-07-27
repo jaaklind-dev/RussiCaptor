@@ -1,0 +1,20 @@
+{
+  "workPackage": "WP-9",
+  "status": "PASS",
+  "capabilities": {
+    "ResourcePool": "PASS",
+    "Reserve": "PASS",
+    "Release": "PASS",
+    "DoubleReserveRejection": "PASS",
+    "Availability": "PASS",
+    "InterventionEngine": "PASS",
+    "Replay": "PASS",
+    "DeterministicHash": "PASS",
+    "EventLogDeterminism": "PASS"
+  },
+  "resourceTypes": ["oxygen", "oxygenMask", "BVM", "ventilator", "endotrachealTube", "monitor"],
+  "goldenRegression": { "hvPassed": 8, "xmodPassed": 6, "blocked": 0, "failed": 0 },
+  "automatedTests": { "testSuites": 21, "tests": 116, "status": "PASS" },
+  "fullSourceCoverage": { "statements": 64.7, "branches": 55.75, "functions": 62.06, "lines": 65.54 },
+  "goldenPackModified": false
+}

@@ -10,10 +10,10 @@ Fookus: WP-3 import, WP-3B runtime aggregation, WP-4B Golden runner ja engine ad
 |---|---:|
 | Testipakid | 15 / 15 PASS |
 | Automaattestid | 92 / 92 PASS |
-| Kogu `src` statement coverage | 64.12% (2075 / 3236) |
-| Kogu `src` branch coverage | 55.26% (1186 / 2146) |
-| Kogu `src` function coverage | 61.36% (613 / 999) |
-| Kogu `src` line coverage | 64.82% (1880 / 2900) |
+| Kogu `src` statement coverage | 64.70% (2150 / 3323) |
+| Kogu `src` branch coverage | 55.75% (1231 / 2208) |
+| Kogu `src` function coverage | 62.06% (638 / 1028) |
+| Kogu `src` line coverage | 65.54% (1952 / 2978) |
 | 0% line coverage failid | 50 |
 
 Coverage mõõdeti käsuga, mis kaasab kõik `src/**/*.{ts,tsx}` failid. Seetõttu sisaldab
@@ -199,3 +199,29 @@ Testi eelarved on 15 s ühe replay kohta, 30 s kahe replay kohta ja alla 128 MiB
 
 Replay hash'i fikstuur läbis päriselt Node 20, 22, 24 ja 26 all. GitHub Actions matrix
 kordab sama kontrolli igal push'il ja pull request'il.
+
+## WP-9 Resource & Intervention Foundation
+
+| Resource capability | Status |
+|---|---|
+| ResourcePool | PASS |
+| Reserve | PASS |
+| Release | PASS |
+| Intervention Engine | PASS |
+| Replay | PASS |
+| Deterministic hash | PASS |
+
+ResourcePool toetab üldisi oxygen, oxygenMask, BVM, ventilator, endotrachealTube ja
+monitor ressursse. Pooli snapshot ja hash sorteeritakse `resourceId` järgi, seega
+sisendjärjekord ei mõjuta tulemust. Topeltreserveerimine, määramata ressursi vabastamine
+ja vale patsiendi REMOVE-intervention lükatakse tagasi.
+
+Intervention Engine hoiab ajastatud APPLY/REMOVE sündmusi PatientProcess'idest eraldi.
+ENGINE_TICK uuendab esmalt pooli, rakendab tähtajaks saabunud intervention'id ning alles
+siis käivitab PatientProcess'id ja olemasoleva ownership/aggregation ahela. Foundation
+ei lisa haigusmudelitesse ressursispetsiifilist loogikat ega anna protsessidele pooli
+muutmise õigust.
+
+Kahekordsel resource replay'l olid identsed RuntimeState, ResourcePool, PatientProcess-id,
+event log, process tree ja hashid. Kanonilise Golden Packi kontrollis jäid kõik 8 HV ja
+6 XMOD testi PASS-i; BLOCKED ja FAIL teste ei olnud.

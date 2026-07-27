@@ -12,6 +12,7 @@ import type { GoldenActualEvent, GoldenFixture, GoldenInputEvent } from "@/model
 import type { OwnershipRule } from "@/models/ModuleImport";
 import type { BotulismRootPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime } from "@/models/PatientProcessRuntime";
 import type { RuntimeState } from "@/models/RuntimeAggregation";
+import type { ResourceRuntimeEvent, RuntimeIntervention, RuntimeResource, ResourceType } from "@/models/ResourceRuntime";
 import {
   applyHvAction,
   applyHvTimedTransition,
@@ -27,6 +28,8 @@ import {
   tickHypoxiaPatientProcess,
 } from "@/services/runtime/HypoxiaPatientProcess";
 import { bootstrapBotulismRoot, tickBotulismRoot } from "@/services/runtime/BotulismRootPatientProcess";
+import { InterventionEngine } from "@/services/runtime/InterventionEngine";
+import { ResourcePool } from "@/services/runtime/ResourcePool";
 import { RuntimeOwnershipResolver } from "@/services/runtime/OwnershipResolver";
 import { aggregateRuntimeState } from "@/services/runtime/RuntimeAggregationPipeline";
 import { sha256Text } from "@/utils/sha256";
@@ -123,6 +126,31 @@ function eventPayload(event: GoldenInputEvent): Record<string, unknown> {
     : {};
 }
 
+const resourceTypes = new Set<ResourceType>([
+  "oxygen", "oxygenMask", "BVM", "ventilator", "endotrachealTube", "monitor",
+]);
+
+function fixtureResources(value: unknown): RuntimeResource[] {
+  const source = Array.isArray(value)
+    ? value
+    : value && typeof value === "object" && Array.isArray((value as Record<string, unknown>).resources)
+      ? (value as Record<string, unknown>).resources as unknown[]
+      : [];
+  return source.flatMap(item => {
+    if (!item || typeof item !== "object") return [];
+    const row = item as Record<string, unknown>;
+    const type = String(row.type) as ResourceType;
+    if (!resourceTypes.has(type) || !row.resourceId) return [];
+    return [{
+      resourceId: String(row.resourceId), type,
+      status: row.status === "RESERVED" ? "RESERVED" as const : "AVAILABLE" as const,
+      assignedPatientId: row.assignedPatientId ? String(row.assignedPatientId) : undefined,
+      metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? structuredClone(row.metadata as Record<string, unknown>) : {},
+    }];
+  });
+}
+
 export class ClinicalScenarioEngine {
   private process?: PatientProcessRuntime;
   private botulismRoot?: BotulismRootPatientProcessRuntime;
@@ -135,6 +163,8 @@ export class ClinicalScenarioEngine {
   private processControlledEventPending = false;
   private readonly appliedEventIds = new Set<string>();
   private readonly resolver = new RuntimeOwnershipResolver(firstClinicalOwnershipRules);
+  private resourcePool = new ResourcePool();
+  private interventionEngine = new InterventionEngine();
 
   reset(fixture: GoldenFixture): void {
     const initial = eventPayload({ payload: fixture.initialState } as GoldenInputEvent);
@@ -175,6 +205,8 @@ export class ClinicalScenarioEngine {
     this.pendingTransitions = [];
     this.processControlledEventPending = false;
     this.appliedEventIds.clear();
+    this.resourcePool = new ResourcePool(fixtureResources(fixture.activeResources));
+    this.interventionEngine = new InterventionEngine();
     if (this.botulismRoot) this.aggregateProcesses(this.runtimeState);
   }
 
@@ -290,6 +322,10 @@ export class ClinicalScenarioEngine {
     if (event.eventType !== "ENGINE_TICK") {
       throw new Error(`NOT_IMPLEMENTED: ClinicalScenarioEngine sündmus ${event.eventType}.`);
     }
+    this.resourcePool.update(this.simulationTimeSec);
+    for (const resourceEvent of this.interventionEngine.applyDue(this.simulationTimeSec, this.resourcePool)) {
+      this.logResourceEvent(resourceEvent);
+    }
     const payload = eventPayload(event);
     const tickMinutes = Number(payload.tickMin ?? payload.elapsedMin);
     if (!Number.isFinite(tickMinutes) || tickMinutes <= 0) {
@@ -338,15 +374,34 @@ export class ClinicalScenarioEngine {
     return structuredClone(this.eventLog);
   }
 
-  getHashes(): { stateHash: string; eventLogHash: string; processTreeHash: string; replayHash: string } {
+  scheduleIntervention(intervention: RuntimeIntervention): void {
+    this.interventionEngine.schedule(intervention);
+  }
+
+  getResourcePoolSnapshot(): RuntimeResource[] {
+    return this.resourcePool.snapshot();
+  }
+
+  getAssignedResources(patientId: string): RuntimeResource[] {
+    return this.resourcePool.getAssignedResources(patientId);
+  }
+
+  getResourcePoolHash(): string {
+    return this.resourcePool.hash();
+  }
+
+  getHashes(): { stateHash: string; eventLogHash: string; processTreeHash: string; resourcePoolHash: string; replayHash: string } {
     const stateHash = sha256Text(stableJson(this.requireRuntimeState()));
     const eventLogHash = sha256Text(stableJson(this.eventLog));
     const processTreeHash = sha256Text(stableJson({ root: this.botulismRoot, processes: this.getPatientProcesses() }));
+    const resourcePoolHash = this.resourcePool.hash();
+    const interventionHash = sha256Text(stableJson(this.interventionEngine.snapshot()));
     return {
       stateHash,
       eventLogHash,
       processTreeHash,
-      replayHash: sha256Text(stableJson({ stateHash, eventLogHash, processTreeHash })),
+      resourcePoolHash,
+      replayHash: sha256Text(stableJson({ stateHash, eventLogHash, processTreeHash, resourcePoolHash, interventionHash })),
     };
   }
 
@@ -395,6 +450,25 @@ export class ClinicalScenarioEngine {
         instanceKey: source.instanceKey,
         ...(source.parentProcessId ? { parentProcessId: source.parentProcessId } : {}),
         ...details,
+      },
+    });
+  }
+
+  private logResourceEvent(event: ResourceRuntimeEvent): void {
+    this.sequence += 1;
+    this.eventLog.push({
+      eventType: event.eventType,
+      sourceModule: "CORE_ENGINE",
+      target: event.patientId,
+      simulationTime: event.timestamp,
+      enginePhase: 1,
+      sequence: this.sequence,
+      payload: {
+        timestamp: event.timestamp,
+        resourceId: event.resourceId,
+        patientId: event.patientId,
+        interventionId: event.interventionId,
+        ...(event.sourceProcessId ? { sourceProcessId: event.sourceProcessId } : {}),
       },
     });
   }
