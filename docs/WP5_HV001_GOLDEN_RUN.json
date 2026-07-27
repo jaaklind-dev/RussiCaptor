@@ -1,0 +1,31 @@
+{
+  "runId": "RUN-WP5-HV-001-CANONICAL",
+  "sourceWorkbook": "RussiCaptor_Golden_Test_Pack_v1.xlsx",
+  "packId": "RC-GOLDEN-TEST-PACK-001",
+  "packVersion": "1.0",
+  "testId": "HV-001",
+  "status": "PASS",
+  "assertions": [
+    {
+      "assertionId": "AS-0016",
+      "status": "PASS",
+      "expected": "48.2",
+      "actual": 48.2,
+      "tolerance": 0.001
+    },
+    {
+      "assertionId": "AS-0017",
+      "status": "PASS",
+      "expected": "42.0",
+      "actual": 42,
+      "tolerance": 0.001
+    }
+  ],
+  "replayComparison": {
+    "status": "PASS",
+    "failures": []
+  },
+  "stateHash": "8c9fdfb2b3f06e2ab936fa766c955621fe2c021239435b0eaa5c7c8881e207e8",
+  "eventLogHash": "401370563176a4062f841fccc9b72b7ae69caaa9ad9ef9a0ae01b60887a049fd",
+  "processTreeHash": "bd771383f82d6ff0b21f2eba4a95ee21d5ec03b10d976192d6057c972b77c6b0"
+}
