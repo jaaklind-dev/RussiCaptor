@@ -223,6 +223,13 @@ export function validateModuleManifest(
 
   const byId = new Map(manifest.modules.map((module) => [module.moduleId, module]));
   for (const dependency of manifest.dependencies) {
+    if (
+      !dependency.parentModuleId || !dependency.dependsOnModuleId ||
+      !dependency.minimumVersion || dependency.parentModuleId === dependency.dependsOnModuleId
+    ) {
+      fatal("INVALID_DEPENDENCY", "DependencyEdges sisaldab tühja või iseendale viitavat sõltuvust.");
+      continue;
+    }
     const parent = byId.get(dependency.parentModuleId);
     const required = byId.get(dependency.dependsOnModuleId);
     if (!parent || !required) {
@@ -238,6 +245,28 @@ export function validateModuleManifest(
     ) {
       fatal("DEPENDENCY_VERSION", `${parent.moduleId} vajab ${required.moduleId} versiooni vähemalt ${dependency.minimumVersion}.`);
     }
+  }
+
+  const dependencyGraph = new Map<string, string[]>();
+  for (const module of manifest.modules) dependencyGraph.set(module.moduleId, []);
+  for (const dependency of manifest.dependencies.filter((item) => item.required)) {
+    if (byId.has(dependency.parentModuleId) && byId.has(dependency.dependsOnModuleId)) {
+      dependencyGraph.get(dependency.parentModuleId)!.push(dependency.dependsOnModuleId);
+    }
+  }
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const hasCycle = (moduleId: string): boolean => {
+    if (visiting.has(moduleId)) return true;
+    if (visited.has(moduleId)) return false;
+    visiting.add(moduleId);
+    const cycle = (dependencyGraph.get(moduleId) ?? []).some(hasCycle);
+    visiting.delete(moduleId);
+    visited.add(moduleId);
+    return cycle;
+  };
+  if (manifest.modules.some((module) => hasCycle(module.moduleId))) {
+    fatal("DEPENDENCY_CYCLE", "DependencyEdges sisaldab tsüklilist sõltuvust.");
   }
 
   const runtimeClasses = new Set(["RUNTIME_CONFIG", "EXERCISE_DATA"]);
@@ -275,6 +304,26 @@ export function validateModuleManifest(
     if (!selected.has(module.sourceFile)) {
       fatal("MISSING_FILE", `${module.moduleId}: fail ${module.sourceFile} puudub.`);
     }
+  }
+
+
+  const exerciseModules = manifest.modules.filter((module) => module.moduleType === "EXERCISE_INSTANCE");
+  const exerciseIds = new Set(manifest.bindings.map((binding) => binding.exerciseId).filter(Boolean));
+  for (const binding of manifest.bindings) {
+    const exerciseModule = byId.get(binding.exerciseModuleId);
+    const requiredModule = byId.get(binding.requiredModuleId);
+    if (!binding.exerciseId || !exerciseModule || exerciseModule.moduleType !== "EXERCISE_INSTANCE") {
+      fatal("INVALID_EXERCISE_BINDING", "ExerciseBinding viitab puuduvale õppusele või õppuse moodulile.");
+    }
+    if (!requiredModule || requiredModule.moduleVersion !== binding.requiredVersion) {
+      fatal("INVALID_EXERCISE_BINDING", `${binding.requiredModuleId} bindingu moodul või versioon ei vasta registrile.`);
+    }
+    if (!["RUNTIME", "TEMPLATE", "EXCLUDED"].includes(binding.bindingType)) {
+      fatal("INVALID_EXERCISE_BINDING", `${binding.requiredModuleId} BindingType pole lubatud.`);
+    }
+  }
+  if (exerciseModules.length !== 1 || exerciseIds.size !== 1) {
+    fatal("INVALID_EXERCISE_BINDING", "Paketis peab olema täpselt üks üheselt seotud EXERCISE_INSTANCE moodul.");
   }
 
   return issues;

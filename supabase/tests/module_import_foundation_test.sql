@@ -19,6 +19,10 @@ declare
   v_conflict_rejected boolean := false;
   v_failed_run_id uuid;
   v_failed_module_id uuid;
+  v_failed_exercise_version_id uuid;
+  v_repeat_run_id uuid;
+  v_active_before uuid;
+  v_active_after uuid;
 begin
   if v_user_id is null then
     raise exception 'Smoke test requires at least one auth.users row';
@@ -140,6 +144,38 @@ begin
     raise exception 'Exercise version was not activated';
   end if;
 
+  select id into strict v_active_before
+  from public.exercise_versions
+  where exercise_id = 'SMOKE-EXERCISE' and is_active;
+
+  -- Re-registering the same ModuleID/version/SHA in another run is idempotent.
+  insert into public.import_runs (manifest_id, manifest_version, created_by)
+  values ('SMOKE-REPEAT-MANIFEST', '1', v_user_id)
+  returning id into v_repeat_run_id;
+
+  v_repeated_module_version_id := public.register_module_version(
+    v_repeat_run_id,
+    'SMOKE_MODULE',
+    '1.0',
+    'REUSABLE_MODULE',
+    'smoke.xlsx',
+    repeat('a', 64),
+    '{"kind":"smoke"}'::jsonb,
+    10,
+    true,
+    true
+  );
+
+  if v_repeated_module_version_id <> v_module_version_id then
+    raise exception 'Same SHA in a repeated run created a new module version';
+  end if;
+
+  perform public.fail_import_run(v_repeat_run_id, '{"message":"idempotency cleanup"}'::jsonb);
+
+  if not exists (select 1 from public.module_versions where id = v_module_version_id) then
+    raise exception 'Repeated-run cleanup deleted the shared module version';
+  end if;
+
   insert into public.import_runs (
     manifest_id,
     manifest_version,
@@ -161,6 +197,24 @@ begin
     true
   );
 
+  insert into public.exercise_versions (
+    exercise_id,
+    exercise_version,
+    content_hash,
+    canonical_payload,
+    import_run_id,
+    created_by
+  )
+  values (
+    'SMOKE-EXERCISE',
+    '2.0',
+    repeat('f', 64),
+    '{"kind":"failed-exercise"}'::jsonb,
+    v_failed_run_id,
+    v_user_id
+  )
+  returning id into v_failed_exercise_version_id;
+
   perform public.fail_import_run(v_failed_run_id, '{"message":"expected smoke failure"}'::jsonb);
 
   if exists (select 1 from public.module_versions where id = v_failed_module_id) then
@@ -171,11 +225,23 @@ begin
     raise exception 'Failed run module association was not removed';
   end if;
 
+  if exists (select 1 from public.exercise_versions where id = v_failed_exercise_version_id) then
+    raise exception 'Failed run exercise staging row was not removed';
+  end if;
+
   if not exists (
     select 1 from public.import_runs
     where id = v_failed_run_id and status = 'FAILED' and finished_at is not null
   ) then
     raise exception 'Failed import run audit row was not retained';
+  end if;
+
+  select id into strict v_active_after
+  from public.exercise_versions
+  where exercise_id = 'SMOKE-EXERCISE' and is_active;
+
+  if v_active_after <> v_active_before then
+    raise exception 'Failed import changed the active exercise version';
   end if;
 end;
 $$;

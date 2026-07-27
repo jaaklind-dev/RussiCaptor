@@ -99,13 +99,25 @@ function settingValue(payload: CanonicalModulePayload, settingId: string): Impor
   )?.Value;
 }
 
-function validateStagedPackage(
+export function validateStagedPackage(
   modules: StagedModule[],
   manifest: ReturnType<typeof parseModuleManifest>
 ): ModuleImportIssue[] {
   const issues: ModuleImportIssue[] = [];
   const exercise = modules.find((module) => module.registry.moduleType === "EXERCISE_INSTANCE");
   if (!exercise) return [issue("EXERCISE_MODULE", "Aktiivne EXERCISE_INSTANCE moodul puudub.")];
+
+  for (const rule of manifest.sheetRules.filter(
+    (item) => item.importAtRuntime && (item.requiredSheet || item.onMissing === "ABORT_IMPORT")
+  )) {
+    const target = modules.find((module) => module.registry.moduleId === rule.moduleId);
+    if (!target?.payload.sheets[rule.sheetName]) {
+      issues.push(issue(
+        "REQUIRED_SHEET",
+        `${rule.moduleId}: kohustuslik leht ${rule.sheetName} puudub.`
+      ));
+    }
+  }
 
   for (const binding of manifest.bindings) {
     const target = modules.find((module) => module.registry.moduleId === binding.requiredModuleId);
@@ -318,15 +330,6 @@ async function isExactActiveNoOp(
     .select("module_id,module_version,content_hash")
     .in("module_id", modules.map((module) => module.registry.moduleId));
   if (moduleError) throw moduleError;
-  for (const module of modules) {
-    const existing = existingModules?.find((row) =>
-      row.module_id === module.registry.moduleId && row.module_version === module.registry.moduleVersion
-    );
-    if (existing && existing.content_hash !== module.contentHash) {
-      throw new Error(`FATAL module version content conflict for ${module.registry.moduleId}/${module.registry.moduleVersion}`);
-    }
-    if (!existing) return false;
-  }
   const exerciseModule = modules.find((module) => module.registry.moduleType === "EXERCISE_INSTANCE")!;
   const { data: existingExercise, error: exerciseError } = await supabase
     .from("exercise_versions")
@@ -335,6 +338,33 @@ async function isExactActiveNoOp(
     .eq("exercise_version", exerciseVersion)
     .maybeSingle();
   if (exerciseError) throw exerciseError;
+  return evaluateExactActiveNoOp(
+    modules,
+    existingModules ?? [],
+    existingExercise,
+    exerciseModule,
+    exerciseId,
+    exerciseVersion
+  );
+}
+
+export function evaluateExactActiveNoOp(
+  modules: StagedModule[],
+  existingModules: { module_id: string; module_version: string; content_hash: string }[],
+  existingExercise: { content_hash: string; is_active: boolean } | null,
+  exerciseModule: StagedModule,
+  exerciseId: string,
+  exerciseVersion: string
+): boolean {
+  for (const module of modules) {
+    const existing = existingModules.find((row) =>
+      row.module_id === module.registry.moduleId && row.module_version === module.registry.moduleVersion
+    );
+    if (existing && existing.content_hash !== module.contentHash) {
+      throw new Error(`FATAL module version content conflict for ${module.registry.moduleId}/${module.registry.moduleVersion}`);
+    }
+    if (!existing) return false;
+  }
   if (existingExercise && existingExercise.content_hash !== exerciseModule.contentHash) {
     throw new Error(`FATAL exercise version content conflict for ${exerciseId}/${exerciseVersion}`);
   }

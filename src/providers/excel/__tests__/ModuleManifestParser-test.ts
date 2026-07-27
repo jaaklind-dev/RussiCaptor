@@ -69,6 +69,42 @@ describe("module manifest parser", () => {
     );
   });
 
+  test("rejects a missing mandatory manifest sheet", () => {
+    const sheets = createManifestSheets();
+    delete sheets.ExerciseBinding;
+    expect(() => parseModuleManifest(sheets)).toThrow("ExerciseBinding");
+  });
+
+  test("rejects malformed, missing and cyclic dependencies", () => {
+    const malformed = createManifestSheets();
+    malformed.DependencyEdges[3][1] = "";
+    expect(validateModuleManifest(parseModuleManifest(malformed), ["Exercise.xlsx"])
+      .map((item) => item.code)).toContain("INVALID_DEPENDENCY");
+
+    const missing = createManifestSheets();
+    missing.DependencyEdges[3][1] = "MISSING_MODULE";
+    expect(validateModuleManifest(parseModuleManifest(missing), ["Exercise.xlsx"])
+      .map((item) => item.code)).toContain("UNKNOWN_DEPENDENCY");
+
+    const cyclic = createManifestSheets();
+    cyclic.DependencyEdges.push(["CORE_ENGINE", "TEST_EXERCISE", "TRUE", "1.0"]);
+    expect(validateModuleManifest(parseModuleManifest(cyclic), ["Exercise.xlsx"])
+      .map((item) => item.code)).toContain("DEPENDENCY_CYCLE");
+  });
+
+  test("rejects an ExerciseBinding with the wrong required version", () => {
+    const sheets = createManifestSheets();
+    sheets.ExerciseBinding[3][3] = "wrong";
+    expect(validateModuleManifest(parseModuleManifest(sheets), ["Exercise.xlsx"])
+      .map((item) => item.code)).toContain("INVALID_EXERCISE_BINDING");
+  });
+
+  test("file selection order does not change validation", () => {
+    const manifest = parseModuleManifest(createManifestSheets());
+    expect(validateModuleManifest(manifest, ["Exercise.xlsx", "Old.xlsx"]))
+      .toEqual(validateModuleManifest(manifest, ["Old.xlsx", "Exercise.xlsx"]));
+  });
+
   test("computes standard SHA-256 values without a platform dependency", () => {
     expect(sha256Text("abc")).toBe(
       "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
