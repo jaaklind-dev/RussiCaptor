@@ -4,9 +4,11 @@ import { parseGoldenWorkbookSheets } from "@/providers/excel/GoldenWorkbookLoade
 import {
   compareEvents,
   compareGoldenValue,
+  compareProcessTree,
+  compareReplay,
   compareSnapshot,
 } from "@/services/golden/GoldenComparators";
-import { goldenReportJson, writeAssertionResults } from "@/services/golden/GoldenReportWriter";
+import { goldenReportJson, writeAssertionResults, writeRunResults } from "@/services/golden/GoldenReportWriter";
 import { executeGoldenTests } from "@/services/golden/GoldenTestExecutor";
 
 function table(headers: string[], rows: ImportSheetData): ImportSheetData {
@@ -40,14 +42,26 @@ function workbookSheets(): Record<string, ImportSheetData> {
       ["TestID", "ExpectedOrder", "EventType", "ExpectedCount", "SourceModule", "Target", "Required", "MustNotExist", "AttributionRule"],
       [["T-1", 1, "DONE", 1, "CORE_ENGINE", "PT-001", "TRUE", "FALSE", "PatientID"]]
     ),
+    ExpectedProcessTree: table(
+      ["TestID", "CheckpointSec", "ParentProcessType", "ParentProcessID", "ChildProcessType", "ChildTemplateID", "ExpectedActiveCount", "ExpectedStatus", "InstanceKeyRule", "MustNotExist"],
+      []
+    ),
+    NumericGolden: table(["ExampleID"], []),
+    PatientRespGolden: table(["PatientID"], []),
+    PatientABGGolden: table(["PatientID"], []),
+    AutomationContract: table(["ContractID"], []),
     AssertionResults: table(
       ["AssertionID", "TestID", "Comparator", "ExpectedValue", "Tolerance", "ActualValue", "EvidenceRef", "ManualStatus", "CalculatedStatus", "FinalStatus", "RunnerNote"],
       [["AS-1", "T-1", "NEAR", "10", 0.01, null, null, "Approved", "Not run", "Not run", null]]
     ),
+    RunResults: table(
+      ["TestID", "PassAssertions", "FailAssertions", "BlockedAssertions", "NotRunAssertions", "Runner", "RunID", "RunDate", "CalculatedStatus", "FinalStatus", "EvidenceSummary"],
+      [["T-1", 0, 0, 0, 1, null, null, null, "Not run", "Not run", null]]
+    ),
   };
 }
 
-describe("WP-4A golden runner infrastructure", () => {
+describe("WP-4B golden runner", () => {
   test("loads the workbook contract, fixture JSON and event sequence", () => {
     const workbook = parseGoldenWorkbookSheets(workbookSheets());
     expect(workbook.packId).toBe("PACK-1");
@@ -99,11 +113,15 @@ describe("WP-4A golden runner infrastructure", () => {
     }, { runId: "RUN-1", commitHash: "abc123", now: () => dates.shift()! });
 
     expect(report.tests[0].status).toBe("PASS");
-    expect(goldenReportJson(report)).toContain('"runnerVersion": "WP-4A/1.0"');
+    expect(goldenReportJson(report)).toContain('"runnerVersion": "WP-4B/1.0"');
     const resultSheet = writeAssertionResults(workbook.sheets.AssertionResults, report);
     expect(resultSheet[3]).toEqual([
       "AS-1", "T-1", "NEAR", "10", 0.01, 10.001, "evidence.json",
       "Approved", "PASS", "PASS", "RunID RUN-1",
+    ]);
+    expect(writeRunResults(workbook.sheets.RunResults, report)[3]).toEqual([
+      "T-1", 1, 0, 0, 0, "WP-4B/1.0", "RUN-1", "2026-07-27T10:00:01.000Z",
+      "PASS", "PASS", "state=state-hash; events=event-hash; tree=tree-hash",
     ]);
   });
 
@@ -115,5 +133,51 @@ describe("WP-4A golden runner infrastructure", () => {
     expect(report.tests[0].status).toBe("BLOCKED");
     expect(report.tests[0].assertionResults[0].failureReason).toBe("engine unavailable");
   });
-});
 
+  test("compares process trees semantically and replay outputs deterministically", () => {
+    const processTree = [{
+      checkpointSec: 60,
+      parentProcessType: "BOT_RESPIRATORY_MUSCLE_FAILURE",
+      parentProcessId: "PP-1",
+      childProcessType: "HYPOVENTILATION_HYPERCAPNIA",
+      childTemplateId: "HV_NM_SEV",
+      status: "Active",
+      instanceKey: "PP-1:hv",
+    }];
+    expect(compareProcessTree([{
+      testId: "T-1", checkpointSec: 60,
+      parentProcessType: "BOT_RESPIRATORY_MUSCLE_FAILURE", parentProcessId: "ANY",
+      childProcessType: "HYPOVENTILATION_HYPERCAPNIA", childTemplateId: "HV_NM_SEV",
+      expectedActiveCount: 1, expectedStatus: "Active", instanceKeyRule: "one per parent",
+      mustNotExist: false,
+    }], processTree)).toEqual({ status: "PASS", failures: [] });
+
+    const first = {
+      values: { reserve: 48.2 }, events: [{ eventType: "TICK", insertedAt: "first" }],
+      processTree,
+    };
+    const second = {
+      values: { reserve: 48.2 }, events: [{ eventType: "TICK", insertedAt: "second" }],
+      processTree: structuredClone(processTree),
+    };
+    expect(compareReplay(first, second)).toEqual({ status: "PASS", failures: [] });
+    expect(compareReplay(first, { ...second, values: { reserve: 47 } }).status).toBe("FAIL");
+  });
+
+  test("stops after the first P0 failure and marks remaining tests NOT_RUN", async () => {
+    const sheets = workbookSheets();
+    sheets.TestCatalog.push([
+      "T-2", "Second", "P0", "FX-1", "SEQ-1", "AG-2", "TRUE", "TRUE",
+    ]);
+    sheets.Assertions.push([
+      "AS-2", "AG-2", "T-2", "SNAPSHOT", 60, "value", "EQ", "10", 0, "FATAL", "FX-1",
+    ]);
+    const workbook = parseGoldenWorkbookSheets(sheets);
+    const report = await executeGoldenTests(workbook, {
+      execute: async () => ({ values: { "PT-001::State::value": 9 }, events: [] }),
+    }, { runId: "RUN-FAIL", now: () => new Date("2026-07-27T10:00:00Z") });
+    expect(report.tests.map((test) => [test.testId, test.status])).toEqual([
+      ["T-1", "FAIL"], ["T-2", "NOT_RUN"],
+    ]);
+  });
+});

@@ -78,6 +78,29 @@ export type GoldenExpectedEvent = {
   attributionRule?: string;
 };
 
+export type GoldenExpectedProcess = {
+  testId: string;
+  checkpointSec: number;
+  parentProcessType: string;
+  parentProcessId: string;
+  childProcessType: string;
+  childTemplateId: string;
+  expectedActiveCount: number;
+  expectedStatus: string;
+  instanceKeyRule: string;
+  mustNotExist: boolean;
+};
+
+export type GoldenActualProcess = {
+  checkpointSec: number;
+  parentProcessType: string;
+  parentProcessId: string;
+  childProcessType: string;
+  childTemplateId: string;
+  status: string;
+  instanceKey?: string;
+};
+
 export type GoldenActualEvent = {
   eventType: string;
   sourceModule?: string;
@@ -98,6 +121,7 @@ export type GoldenWorkbook = {
   assertions: GoldenAssertion[];
   expectedSnapshots: GoldenExpectedSnapshot[];
   expectedEvents: GoldenExpectedEvent[];
+  expectedProcessTree: GoldenExpectedProcess[];
   sheets: Record<string, ImportSheetData>;
 };
 
@@ -105,6 +129,7 @@ export type GoldenExecutionOutput = {
   values: Record<string, unknown>;
   snapshots?: Record<string, unknown>;
   events: GoldenActualEvent[];
+  processTree?: GoldenActualProcess[];
   stateHash?: string;
   eventLogHash?: string;
   processTreeHash?: string;
@@ -128,6 +153,11 @@ export type GoldenTestResult = {
   status: GoldenStatus;
   assertionResults: GoldenAssertionResult[];
   eventComparison: { status: GoldenStatus; failures: string[] };
+  processTreeComparison: { status: GoldenStatus; failures: string[] };
+  replayComparison: { status: GoldenStatus; failures: string[] };
+  stateHash?: string;
+  eventLogHash?: string;
+  processTreeHash?: string;
 };
 
 export type GoldenRunReport = {
@@ -144,4 +174,3 @@ export type GoldenRunReport = {
   processTreeHash?: string;
   tests: GoldenTestResult[];
 };
-

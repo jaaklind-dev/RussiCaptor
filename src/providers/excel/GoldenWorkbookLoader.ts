@@ -5,6 +5,7 @@ import type {
   GoldenAssertion,
   GoldenComparator,
   GoldenExpectedEvent,
+  GoldenExpectedProcess,
   GoldenExpectedSnapshot,
   GoldenFixture,
   GoldenInputEvent,
@@ -13,11 +14,13 @@ import type {
 } from "@/models/GoldenTest";
 
 export const goldenRequiredSheets = [
-  "README", "TestCatalog", "Fixtures", "EventSequences", "Assertions",
-  "ExpectedSnapshots", "ExpectedEvents", "AssertionResults",
+  "README", "TestCatalog", "Fixtures", "EventSequences", "NumericGolden",
+  "PatientRespGolden", "PatientABGGolden", "ExpectedEvents", "ExpectedProcessTree",
+  "ExpectedSnapshots", "Assertions", "AutomationContract", "AssertionResults", "RunResults",
 ] as const;
 
 type Row = Record<string, ImportCellValue>;
+const supportedComparators = new Set<GoldenComparator>(["EQ", "NEAR", "COUNT_EQ", "SET_EQ", "LIST_EQ", "IN"]);
 
 function text(value: ImportCellValue | undefined): string {
   return value === null || value === undefined ? "" : String(value).trim();
@@ -63,6 +66,15 @@ function metadata(sheet: ImportSheetData): Record<string, string> {
     const value = text(row[1]);
     return key && value ? [[key, value]] : [];
   }));
+}
+
+function assertUnique(values: string[], label: string): void {
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (!value) throw new Error(`${label} ei tohi olla tühi.`);
+    if (seen.has(value)) throw new Error(`${label} ${value} esineb mitu korda.`);
+    seen.add(value);
+  }
 }
 
 export function parseGoldenWorkbookSheets(sheets: Record<string, ImportSheetData>): GoldenWorkbook {
@@ -111,8 +123,36 @@ export function parseGoldenWorkbookSheets(sheets: Record<string, ImportSheetData
     required: bool(row.Required), mustNotExist: bool(row.MustNotExist),
     attributionRule: text(row.AttributionRule) || undefined,
   }));
+  const expectedProcessTree: GoldenExpectedProcess[] = rows(sheets.ExpectedProcessTree, [
+    "TestID", "CheckpointSec", "ParentProcessType", "ChildProcessType", "ChildTemplateID",
+  ]).map((row) => ({
+    testId: text(row.TestID), checkpointSec: number(row.CheckpointSec),
+    parentProcessType: text(row.ParentProcessType), parentProcessId: text(row.ParentProcessID),
+    childProcessType: text(row.ChildProcessType), childTemplateId: text(row.ChildTemplateID),
+    expectedActiveCount: number(row.ExpectedActiveCount), expectedStatus: text(row.ExpectedStatus),
+    instanceKeyRule: text(row.InstanceKeyRule), mustNotExist: bool(row.MustNotExist),
+  }));
   if (!meta.PackID || !meta.PackVersion) throw new Error("Golden workbooki PackID või PackVersion puudub.");
-  return { packId: meta.PackID, packVersion: meta.PackVersion, tests, fixtures, eventSequences, assertions, expectedSnapshots, expectedEvents, sheets };
+  assertUnique(tests.map((item) => item.testId), "TestID");
+  assertUnique(fixtures.map((item) => item.fixtureId), "FixtureID");
+  assertUnique(assertions.map((item) => item.assertionId), "AssertionID");
+  const fixtureIds = new Set(fixtures.map((item) => item.fixtureId));
+  const sequenceIds = new Set(eventSequences.map((item) => item.sequenceId));
+  const testIds = new Set(tests.map((item) => item.testId));
+  for (const test of tests) {
+    if (!fixtureIds.has(test.fixtureId)) throw new Error(`${test.testId}: fixture ${test.fixtureId} puudub.`);
+    if (!sequenceIds.has(test.eventSequenceId)) throw new Error(`${test.testId}: event sequence ${test.eventSequenceId} puudub.`);
+  }
+  for (const assertion of assertions) {
+    if (!testIds.has(assertion.testId)) throw new Error(`${assertion.assertionId}: TestID ${assertion.testId} puudub.`);
+    if (!supportedComparators.has(assertion.comparator)) {
+      throw new Error(`${assertion.assertionId}: comparator ${assertion.comparator} pole toetatud.`);
+    }
+  }
+  for (const expected of expectedProcessTree) {
+    if (!testIds.has(expected.testId)) throw new Error(`ExpectedProcessTree viitab puuduvale testile ${expected.testId}.`);
+  }
+  return { packId: meta.PackID, packVersion: meta.PackVersion, tests, fixtures, eventSequences, assertions, expectedSnapshots, expectedEvents, expectedProcessTree, sheets };
 }
 
 export async function loadGoldenWorkbook(buffer: ArrayBuffer): Promise<GoldenWorkbook> {
@@ -138,4 +178,3 @@ export function loadEventSequence(workbook: GoldenWorkbook, sequenceId: string):
   if (events.length === 0) throw new Error(`Event sequence ${sequenceId} puudub.`);
   return structuredClone(events);
 }
-

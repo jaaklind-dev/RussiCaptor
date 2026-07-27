@@ -2,6 +2,9 @@ import type {
   GoldenActualEvent,
   GoldenComparator,
   GoldenExpectedEvent,
+  GoldenExpectedProcess,
+  GoldenActualProcess,
+  GoldenExecutionOutput,
   GoldenExpectedSnapshot,
   GoldenStatus,
 } from "@/models/GoldenTest";
@@ -112,6 +115,14 @@ export function compareEvents(
     if (item.required && matches.length === 0) {
       failures.push(`${item.eventType} kohustuslik sündmus puudub.`);
     }
+    if (item.attributionRule?.toLowerCase().includes("sourceprocessid") && matches.length > 0) {
+      const missingAttribution = matches.some(({ event }) => {
+        const payload = event.payload;
+        return !payload || typeof payload !== "object" ||
+          !("sourceProcessId" in payload || "sourceProcessID" in payload);
+      });
+      if (missingAttribution) failures.push(`${item.eventType}: sourceProcessID omistus puudub.`);
+    }
     if (matches.length > 0) {
       const firstIndex = matches[0].index;
       if (firstIndex < lastIndex) failures.push(`${item.eventType} sündmuste semantiline järjekord on vale.`);
@@ -121,3 +132,78 @@ export function compareEvents(
   return { status: failures.length === 0 ? "PASS" : "FAIL", failures };
 }
 
+function processMatches(expected: GoldenExpectedProcess, actual: GoldenActualProcess): boolean {
+  const parentMatches = expected.parentProcessId === "ANY" ||
+    expected.parentProcessId === actual.parentProcessId;
+  const statusMatches = expected.expectedStatus === "None" ||
+    expected.expectedStatus.split("/").includes(actual.status);
+  return actual.checkpointSec === expected.checkpointSec &&
+    actual.parentProcessType === expected.parentProcessType && parentMatches &&
+    actual.childProcessType === expected.childProcessType &&
+    actual.childTemplateId === expected.childTemplateId && statusMatches;
+}
+
+export function compareProcessTree(
+  expected: GoldenExpectedProcess[],
+  actual: GoldenActualProcess[]
+): { status: GoldenStatus; failures: string[] } {
+  const failures: string[] = [];
+  for (const item of expected) {
+    const matches = actual.filter((node) => processMatches(item, node));
+    if (matches.length !== item.expectedActiveCount) {
+      failures.push(
+        `${item.childTemplateId}@${item.checkpointSec}: oodatud ${item.expectedActiveCount}, tegelik ${matches.length}.`
+      );
+    }
+    if (item.mustNotExist && matches.length > 0) {
+      failures.push(`${item.childTemplateId} ei tohi protsessipuus esineda.`);
+    }
+    if (!item.mustNotExist && item.instanceKeyRule && matches.some((node) => !node.instanceKey)) {
+      failures.push(`${item.childTemplateId}: semantiline instance key puudub.`);
+    }
+    const instanceKeys = matches.map((node) => node.instanceKey).filter(Boolean);
+    if (new Set(instanceKeys).size !== instanceKeys.length) {
+      failures.push(`${item.childTemplateId}: sama instance key esineb protsessipuus mitu korda.`);
+    }
+  }
+  return { status: failures.length === 0 ? "PASS" : "FAIL", failures };
+}
+
+function normalizeSemantic(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeSemantic);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .filter(([key]) => !["insertedAt", "updatedAt", "createdAt", "importRunId", "ImportRunID", "databasePk"]
+      .includes(key))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, nested]) => [key, normalizeSemantic(nested)]));
+}
+
+function replaySemantic(output: GoldenExecutionOutput): unknown {
+  return normalizeSemantic({
+    values: output.values,
+    snapshots: output.snapshots,
+    events: orderedEvents(output.events).map(({ insertedAt: _insertedAt, ...event }) => event),
+    processTree: [...(output.processTree ?? [])].sort((left, right) =>
+      left.checkpointSec - right.checkpointSec ||
+      left.parentProcessType.localeCompare(right.parentProcessType) ||
+      left.parentProcessId.localeCompare(right.parentProcessId) ||
+      left.childProcessType.localeCompare(right.childProcessType) ||
+      left.childTemplateId.localeCompare(right.childTemplateId) ||
+      left.status.localeCompare(right.status)
+    ),
+    stateHash: output.stateHash,
+    eventLogHash: output.eventLogHash,
+    processTreeHash: output.processTreeHash,
+  });
+}
+
+export function compareReplay(
+  first: GoldenExecutionOutput,
+  second: GoldenExecutionOutput
+): { status: GoldenStatus; failures: string[] } {
+  const passed = JSON.stringify(replaySemantic(first)) === JSON.stringify(replaySemantic(second));
+  return passed
+    ? { status: "PASS", failures: [] }
+    : { status: "FAIL", failures: ["Sama fixture, seed ja event log ei andnud semantiliselt identset tulemust."] };
+}
