@@ -162,7 +162,7 @@ describe("WP-5 first clinical golden run", () => {
       globalStatus: "Stable",
       dominantProcessId: "HV_NM_SEV",
       runtimeFields: { ventilationReserve: 48.2, co2Burden: 42 },
-      aggregationConfigVersion: "WP-5/HV-001",
+      aggregationConfigVersion: "WP-6/HV-P0",
     });
     expect(engine.getEventLog()).toEqual([expect.objectContaining({
       eventType: "ENGINE_TICK_APPLIED",

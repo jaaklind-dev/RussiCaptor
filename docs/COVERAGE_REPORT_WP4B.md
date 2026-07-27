@@ -8,12 +8,12 @@ Fookus: WP-3 import, WP-3B runtime aggregation, WP-4B Golden runner ja engine ad
 
 | Mõõdik | Tulemus |
 |---|---:|
-| Testipakid | 14 / 14 PASS |
-| Automaattestid | 85 / 85 PASS |
-| Kogu `src` statement coverage | 60.41% (1822 / 3016) |
-| Kogu `src` branch coverage | 48.60% (923 / 1899) |
-| Kogu `src` function coverage | 58.78% (562 / 956) |
-| Kogu `src` line coverage | 61.36% (1658 / 2702) |
+| Testipakid | 15 / 15 PASS |
+| Automaattestid | 92 / 92 PASS |
+| Kogu `src` statement coverage | 62.94% (2037 / 3236) |
+| Kogu `src` branch coverage | 53.50% (1145 / 2140) |
+| Kogu `src` function coverage | 60.86% (608 / 999) |
+| Kogu `src` line coverage | 63.82% (1851 / 2900) |
 | 0% line coverage failid | 50 |
 
 Coverage mõõdeti käsuga, mis kaasab kõik `src/**/*.{ts,tsx}` failid. Seetõttu sisaldab
@@ -26,11 +26,47 @@ käigus laaditud failide statement coverage oleks 76.57%, kuid see pole kogu rep
 |---|---:|---|
 | Workbooki leping | 50 / 50 testi | PASS – päris workbook laaditi |
 | Assertion'ite leping | 176 / 176 | PASS – ID-d, testiviited ja comparator'id valideeriti |
-| P0 assertion'id | 148 | 2 PASS; ülejäänud ootavad engine'i võimekust |
+| P0 assertion'id | 148 | 25 PASS; ülejäänud ootavad järgmisi engine'i lõikeid |
 | P1 assertion'id | 28 | Runneris toetatud, päris engine'i vastu käivitamata |
 | Comparator'id | 176 / 176 | EQ, NEAR, COUNT_EQ, SET_EQ, LIST_EQ ja IN toetatud |
 | Expected process tree read | 16 / 16 rida | PASS |
-| Tegelik kliiniline Golden execution | 2 / 176 | HV-001 kaks assertion'it PASS |
+| Tegelik kliiniline Golden execution | 25 / 176 | Kõik 7 HV P0 testi PASS |
+
+## HV P0 staatus – WP-6
+
+| HV P0 test | Staatus | Märkus |
+|---|---|---|
+| HV-001 | PASS | Ravimata 1 min: reserve 48.2, CO₂ 42.0 |
+| HV-002 | PASS | Hapnik ei muuda HV reserve'i ega CO₂ progressiooni |
+| HV-003 | PASS | Intubatsioon kaitseb hingamisteed, ventilatsiooniefekt puudub |
+| HV-004 | PASS | BVM: reserve 53.62, CO₂ 34.4 |
+| HV-005 | PASS | Mehaaniline ventilatsioon: reserve 54.0, CO₂ 33.5, protsess Controlled |
+| HV-007 | PASS | CO₂ narkoos tekib 60 s lävel korrektse HV omistusega |
+| HV-008 | PASS | Respiratoorne seiskus puudub 59 s ja tekib 60 s lävel |
+
+HV-006 on P1 test ja ei kuulu WP-6 HV P0 komplekti. BLOCKED HV P0 teste ei ole.
+
+## WP-7 HV + Hypoxia integreeritud runtime
+
+| Testigrupp | PASS | BLOCKED | Märkus |
+|---|---:|---:|---|
+| HV P0 | 7 | 0 | Kõik WP-6 testid jäid PASS-i |
+| HV P1 | 1 | 0 | HV-006 oxygen masking PASS |
+| Hypoxia P0 | 0 | 0 | Golden Packis pole eraldiseisvaid Hypoxia teste |
+| HV + Hypoxia | 2 | 0 | XMOD-001 ja XMOD-002 PASS |
+| Botulismist sõltuvad XMOD testid | 0 | 4 | XMOD-003…006 vajavad Botulism PatientProcess runtime'i |
+
+WP-7 päris Golden run: 10 PASS ja 4 põhjendatud BLOCKED. XMOD-003 ja XMOD-004
+kasutavad `FX-PT007` Botulismi juurprotsessi; XMOD-005 kasutab Botulismi/patsiendi
+koondfixture'it `FX-PT001-60`, kus HV bootstrapile vajalikud väljad ei asu juurtasemel;
+XMOD-006 kasutab `FX-PT009` Botulismi juurprotsessi. Nende realiseerimine tähendaks
+Botulism PatientProcess runtime'i lisamist ja jääb WP-7 HV + Hypoxia ulatusest välja.
+
+Mitme protsessi runtime käivitab HV ja Hypoxia protsessid deterministlikus järjekorras,
+aggregeerib nende väljundid ühe pipeline'i kutsega ning hoiab protsesside elapsedTime'i,
+outputs'i, instanceKey'd ja sündmuste omistuse eraldi. SpO₂ tuleb ainult Hypoxia
+protsessilt; ventilatsioon, CO₂ ja CO₂ trend jäävad HV omandisse. Kordusreplay annab
+identse RuntimeState'i, PatientProcess-loendi, process tree, event log'i ja hashid.
 
 Assertion'ite jaotus:
 
@@ -62,7 +98,7 @@ Comparator'ite jaotus:
 | SET_EQ | 1 |
 
 Oluline eristus: 176/176 tähendab runneri lepingu ja comparator'ite tuge. Kliiniline
-simulatsioon on päriselt läbinud HV-001 kaks assertion'it; ülejäänud protsessi-,
+simulatsioon on päriselt läbinud kõik 25 HV P0 assertion'it; ülejäänud protsessi-,
 resource- ja patsiendistsenaariumide mootorivõimed tuleb lisada järgmiste vertikaallõigetena.
 
 ## WP-3B ja WP-4B komponentide code coverage
@@ -103,16 +139,34 @@ töövood vajavad hiljem component/E2E teste.
 - WP-4B runner ja adapter mapping: infrastruktuuri kate on piisav engine'i ühendamise alustamiseks.
 - Mooduliimport: puhta valideerimisloogika stressitestid on olemas, kuid päris faili/Supabase
   staging ja atomaarne commit vajavad integratsiooniteste.
-- Golden clinical coverage: esimene test HV-001 läbib; ülejäänud P0 testid vajavad
-  järgmisi PatientProcess/Hypoxia/resource vertikaallõikeid.
+- Golden clinical coverage: kõik HV P0 testid läbivad; järgmised P0 rühmad vajavad
+  Botulism/Hypoxia/PatientProcess/resource vertikaallõikeid.
 
 ## Järgmine minimaalne samm
 
-Laiendada olemasolevat `GoldenEngineHarness` vertikaallõiget järgmisele HV testile:
+Laiendada olemasolevat `GoldenEngineHarness` vertikaallõiget järgmisele P0 rühmale:
 
-1. lisada üks action (`OXYGEN_HIGH_FLOW` või `INTUBATION`);
-2. säilitada sama HV progressioon ja ownership;
-3. kontrollida event log'i ning topelt-replay'd;
-4. käivitada vastav kanooniline HV P0 test.
+1. lisada minimaalne Botulism PatientProcess bootstrap `FX-PT007`, `FX-PT001-60` ja
+   `FX-PT009` fixture-kujude jaoks;
+2. juhtida Botulismi parent-protsessist olemasolevaid HV ja Hypoxia lapsprotsesse;
+3. käivitada XMOD-003…006 sama deterministliku pipeline'i ja replay kontrolliga.
 
-HV-001 vertikaallõige on valmis; järgmine lõige saab sama protsessiruntime'i taaskasutada.
+HV ja Hypoxia integreeritud lõige on valmis; järgmine piir on Botulismi juurprotsess.
+
+## WP-8 minimaalne Botulism Root runtime
+
+| XMOD test | Staatus | Märkus |
+|---|---|---|
+| XMOD-001 | PASS | HV käivitab ühe Hypoxia child'i |
+| XMOD-002 | PASS | Korduv hindamine ei dubleeri child'i |
+| XMOD-003 | PASS | Botulism respiratory → HV → Hypoxia; SpO₂ owner on Hypoxia |
+| XMOD-004 | PASS | Ventilatsioon kontrollib HV-d, Botulismi cranial/motor jäävad aktiivseks |
+| XMOD-005 | PASS | Teadvusseisundi langus omistatakse HV moodulile |
+| XMOD-006 | PASS | Aspiratsioon loob HYP_ASP_MOD child'i ja jätab 5 Botulismi protsessi aktiivseks |
+
+Kõik kuus XMOD testi ning nende 24 assertion'it läbivad päris Golden Packi vastu.
+BLOCKED teste ei ole. Botulism Root bootstrap loeb protsessid fixture'i
+`processAssignments` või `botulismProcesses` loendist, säilitab parent-child seosed ja
+orkestreerib ainult Golden testides vajalikud HV ning Hypoxia child'id. Root'i enda
+`runtimeContributions` on tühi: kliinilised muudatused lähevad jätkuvalt child output'ide,
+OwnershipResolver'i ja RuntimeAggregationPipeline'i kaudu.

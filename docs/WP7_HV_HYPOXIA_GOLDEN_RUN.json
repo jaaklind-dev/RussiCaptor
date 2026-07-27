@@ -1,0 +1,30 @@
+{
+  "workPackage": "WP-7",
+  "goldenPack": "RC-GOLDEN-TEST-PACK-001 v1.0",
+  "runId": "WP7-CANONICAL",
+  "runAt": "2026-07-27T18:00:00.000Z",
+  "summary": {
+    "hvPassed": 8,
+    "hypoxiaStandalonePassed": 0,
+    "integratedPassed": 2,
+    "blocked": 4
+  },
+  "groups": [
+    { "group": "HV", "passed": ["HV-001", "HV-002", "HV-003", "HV-004", "HV-005", "HV-006", "HV-007", "HV-008"], "blocked": [] },
+    { "group": "Hypoxia P0", "passed": [], "blocked": [], "note": "Golden Packis ei ole eraldiseisvaid Hypoxia teste." },
+    { "group": "HV + Hypoxia", "passed": ["XMOD-001", "XMOD-002"], "blocked": [] },
+    { "group": "Botulism-dependent XMOD", "passed": [], "blocked": ["XMOD-003", "XMOD-004", "XMOD-005", "XMOD-006"] }
+  ],
+  "blockedReasons": {
+    "XMOD-003": "Fixture FX-PT007 juurprotsess ei ole HV; Botulism PatientProcess runtime puudub WP-7 ulatusest.",
+    "XMOD-004": "Fixture FX-PT007 juurprotsess ei ole HV; Botulism PatientProcess runtime ja selle mitme lapse orkestreerimine puuduvad.",
+    "XMOD-005": "Fixture FX-PT001-60 sisaldab Botulismi/patsiendi koondolekut, mitte HV juurprotsessi ventilationReserve välja; Botulism runtime puudub.",
+    "XMOD-006": "Fixture FX-PT009 juurprotsess ei ole HV; Botulism PatientProcess runtime ja taastumise seos puuduvad."
+  },
+  "hashes": {
+    "stateHash": "4f323b0f3047be44887140b60655a440ee62bd403120f4f9b8e537c7b2c0d21c",
+    "eventLogHash": "9abf4bb0faffa630eb48504a3400cf7e7644e9cc031435177e4d6b20210bfd44",
+    "processTreeHash": "c4102dc94acb3df70ce794e445ea1ed08f85f3fe12d1719887e652a64feea259"
+  },
+  "goldenPackModified": false
+}

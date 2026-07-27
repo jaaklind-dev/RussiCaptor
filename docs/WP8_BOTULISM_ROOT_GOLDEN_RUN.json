@@ -1,0 +1,22 @@
+{
+  "workPackage": "WP-8",
+  "goldenPack": "RC-GOLDEN-TEST-PACK-001 v1.0",
+  "runId": "WP8-CANONICAL",
+  "runAt": "2026-07-27T20:00:00.000Z",
+  "summary": { "xmodPassed": 6, "xmodBlocked": 0, "assertionsPassed": 24 },
+  "tests": [
+    { "testId": "XMOD-001", "status": "PASS", "assertions": 3 },
+    { "testId": "XMOD-002", "status": "PASS", "assertions": 3 },
+    { "testId": "XMOD-003", "status": "PASS", "assertions": 5 },
+    { "testId": "XMOD-004", "status": "PASS", "assertions": 7 },
+    { "testId": "XMOD-005", "status": "PASS", "assertions": 3 },
+    { "testId": "XMOD-006", "status": "PASS", "assertions": 3 }
+  ],
+  "hashes": {
+    "stateHash": "a4e823be30ac4151e37da3e674a577979b6dfbd913df0b1d74905e641254677f",
+    "eventLogHash": "1a603adb9b1372c6cf581c29aab0eb01e0293fcfa08a92100cdeece576445ffd",
+    "processTreeHash": "5b211053460a7a13a966422094c504b7d6adb0abc13b10a4cbf45ef90b6dce23"
+  },
+  "blocked": [],
+  "goldenPackModified": false
+}

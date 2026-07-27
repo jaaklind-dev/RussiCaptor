@@ -108,7 +108,8 @@ export function resolveGoldenQuery(
 }
 
 function requiresMappedValue(assertion: GoldenAssertion): boolean {
-  return assertion.assertionType !== "EVENT" && assertion.assertionType !== "PROCESS_TREE";
+  return assertion.assertionType !== "EVENT" &&
+    (assertion.assertionType !== "PROCESS_TREE" || !assertion.queryOrField.startsWith("processTree["));
 }
 
 export function createGoldenEngineAdapter(

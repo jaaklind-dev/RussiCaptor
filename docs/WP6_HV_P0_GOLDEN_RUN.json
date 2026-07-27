@@ -1,0 +1,66 @@
+{
+  "runId": "RUN-WP6-HV-P0-CANONICAL",
+  "sourceWorkbook": "RussiCaptor_Golden_Test_Pack_v1.xlsx",
+  "packId": "RC-GOLDEN-TEST-PACK-001",
+  "packVersion": "1.0",
+  "summary": {
+    "tests": 7,
+    "passedTests": 7,
+    "blockedTests": 0,
+    "assertions": 25,
+    "passedAssertions": 25,
+    "failedAssertions": 0,
+    "replayPassed": 7
+  },
+  "tests": [
+    {
+      "testId": "HV-001",
+      "status": "PASS",
+      "stateHash": "654d3ed58bbba83464e92cb0880e10efe5e4bddd59eaf9d9d46f8b62fa6ea34e",
+      "eventLogHash": "401370563176a4062f841fccc9b72b7ae69caaa9ad9ef9a0ae01b60887a049fd",
+      "processTreeHash": "ae3473b6a2145e4f015100b3e3fbc7642ea20b3f5e4c5a36b725ce198de38fdf"
+    },
+    {
+      "testId": "HV-002",
+      "status": "PASS",
+      "stateHash": "eb44b3f7578d5556ac30f8ef5a49c11b68ef1740e473b3c0f9930402d8f031a8",
+      "eventLogHash": "bdb5f3b58359cc7b7df3a3a42930acffbfc1eaf9d71ef26831f3e2814f6b995c",
+      "processTreeHash": "ae3473b6a2145e4f015100b3e3fbc7642ea20b3f5e4c5a36b725ce198de38fdf"
+    },
+    {
+      "testId": "HV-003",
+      "status": "PASS",
+      "stateHash": "b6f803f39fe5ba1ac0e683116268672ff39f05bcdac616bd2a77af6aa54b6dde",
+      "eventLogHash": "c71e15fbc9c65bdd241dde0f1fb6538c4e97dac2ba2c3c7a0080cd374cbeebab",
+      "processTreeHash": "3cdb52d05fcbd363cc638a699ea8cff8c30aef5f0cd3d42711be133d436f622a"
+    },
+    {
+      "testId": "HV-004",
+      "status": "PASS",
+      "stateHash": "bcaf5e06e1fe762356b4ceebaffbc9c9e0e23347d2c6983b173b9e47ea54a8f6",
+      "eventLogHash": "c51ae853f0c36709a79bb706d07084aa69727693ceef5bda74a0bfd3c5d78182",
+      "processTreeHash": "01b2df14532e52210e06b9c5cadeec2fdb4ba3cede08cb0d7740d78bd8404711"
+    },
+    {
+      "testId": "HV-005",
+      "status": "PASS",
+      "stateHash": "24f43f91823a7d3da17d98783184341767829894e74dfd901138bdc0e7c35c3c",
+      "eventLogHash": "1d8c10f7210319c6a176c8d0ad9830cb3fa8dfeaed08e1153925ba49f6a0c437",
+      "processTreeHash": "24133f6144812bdb58aafafeca8d1dc2755aa92e6fc6db928f769221b91043b8"
+    },
+    {
+      "testId": "HV-007",
+      "status": "PASS",
+      "stateHash": "350e3d8e993a4359b5b5185e234af38600a2d3b95cf02e48ff2d386b2810b230",
+      "eventLogHash": "41ef73238051e1ada1423f247536792d32392418fe7f4fe0435f7a16f3f9b0d7",
+      "processTreeHash": "cbee9229fab19c9572add079a52fdf1b4510e8ef281fd522ec1bb5338756237f"
+    },
+    {
+      "testId": "HV-008",
+      "status": "PASS",
+      "stateHash": "96576a9e79fd7d5a1a8e04f4544e6c3a4a32f089ec26ddeea67008c65e486a48",
+      "eventLogHash": "54d94812871b4951199beeb987dcf4305124c4a3ba8e358f4c98f678c8c697a5",
+      "processTreeHash": "b70901a0aca7fff92943d869d0440ad891679a46d4f83e1d34a42231c3914702"
+    }
+  ]
+}

@@ -64,7 +64,10 @@ function assertionActual(assertion: GoldenWorkbook["assertions"][number], output
   }
   if (assertion.assertionType === "EVENT") {
     const filters = selector(assertion.queryOrField);
+    const isNegativeCheckpointAssertion = assertion.comparator === "COUNT_EQ" &&
+      Number(assertion.expectedValue) === 0;
     return output.events.filter((event) =>
+      (!isNegativeCheckpointAssertion || (event.simulationTime ?? 0) <= assertion.checkpointSec) &&
       (!filters.type || event.eventType === filters.type) &&
       (!filters.target || event.target === filters.target) &&
       (!filters.sourceModule || event.sourceModule === filters.sourceModule)
