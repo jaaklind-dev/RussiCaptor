@@ -127,6 +127,7 @@ export type GoldenWorkbook = {
 
 export type GoldenExecutionOutput = {
   values: Record<string, unknown>;
+  checkpointValues?: Record<string, Record<string, unknown>>;
   snapshots?: Record<string, unknown>;
   events: GoldenActualEvent[];
   processTree?: GoldenActualProcess[];

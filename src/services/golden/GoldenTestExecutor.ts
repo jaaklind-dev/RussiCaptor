@@ -3,6 +3,7 @@ import type {
   GoldenExecutionOutput,
   GoldenFixture,
   GoldenInputEvent,
+  GoldenAssertion,
   GoldenRunReport,
   GoldenTestCase,
   GoldenWorkbook,
@@ -23,6 +24,7 @@ export type GoldenRunnerAdapter = {
     fixture: GoldenFixture;
     events: GoldenInputEvent[];
     checkpoints: number[];
+    assertions: GoldenAssertion[];
   }): Promise<GoldenExecutionOutput>;
 };
 
@@ -54,6 +56,8 @@ function selector(query: string): Record<string, string> {
 }
 
 function assertionActual(assertion: GoldenWorkbook["assertions"][number], output: GoldenExecutionOutput): unknown {
+  const checkpointValue = output.checkpointValues?.[String(assertion.checkpointSec)]?.[assertion.queryOrField];
+  if (checkpointValue !== undefined) return checkpointValue;
   if (Object.hasOwn(output.values, assertion.queryOrField)) return output.values[assertion.queryOrField];
   if (output.snapshots && Object.hasOwn(output.snapshots, assertion.queryOrField)) {
     return output.snapshots[assertion.queryOrField];
@@ -131,6 +135,7 @@ export async function executeGoldenTests(
         fixture,
         events,
         checkpoints: [...new Set(assertions.map((item) => item.checkpointSec))].sort((a, b) => a - b),
+        assertions,
       });
       lastOutput = output;
       const replayComparison = test.deterministic
@@ -138,6 +143,7 @@ export async function executeGoldenTests(
           test, fixture: loadFixture(workbook, test.fixtureId),
           events: loadEventSequence(workbook, test.eventSequenceId),
           checkpoints: [...new Set(assertions.map((item) => item.checkpointSec))].sort((a, b) => a - b),
+          assertions,
         }))
         : { status: "PASS" as const, failures: [] };
       const assertionResults = assertions.map((assertion): GoldenAssertionResult => {

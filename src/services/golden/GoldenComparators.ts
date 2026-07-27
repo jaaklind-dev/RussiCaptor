@@ -182,6 +182,7 @@ function normalizeSemantic(value: unknown): unknown {
 function replaySemantic(output: GoldenExecutionOutput): unknown {
   return normalizeSemantic({
     values: output.values,
+    checkpointValues: output.checkpointValues,
     snapshots: output.snapshots,
     events: orderedEvents(output.events).map(({ insertedAt: _insertedAt, ...event }) => event),
     processTree: [...(output.processTree ?? [])].sort((left, right) =>
