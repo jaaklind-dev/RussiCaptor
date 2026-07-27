@@ -47,6 +47,11 @@ export class ResourcePool {
     return this.snapshot().filter(resource => resource.assignedPatientId === patientId);
   }
 
+  getResource(resourceId: string): RuntimeResource | undefined {
+    const resource = this.resources.get(resourceId);
+    return resource ? structuredClone(resource) : undefined;
+  }
+
   snapshot(): RuntimeResource[] {
     return [...this.resources.values()]
       .sort((a, b) => a.resourceId.localeCompare(b.resourceId))

@@ -13,6 +13,7 @@ export type RuntimeResource = {
   type: ResourceType;
   status: ResourceStatus;
   assignedPatientId?: string;
+  exclusiveGroup?: string;
   metadata: Record<string, unknown>;
 };
 
@@ -24,14 +25,26 @@ export type RuntimeIntervention = {
   resourceId: string;
   action: InterventionAction;
   timestamp: number;
+  priority: number;
   sourceProcessId?: string;
 };
+
+export type SchedulableIntervention = Omit<RuntimeIntervention, "priority"> & { priority?: number };
+
+export type InterventionRejectionReason =
+  | "LOWER_PRIORITY"
+  | "DUPLICATE_ACTION"
+  | "RESOURCE_ALREADY_RESERVED"
+  | "EXCLUSIVE_GROUP_CONFLICT"
+  | "INVALID_REMOVE"
+  | "STALE_INTERVENTION";
 
 export type ResourceEventType =
   | "ResourceReserved"
   | "ResourceReleased"
   | "InterventionApplied"
-  | "InterventionRemoved";
+  | "InterventionRemoved"
+  | "InterventionRejected";
 
 export type ResourceRuntimeEvent = {
   eventType: ResourceEventType;
@@ -40,4 +53,7 @@ export type ResourceRuntimeEvent = {
   patientId: string;
   interventionId?: string;
   sourceProcessId?: string;
+  reasonCode?: InterventionRejectionReason;
+  conflictingInterventionId?: string;
+  exclusiveGroup?: string;
 };

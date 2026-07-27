@@ -12,7 +12,7 @@ import type { GoldenActualEvent, GoldenFixture, GoldenInputEvent } from "@/model
 import type { OwnershipRule } from "@/models/ModuleImport";
 import type { BotulismRootPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime } from "@/models/PatientProcessRuntime";
 import type { RuntimeState } from "@/models/RuntimeAggregation";
-import type { ResourceRuntimeEvent, RuntimeIntervention, RuntimeResource, ResourceType } from "@/models/ResourceRuntime";
+import type { ResourceRuntimeEvent, RuntimeResource, ResourceType, SchedulableIntervention } from "@/models/ResourceRuntime";
 import {
   applyHvAction,
   applyHvTimedTransition,
@@ -145,6 +145,7 @@ function fixtureResources(value: unknown): RuntimeResource[] {
       resourceId: String(row.resourceId), type,
       status: row.status === "RESERVED" ? "RESERVED" as const : "AVAILABLE" as const,
       assignedPatientId: row.assignedPatientId ? String(row.assignedPatientId) : undefined,
+      exclusiveGroup: row.exclusiveGroup ? String(row.exclusiveGroup) : undefined,
       metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
         ? structuredClone(row.metadata as Record<string, unknown>) : {},
     }];
@@ -374,7 +375,7 @@ export class ClinicalScenarioEngine {
     return structuredClone(this.eventLog);
   }
 
-  scheduleIntervention(intervention: RuntimeIntervention): void {
+  scheduleIntervention(intervention: SchedulableIntervention): void {
     this.interventionEngine.schedule(intervention);
   }
 
@@ -468,7 +469,10 @@ export class ClinicalScenarioEngine {
         resourceId: event.resourceId,
         patientId: event.patientId,
         interventionId: event.interventionId,
-        ...(event.sourceProcessId ? { sourceProcessId: event.sourceProcessId } : {}),
+        sourceProcessId: event.sourceProcessId ?? "INTERVENTION_ENGINE",
+        ...(event.reasonCode ? { reasonCode: event.reasonCode } : {}),
+        ...(event.conflictingInterventionId ? { conflictingInterventionId: event.conflictingInterventionId } : {}),
+        ...(event.exclusiveGroup ? { exclusiveGroup: event.exclusiveGroup } : {}),
       },
     });
   }

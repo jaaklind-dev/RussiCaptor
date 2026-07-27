@@ -10,10 +10,10 @@ Fookus: WP-3 import, WP-3B runtime aggregation, WP-4B Golden runner ja engine ad
 |---|---:|
 | Testipakid | 15 / 15 PASS |
 | Automaattestid | 92 / 92 PASS |
-| Kogu `src` statement coverage | 64.70% (2150 / 3323) |
-| Kogu `src` branch coverage | 55.75% (1231 / 2208) |
-| Kogu `src` function coverage | 62.06% (638 / 1028) |
-| Kogu `src` line coverage | 65.54% (1952 / 2978) |
+| Kogu `src` statement coverage | 65.26% (2210 / 3386) |
+| Kogu `src` branch coverage | 56.67% (1290 / 2276) |
+| Kogu `src` function coverage | 62.39% (647 / 1037) |
+| Kogu `src` line coverage | 66.12% (2007 / 3035) |
 | 0% line coverage failid | 50 |
 
 Coverage mõõdeti käsuga, mis kaasab kõik `src/**/*.{ts,tsx}` failid. Seetõttu sisaldab
@@ -225,3 +225,31 @@ muutmise õigust.
 Kahekordsel resource replay'l olid identsed RuntimeState, ResourcePool, PatientProcess-id,
 event log, process tree ja hashid. Kanonilise Golden Packi kontrollis jäid kõik 8 HV ja
 6 XMOD testi PASS-i; BLOCKED ja FAIL teste ei olnud.
+
+## WP-9B Intervention Conflict & Priority Foundation
+
+Intervention Engine'i semantiline järjestus on nüüd:
+
+1. timestamp kasvavalt;
+2. priority kahanevalt (suurem number tähendab kõrgemat prioriteeti);
+3. action phase: REMOVE enne APPLY;
+4. interventionId kui viimane deterministlik tie-breaker.
+
+Kõik sama tick'i tähtajaks saabunud intervention'id läbivad preflight konfliktiplaani
+enne ResourcePool'i muutmist. Konfliktiplaan katab sama ressursi duplikaadid, madalama
+prioriteedi, juba reserveeritud ressursi, vigase REMOVE tegevuse ja valikulise
+`exclusiveGroup` konflikti. Tagasilükkamine tekitab `InterventionRejected` sündmuse
+stabiilse reasonCode'i, conflictingInterventionId ja exclusiveGroup omistusega.
+
+| WP-9B capability | Status |
+|---|---|
+| Priority sort | PASS |
+| REMOVE → APPLY action phase | PASS |
+| Deterministic ID tie-breaker | PASS |
+| Same-resource preflight | PASS |
+| Exclusive group preflight | PASS |
+| Stable rejection reasonCode | PASS |
+| Rejected-event replay/hash determinism | PASS |
+
+Kanonilise Golden Packi regressioonis jäid 8 HV ja 6 XMOD testi PASS-i; BLOCKED ja FAIL
+teste ei olnud. WP-9B ei lisa haiguspõhiseid prioriteete ega kliinilist sobivusmaatriksit.

@@ -1,0 +1,29 @@
+{
+  "workPackage": "WP-9B",
+  "status": "PASS",
+  "ordering": ["timestamp:ascending", "priority:descending", "actionPhase:REMOVE_BEFORE_APPLY", "interventionId:ascending"],
+  "defaultPriority": 0,
+  "higherNumberMeansHigherPriority": true,
+  "capabilities": {
+    "PrioritySort": "PASS",
+    "ActionPhase": "PASS",
+    "DeterministicTieBreaker": "PASS",
+    "SameResourcePreflight": "PASS",
+    "ExclusiveGroupPreflight": "PASS",
+    "InterventionRejected": "PASS",
+    "ReplayDeterminism": "PASS",
+    "HashDeterminism": "PASS"
+  },
+  "rejectionReasons": [
+    "LOWER_PRIORITY",
+    "DUPLICATE_ACTION",
+    "RESOURCE_ALREADY_RESERVED",
+    "EXCLUSIVE_GROUP_CONFLICT",
+    "INVALID_REMOVE",
+    "STALE_INTERVENTION"
+  ],
+  "goldenRegression": { "hvPassed": 8, "xmodPassed": 6, "blocked": 0, "failed": 0 },
+  "automatedTests": { "testSuites": 22, "tests": 125, "status": "PASS" },
+  "fullSourceCoverage": { "statements": 65.26, "branches": 56.67, "functions": 62.39, "lines": 66.12 },
+  "goldenPackModified": false
+}
