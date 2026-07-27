@@ -48,7 +48,7 @@ describe("WP-9 Intervention Engine", () => {
       "ResourceReleased", "InterventionRemoved",
     ]);
     expect(pool.isAvailable("VENT-1")).toBe(true);
-    expect(interventions.snapshot()).toEqual({ pending: [], completed: ["I-APPLY", "I-REMOVE"] });
+    expect(interventions.snapshot()).toEqual({ pending: [], active: [], completed: ["I-APPLY", "I-REMOVE"] });
   });
 });
 

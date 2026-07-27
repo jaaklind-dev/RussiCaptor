@@ -47,6 +47,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import VitalsTab from "@/components/patient/VitalsTab";
 import { getVitalSigns } from "@/repositories/VitalSignsRepository";
 import { recordVitalSigns } from "@/services/VitalSignsService";
+import ResourceDeveloperCard from "@/components/patient/ResourceDeveloperCard";
 type PatientTab =
   | "overview"
   | "vitals"
@@ -242,11 +243,14 @@ useEffect(() => {
       <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
 
         {activeTab === "overview" && (
-          <OverviewTab
-            patient={patient}
-            latestVitals={getVitalSigns(patient.id)[0]}
-            recentEvents={getTimelineEvents(patient.id).slice(-3).reverse()}
-          />
+          <>
+            <OverviewTab
+              patient={patient}
+              latestVitals={getVitalSigns(patient.id)[0]}
+              recentEvents={getTimelineEvents(patient.id).slice(-3).reverse()}
+            />
+            {__DEV__ && <ResourceDeveloperCard patientId={patient.id} />}
+          </>
         )}
 
         {activeTab === "vitals" && (

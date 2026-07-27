@@ -10,10 +10,10 @@ Fookus: WP-3 import, WP-3B runtime aggregation, WP-4B Golden runner ja engine ad
 |---|---:|
 | Testipakid | 15 / 15 PASS |
 | Automaattestid | 92 / 92 PASS |
-| Kogu `src` statement coverage | 65.26% (2210 / 3386) |
-| Kogu `src` branch coverage | 56.67% (1290 / 2276) |
-| Kogu `src` function coverage | 62.39% (647 / 1037) |
-| Kogu `src` line coverage | 66.12% (2007 / 3035) |
+| Kogu `src` statement coverage | 65.26% (2249 / 3446) |
+| Kogu `src` branch coverage | 55.96% (1294 / 2312) |
+| Kogu `src` function coverage | 62.50% (665 / 1064) |
+| Kogu `src` line coverage | 66.07% (2041 / 3089) |
 | 0% line coverage failid | 50 |
 
 Coverage mõõdeti käsuga, mis kaasab kõik `src/**/*.{ts,tsx}` failid. Seetõttu sisaldab
@@ -253,3 +253,26 @@ stabiilse reasonCode'i, conflictingInterventionId ja exclusiveGroup omistusega.
 
 Kanonilise Golden Packi regressioonis jäid 8 HV ja 6 XMOD testi PASS-i; BLOCKED ja FAIL
 teste ei olnud. WP-9B ei lisa haiguspõhiseid prioriteete ega kliinilist sobivusmaatriksit.
+
+## WP-9.5 patsiendi resource developer card
+
+Patsiendi Overview vaates kuvatakse arendusbuildis read-only Resources kaart. Kaart saab
+andmed ScenarioEngine'i avaldatud debug snapshot'ist ja ei ekspordi UI-le ResourcePool'i
+reserve/release meetodeid.
+
+Kaart kuvab:
+
+- kõik runtime'i ressursid ning available/assigned/in-use oleku;
+- patsiendi aktiivsed APPLY intervention'id koos prioriteediga;
+- patsiendi kümme viimast resource event'i;
+- `InterventionRejected` reasonCode'i, conflictingInterventionId ja exclusiveGroup infot;
+- selge tühioleku, kui runtime pole patsiendi kohta snapshot'i avaldanud.
+
+Debug read-model kasutab subscription/version mehhanismi, mistõttu engine'i uus snapshot
+uuendab kaarti ilma eraldi UI ressursiseisuta. Patient filtering, aktiivsete intervention'ite
+filter ja viimase kümne sündmuse järjestus on automaattestiga kaetud.
+
+Dashboardil kuvatakse arendusbuildis sama read-only snapshot'i kasutav Resource Monitor.
+Paneel koondab iga olemasoleva ressursitüübi `Total / Free / In use` väärtused ning näitab
+snapshot'i simulatsiooniaega. Ressursitüübid on alati stabiilses järjekorras ja nullkogusega
+tüüpe ei kuvata. Koondamisloogika on eraldi automaattestiga kaetud.

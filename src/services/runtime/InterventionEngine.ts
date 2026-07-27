@@ -26,6 +26,7 @@ function compareInterventions(left: RuntimeIntervention, right: RuntimeIntervent
 export class InterventionEngine {
   private readonly pending = new Map<string, RuntimeIntervention>();
   private readonly completed = new Set<string>();
+  private readonly active = new Map<string, RuntimeIntervention>();
 
   schedule(intervention: SchedulableIntervention): void {
     if (this.pending.has(intervention.interventionId) || this.completed.has(intervention.interventionId)) {
@@ -51,9 +52,11 @@ export class InterventionEngine {
         events.push(this.rejectedEvent(intervention, rejection));
       } else if (intervention.action === "APPLY") {
         pool.reserve(intervention.resourceId, intervention.patientId);
+        this.active.set(`${intervention.patientId}\u0000${intervention.resourceId}`, intervention);
         events.push(this.event("ResourceReserved", intervention), this.event("InterventionApplied", intervention));
       } else {
         pool.release(intervention.resourceId);
+        this.active.delete(`${intervention.patientId}\u0000${intervention.resourceId}`);
         events.push(this.event("ResourceReleased", intervention), this.event("InterventionRemoved", intervention));
       }
       this.pending.delete(intervention.interventionId);
@@ -62,9 +65,10 @@ export class InterventionEngine {
     return events;
   }
 
-  snapshot(): { pending: RuntimeIntervention[]; completed: string[] } {
+  snapshot(): { pending: RuntimeIntervention[]; active: RuntimeIntervention[]; completed: string[] } {
     return {
       pending: [...this.pending.values()].sort(compareInterventions).map(item => structuredClone(item)),
+      active: [...this.active.values()].sort(compareInterventions).map(item => structuredClone(item)),
       completed: [...this.completed].sort(),
     };
   }

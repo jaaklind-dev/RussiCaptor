@@ -30,6 +30,7 @@ import {
 import { bootstrapBotulismRoot, tickBotulismRoot } from "@/services/runtime/BotulismRootPatientProcess";
 import { InterventionEngine } from "@/services/runtime/InterventionEngine";
 import { ResourcePool } from "@/services/runtime/ResourcePool";
+import { publishResourceRuntimeDebugSnapshot } from "@/services/ResourceRuntimeDebugService";
 import { RuntimeOwnershipResolver } from "@/services/runtime/OwnershipResolver";
 import { aggregateRuntimeState } from "@/services/runtime/RuntimeAggregationPipeline";
 import { sha256Text } from "@/utils/sha256";
@@ -160,6 +161,7 @@ export class ClinicalScenarioEngine {
   private simulationTimeSec = 0;
   private sequence = 0;
   private eventLog: GoldenActualEvent[] = [];
+  private resourceEventLog: ResourceRuntimeEvent[] = [];
   private pendingTransitions: { dueSec: number; transition: HvTimedTransition }[] = [];
   private processControlledEventPending = false;
   private readonly appliedEventIds = new Set<string>();
@@ -203,11 +205,13 @@ export class ClinicalScenarioEngine {
     this.simulationTimeSec = 0;
     this.sequence = 0;
     this.eventLog = [];
+    this.resourceEventLog = [];
     this.pendingTransitions = [];
     this.processControlledEventPending = false;
     this.appliedEventIds.clear();
     this.resourcePool = new ResourcePool(fixtureResources(fixture.activeResources));
     this.interventionEngine = new InterventionEngine();
+    this.publishResourceDebugSnapshot();
     if (this.botulismRoot) this.aggregateProcesses(this.runtimeState);
   }
 
@@ -353,6 +357,7 @@ export class ClinicalScenarioEngine {
       this.processControlledEventPending = false;
     }
     this.emitOxygenMaskingWarning(event.target);
+    this.publishResourceDebugSnapshot();
   }
 
   getPatientProcess(): PatientProcessRuntime {
@@ -456,6 +461,7 @@ export class ClinicalScenarioEngine {
   }
 
   private logResourceEvent(event: ResourceRuntimeEvent): void {
+    this.resourceEventLog.push(structuredClone(event));
     this.sequence += 1;
     this.eventLog.push({
       eventType: event.eventType,
@@ -474,6 +480,15 @@ export class ClinicalScenarioEngine {
         ...(event.conflictingInterventionId ? { conflictingInterventionId: event.conflictingInterventionId } : {}),
         ...(event.exclusiveGroup ? { exclusiveGroup: event.exclusiveGroup } : {}),
       },
+    });
+  }
+
+  private publishResourceDebugSnapshot(): void {
+    publishResourceRuntimeDebugSnapshot({
+      resources: this.resourcePool.snapshot(),
+      activeInterventions: this.interventionEngine.snapshot().active,
+      recentEvents: this.resourceEventLog,
+      updatedAt: this.simulationTimeSec,
     });
   }
 
