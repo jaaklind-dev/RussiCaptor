@@ -1,0 +1,39 @@
+{
+  "workPackage": "WP-8A",
+  "status": "PASS",
+  "runtimeBranchCoverage": {
+    "ScenarioEngine": 77.63,
+    "BotulismRootPatientProcess": 100,
+    "HvPatientProcess": 86.2,
+    "HypoxiaPatientProcess": 100,
+    "OwnershipResolver": 88.46,
+    "RuntimeAggregationPipeline": 80.79
+  },
+  "moduleImportIntegration": {
+    "productionPersistencePath": true,
+    "databaseHarness": "stateful in-memory Supabase client",
+    "successfulStageCommitActivate": "PASS",
+    "rollbackFailurePoints": ["register_module_version", "exercise_module_bindings", "stage_import_run", "activate_exercise_import"],
+    "auditRetained": true,
+    "stagingCleaned": true,
+    "previousActiveVersionPreserved": true
+  },
+  "longSimulation": {
+    "ticksPerReplay": 10000,
+    "replays": 2,
+    "eventsPerReplay": 20000,
+    "deterministic": true,
+    "singleReplayBudgetMs": 15000,
+    "doubleReplayBudgetMs": 30000,
+    "heapGrowthBudgetMiB": 128,
+    "observedDurationRangeMs": [2700, 3407]
+  },
+  "nodeHashStability": {
+    "versionsTested": [20, 22, 24, 26],
+    "status": "PASS",
+    "canonicalHash": "ce6d0655e26f55b0b031a33a34c6a29862bb84ae9033b03d7585b915c357e554",
+    "ciWorkflow": ".github/workflows/runtime-hash-stability.yml"
+  },
+  "fullSuite": { "testSuites": 20, "tests": 111, "status": "PASS" },
+  "fullSourceCoverage": { "statements": 64.12, "branches": 55.26, "functions": 61.36, "lines": 64.82 }
+}

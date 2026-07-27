@@ -298,11 +298,13 @@ async function buildStagedModules(
   return staged;
 }
 
-async function ensureAuthenticatedUser(): Promise<string> {
-  if (!supabase) throw new Error("Supabase pole seadistatud.");
-  let { data } = await supabase.auth.getUser();
+type ImportPersistenceClient = NonNullable<typeof supabase>;
+
+async function ensureAuthenticatedUser(client: ImportPersistenceClient = supabase!): Promise<string> {
+  if (!client) throw new Error("Supabase pole seadistatud.");
+  let { data } = await client.auth.getUser();
   if (!data.user) {
-    const signedIn = await supabase.auth.signInAnonymously();
+    const signedIn = await client.auth.signInAnonymously();
     if (signedIn.error) throw signedIn.error;
     data = { user: signedIn.data.user };
   }
@@ -371,15 +373,17 @@ export function evaluateExactActiveNoOp(
   return Boolean(existingExercise?.is_active);
 }
 
-async function persistStagedPackage(
+export async function persistStagedPackage(
   manifest: ReturnType<typeof parseModuleManifest>,
   modules: StagedModule[],
   exerciseId: string,
-  exerciseVersion: string
+  exerciseVersion: string,
+  client: ImportPersistenceClient = supabase!,
+  authenticatedUserId?: string
 ): Promise<string> {
-  if (!supabase) throw new Error("Supabase pole seadistatud.");
-  const userId = await ensureAuthenticatedUser();
-  const { data: run, error: runError } = await supabase
+  if (!client) throw new Error("Supabase pole seadistatud.");
+  const userId = authenticatedUserId ?? await ensureAuthenticatedUser(client);
+  const { data: run, error: runError } = await client
     .from("import_runs")
     .insert({ manifest_id: manifest.manifestId, manifest_version: manifest.manifestVersion, created_by: userId })
     .select("id")
@@ -390,7 +394,7 @@ async function persistStagedPackage(
   try {
     const moduleIds = new Map<string, string>();
     for (const module of modules) {
-      const { data, error } = await supabase.rpc("register_module_version", {
+      const { data, error } = await client.rpc("register_module_version", {
         p_import_run_id: importRunId,
         p_module_id: module.registry.moduleId,
         p_module_version: module.registry.moduleVersion,
@@ -407,7 +411,7 @@ async function persistStagedPackage(
     }
 
     const exerciseModule = modules.find((module) => module.registry.moduleType === "EXERCISE_INSTANCE")!;
-    const { data: version, error: versionError } = await supabase
+    const { data: version, error: versionError } = await client
       .from("exercise_versions")
       .insert({
         exercise_id: exerciseId,
@@ -430,21 +434,21 @@ async function persistStagedPackage(
     if (bindingRows.some((binding) => !binding.module_version_id)) {
       throw new Error("Kõiki ExerciseBinding mooduleid ei registreeritud.");
     }
-    const { error: bindingError } = await supabase
+    const { error: bindingError } = await client
       .from("exercise_module_bindings")
       .insert(bindingRows);
     if (bindingError) throw bindingError;
 
-    const staged = await supabase.rpc("stage_import_run", { p_import_run_id: importRunId });
+    const staged = await client.rpc("stage_import_run", { p_import_run_id: importRunId });
     if (staged.error) throw staged.error;
-    const activated = await supabase.rpc("activate_exercise_import", {
+    const activated = await client.rpc("activate_exercise_import", {
       p_import_run_id: importRunId,
       p_exercise_version_id: version.id,
     });
     if (activated.error) throw activated.error;
     return importRunId;
   } catch (error) {
-    await supabase.rpc("fail_import_run", {
+    await client.rpc("fail_import_run", {
       p_import_run_id: importRunId,
       p_error_details: { message: formatUnknownError(error) },
     });

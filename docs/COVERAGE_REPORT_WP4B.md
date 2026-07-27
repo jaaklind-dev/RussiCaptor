@@ -10,10 +10,10 @@ Fookus: WP-3 import, WP-3B runtime aggregation, WP-4B Golden runner ja engine ad
 |---|---:|
 | Testipakid | 15 / 15 PASS |
 | Automaattestid | 92 / 92 PASS |
-| Kogu `src` statement coverage | 62.94% (2037 / 3236) |
-| Kogu `src` branch coverage | 53.50% (1145 / 2140) |
-| Kogu `src` function coverage | 60.86% (608 / 999) |
-| Kogu `src` line coverage | 63.82% (1851 / 2900) |
+| Kogu `src` statement coverage | 64.12% (2075 / 3236) |
+| Kogu `src` branch coverage | 55.26% (1186 / 2146) |
+| Kogu `src` function coverage | 61.36% (613 / 999) |
+| Kogu `src` line coverage | 64.82% (1880 / 2900) |
 | 0% line coverage failid | 50 |
 
 Coverage mõõdeti käsuga, mis kaasab kõik `src/**/*.{ts,tsx}` failid. Seetõttu sisaldab
@@ -170,3 +170,32 @@ BLOCKED teste ei ole. Botulism Root bootstrap loeb protsessid fixture'i
 orkestreerib ainult Golden testides vajalikud HV ning Hypoxia child'id. Root'i enda
 `runtimeContributions` on tühi: kliinilised muudatused lähevad jätkuvalt child output'ide,
 OwnershipResolver'i ja RuntimeAggregationPipeline'i kaudu.
+
+## WP-8A runtime hardening
+
+Kriitiliste runtime-komponentide branch coverage mõõdeti eraldi, et kogu repo UI-failide
+madal kate ei varjaks engine'i tegelikku kvaliteeti.
+
+| Kriitiline komponent | Branch coverage | Eesmärk |
+|---|---:|---:|
+| ScenarioEngine | 77.63% | PASS |
+| BotulismRootPatientProcess | 100% | PASS |
+| HvPatientProcess | 86.20% | PASS |
+| HypoxiaPatientProcess | 100% | PASS |
+| OwnershipResolver | 88.46% | PASS |
+| RuntimeAggregationPipeline | 80.79% | PASS |
+
+ModuleImportService persistence integratsioonitestid kasutavad sama production
+`persistStagedPackage` rada ja stateful in-memory Supabase klienti. Testid kontrollivad
+edukat import run'i, moodulite stagingut, bindinguid ja atomaarset aktiveerimist ning
+rollback'i neljas rikkepunktis: module registration, binding insert, stage RPC ja
+activate RPC. Rollback säilitab audit run'i, puhastab stagingu ja jätab varasema aktiivse
+õppuse muutmata. Testid ei kirjuta CI või kohaliku arenduse ajal päris Supabase projekti.
+
+10 000 tick'i test käivitab sama HV + Hypoxia simulatsiooni kaks korda. Mõlemal replay'l
+on identsed RuntimeState, PatientProcess runtime'id, event log ja kõik hashid. Üks jooks
+tekitas 20 000 omistatud sündmust; kohalikes kontrollides kestis jooks ligikaudu 2.7–3.4 s.
+Testi eelarved on 15 s ühe replay kohta, 30 s kahe replay kohta ja alla 128 MiB heap'i kasv.
+
+Replay hash'i fikstuur läbis päriselt Node 20, 22, 24 ja 26 all. GitHub Actions matrix
+kordab sama kontrolli igal push'il ja pull request'il.

@@ -139,5 +139,21 @@ describe("3B-1 runtime ownership resolver", () => {
     expect(() => new RuntimeOwnershipResolver([{ ...rules[0], conflictAction: "" }]))
       .toThrow("mittetäielikku reeglit");
   });
-});
 
+  test("covers inactive, module, process and core-service contributor policies", () => {
+    const broad = new RuntimeOwnershipResolver([{
+      objectType: "RuntimeField", objectOrField: "fieldA / fieldB", canonicalOwner: "OWNER_V1",
+      contributionAllowedFrom: "All active modules; other processes; CORE_ENGINE",
+      aggregationOrWriteRule: "LATEST", conflictAction: "REJECT",
+    }]);
+    expect(broad.authorize(request({ field: "fieldA", writerId: "MODULE_V1", active: false })).accepted).toBe(false);
+    expect(broad.authorize(request({ field: "fieldA", writerId: "MODULE_V1", channel: "PROCESS_CONTRIBUTION" })).accepted).toBe(true);
+    expect(broad.authorize(request({ field: "fieldB", writerId: "PP-1", writerKind: "PROCESS", channel: "PROCESS_CONTRIBUTION" })).accepted).toBe(true);
+    expect(broad.authorize(request({ field: "fieldB", writerId: "CORE_ENGINE", writerKind: "CORE_SERVICE", channel: "CORE_SERVICE" })).accepted).toBe(true);
+  });
+
+  test("rejects duplicate aliases", () => {
+    expect(() => new RuntimeOwnershipResolver([rules[0], { ...rules[0] }]))
+      .toThrow("ownership-reegel esineb mitu korda");
+  });
+});
