@@ -30,3 +30,6 @@ using (true)
 with check (updated_by = auth.uid());
 
 alter publication supabase_realtime add table public.exercise_states;
+
+-- Manifest-driven importer schema is maintained in supabase/migrations/.
+-- Apply every migration in filename order after this shared-state schema.
