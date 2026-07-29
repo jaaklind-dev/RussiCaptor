@@ -10,6 +10,10 @@ function inferredDefinition(resource: RuntimeResource | undefined): string | und
     nasalCannula: "OXYGEN_THERAPY", oropharyngealAirway: "OROPHARYNGEAL_AIRWAY",
     nasopharyngealAirway: "NASOPHARYNGEAL_AIRWAY", iGel: "SUPRAGLOTTIC_IGEL",
     laryngealMask: "SUPRAGLOTTIC_LMA", bagValveMask: "BAG_VALVE_MASK_VENTILATION",
+    peripheralIV: "PERIPHERAL_IV_ACCESS", intraosseousAccess: "INTRAOSSEOUS_ACCESS",
+    centralVenousCatheter: "CENTRAL_VENOUS_ACCESS", infusionPump: "CRYSTALLOID_INFUSION",
+    bloodAdministrationSet: "BLOOD_PRODUCT_ADMINISTRATION", pressureBag: "PRESSURE_INFUSION",
+    tourniquet: "TOURNIQUET_APPLICATION", pelvicBinder: "PELVIC_BINDER_APPLICATION",
   } as Partial<Record<RuntimeResource["type"], string>>)[resource?.type ?? "monitor"];
 }
 

@@ -342,3 +342,18 @@ Kaetud on rule evaluation, puuduv sekkumine, vale järjekord, duplikaat, rejecte
 intervention, resource conflict, structured debrief, input-snapshoti muutmatus,
 reeglite sisendjärjekorrast sõltumatus ning ScenarioEngine'i assessment/debrief/event/
 replay-hash determinism. Golden Pack jäi muutmata.
+
+## WP-13 Circulation & Vascular Access Framework
+
+| Mõõdik | Tulemus |
+|---|---:|
+| Testipakid | 27 / 27 PASS |
+| Automaattestid | 151 / 151 PASS |
+| Circulation files statements | 97.77% |
+| Circulation files branches | 97.22% |
+| Circulation files functions | 93.75% |
+| Circulation files lines | 100% |
+
+Kaetud on IV/IO reserve-release foundation, mitu samaaegset IV ligipääsu,
+tourniquet/pelvic binder/infusion apply-remove, priority ja exclusive-group
+konfliktid, circulation state, assessment, event log ning replay determinism.

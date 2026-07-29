@@ -5,6 +5,9 @@ const typeOrder: ResourceType[] = [
   "oropharyngealAirway", "nasopharyngealAirway", "iGel", "laryngealMask",
   "bagValveMask", "BVM", "endotrachealTube", "videoLaryngoscope",
   "directLaryngoscope", "ventilator", "suction", "capnography", "monitor",
+  "peripheralIV", "centralVenousCatheter", "intraosseousAccess", "pressureBag",
+  "fluidWarmer", "infusionPump", "bloodAdministrationSet", "rapidInfuser",
+  "tourniquet", "pelvicBinder",
 ];
 
 const labels: Record<ResourceType, string> = {
@@ -25,6 +28,16 @@ const labels: Record<ResourceType, string> = {
   directLaryngoscope: "Direct laryngoscopes",
   suction: "Suction",
   capnography: "Capnography",
+  peripheralIV: "Peripheral IV",
+  centralVenousCatheter: "Central venous catheters",
+  intraosseousAccess: "IO access",
+  pressureBag: "Pressure bags",
+  fluidWarmer: "Fluid warmers",
+  infusionPump: "Infusion pumps",
+  bloodAdministrationSet: "Blood administration sets",
+  rapidInfuser: "Rapid infusers",
+  tourniquet: "Tourniquets",
+  pelvicBinder: "Pelvic binders",
   monitor: "Monitors",
 };
 

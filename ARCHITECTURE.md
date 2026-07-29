@@ -737,3 +737,26 @@ warnings, failures, strengths, and improvement opportunities.
 Assessment content participates in replay hashing. Because the engine receives
 cloned/read-only snapshots and has no references to mutating runtime services, an
 assessment cannot change simulation results.
+
+## WP-13 – Circulation & Vascular Access Framework
+
+WP-13 completes the ABC foundation using the existing resource, intervention, and
+clinical-effect layers. `CirculationState` is a deterministic projection containing
+zero or more active vascular accesses, active hemorrhage-control mechanisms,
+running infusions, patient identity, and simulation timestamp.
+
+```text
+ResourcePool -> InterventionInstance -> CirculationState/events
+                                    `-> ClinicalEffect -> eligible PatientProcess
+```
+
+Peripheral IV, IO, central access, crystalloid, blood-product and pressure
+infusions, tourniquet, and pelvic binder are versioned definitions. Multiple IV
+instances may coexist because access identity is instance- and resource-based.
+Exclusive access-site or pelvic-stabilization conflicts remain ResourcePool data and
+are resolved by the WP-9B planner.
+
+Tourniquet emits `REDUCE_EXTERNAL_BLEEDING`, but no temporary physiology is applied
+when a Hemorrhage PatientProcess is absent. A later Hemorrhage process can consume
+the same general effect without changing this framework. WP-13 adds no medication
+or transfusion decision logic.

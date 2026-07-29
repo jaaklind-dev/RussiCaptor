@@ -34,6 +34,7 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
   );
   const snapshot = getPatientResourceDebugSnapshot(patientId);
   const airway = snapshot.airwayStates?.[0];
+  const circulation = snapshot.circulationStates?.[0];
 
   return (
     <View style={styles.card}>
@@ -81,6 +82,15 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
           ].includes(resource.type)
         ).map(resource => resource.resourceId).join(", ") || "NONE"}
       </Text>
+
+      <Text style={styles.sectionTitle}>Circulation runtime</Text>
+      <Text style={styles.itemText}>Active vascular access: {circulation?.vascularAccess.map(item => `${item.type}${item.location ? ` (${item.location})` : ""}`).join(", ") || "NONE"}</Text>
+      <Text style={styles.itemText}>Active hemorrhage control: {circulation?.hemorrhageControl.join(", ") || "NONE"}</Text>
+      <Text style={styles.itemText}>Running circulation interventions: {circulation?.runningInfusions.length ?? 0}</Text>
+      <Text style={styles.itemText}>Reserved circulation resources: {snapshot.resources.filter(resource =>
+        resource.assignedPatientId === patientId && ["peripheralIV", "centralVenousCatheter", "intraosseousAccess",
+          "pressureBag", "fluidWarmer", "infusionPump", "bloodAdministrationSet", "rapidInfuser", "tourniquet", "pelvicBinder"].includes(resource.type)
+      ).map(resource => resource.resourceId).join(", ") || "NONE"}</Text>
 
       <Text style={styles.sectionTitle}>Recent resource events</Text>
       {snapshot.recentEvents.length === 0 ? (

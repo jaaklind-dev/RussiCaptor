@@ -16,6 +16,7 @@ import type { ClinicalEffect, ClinicalProcessRuntime } from "@/models/ClinicalIn
 import type { InterventionInstance } from "@/models/InterventionInstance";
 import type { AirwayState } from "@/models/AirwayState";
 import type { AssessmentRule, AssessmentSnapshot } from "@/models/ClinicalAssessment";
+import type { CirculationState } from "@/models/CirculationState";
 import type { ResourceRuntimeEvent, RuntimeResource, ResourceType, SchedulableIntervention } from "@/models/ResourceRuntime";
 import {
   applyHvTimedTransition,
@@ -39,6 +40,8 @@ import { InterventionRuntime } from "@/services/runtime/clinical/InterventionRun
 import { airwayInterventionDefinitions } from "@/services/runtime/clinical/AirwayInterventionDefinitions";
 import { AirwayManagementFramework } from "@/services/runtime/clinical/AirwayManagementFramework";
 import { ClinicalAssessmentEngine } from "@/services/runtime/assessment/ClinicalAssessmentEngine";
+import { circulationInterventionDefinitions } from "@/services/runtime/clinical/CirculationInterventionDefinitions";
+import { CirculationManagementFramework } from "@/services/runtime/clinical/CirculationManagementFramework";
 import { publishAssessmentDebugSnapshot } from "@/services/AssessmentRuntimeDebugService";
 import { hvClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HvClinicalProcessHandler";
 import { hypoxiaClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HypoxiaClinicalProcessHandler";
@@ -141,6 +144,9 @@ const resourceTypes = new Set<ResourceType>([
   "nasalCannula", "simpleMask", "nonRebreatherMask", "bagValveMask",
   "oropharyngealAirway", "nasopharyngealAirway", "iGel", "laryngealMask",
   "videoLaryngoscope", "directLaryngoscope", "suction", "capnography",
+  "peripheralIV", "centralVenousCatheter", "intraosseousAccess", "pressureBag",
+  "fluidWarmer", "infusionPump", "bloodAdministrationSet", "rapidInfuser",
+  "tourniquet", "pelvicBinder",
 ]);
 
 function fixtureResources(value: unknown): RuntimeResource[] {
@@ -184,10 +190,11 @@ export class ClinicalScenarioEngine {
     new ClinicalProcessRegistry([hvClinicalProcessHandler, hypoxiaClinicalProcessHandler])
   );
   private readonly interventionRuntime = new InterventionRuntime(
-    new InterventionDefinitionRegistry(airwayInterventionDefinitions)
+    new InterventionDefinitionRegistry([...airwayInterventionDefinitions, ...circulationInterventionDefinitions])
   );
   private readonly airwayManagement = new AirwayManagementFramework();
   private readonly assessmentEngine = new ClinicalAssessmentEngine();
+  private readonly circulationManagement = new CirculationManagementFramework();
   private assessmentRules: AssessmentRule[] = [];
 
   reset(fixture: GoldenFixture): void {
@@ -235,6 +242,7 @@ export class ClinicalScenarioEngine {
     this.clinicalIntegration.reset();
     this.interventionRuntime.reset();
     this.airwayManagement.reset();
+    this.circulationManagement.reset();
     this.publishResourceDebugSnapshot();
     if (this.botulismRoot) this.aggregateProcesses(this.runtimeState);
   }
@@ -363,6 +371,12 @@ export class ClinicalScenarioEngine {
             ventilationState: airwayEvent.ventilationState,
           }, airwayEvent.patientId);
         }
+        for (const circulationEvent of this.circulationManagement.apply(changedInstance)) {
+          this.logEvent(circulationEvent.eventType, {
+            interventionInstanceId: circulationEvent.interventionInstanceId,
+            definitionId: circulationEvent.definitionId,
+          }, circulationEvent.patientId);
+        }
       }
       if (changedInstance?.definitionId === "OXYGEN_THERAPY" && changedInstance.status === "CANCELLED" &&
         !this.interventionRuntime.active(changedInstance.patientId).some(item => item.definitionId === "OXYGEN_THERAPY")) {
@@ -453,6 +467,10 @@ export class ClinicalScenarioEngine {
     return this.airwayManagement.getState(patientId);
   }
 
+  getCirculationState(patientId = this.requireProcess().encounterId): CirculationState {
+    return this.circulationManagement.getState(patientId);
+  }
+
   setAssessmentRules(rules: AssessmentRule[]): void {
     this.assessmentRules = structuredClone(rules);
     this.publishAssessmentSnapshot();
@@ -481,6 +499,7 @@ export class ClinicalScenarioEngine {
     const clinicalIntegrationHash = sha256Text(stableJson({
       framework: this.clinicalIntegration.snapshot(), instances: this.interventionRuntime.snapshot(),
       airway: this.airwayManagement.snapshot(),
+      circulation: this.circulationManagement.snapshot(),
       assessment: this.getAssessmentSnapshot(),
     }));
     return {
@@ -574,6 +593,7 @@ export class ClinicalScenarioEngine {
       activeInterventions: this.interventionEngine.snapshot().active,
       clinicalInterventions: this.interventionRuntime.snapshot(),
       airwayStates: this.airwayManagement.snapshot().states,
+      circulationStates: this.circulationManagement.snapshot().states,
       recentEvents: this.resourceEventLog,
       updatedAt: this.simulationTimeSec,
     });

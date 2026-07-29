@@ -16,6 +16,16 @@ export type ResourceType =
   | "directLaryngoscope"
   | "suction"
   | "capnography"
+  | "peripheralIV"
+  | "centralVenousCatheter"
+  | "intraosseousAccess"
+  | "pressureBag"
+  | "fluidWarmer"
+  | "infusionPump"
+  | "bloodAdministrationSet"
+  | "rapidInfuser"
+  | "tourniquet"
+  | "pelvicBinder"
   | "monitor";
 
 export type ResourceStatus = "AVAILABLE" | "RESERVED";
