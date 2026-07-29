@@ -618,12 +618,16 @@ export class ClinicalScenarioEngine {
     eventType: string,
     details: Record<string, unknown> = {},
     target?: string,
-    source: PatientProcessRuntime | HypoxiaPatientProcessRuntime = this.requireProcess()
+    source: ClinicalProcessRuntime = this.requireProcess()
   ): void {
     this.sequence += 1;
     this.eventLog.push({
       eventType,
-      sourceModule: source.processType === "HYPOXIA" ? "HYPOXIA_V1" : "HYPOVENTILATION_HYPERCAPNIA_V1",
+      sourceModule: source.processType === "HYPOXIA"
+        ? "HYPOXIA_V1"
+        : source.processType === "RESPIRATORY_FAILURE"
+          ? "RESPIRATORY_FAILURE_V1"
+          : "HYPOVENTILATION_HYPERCAPNIA_V1",
       target: target ?? source.processId,
       simulationTime: this.simulationTimeSec,
       enginePhase: 2,

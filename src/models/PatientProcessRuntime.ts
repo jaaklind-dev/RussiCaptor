@@ -86,3 +86,76 @@ export type BotulismRootPatientProcessRuntime = {
   nextTick: number;
   children: BotulismChildProcessRuntime[];
 };
+
+export type RespiratoryFailurePhenotype = "HYPOXAEMIC" | "HYPERCAPNIC" | "MIXED";
+
+export type RespiratoryFailureConfiguration = {
+  version: string;
+  initial: {
+    spo2: number;
+    respiratoryRate: number;
+    etco2: number;
+    gcs: number;
+    workOfBreathing: number;
+    fatigue: number;
+  };
+  progression: {
+    spo2DeclinePerMin: number;
+    respiratoryRateChangePerMin: number;
+    etco2RisePerMin: number;
+    workOfBreathingRisePerMin: number;
+    fatigueRisePerMin: number;
+    gcsDeclinePerMin: number;
+  };
+  support: {
+    oxygenSpo2RecoveryPerMin: number;
+    patentAirwayWorkRecoveryPerMin: number;
+    bvmSpo2RecoveryPerMin: number;
+    bvmEtco2ClearancePerMin: number;
+    bvmFatigueRecoveryPerMin: number;
+    mechanicalSpo2RecoveryPerMin: number;
+    mechanicalEtco2ClearancePerMin: number;
+    mechanicalFatigueRecoveryPerMin: number;
+  };
+  limits: {
+    spo2: { min: number; max: number };
+    respiratoryRate: { min: number; max: number };
+    etco2: { min: number; max: number };
+    gcs: { min: number; max: number };
+    workOfBreathing: { min: number; max: number };
+    fatigue: { min: number; max: number };
+  };
+  recovery: { resolvedFatigueMax: number; resolvedWorkOfBreathingMax: number };
+};
+
+export type RespiratoryFailureProcessState = {
+  phenotype: RespiratoryFailurePhenotype;
+  spo2: number;
+  respiratoryRate: number;
+  etco2: number;
+  gcs: number;
+  workOfBreathing: number;
+  fatigue: number;
+  oxygenSupport: boolean;
+  oxygenTherapyActive: boolean;
+  airwayPatent: boolean;
+  airwayProtected: boolean;
+  ventilationMode: "NONE" | "BVM" | "MECHANICAL";
+  trend: "STABLE" | "IMPROVING" | "WORSENING";
+};
+
+export type RespiratoryFailurePatientProcessRuntime = {
+  processId: string;
+  encounterId: string;
+  instanceKey: string;
+  processType: "RESPIRATORY_FAILURE";
+  templateId: string;
+  state: "Active" | "Controlled" | "Resolved";
+  elapsedTime: number;
+  clinicalState: RespiratoryFailureProcessState;
+  configuration: RespiratoryFailureConfiguration;
+  outputs: ProcessOutput;
+  nextTick: number;
+  parentProcessId?: string;
+  parentProcessType?: string;
+};

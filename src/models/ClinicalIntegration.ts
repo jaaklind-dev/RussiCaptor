@@ -1,4 +1,4 @@
-import type { HypoxiaPatientProcessRuntime, PatientProcessRuntime } from "@/models/PatientProcessRuntime";
+import type { HypoxiaPatientProcessRuntime, PatientProcessRuntime, RespiratoryFailurePatientProcessRuntime } from "@/models/PatientProcessRuntime";
 import type { ProcessOutput } from "@/models/RuntimeAggregation";
 
 export type ClinicalParameterValue = string | number | boolean | null;
@@ -44,7 +44,7 @@ export type ClinicalEffect = {
   duration?: number;
 };
 
-export type ClinicalProcessRuntime = PatientProcessRuntime | HypoxiaPatientProcessRuntime;
+export type ClinicalProcessRuntime = PatientProcessRuntime | HypoxiaPatientProcessRuntime | RespiratoryFailurePatientProcessRuntime;
 
 export type ClinicalIntegrationRejectionCode =
   | "INVALID_INPUT"
