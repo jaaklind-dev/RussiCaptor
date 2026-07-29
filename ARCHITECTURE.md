@@ -239,7 +239,9 @@ The framework is responsible for:
 8. rejecting unsupported, stale, duplicate, or ambiguous inputs with stable codes;
 9. returning results to `ClinicalScenarioEngine` for the existing ownership and
    aggregation path;
-10. contributing only simulation-derived content to replay state and hashing.
+10. managing definition-driven intervention instances and their terminal states;
+11. converting running interventions into typed mechanism-level effects;
+12. contributing only simulation-derived content to replay state and hashing.
 
 The framework is not responsible for:
 
@@ -292,6 +294,166 @@ type ClinicalIntegrationResult = {
 Handlers must be registered by process capability or process type. The framework
 must not identify Golden test IDs, fixture IDs, patient IDs, or disease-specific
 template IDs as routing shortcuts.
+
+### InterventionDefinition
+
+An `InterventionDefinition` is immutable configuration describing what an
+intervention requires and which clinical effects it may produce. It is not a
+patient-specific runtime record.
+
+```ts
+type InterventionDefinition = {
+  definitionId: string;
+  version: string;
+  name: string;
+  requiredResources: ResourceRequirement[];
+  effects: ClinicalEffectDefinition[];
+  duration: InterventionDuration;
+  parameters: InterventionParameterDefinition[];
+  preconditions: InterventionPrecondition[];
+};
+```
+
+- `requiredResources` declares resource types, quantities, and optional exclusive
+  groups needed before the intervention can start.
+- `effects` declares typed clinical effects, not direct RuntimeState changes.
+- `duration` defines a fixed, bounded, or continuous intervention.
+- `parameters` defines validated inputs such as oxygen flow in litres per minute.
+- `preconditions` defines structural conditions for starting the intervention,
+  such as an active encounter or a compatible resource. It must not become a
+  treatment recommendation engine.
+
+Definitions are versioned and included by identity and version in replay content.
+Changing a definition does not retroactively change an existing replay.
+
+### InterventionInstance
+
+An `InterventionInstance` is a patient- and encounter-specific execution of one
+definition. It owns intervention lifecycle but does not own physiology.
+
+```ts
+type InterventionInstanceStatus =
+  | "RUNNING"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "FAILED";
+
+type InterventionInstance = {
+  instanceId: string;
+  definitionId: string;
+  definitionVersion: string;
+  encounterId: string;
+  patientId: string;
+  status: InterventionInstanceStatus;
+  startedAt: number;
+  endedAt?: number;
+  parameters: Record<string, ClinicalParameterValue>;
+  resourceIds: string[];
+  sourceInterventionId: string;
+  failureReason?: InterventionFailureReason;
+};
+```
+
+Lifecycle transitions are explicit and append deterministic events:
+
+```text
+RUNNING -> COMPLETED
+RUNNING -> CANCELLED
+RUNNING -> FAILED
+```
+
+`COMPLETED`, `CANCELLED`, and `FAILED` are terminal. A failed precondition or
+resource acquisition does not create a partially running instance. Cancellation
+stops future effects and releases resources according to the resource layer; it
+does not silently reverse clinical history.
+
+### Clinical Effect Pipeline
+
+An intervention never changes PatientProcess state, vital signs, or RuntimeState
+directly. It emits one or more typed `ClinicalEffect` values. Eligible active
+PatientProcesses interpret those effects and produce their normal outputs.
+
+```text
+InterventionDefinition + validated parameters
+                         |
+                         v
+               InterventionInstance
+                         |
+                         v
+                   ClinicalEffect
+                         |
+                         v
+               PatientProcess handler
+                         |
+                         v
+                    ProcessOutput
+                         |
+                         v
+       OwnershipResolver -> RuntimeAggregationPipeline
+```
+
+The minimum effect envelope is:
+
+```ts
+type ClinicalEffect = {
+  effectId: string;
+  effectType: string;
+  encounterId: string;
+  patientId: string;
+  timestamp: number;
+  sourceInterventionInstanceId: string;
+  parameters: Record<string, ClinicalParameterValue>;
+  duration?: number;
+};
+```
+
+Effects describe mechanism-level input such as inspired oxygen, effective
+ventilation, monitoring, or vascular access. They do not prescribe a resulting
+SpO2, CO2 burden, clinical status, or displayed vital value. An effect that no
+active process supports is rejected or recorded as a deterministic no-op; it is
+never converted into an arbitrary generic vital-sign delta.
+
+### Oxygen Therapy foundation
+
+Oxygen Therapy is the first concrete intervention definition used to prove the
+pipeline. Its minimum parameter is `flowRateLMin`; its required delivery resource
+is declared by the definition or selected compatible interface. The definition
+converts validated treatment parameters into an inspired-oxygen effect.
+
+```text
+Oxygen Therapy: oxygen at 15 L/min
+                  |
+                  v
+ClinicalEffect: INSPIRED_OXYGEN_INCREASED
+  flowRateLMin: 15
+  deliveryInterface: oxygenMask
+                  |
+                  v
+HypoxiaPatientProcess
+                  |
+                  v
+oxygenation progression / ProcessOutput
+                  |
+                  v
+aggregated SpO2
+```
+
+The exact FiO2 estimate belongs to a reusable oxygen-delivery effect calculation,
+not to the UI or ResourcePool. The resulting SpO2 response belongs to the Hypoxia
+process and depends on its current clinical state. Reserving an oxygen mask without
+a running Oxygen Therapy instance has no direct SpO2 effect.
+
+Foundation-level Oxygen Therapy supports:
+
+- flow-rate validation;
+- required oxygen supply and compatible delivery-interface resources;
+- start, completion, cancellation, and failure lifecycle;
+- continuous effect emission while running;
+- deterministic replay and event generation;
+- Hypoxia process consumption through the normal clinical handler contract.
+
+It does not yet model device leakage, patient-specific oxygen dissociation,
+high-flow systems, toxicity, or treatment recommendation logic.
 
 ### Stable rejection reasons
 
@@ -349,11 +511,12 @@ Hashes must use canonical serialization and must not depend on:
 
 ### Integration with interventions
 
-The clinical bridge begins only after `InterventionEngine` has accepted and applied
-an intervention. `InterventionRejected` never becomes a physiological input.
-`InterventionApplied` and `InterventionRemoved` may be translated to typed clinical
-inputs by a stateless adapter. This keeps resource conflict semantics independent
-from clinical effect semantics.
+The clinical bridge begins only after `InterventionEngine` has accepted an action,
+its definition preconditions have passed, and required resources have been
+reserved. `InterventionRejected` never becomes a physiological input. An accepted
+action creates, completes, cancels, or fails an `InterventionInstance`; running
+instances emit typed effects. This keeps resource conflict semantics, intervention
+lifecycle, and clinical effect semantics independent.
 
 ```text
 SchedulableIntervention
@@ -363,14 +526,37 @@ InterventionEngine + ResourcePool
         |
         +-- rejected --> audit event only
         |
-        +-- applied/removed
+        +-- accepted
                   |
                   v
-       ClinicalInputAdapter
+       InterventionInstance
+                  |
+                  v
+          ClinicalEffectAdapter
                   |
                   v
        ClinicalIntegrationFramework
 ```
+
+### UI projection
+
+The patient detail view may show an `Active interventions` section sourced from
+running instances, for example:
+
+```text
+Active interventions
+--------------------
+Oxygen 15 L/min
+Monitor attached
+IV access
+BVM ventilation
+```
+
+This is a read-only projection. The UI formats definition names, validated
+parameters, and lifecycle state; it does not derive clinical effects. Completed,
+cancelled, and failed instances belong in intervention history rather than the
+active list. Developer resource cards remain resource diagnostics and must not be
+used as the source of clinical truth.
 
 ### Event model
 
@@ -414,8 +600,13 @@ Forbidden dependencies:
 
 ```text
 src/models/ClinicalIntegration.ts
+src/models/InterventionDefinition.ts
+src/models/InterventionInstance.ts
 src/services/runtime/clinical/ClinicalIntegrationFramework.ts
-src/services/runtime/clinical/ClinicalInputAdapter.ts
+src/services/runtime/clinical/ClinicalEffectPipeline.ts
+src/services/runtime/clinical/InterventionDefinitionRegistry.ts
+src/services/runtime/clinical/InterventionRuntime.ts
+src/services/runtime/clinical/OxygenTherapyDefinition.ts
 src/services/runtime/clinical/ClinicalProcessRegistry.ts
 src/services/runtime/clinical/handlers/HvClinicalProcessHandler.ts
 src/services/runtime/clinical/handlers/HypoxiaClinicalProcessHandler.ts
@@ -427,15 +618,21 @@ adapters, and disease-specific handlers remain separate.
 
 ## WP-10 delivery sequence
 
-1. Add contracts, rejection codes, canonical ordering, and handler registry.
-2. Add the framework's plan/apply path with idempotency and atomic rejection.
-3. Adapt existing HV and Hypoxia action handling without changing their clinical
+1. Add clinical input/effect contracts, rejection codes, canonical ordering, and
+   handler registry.
+2. Add `InterventionDefinition`, `InterventionInstance`, lifecycle validation, and
+   a definition registry.
+3. Add the framework's plan/apply path with idempotency and atomic rejection.
+4. Add the effect pipeline and the minimal Oxygen Therapy definition.
+5. Adapt existing HV and Hypoxia action handling without changing their clinical
    formulas.
-4. Bridge accepted resource intervention events through a stateless adapter.
-5. Integrate the framework into `ClinicalScenarioEngine` while retaining the
+6. Bridge accepted resource intervention actions through intervention instances
+   and typed effects.
+7. Integrate the framework into `ClinicalScenarioEngine` while retaining the
    existing ownership and aggregation pipeline.
-6. Add deterministic replay, ordering, rejection, and regression tests.
-7. Update architecture and coverage documentation from actual test results.
+8. Add an Active interventions read-only projection to the patient detail view.
+9. Add deterministic replay, ordering, rejection, lifecycle, and regression tests.
+10. Update architecture and coverage documentation from actual test results.
 
 ## WP-10 acceptance criteria
 
@@ -446,8 +643,16 @@ adapters, and disease-specific handlers remain separate.
   mutation.
 - Duplicate input delivery is idempotent.
 - Process result does not depend on handler registration or map insertion order.
-- Accepted intervention events can reach the appropriate process through the
-  adapter; rejected interventions cannot.
+- Definitions validate required resources, parameters, duration, effects, and
+  preconditions before an instance starts.
+- Intervention instances follow only valid `RUNNING`, `COMPLETED`, `CANCELLED`, or
+  `FAILED` lifecycle transitions.
+- Accepted interventions reach PatientProcesses only as typed clinical effects;
+  rejected interventions cannot produce effects.
+- Oxygen at 15 L/min produces an inspired-oxygen effect consumed by Hypoxia; mask
+  reservation by itself does not directly change SpO2.
+- Patient detail Active interventions is derived from running instances and
+  contains no clinical business logic.
 - Every RuntimeState change still passes through `OwnershipResolver` and
   `RuntimeAggregationPipeline`.
 - Two identical replays produce identical processes, RuntimeState, event log, and
