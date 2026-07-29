@@ -12,7 +12,6 @@ function output(process: Omit<HypoxiaPatientProcessRuntime, "outputs">): Process
     status: process.state,
     globalSeverityScore: Math.min(1, Math.max(0, (100 - process.clinicalState.oxygenationReserve) / 100)),
     oxygenationPriority: 100,
-    spo2Ceiling: process.clinicalState.spo2,
     vitalContributions: [{ vital: "spo2", operation: "TARGET", value: process.clinicalState.spo2 }],
     runtimeContributions: {
       oxygenationReserve: process.clinicalState.oxygenationReserve,

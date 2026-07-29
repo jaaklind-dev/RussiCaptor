@@ -1,6 +1,6 @@
 export type VitalSignKey =
   | "heartRate" | "systolicBp" | "diastolicBp" | "respiratoryRate"
-  | "spo2" | "etco2" | "temperature" | "gcs";
+  | "spo2" | "etco2" | "temperature" | "gcs" | "crt";
 
 export type VitalTrendDirection = "RISING" | "FALLING" | "UNCHANGED";
 export type VitalTrendStability = "STABLE" | "UNSTABLE";
@@ -42,14 +42,25 @@ export type VitalSignConfiguration = {
   avpuThresholds: { alertMinGcs: number; voiceMinGcs: number; painMinGcs: number };
 };
 
+/**
+ * Generic engine input retained for isolated engine tests and compatibility.
+ * Production runtime accepts only PatientVitalContributor through
+ * VitalSignRuntimeResolver.
+ */
 export type VitalSignContributor = {
   contributorId: string;
-  sourceType: "PATIENT_PROCESS" | "CLINICAL_EFFECT" | "RUNTIME_TARGET";
+  sourceType: "PATIENT_PROCESS" | "CLINICAL_EFFECT" | "RUNTIME_TARGET" | "MANUAL_OVERRIDE";
   sourceId: string;
   layer: VitalContributionLayer;
   vital: VitalSignKey;
-  operation: "DELTA" | "TARGET";
+  operation: "DELTA" | "TARGET" | "OVERRIDE";
   value: number;
+};
+
+export type PatientVitalContributor = Omit<VitalSignContributor, "sourceType" | "layer" | "operation"> & {
+  sourceType: "PATIENT_PROCESS";
+  layer: "PROCESS";
+  operation: "DELTA" | "TARGET";
 };
 
 export type VitalSignEvent = {

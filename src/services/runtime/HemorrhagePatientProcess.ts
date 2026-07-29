@@ -14,6 +14,7 @@ function validConfig(value: unknown): value is HemorrhageConfiguration {
 function output(p: Omit<HemorrhagePatientProcessRuntime, "outputs">): ProcessOutput {
   return { processId: p.processId, encounterId: p.encounterId, moduleId, status: p.state,
     globalSeverityScore: Math.min(1, p.clinicalState.cumulativeLossMl / p.configuration.severityThresholdsMl[3]),
+    vitalContributions: [],
     runtimeContributions: { estimatedBloodLossMl: p.clinicalState.estimatedBloodLossMl,
       cumulativeBloodLossMl: p.clinicalState.cumulativeLossMl, bleedingRateMlMin: p.clinicalState.bleedingRateMlMin,
       hemorrhageSeverity: p.clinicalState.severity, perfusionState: p.clinicalState.perfusion,

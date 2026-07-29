@@ -801,20 +801,25 @@ other clinical layers may emit the same contributor contract. The engine contain
 disease, medication, intervention, resource, assessment, or UI logic.
 
 ```text
-PatientProcess outputs / ClinicalEffect contributors / Runtime targets
+Clinical Effects
+       |
+       v
+Eligible PatientProcesses -> typed contributors
                               |
                               v
                        VitalSignEngine
                               |
-             VitalSignState + VitalSignEvents
+                   canonical VitalSignState
                               |
-                 Runtime snapshot / read-only UI
+                    Runtime aggregation
                               |
-                 ClinicalAssessmentEngine
+                    Runtime snapshot
+                              |
+            Assessment / Replay / read-only UI
 ```
 
 Resolution is data-driven and stable: configured baseline, permanent modifiers,
-PatientProcess contributors, medication contributors, temporary modifiers,
+PatientProcess contributors, temporary modifiers,
 configured limits/change-per-tick, then rounding. Sorting uses layer, vital,
 source ID, and contributor ID; caller order cannot affect the result.
 
@@ -823,6 +828,12 @@ temperature, GCS, AVPU, target/current/trend/direction/stability, monitor qualit
 active contributor attribution, MAP, shock index, and pulse pressure. `VALID`,
 `UNRELIABLE`, `LOST`, and `OFFLINE` are monitor quality states. Changes emit
 `VitalSignChanged`, `TrendChanged`, and `MonitorStateChanged` into a separate,
-replay-hashed deterministic event stream. The legacy `targetVitals` and
-`displayedVitals` projection remains for Golden adapter compatibility; new process
-implementations should use `vitalContributions`.
+replay-hashed deterministic event stream. The legacy `targetVitals`,
+`displayedVitals`, `mapCalculated`, and `gcsTarget` values are frozen compatibility
+projections generated only from `VitalSignState`; they are not writable state.
+
+WP-AA1 fixes the production order as `PatientProcess -> VitalSignRuntimeResolver ->
+VitalSignEngine -> RuntimeAggregationPipeline -> RuntimeState`. Legacy ProcessOutput
+vital fields are accepted only through `LegacyVitalContributorAdapter`; the adapter
+creates contributors and never calculates a final monitor state. Clinical Effects
+and medication effects cannot enter the production resolver directly.

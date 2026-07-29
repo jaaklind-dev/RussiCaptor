@@ -26,13 +26,17 @@ export type RuntimeState = {
   exerciseTimeSec: number;
   globalStatus: RuntimeStatus;
   dominantProcessId?: string;
-  targetVitals: RuntimeVitalTargets;
-  displayedVitals: RuntimeVitalTargets;
+  /** @deprecated Read-only compatibility projection generated from vitalSignState. */
+  readonly targetVitals: Readonly<RuntimeVitalTargets>;
+  /** @deprecated Read-only compatibility projection generated from vitalSignState. */
+  readonly displayedVitals: Readonly<RuntimeVitalTargets>;
   vitalSignState?: import("@/models/VitalSign").VitalSignState;
   vitalSignConfiguration?: import("@/models/VitalSign").VitalSignConfiguration;
-  mapCalculated?: number;
+  /** @deprecated Read-only compatibility projection generated from vitalSignState. */
+  readonly mapCalculated?: number;
   mentalStatusCode: MentalStatusCode;
-  gcsTarget?: number;
+  /** @deprecated Read-only compatibility projection generated from vitalSignState. */
+  readonly gcsTarget?: number;
   symptomTags: string[];
   visibleFindings: RuntimeFinding[];
   activeAlerts: string[];

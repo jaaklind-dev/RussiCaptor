@@ -31,7 +31,10 @@ function output(process: Omit<PatientProcessRuntime, "outputs">): ProcessOutput 
     status: process.state,
     globalSeverityScore: Math.min(1, Math.max(0, clinical.co2Burden / 100)),
     respiratoryPriority: 100,
-    vitalContributions: [{ vital: "etco2", operation: "TARGET", value: clinical.co2Burden }],
+    vitalContributions: [
+      { vital: "etco2", operation: "TARGET", value: clinical.co2Burden },
+      ...(clinical.respiratoryArrest ? [{ vital: "gcs" as const, operation: "TARGET" as const, value: 3 }] : []),
+    ],
     runtimeContributions: {
       ventilationReserve: clinical.ventilationReserve,
       co2Burden: clinical.co2Burden,

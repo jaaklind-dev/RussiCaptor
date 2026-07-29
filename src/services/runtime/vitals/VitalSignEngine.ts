@@ -14,6 +14,7 @@ export const defaultVitalSignConfiguration: VitalSignConfiguration = {
     etco2: { baseline: 40, min: 0, max: 150, maxChangePerTick: 15, responseFactor: 0.4, roundingDigits: 1, unstableChangeThreshold: 10 },
     temperature: { baseline: 36.8, min: 25, max: 43, maxChangePerTick: 0.5, responseFactor: 0.2, roundingDigits: 2, unstableChangeThreshold: 0.5 },
     gcs: { baseline: 15, min: 3, max: 15, maxChangePerTick: 3, responseFactor: 1, roundingDigits: 0, unstableChangeThreshold: 2 },
+    crt: { baseline: 2, min: 0, max: 10, maxChangePerTick: 2, responseFactor: 0.5, roundingDigits: 2, unstableChangeThreshold: 1 },
   },
   avpuThresholds: { alertMinGcs: 15, voiceMinGcs: 12, painMinGcs: 7 },
 };
@@ -50,12 +51,13 @@ export class VitalSignEngine {
       const rule = config.signs[key];
       let target = baseline[key];
       for (const item of contributors.filter(value => value.vital === key)) {
-        target = item.operation === "TARGET" ? item.value : target + item.value;
+        target = item.operation === "DELTA" ? target + item.value : item.value;
       }
       target = round(clamp(target, rule.min, rule.max), rule.roundingDigits);
       const previous = input.previous?.readings[key]?.current;
-      const desired = previous === undefined ? target : previous + (target - previous) * rule.responseFactor;
-      const current = round(clamp(previous === undefined ? desired : clamp(desired, previous - rule.maxChangePerTick, previous + rule.maxChangePerTick), rule.min, rule.max), rule.roundingDigits);
+      const overridden = contributors.some(value => value.vital === key && value.operation === "OVERRIDE");
+      const desired = overridden || previous === undefined ? target : previous + (target - previous) * rule.responseFactor;
+      const current = round(clamp(overridden || previous === undefined ? desired : clamp(desired, previous - rule.maxChangePerTick, previous + rule.maxChangePerTick), rule.min, rule.max), rule.roundingDigits);
       const change = round(current - (previous ?? current), rule.roundingDigits);
       const direction = change > 0 ? "RISING" : change < 0 ? "FALLING" : "UNCHANGED";
       readings[key] = { current, target, trend: change, direction, stability: Math.abs(change) > rule.unstableChangeThreshold ? "UNSTABLE" : "STABLE" };

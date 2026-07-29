@@ -34,7 +34,7 @@ import { InterventionEngine } from "@/services/runtime/InterventionEngine";
 import { ResourcePool } from "@/services/runtime/ResourcePool";
 import { publishResourceRuntimeDebugSnapshot } from "@/services/ResourceRuntimeDebugService";
 import { RuntimeOwnershipResolver } from "@/services/runtime/OwnershipResolver";
-import { aggregateRuntimeState } from "@/services/runtime/RuntimeAggregationPipeline";
+import { aggregateRuntimeState } from "@/services/runtime/AlignedRuntimePipeline";
 import { ClinicalIntegrationFramework } from "@/services/runtime/clinical/ClinicalIntegrationFramework";
 import { ClinicalProcessRegistry } from "@/services/runtime/clinical/ClinicalProcessRegistry";
 import { InterventionDefinitionRegistry } from "@/services/runtime/clinical/InterventionDefinitionRegistry";
@@ -51,7 +51,8 @@ import { hvClinicalProcessHandler } from "@/services/runtime/clinical/handlers/H
 import { hypoxiaClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HypoxiaClinicalProcessHandler";
 import { sha256Text } from "@/utils/sha256";
 import { stableJson } from "@/utils/stableJson";
-import { defaultVitalSignConfiguration } from "@/services/runtime/vitals/VitalSignEngine";
+import { defaultVitalSignConfiguration, VitalSignEngine } from "@/services/runtime/vitals/VitalSignEngine";
+import { projectVitalSignState } from "@/services/runtime/vitals/VitalSignProjection";
 import type { VitalSignConfiguration, VitalSignEvent, VitalSignKey } from "@/models/VitalSign";
 
 export function runScenarioEvents(
@@ -129,20 +130,25 @@ function initialRuntimeState(fixture: GoldenFixture, process: PatientProcessRunt
   const aliases: Record<VitalSignKey, string[]> = {
     heartRate: ["heartRate", "hr"], systolicBp: ["systolicBp", "sbp"], diastolicBp: ["diastolicBp", "dbp"],
     respiratoryRate: ["respiratoryRate", "rr"], spo2: ["spo2"], etco2: ["etco2"],
-    temperature: ["temperature"], gcs: ["gcs"],
+    temperature: ["temperature"], gcs: ["gcs"], crt: ["crt"],
   };
   const vitalSignConfiguration: VitalSignConfiguration = structuredClone(defaultVitalSignConfiguration);
   for (const [key, names] of Object.entries(aliases) as [VitalSignKey, string[]][]) {
     const value = names.map(name => baselineSource[name]).find(item => typeof item === "number" && Number.isFinite(item));
     if (typeof value === "number") vitalSignConfiguration.signs[key].baseline = value;
   }
+  const vitalSignState = new VitalSignEngine().resolve({ timestamp: 0, configuration: vitalSignConfiguration, contributors: [] }).state;
+  const vitalProjection = projectVitalSignState(vitalSignState);
   return {
     encounterId: process.encounterId,
     stateVersion: 0,
     exerciseTimeSec: 0,
     globalStatus: "Stable",
-    targetVitals: {},
-    displayedVitals: {},
+    targetVitals: vitalProjection.targetVitals,
+    displayedVitals: vitalProjection.displayedVitals,
+    vitalSignState,
+    mapCalculated: vitalProjection.mapCalculated,
+    gcsTarget: vitalProjection.gcsTarget,
     mentalStatusCode: "Alert",
     symptomTags: [],
     visibleFindings: [],
@@ -479,7 +485,9 @@ export class ClinicalScenarioEngine {
   }
 
   getRuntimeState(): RuntimeState {
-    return structuredClone(this.requireRuntimeState());
+    const state = structuredClone(this.requireRuntimeState());
+    if (!state.vitalSignState) return state;
+    return { ...state, ...projectVitalSignState(state.vitalSignState) };
   }
 
   getVitalSignEvents(): VitalSignEvent[] { return structuredClone(this.vitalSignEvents); }
