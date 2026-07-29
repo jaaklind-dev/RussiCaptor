@@ -792,3 +792,37 @@ the existing clinical layer; unsupported effects do not become direct vital or
 RuntimeState changes. Medication state, history, and effects participate in replay
 hashing. ResourcePool is read-only to MedicationEngine and no resources are
 reserved by medication administration.
+
+## WP-16 – Vital Sign Engine
+
+`VitalSignEngine` is the deterministic monitor synthesis boundary. PatientProcess
+implementations own disease progression and emit typed contributors; medication and
+other clinical layers may emit the same contributor contract. The engine contains no
+disease, medication, intervention, resource, assessment, or UI logic.
+
+```text
+PatientProcess outputs / ClinicalEffect contributors / Runtime targets
+                              |
+                              v
+                       VitalSignEngine
+                              |
+             VitalSignState + VitalSignEvents
+                              |
+                 Runtime snapshot / read-only UI
+                              |
+                 ClinicalAssessmentEngine
+```
+
+Resolution is data-driven and stable: configured baseline, permanent modifiers,
+PatientProcess contributors, medication contributors, temporary modifiers,
+configured limits/change-per-tick, then rounding. Sorting uses layer, vital,
+source ID, and contributor ID; caller order cannot affect the result.
+
+`VitalSignState` contains HR, systolic/diastolic BP, RR, SpO2, EtCO2,
+temperature, GCS, AVPU, target/current/trend/direction/stability, monitor quality,
+active contributor attribution, MAP, shock index, and pulse pressure. `VALID`,
+`UNRELIABLE`, `LOST`, and `OFFLINE` are monitor quality states. Changes emit
+`VitalSignChanged`, `TrendChanged`, and `MonitorStateChanged` into a separate,
+replay-hashed deterministic event stream. The legacy `targetVitals` and
+`displayedVitals` projection remains for Golden adapter compatibility; new process
+implementations should use `vitalContributions`.

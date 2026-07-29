@@ -51,6 +51,8 @@ import { hvClinicalProcessHandler } from "@/services/runtime/clinical/handlers/H
 import { hypoxiaClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HypoxiaClinicalProcessHandler";
 import { sha256Text } from "@/utils/sha256";
 import { stableJson } from "@/utils/stableJson";
+import { defaultVitalSignConfiguration } from "@/services/runtime/vitals/VitalSignEngine";
+import type { VitalSignConfiguration, VitalSignEvent, VitalSignKey } from "@/models/VitalSign";
 
 export function runScenarioEvents(
 
@@ -121,6 +123,19 @@ const firstClinicalOwnershipRules: OwnershipRule[] = [{
 }];
 
 function initialRuntimeState(fixture: GoldenFixture, process: PatientProcessRuntime): RuntimeState {
+  const initial = eventPayload({ payload: fixture.initialState } as GoldenInputEvent);
+  const baselineSource = initial.baselineVitals && typeof initial.baselineVitals === "object"
+    ? initial.baselineVitals as Record<string, unknown> : {};
+  const aliases: Record<VitalSignKey, string[]> = {
+    heartRate: ["heartRate", "hr"], systolicBp: ["systolicBp", "sbp"], diastolicBp: ["diastolicBp", "dbp"],
+    respiratoryRate: ["respiratoryRate", "rr"], spo2: ["spo2"], etco2: ["etco2"],
+    temperature: ["temperature"], gcs: ["gcs"],
+  };
+  const vitalSignConfiguration: VitalSignConfiguration = structuredClone(defaultVitalSignConfiguration);
+  for (const [key, names] of Object.entries(aliases) as [VitalSignKey, string[]][]) {
+    const value = names.map(name => baselineSource[name]).find(item => typeof item === "number" && Number.isFinite(item));
+    if (typeof value === "number") vitalSignConfiguration.signs[key].baseline = value;
+  }
   return {
     encounterId: process.encounterId,
     stateVersion: 0,
@@ -138,6 +153,7 @@ function initialRuntimeState(fixture: GoldenFixture, process: PatientProcessRunt
     manualOverrideActive: false,
     overrideMap: {},
     aggregationConfigVersion: "WP-5/HV-001",
+    vitalSignConfiguration,
     randomSeed: fixture.seed,
   };
 }
@@ -207,6 +223,7 @@ export class ClinicalScenarioEngine {
   private assessmentRules: AssessmentRule[] = [];
   private hemorrhageProcess?: HemorrhagePatientProcessRuntime;
   private readonly medicationEngine = new MedicationEngine();
+  private vitalSignEvents: VitalSignEvent[] = [];
 
   reset(fixture: GoldenFixture): void {
     const initial = eventPayload({ payload: fixture.initialState } as GoldenInputEvent);
@@ -257,7 +274,9 @@ export class ClinicalScenarioEngine {
     this.airwayManagement.reset();
     this.circulationManagement.reset();
     this.medicationEngine.reset();
+    this.vitalSignEvents = [];
     this.publishResourceDebugSnapshot();
+    this.publishAssessmentSnapshot(true);
     if (this.botulismRoot) this.aggregateProcesses(this.runtimeState);
   }
 
@@ -463,6 +482,8 @@ export class ClinicalScenarioEngine {
     return structuredClone(this.requireRuntimeState());
   }
 
+  getVitalSignEvents(): VitalSignEvent[] { return structuredClone(this.vitalSignEvents); }
+
   getEventLog(): GoldenActualEvent[] {
     return structuredClone(this.eventLog);
   }
@@ -510,7 +531,7 @@ export class ClinicalScenarioEngine {
 
   setAssessmentRules(rules: AssessmentRule[]): void {
     this.assessmentRules = structuredClone(rules);
-    this.publishAssessmentSnapshot();
+    this.publishAssessmentSnapshot(true);
   }
 
   getAssessmentSnapshot(): AssessmentSnapshot {
@@ -539,6 +560,7 @@ export class ClinicalScenarioEngine {
       circulation: this.circulationManagement.snapshot(),
       assessment: this.getAssessmentSnapshot(),
       medication: this.medicationEngine.snapshot(),
+      vitalSigns: { state: this.runtimeState?.vitalSignState, events: this.vitalSignEvents },
     }));
     return {
       stateHash,
@@ -575,6 +597,13 @@ export class ClinicalScenarioEngine {
       throw new Error(`PatientProcess output lükati ownership'i või agregatsiooni poolt tagasi.`);
     }
     this.runtimeState = aggregated.state;
+    for (const event of aggregated.events.filter(item => ["VitalSignChanged", "TrendChanged", "MonitorStateChanged"].includes(item.eventType))) {
+      this.vitalSignEvents.push({
+        eventType: event.eventType as VitalSignEvent["eventType"], timestamp: this.simulationTimeSec,
+        vital: event.field as VitalSignKey | undefined, from: event.details?.from as number | string | undefined,
+        to: event.details?.to as number | string | undefined, sourceProcessId: "VITAL_SIGN_ENGINE",
+      });
+    }
   }
 
   private logEvent(
@@ -634,6 +663,7 @@ export class ClinicalScenarioEngine {
       circulationStates: this.circulationManagement.snapshot().states,
       hemorrhageProcesses: this.hemorrhageProcess ? [this.hemorrhageProcess] : [],
       medicationState: this.medicationEngine.snapshot(),
+      vitalSignStates: this.runtimeState?.vitalSignState ? [{ patientId: this.requireProcess().encounterId, state: this.runtimeState.vitalSignState }] : [],
       recentEvents: this.resourceEventLog,
       updatedAt: this.simulationTimeSec,
     });
@@ -752,8 +782,11 @@ export class ClinicalScenarioEngine {
     };
   }
 
-  private publishAssessmentSnapshot(): void {
+  private publishAssessmentSnapshot(force = false): void {
     if (!this.process || !this.runtimeState) return;
+    // An empty rule set has no changing assessment result. Avoid cloning the
+    // ever-growing timeline on every tick in long deterministic simulations.
+    if (!force && this.assessmentRules.length === 0) return;
     publishAssessmentDebugSnapshot(this.getAssessmentSnapshot());
   }
 }

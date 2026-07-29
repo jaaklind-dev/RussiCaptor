@@ -11,6 +11,8 @@ import type {
   RuntimeVitalTargets,
 } from "@/models/RuntimeAggregation";
 import { RuntimeOwnershipResolver } from "@/services/runtime/OwnershipResolver";
+import type { VitalSignContributor, VitalSignKey } from "@/models/VitalSign";
+import { defaultVitalSignConfiguration, VitalSignEngine } from "@/services/runtime/vitals/VitalSignEngine";
 
 const constants = {
   hrDeltaCap: 35,
@@ -21,12 +23,12 @@ const constants = {
 };
 
 const vitalRules = {
-  hr: { min: 20, max: 220, smoothing: 0.35, maxChange: 25 },
-  sbp: { min: 30, max: 250, smoothing: 0.4, maxChange: 30 },
-  dbp: { min: 15, max: 160, smoothing: 0.35, maxChange: 20 },
-  rr: { min: 0, max: 60, smoothing: 0.4, maxChange: 10 },
-  spo2: { min: 40, max: 100, smoothing: 0.45, maxChange: 12 },
-  temperature: { min: 25, max: 43, smoothing: 0.2, maxChange: 0.5 },
+  hr: { min: defaultVitalSignConfiguration.signs.heartRate.min, max: defaultVitalSignConfiguration.signs.heartRate.max, smoothing: defaultVitalSignConfiguration.signs.heartRate.responseFactor, maxChange: defaultVitalSignConfiguration.signs.heartRate.maxChangePerTick },
+  sbp: { min: defaultVitalSignConfiguration.signs.systolicBp.min, max: defaultVitalSignConfiguration.signs.systolicBp.max, smoothing: defaultVitalSignConfiguration.signs.systolicBp.responseFactor, maxChange: defaultVitalSignConfiguration.signs.systolicBp.maxChangePerTick },
+  dbp: { min: defaultVitalSignConfiguration.signs.diastolicBp.min, max: defaultVitalSignConfiguration.signs.diastolicBp.max, smoothing: defaultVitalSignConfiguration.signs.diastolicBp.responseFactor, maxChange: defaultVitalSignConfiguration.signs.diastolicBp.maxChangePerTick },
+  rr: { min: defaultVitalSignConfiguration.signs.respiratoryRate.min, max: defaultVitalSignConfiguration.signs.respiratoryRate.max, smoothing: defaultVitalSignConfiguration.signs.respiratoryRate.responseFactor, maxChange: defaultVitalSignConfiguration.signs.respiratoryRate.maxChangePerTick },
+  spo2: { min: defaultVitalSignConfiguration.signs.spo2.min, max: defaultVitalSignConfiguration.signs.spo2.max, smoothing: defaultVitalSignConfiguration.signs.spo2.responseFactor, maxChange: defaultVitalSignConfiguration.signs.spo2.maxChangePerTick },
+  temperature: { min: defaultVitalSignConfiguration.signs.temperature.min, max: defaultVitalSignConfiguration.signs.temperature.max, smoothing: defaultVitalSignConfiguration.signs.temperature.responseFactor, maxChange: defaultVitalSignConfiguration.signs.temperature.maxChangePerTick },
   crt: { min: 0, max: 10, smoothing: 0.5, maxChange: 2 },
 } as const;
 
@@ -180,7 +182,7 @@ function aggregateVitals(
   outputs: ProcessOutput[],
   previous: RuntimeState,
   events: AggregationEvent[]
-): { targets: RuntimeVitalTargets; displayed: RuntimeVitalTargets; attribution: RuntimeState["vitalAttribution"] } {
+): { targets: RuntimeVitalTargets; attribution: RuntimeState["vitalAttribution"] } {
   const targets: RuntimeVitalTargets = { ...previous.targetVitals };
   const attribution: RuntimeState["vitalAttribution"] = {};
 
@@ -267,12 +269,54 @@ function aggregateVitals(
     attribution.crt = { primaryProcessId: crtPrimary.processId, contributorProcessIds: [] };
   }
 
-  const displayed: RuntimeVitalTargets = { ...previous.displayedVitals };
-  for (const field of Object.keys(vitalRules) as VitalName[]) {
-    const target = targets[field];
-    if (target !== undefined) displayed[field] = smoothVital(field, previous.displayedVitals[field], target);
+  return { targets, attribution };
+}
+
+const runtimeToVital: Partial<Record<keyof RuntimeVitalTargets, VitalSignKey>> = {
+  hr: "heartRate", sbp: "systolicBp", dbp: "diastolicBp", rr: "respiratoryRate",
+  spo2: "spo2", temperature: "temperature",
+};
+
+function synthesizeMonitor(
+  previous: RuntimeState,
+  targets: RuntimeVitalTargets,
+  attribution: RuntimeState["vitalAttribution"],
+  outputs: ProcessOutput[],
+  gcs: number | undefined,
+  exerciseTimeSec: number,
+  events: AggregationEvent[]
+) {
+  const configuration = previous.vitalSignConfiguration ?? defaultVitalSignConfiguration;
+  const contributors: VitalSignContributor[] = Object.entries(targets).flatMap(([field, value]) => {
+    const vital = runtimeToVital[field as keyof RuntimeVitalTargets];
+    return vital && typeof value === "number" ? [{
+      contributorId: `runtime-target:${field}`, sourceType: "RUNTIME_TARGET" as const,
+      sourceId: attribution[field]?.primaryProcessId ?? "RUNTIME_AGGREGATION",
+      layer: "PROCESS" as const, vital, operation: "TARGET" as const, value,
+    }] : [];
+  });
+  for (const output of [...outputs].sort((a, b) => a.processId.localeCompare(b.processId))) {
+    for (const [index, item] of (output.vitalContributions ?? []).entries()) {
+      contributors.push({ contributorId: `${output.processId}:${index}`, sourceType: "PATIENT_PROCESS", sourceId: output.processId, layer: "PROCESS", ...item });
+    }
   }
-  return { targets, displayed, attribution };
+  if (gcs !== undefined) contributors.push({ contributorId: "runtime-target:gcs", sourceType: "RUNTIME_TARGET", sourceId: "RUNTIME_AGGREGATION", layer: "PROCESS", vital: "gcs", operation: "TARGET", value: gcs });
+  let previousMonitor = previous.vitalSignState;
+  if (!previousMonitor && Object.keys(previous.displayedVitals).length > 0) {
+    previousMonitor = new VitalSignEngine().resolve({ timestamp: previous.exerciseTimeSec, configuration, contributors: [] }).state;
+    for (const [runtimeField, vital] of Object.entries(runtimeToVital) as [keyof RuntimeVitalTargets, VitalSignKey][]) {
+      const value = previous.displayedVitals[runtimeField];
+      if (typeof value === "number") previousMonitor.readings[vital] = { ...previousMonitor.readings[vital], current: value, target: previous.targetVitals[runtimeField] ?? value };
+    }
+  }
+  const resolved = new VitalSignEngine().resolve({
+    timestamp: exerciseTimeSec,
+    configuration,
+    previous: previousMonitor,
+    contributors,
+  });
+  events.push(...resolved.events.map(event => ({ eventType: event.eventType, field: event.vital, details: { from: event.from, to: event.to, sourceProcessId: event.sourceProcessId } })));
+  return resolved.state;
 }
 
 function authorizeContribution(
@@ -488,6 +532,7 @@ export function aggregateRuntimeState(
   const dominant = [...outputs].sort((left, right) =>
     right.globalSeverityScore - left.globalSeverityScore || left.processId.localeCompare(right.processId)
   )[0];
+  const monitor = synthesizeMonitor(input.previous, vitals.targets, vitals.attribution, outputs, status.status === "Arrest" ? 3 : mental.gcs, input.exerciseTimeSec, events);
 
   const state: RuntimeState = {
     ...structuredClone(input.previous),
@@ -496,10 +541,15 @@ export function aggregateRuntimeState(
     globalStatus: status.status,
     dominantProcessId: status.primaryProcessId ?? dominant?.processId,
     targetVitals: vitals.targets,
-    displayedVitals: vitals.displayed,
-    mapCalculated: vitals.displayed.sbp !== undefined && vitals.displayed.dbp !== undefined
-      ? (vitals.displayed.sbp + 2 * vitals.displayed.dbp) / 3
-      : undefined,
+    displayedVitals: {
+      hr: monitor.readings.heartRate.current, sbp: monitor.readings.systolicBp.current,
+      dbp: monitor.readings.diastolicBp.current, rr: monitor.readings.respiratoryRate.current,
+      spo2: monitor.readings.spo2.current, temperature: monitor.readings.temperature.current,
+      crt: vitals.targets.crt === undefined ? input.previous.displayedVitals.crt : smoothVital("crt", input.previous.displayedVitals.crt, vitals.targets.crt),
+    },
+    vitalSignState: monitor,
+    vitalSignConfiguration: input.previous.vitalSignConfiguration ?? defaultVitalSignConfiguration,
+    mapCalculated: monitor.derived.meanArterialPressure,
     mentalStatusCode: status.status === "Arrest" ? "Arrest" : mental.value,
     gcsTarget: status.status === "Arrest" ? 3 : mental.gcs,
     symptomTags: collections.symptomTags,

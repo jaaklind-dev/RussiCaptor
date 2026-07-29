@@ -5,6 +5,7 @@ import type { CirculationState } from "@/models/CirculationState";
 import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatientProcess";
 import type { ClinicalEffect } from "@/models/ClinicalIntegration";
 import type { MedicationInstance, MedicationRuntimeEvent } from "@/models/MedicationRuntime";
+import type { VitalSignState } from "@/models/VitalSign";
 
 export type ResourceRuntimeDebugSnapshot = {
   resources: RuntimeResource[];
@@ -14,6 +15,7 @@ export type ResourceRuntimeDebugSnapshot = {
   circulationStates?: CirculationState[];
   hemorrhageProcesses?: HemorrhagePatientProcessRuntime[];
   medicationState?: { instances: MedicationInstance[]; events: MedicationRuntimeEvent[]; effects: ClinicalEffect[] };
+  vitalSignStates?: { patientId: string; state: VitalSignState }[];
   recentEvents: ResourceRuntimeEvent[];
   updatedAt: number;
 };
@@ -56,6 +58,7 @@ export function getPatientResourceDebugSnapshot(patientId: string): ResourceRunt
       events: snapshot.medicationState.events.filter(x => x.patientId === patientId).map(x=>structuredClone(x)),
       effects: snapshot.medicationState.effects.filter(x => x.patientId === patientId).map(x=>structuredClone(x)),
     } : undefined,
+    vitalSignStates: (snapshot.vitalSignStates ?? []).filter(item => item.patientId === patientId).map(item => structuredClone(item)),
     recentEvents: snapshot.recentEvents
       .filter(event => event.patientId === patientId)
       .slice(-10)

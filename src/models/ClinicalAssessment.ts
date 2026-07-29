@@ -5,7 +5,7 @@ import type { ResourceRuntimeEvent, RuntimeResource } from "@/models/ResourceRun
 import type { RuntimeState } from "@/models/RuntimeAggregation";
 import type { ClinicalIntegrationEvent } from "@/models/ClinicalIntegration";
 
-export type AssessmentCategory = "AIRWAY" | "OXYGENATION" | "VENTILATION" | "MONITORING" | "RESOURCES";
+export type AssessmentCategory = "AIRWAY" | "OXYGENATION" | "VENTILATION" | "MONITORING" | "RESOURCES" | "VITALS";
 export type AssessmentSeverity = "INFO" | "WARNING" | "FAIL";
 export type AssessmentResultStatus = "PASS" | "WARNING" | "FAIL" | "INFO" | "NOT_APPLICABLE";
 
@@ -16,6 +16,8 @@ export type AssessmentCondition =
   | { type: "EVENT_COUNT_MAX"; eventType: string; maxCount: number }
   | { type: "INTERVENTION_REJECTED"; reasonCode?: string; expected: boolean }
   | { type: "RESOURCE_CONFLICT"; expected: boolean }
+  | { type: "VITAL_TREND"; expected: "IMPROVING" | "DETERIORATING" | "STABLE" | "UNSTABLE" }
+  | { type: "MONITOR_QUALITY"; equals: "VALID" | "UNRELIABLE" | "LOST" | "OFFLINE" }
   | { type: "AIRWAY_STATE"; field: "activeAirway" | "currentVentilation" | "confirmed"; equals: string | boolean };
 
 export type AssessmentRule = {

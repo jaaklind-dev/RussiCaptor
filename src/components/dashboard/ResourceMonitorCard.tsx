@@ -18,6 +18,7 @@ export default function ResourceMonitorCard() {
   const rows = summarizeResources(snapshot.resources);
   const hemorrhage = snapshot.hemorrhageProcesses?.[0];
   const medications = snapshot.medicationState;
+  const vitals = snapshot.vitalSignStates?.[0]?.state;
 
   return (
     <View style={styles.card}>
@@ -55,6 +56,15 @@ export default function ResourceMonitorCard() {
           <Text style={styles.clinicalTitle}>Running medications: {medications.instances.filter(x => x.status === "ACTIVE").length}</Text>
           <Text style={styles.clinicalText}>Medication history: {medications.events.length}</Text>
           <Text style={styles.clinicalText}>Medication effects: {medications.effects.length}</Text>
+        </View>
+      )}
+      {vitals && (
+        <View style={styles.clinicalBlock}>
+          <Text style={styles.clinicalTitle}>Current vitals · {vitals.quality}</Text>
+          <Text style={styles.clinicalText}>HR {vitals.readings.heartRate.current} · BP {vitals.readings.systolicBp.current}/{vitals.readings.diastolicBp.current}</Text>
+          <Text style={styles.clinicalText}>RR {vitals.readings.respiratoryRate.current} · SpO₂ {vitals.readings.spo2.current}% · EtCO₂ {vitals.readings.etco2.current}</Text>
+          <Text style={styles.clinicalText}>MAP {vitals.derived.meanArterialPressure} · SI {vitals.derived.shockIndex} · PP {vitals.derived.pulsePressure}</Text>
+          <Text style={styles.clinicalText}>Active contributors: {vitals.activeContributors.length}</Text>
         </View>
       )}
       <Text style={styles.caption}>

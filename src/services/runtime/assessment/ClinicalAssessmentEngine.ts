@@ -71,6 +71,24 @@ function evaluateCondition(condition: AssessmentCondition, source: AssessmentSou
     return { passed: (conflicts.length > 0) === condition.expected, evidence: conflicts.map(event =>
       `resource:${event.resourceId}:${event.reasonCode}`) };
   }
+  if (condition.type === "MONITOR_QUALITY") {
+    const actual = source.runtimeState.vitalSignState?.quality;
+    return { passed: actual === condition.equals, evidence: [`monitor:quality:${actual ?? "UNKNOWN"}`] };
+  }
+  if (condition.type === "VITAL_TREND") {
+    const readings = Object.values(source.runtimeState.vitalSignState?.readings ?? {});
+    const unstable = readings.some(reading => reading.stability === "UNSTABLE");
+    const deltas = readings.map(reading => reading.trend);
+    const deterioration = (source.runtimeState.vitalSignState?.readings.heartRate.trend ?? 0) > 0 ||
+      (source.runtimeState.vitalSignState?.readings.systolicBp.trend ?? 0) < 0 ||
+      (source.runtimeState.vitalSignState?.readings.spo2.trend ?? 0) < 0;
+    const improving = (source.runtimeState.vitalSignState?.readings.systolicBp.trend ?? 0) > 0 ||
+      (source.runtimeState.vitalSignState?.readings.spo2.trend ?? 0) > 0;
+    const passed = condition.expected === "UNSTABLE" ? unstable
+      : condition.expected === "STABLE" ? !unstable
+        : condition.expected === "DETERIORATING" ? deterioration : improving;
+    return { passed, evidence: [`vitals:${condition.expected}:${deltas.join(",")}`] };
+  }
   const actual = source.airwayState[condition.field];
   return { passed: actual === condition.equals, evidence: [`airway:${condition.field}:${String(actual)}`] };
 }

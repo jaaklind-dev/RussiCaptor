@@ -28,6 +28,8 @@ export type RuntimeState = {
   dominantProcessId?: string;
   targetVitals: RuntimeVitalTargets;
   displayedVitals: RuntimeVitalTargets;
+  vitalSignState?: import("@/models/VitalSign").VitalSignState;
+  vitalSignConfiguration?: import("@/models/VitalSign").VitalSignConfiguration;
   mapCalculated?: number;
   mentalStatusCode: MentalStatusCode;
   gcsTarget?: number;
@@ -58,6 +60,11 @@ export type ProcessOutput = {
   encounterId: string;
   moduleId: string;
   status: "Active" | "Controlled" | "Resolved" | "Cancelled";
+  vitalContributions?: {
+    vital: import("@/models/VitalSign").VitalSignKey;
+    operation: "DELTA" | "TARGET";
+    value: number;
+  }[];
   globalSeverityScore: number;
   vitalPriority?: number;
   respiratoryPriority?: number;
@@ -120,4 +127,3 @@ export type AggregationResult = {
 export type RuntimeAggregationCommitter = {
   commit(result: AggregationResult, expectedStateVersion: number): Promise<void>;
 };
-

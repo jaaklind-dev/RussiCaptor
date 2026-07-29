@@ -383,6 +383,22 @@ samaaegset effect'i, STOP konfliktivõitja, event log, assessment ja replay.
 | MedicationEngine functions | 87.50% |
 | MedicationEngine lines | 100% |
 
+## WP-16 Vital Sign Engine
+
+`VitalSignEngine` provides configuration-driven baseline synthesis, deterministic
+contributor ordering, limits/change-per-tick, trends, monitor quality, derived values,
+events, runtime projection, assessment inputs and replay hashing.
+
+| Scope | Result |
+|---|---|
+| VitalSignEngine focused tests | 8 PASS |
+| HV P0 Golden | 7 PASS |
+| WP-5 Golden vertical slice | 3 PASS |
+| HV + Hypoxia | 4 PASS |
+| Hemorrhage | 4 PASS |
+| Canonical Golden Pack changed | No |
+| VitalSignEngine statements / branches / functions / lines | 89.58% / 80.48% / 100% / 91.89% |
+
 Kaetud on IV/IO, invalid route, missing access, duplicate ID, cancellation,
 completion, mitu samaaegset ravimit, abstract effects, event log, assessment ja
 replay determinism.

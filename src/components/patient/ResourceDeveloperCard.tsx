@@ -37,6 +37,7 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
   const circulation = snapshot.circulationStates?.[0];
   const hemorrhage = snapshot.hemorrhageProcesses?.[0];
   const medications = snapshot.medicationState;
+  const vitals = snapshot.vitalSignStates?.[0]?.state;
 
   return (
     <View style={styles.card}>
@@ -106,6 +107,14 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
       <Text style={styles.itemText}>Completed medications: {medications?.instances.filter(x => x.status === "COMPLETED").map(x => x.medicationName).join(", ") || "NONE"}</Text>
       <Text style={styles.itemText}>Medication effects: {medications?.effects.map(x => x.effectType).join(", ") || "NONE"}</Text>
       <Text style={styles.itemText}>Administration history: {medications?.events.length ?? 0}</Text>
+
+      <Text style={styles.sectionTitle}>Vital Sign Engine</Text>
+      <Text style={styles.itemText}>Monitor: {vitals?.quality ?? "NO SNAPSHOT"}</Text>
+      <Text style={styles.itemText}>Current: {vitals ? `HR ${vitals.readings.heartRate.current} · BP ${vitals.readings.systolicBp.current}/${vitals.readings.diastolicBp.current} · RR ${vitals.readings.respiratoryRate.current} · SpO₂ ${vitals.readings.spo2.current}% · EtCO₂ ${vitals.readings.etco2.current}` : "NONE"}</Text>
+      <Text style={styles.itemText}>Baseline: {vitals ? `HR ${vitals.baseline.heartRate} · BP ${vitals.baseline.systolicBp}/${vitals.baseline.diastolicBp} · RR ${vitals.baseline.respiratoryRate} · SpO₂ ${vitals.baseline.spo2}%` : "NONE"}</Text>
+      <Text style={styles.itemText}>Trends: {vitals ? Object.entries(vitals.readings).map(([key, value]) => `${key} ${value.direction}`).join(", ") : "NONE"}</Text>
+      <Text style={styles.itemText}>Active modifiers: {vitals?.activeContributors.map(item => `${item.sourceId}:${item.vital} ${item.operation} ${item.value}`).join(", ") || "NONE"}</Text>
+      <Text style={styles.itemText}>Derived: {vitals ? `MAP ${vitals.derived.meanArterialPressure} · Shock index ${vitals.derived.shockIndex} · Pulse pressure ${vitals.derived.pulsePressure}` : "NONE"}</Text>
 
       <Text style={styles.sectionTitle}>Recent resource events</Text>
       {snapshot.recentEvents.length === 0 ? (
