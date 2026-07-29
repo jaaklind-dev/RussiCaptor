@@ -672,3 +672,37 @@ adapters, and disease-specific handlers remain separate.
 
 These capabilities may build on the framework in later work packages, but they are
 not prerequisites for completing its foundation.
+
+## WP-11 – Airway Management Framework
+
+WP-11 builds on WP-10 without introducing a second clinical path. Airway
+interventions are versioned definitions and patient-specific instances; resource
+reservation, intervention lifecycle, clinical effects, PatientProcess progression,
+ownership, and aggregation remain separate stages.
+
+```text
+ResourcePool + conflict planner
+            -> InterventionInstance
+            -> AirwayState + deterministic airway events
+            -> ClinicalEffect
+            -> PatientProcess
+            -> OwnershipResolver
+            -> RuntimeAggregationPipeline
+```
+
+`AirwayState` projects the active airway (`NONE`, `MANUAL`, `OPA`, `NPA`,
+`SUPRAGLOTTIC`, or `ENDOTRACHEAL`), ventilation (`NONE`, `BVM`, or `MECHANICAL`),
+oxygen delivery, confirmation, patient, and simulation timestamp. It is included in
+replay hashing but never replaces process-owned physiology.
+
+OPA, NPA, supraglottic airway, endotracheal intubation, BVM, mechanical ventilation,
+and Oxygen Therapy use the same definition registry. Resource-level
+`airwayAdjunct` and `activeVentilation` exclusive groups are resolved by the WP-9B
+planner before any instance or AirwayState mutation. Resource reservation without
+an explicit or safely inferred clinical definition does not create a clinical
+effect.
+
+WP-11 intentionally does not model advanced ventilation or gas-exchange
+physiology. Mechanical ventilation produces lifecycle and AirwayState events;
+future physiology must be added as general clinical effects rather than direct
+RuntimeState writes.

@@ -1,10 +1,12 @@
 import type { ResourceRuntimeEvent, RuntimeIntervention, RuntimeResource } from "@/models/ResourceRuntime";
 import type { InterventionInstance } from "@/models/InterventionInstance";
+import type { AirwayState } from "@/models/AirwayState";
 
 export type ResourceRuntimeDebugSnapshot = {
   resources: RuntimeResource[];
   activeInterventions: RuntimeIntervention[];
   clinicalInterventions?: InterventionInstance[];
+  airwayStates?: AirwayState[];
   recentEvents: ResourceRuntimeEvent[];
   updatedAt: number;
 };
@@ -35,6 +37,9 @@ export function getPatientResourceDebugSnapshot(patientId: string): ResourceRunt
     clinicalInterventions: (snapshot.clinicalInterventions ?? [])
       .filter(intervention => intervention.patientId === patientId)
       .map(intervention => structuredClone(intervention)),
+    airwayStates: (snapshot.airwayStates ?? [])
+      .filter(state => state.patientId === patientId)
+      .map(state => structuredClone(state)),
     recentEvents: snapshot.recentEvents
       .filter(event => event.patientId === patientId)
       .slice(-10)

@@ -16,14 +16,20 @@ function actionFor(process: ClinicalProcessRuntime, effectType: string, mode: un
 export const hvClinicalProcessHandler: ClinicalProcessHandler = {
   processType: "HYPOVENTILATION_HYPERCAPNIA",
   accepts(input, process) {
-    return Boolean(actionFor(process, input.payload.effectType, input.payload.parameters.mode));
+    return process.processType === "HYPOVENTILATION_HYPERCAPNIA" &&
+      (input.payload.effectType === "UPPER_AIRWAY_PATENCY" ||
+        Boolean(actionFor(process, input.payload.effectType, input.payload.parameters.mode)));
   },
   apply(input, process) {
     const action = actionFor(process, input.payload.effectType, input.payload.parameters.mode);
-    if (!action) throw new Error(`HV ei toeta effect'i ${input.payload.effectType}.`);
-    const updated = input.payload.effectType === "INSPIRED_OXYGEN_REMOVED"
+    if (!action && input.payload.effectType !== "UPPER_AIRWAY_PATENCY") {
+      throw new Error(`HV ei toeta effect'i ${input.payload.effectType}.`);
+    }
+    const updated = input.payload.effectType === "UPPER_AIRWAY_PATENCY"
+      ? structuredClone(process as PatientProcessRuntime)
+      : input.payload.effectType === "INSPIRED_OXYGEN_REMOVED"
       ? setHvOxygenTherapy(process as PatientProcessRuntime, false)
-      : applyHvAction(process as PatientProcessRuntime, action);
+      : applyHvAction(process as PatientProcessRuntime, action!);
     return {
       process: updated,
       event: {

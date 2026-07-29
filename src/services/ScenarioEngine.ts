@@ -14,6 +14,7 @@ import type { BotulismRootPatientProcessRuntime, HypoxiaPatientProcessRuntime, P
 import type { RuntimeState } from "@/models/RuntimeAggregation";
 import type { ClinicalEffect, ClinicalProcessRuntime } from "@/models/ClinicalIntegration";
 import type { InterventionInstance } from "@/models/InterventionInstance";
+import type { AirwayState } from "@/models/AirwayState";
 import type { ResourceRuntimeEvent, RuntimeResource, ResourceType, SchedulableIntervention } from "@/models/ResourceRuntime";
 import {
   applyHvTimedTransition,
@@ -34,7 +35,8 @@ import { ClinicalIntegrationFramework } from "@/services/runtime/clinical/Clinic
 import { ClinicalProcessRegistry } from "@/services/runtime/clinical/ClinicalProcessRegistry";
 import { InterventionDefinitionRegistry } from "@/services/runtime/clinical/InterventionDefinitionRegistry";
 import { InterventionRuntime } from "@/services/runtime/clinical/InterventionRuntime";
-import { oxygenTherapyDefinition } from "@/services/runtime/clinical/OxygenTherapyDefinition";
+import { airwayInterventionDefinitions } from "@/services/runtime/clinical/AirwayInterventionDefinitions";
+import { AirwayManagementFramework } from "@/services/runtime/clinical/AirwayManagementFramework";
 import { hvClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HvClinicalProcessHandler";
 import { hypoxiaClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HypoxiaClinicalProcessHandler";
 import { sha256Text } from "@/utils/sha256";
@@ -133,6 +135,9 @@ function eventPayload(event: GoldenInputEvent): Record<string, unknown> {
 
 const resourceTypes = new Set<ResourceType>([
   "oxygen", "oxygenMask", "BVM", "ventilator", "endotrachealTube", "monitor",
+  "nasalCannula", "simpleMask", "nonRebreatherMask", "bagValveMask",
+  "oropharyngealAirway", "nasopharyngealAirway", "iGel", "laryngealMask",
+  "videoLaryngoscope", "directLaryngoscope", "suction", "capnography",
 ]);
 
 function fixtureResources(value: unknown): RuntimeResource[] {
@@ -176,8 +181,9 @@ export class ClinicalScenarioEngine {
     new ClinicalProcessRegistry([hvClinicalProcessHandler, hypoxiaClinicalProcessHandler])
   );
   private readonly interventionRuntime = new InterventionRuntime(
-    new InterventionDefinitionRegistry([oxygenTherapyDefinition])
+    new InterventionDefinitionRegistry(airwayInterventionDefinitions)
   );
+  private readonly airwayManagement = new AirwayManagementFramework();
 
   reset(fixture: GoldenFixture): void {
     const initial = eventPayload({ payload: fixture.initialState } as GoldenInputEvent);
@@ -223,6 +229,7 @@ export class ClinicalScenarioEngine {
     this.interventionEngine = new InterventionEngine();
     this.clinicalIntegration.reset();
     this.interventionRuntime.reset();
+    this.airwayManagement.reset();
     this.publishResourceDebugSnapshot();
     if (this.botulismRoot) this.aggregateProcesses(this.runtimeState);
   }
@@ -340,8 +347,18 @@ export class ClinicalScenarioEngine {
     for (const resourceEvent of this.interventionEngine.applyDue(this.simulationTimeSec, this.resourcePool)) {
       this.logResourceEvent(resourceEvent);
       const changedInstance = this.interventionRuntime.consumeResourceEvent(
-        resourceEvent, this.requireProcess().encounterId, this.resourcePool.snapshot()
+        resourceEvent, this.requireProcess().encounterId, this.resourcePool.snapshot(), this.airwayClinicalContext()
       );
+      if (changedInstance) {
+        for (const airwayEvent of this.airwayManagement.apply(changedInstance)) {
+          this.logEvent(airwayEvent.eventType, {
+            interventionInstanceId: airwayEvent.interventionInstanceId,
+            definitionId: airwayEvent.definitionId,
+            airwayState: airwayEvent.airwayState,
+            ventilationState: airwayEvent.ventilationState,
+          }, airwayEvent.patientId);
+        }
+      }
       if (changedInstance?.definitionId === "OXYGEN_THERAPY" && changedInstance.status === "CANCELLED" &&
         !this.interventionRuntime.active(changedInstance.patientId).some(item => item.definitionId === "OXYGEN_THERAPY")) {
         this.applyClinicalEffect({
@@ -427,6 +444,10 @@ export class ClinicalScenarioEngine {
     return patientId ? this.interventionRuntime.forPatient(patientId) : this.interventionRuntime.snapshot();
   }
 
+  getAirwayState(patientId = this.requireProcess().encounterId): AirwayState {
+    return this.airwayManagement.getState(patientId);
+  }
+
   getHashes(): { stateHash: string; eventLogHash: string; processTreeHash: string; resourcePoolHash: string; replayHash: string } {
     const stateHash = sha256Text(stableJson(this.requireRuntimeState()));
     const eventLogHash = sha256Text(stableJson(this.eventLog));
@@ -435,6 +456,7 @@ export class ClinicalScenarioEngine {
     const interventionHash = sha256Text(stableJson(this.interventionEngine.snapshot()));
     const clinicalIntegrationHash = sha256Text(stableJson({
       framework: this.clinicalIntegration.snapshot(), instances: this.interventionRuntime.snapshot(),
+      airway: this.airwayManagement.snapshot(),
     }));
     return {
       stateHash,
@@ -526,6 +548,7 @@ export class ClinicalScenarioEngine {
       resources: this.resourcePool.snapshot(),
       activeInterventions: this.interventionEngine.snapshot().active,
       clinicalInterventions: this.interventionRuntime.snapshot(),
+      airwayStates: this.airwayManagement.snapshot().states,
       recentEvents: this.resourceEventLog,
       updatedAt: this.simulationTimeSec,
     });
@@ -632,5 +655,14 @@ export class ClinicalScenarioEngine {
     for (const process of processes.filter(item => item.processType === "HYPOXIA")) {
       this.hypoxiaProcesses.set(process.processId, process as HypoxiaPatientProcessRuntime);
     }
+  }
+
+  private airwayClinicalContext(): Record<string, boolean> {
+    const mentalStatus = this.requireRuntimeState().mentalStatusCode;
+    return {
+      unconscious: mentalStatus === "Unresponsive" || mentalStatus === "Arrest",
+      gagReflexAbsent: mentalStatus === "Unresponsive" || mentalStatus === "Arrest",
+      spontaneousBreathing: !this.requireProcess().clinicalState.respiratoryArrest,
+    };
   }
 }

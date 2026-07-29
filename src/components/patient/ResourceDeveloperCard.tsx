@@ -33,6 +33,7 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
     getResourceRuntimeDebugVersion
   );
   const snapshot = getPatientResourceDebugSnapshot(patientId);
+  const airway = snapshot.airwayStates?.[0];
 
   return (
     <View style={styles.card}>
@@ -67,6 +68,19 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
           ✓ {intervention.action} {intervention.resourceId} · priority {intervention.priority}
         </Text>
       ))}
+
+      <Text style={styles.sectionTitle}>Airway runtime</Text>
+      <Text style={styles.itemText}>Active airway: {airway?.activeAirway ?? "NONE"}</Text>
+      <Text style={styles.itemText}>Current ventilation: {airway?.currentVentilation ?? "NONE"}</Text>
+      <Text style={styles.itemText}>Active oxygen delivery: {airway?.activeOxygenDelivery ?? "NONE"}</Text>
+      <Text style={styles.itemText}>
+        Reserved airway resources: {snapshot.resources.filter(resource =>
+          resource.assignedPatientId === patientId && [
+            "oropharyngealAirway", "nasopharyngealAirway", "iGel", "laryngealMask",
+            "endotrachealTube", "bagValveMask", "BVM", "ventilator",
+          ].includes(resource.type)
+        ).map(resource => resource.resourceId).join(", ") || "NONE"}
+      </Text>
 
       <Text style={styles.sectionTitle}>Recent resource events</Text>
       {snapshot.recentEvents.length === 0 ? (

@@ -18,6 +18,7 @@ export type ClinicalIntegrationInput = {
 export type ClinicalEffectType =
   | "INSPIRED_OXYGEN_INCREASED"
   | "INSPIRED_OXYGEN_REMOVED"
+  | "UPPER_AIRWAY_PATENCY"
   | "AIRWAY_PROTECTED"
   | "EFFECTIVE_VENTILATION";
 

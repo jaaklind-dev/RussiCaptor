@@ -27,7 +27,8 @@ export type InterventionParameterDefinition = {
 
 export type InterventionPrecondition =
   | { kind: "ACTIVE_ENCOUNTER" }
-  | { kind: "RESOURCE_ASSIGNED_TO_PATIENT"; resourceType: ResourceType };
+  | { kind: "RESOURCE_ASSIGNED_TO_PATIENT"; resourceType: ResourceType }
+  | { kind: "CLINICAL_FLAG"; flag: string; equals: boolean };
 
 export type InterventionDefinition = {
   definitionId: string;

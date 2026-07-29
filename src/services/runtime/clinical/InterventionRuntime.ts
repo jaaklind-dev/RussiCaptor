@@ -5,7 +5,12 @@ import type { ResourceRuntimeEvent, RuntimeResource } from "@/models/ResourceRun
 import { InterventionDefinitionRegistry } from "@/services/runtime/clinical/InterventionDefinitionRegistry";
 
 function inferredDefinition(resource: RuntimeResource | undefined): string | undefined {
-  return resource?.type === "oxygenMask" ? "OXYGEN_THERAPY" : undefined;
+  return ({
+    oxygenMask: "OXYGEN_THERAPY", simpleMask: "OXYGEN_THERAPY", nonRebreatherMask: "OXYGEN_THERAPY",
+    nasalCannula: "OXYGEN_THERAPY", oropharyngealAirway: "OROPHARYNGEAL_AIRWAY",
+    nasopharyngealAirway: "NASOPHARYNGEAL_AIRWAY", iGel: "SUPRAGLOTTIC_IGEL",
+    laryngealMask: "SUPRAGLOTTIC_LMA", bagValveMask: "BAG_VALVE_MASK_VENTILATION",
+  } as Partial<Record<RuntimeResource["type"], string>>)[resource?.type ?? "monitor"];
 }
 
 function instanceOrder(left: InterventionInstance, right: InterventionInstance): number {
@@ -25,6 +30,7 @@ export class InterventionRuntime {
     event: ResourceRuntimeEvent,
     encounterId: string,
     resources: RuntimeResource[]
+    , clinicalContext: Record<string, boolean> = {}
   ): InterventionInstance | undefined {
     if (event.eventType === "InterventionRejected") return undefined;
     if (event.eventType === "InterventionRemoved") return this.cancelForResource(event);
@@ -41,7 +47,7 @@ export class InterventionRuntime {
       return this.failed(event, encounterId, definitionId, "INVALID_PARAMETERS");
     }
     try {
-      this.validatePreconditions(definition, encounterId, event.patientId, resources);
+      this.validatePreconditions(definition, encounterId, event.patientId, resources, clinicalContext);
       const instance: InterventionInstance = {
         instanceId: `${event.interventionId ?? event.resourceId}:INSTANCE`,
         definitionId: definition.definitionId,
@@ -113,6 +119,7 @@ export class InterventionRuntime {
     encounterId: string,
     patientId: string,
     resources: RuntimeResource[]
+    , clinicalContext: Record<string, boolean>
   ): void {
     if (!encounterId && definition.preconditions.some(item => item.kind === "ACTIVE_ENCOUNTER")) {
       throw new Error("Active encounter puudub.");
@@ -121,6 +128,9 @@ export class InterventionRuntime {
       if (precondition.kind === "RESOURCE_ASSIGNED_TO_PATIENT" && !resources.some(item =>
         item.type === precondition.resourceType && item.status === "RESERVED" && item.assignedPatientId === patientId
       )) throw new Error(`Precondition resource ${precondition.resourceType} puudub.`);
+      if (precondition.kind === "CLINICAL_FLAG" && clinicalContext[precondition.flag] !== precondition.equals) {
+        throw new Error(`Clinical precondition ${precondition.flag} ei ole täidetud.`);
+      }
     }
     this.validateResources(definition, patientId, resources);
   }

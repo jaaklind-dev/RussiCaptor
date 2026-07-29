@@ -306,3 +306,23 @@ valideerimine, RUNNING → CANCELLED elutsükkel, typed effect'i teke, Hypoxia k
 SpO2 muutumine ning ScenarioEngine'i identne RuntimeState, protsessiseis, sündmuslogi
 ja replay hash. Olemasolev Golden Pack jäi muutmata ning kõik senised Golden-testid
 läbisid.
+
+## WP-11 Airway Management Framework
+
+| Mõõdik | Tulemus |
+|---|---:|
+| Testipakid | 25 / 25 PASS |
+| Automaattestid | 141 / 141 PASS |
+| Testides laaditud failide statements | 81.26% |
+| Testides laaditud failide branches | 73.75% |
+| Testides laaditud failide functions | 82.24% |
+| Testides laaditud failide lines | 83.42% |
+| AirwayManagementFramework statements | 96.96% |
+| AirwayManagementFramework branches | 92.85% |
+| AirwayManagementFramework lines | 100% |
+| Airway definitions | 100% |
+
+Kaetud on OPA/NPA insert-remove, kaks supraglottilise vahendi realisatsiooni, ET
+confirmation, BVM ja ventilator lifecycle, airwayAdjunct ning activeVentilation
+exclusive-group konfliktid, prioriteedid, precondition'id, resource release,
+AirwayState, event log ja replay hash.

@@ -1,9 +1,21 @@
 export type ResourceType =
   | "oxygen"
   | "oxygenMask"
+  | "nasalCannula"
+  | "simpleMask"
+  | "nonRebreatherMask"
   | "BVM"
+  | "bagValveMask"
+  | "oropharyngealAirway"
+  | "nasopharyngealAirway"
+  | "iGel"
+  | "laryngealMask"
   | "ventilator"
   | "endotrachealTube"
+  | "videoLaryngoscope"
+  | "directLaryngoscope"
+  | "suction"
+  | "capnography"
   | "monitor";
 
 export type ResourceStatus = "AVAILABLE" | "RESERVED";

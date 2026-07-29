@@ -1,15 +1,30 @@
 import type { ResourceType, RuntimeResource } from "@/models/ResourceRuntime";
 
 const typeOrder: ResourceType[] = [
-  "oxygen", "oxygenMask", "BVM", "ventilator", "endotrachealTube", "monitor",
+  "oxygen", "nasalCannula", "simpleMask", "nonRebreatherMask", "oxygenMask",
+  "oropharyngealAirway", "nasopharyngealAirway", "iGel", "laryngealMask",
+  "bagValveMask", "BVM", "endotrachealTube", "videoLaryngoscope",
+  "directLaryngoscope", "ventilator", "suction", "capnography", "monitor",
 ];
 
 const labels: Record<ResourceType, string> = {
   oxygen: "Oxygen",
   oxygenMask: "Oxygen masks",
+  nasalCannula: "Nasal cannulas",
+  simpleMask: "Simple masks",
+  nonRebreatherMask: "Non-rebreather masks",
   BVM: "BVM",
+  bagValveMask: "BVM",
+  oropharyngealAirway: "OPA",
+  nasopharyngealAirway: "NPA",
+  iGel: "Supraglottic (i-gel)",
+  laryngealMask: "Supraglottic (LMA)",
   ventilator: "Ventilators",
   endotrachealTube: "ET tubes",
+  videoLaryngoscope: "Video laryngoscopes",
+  directLaryngoscope: "Direct laryngoscopes",
+  suction: "Suction",
+  capnography: "Capnography",
   monitor: "Monitors",
 };
 
