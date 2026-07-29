@@ -326,3 +326,19 @@ Kaetud on OPA/NPA insert-remove, kaks supraglottilise vahendi realisatsiooni, ET
 confirmation, BVM ja ventilator lifecycle, airwayAdjunct ning activeVentilation
 exclusive-group konfliktid, prioriteedid, precondition'id, resource release,
 AirwayState, event log ja replay hash.
+
+## WP-12 Clinical Assessment & Protocol Engine
+
+| Mõõdik | Tulemus |
+|---|---:|
+| Testipakid | 26 / 26 PASS |
+| Automaattestid | 145 / 145 PASS |
+| ClinicalAssessmentEngine statements | 88.40% |
+| ClinicalAssessmentEngine branches | 62.31% |
+| ClinicalAssessmentEngine functions | 91.42% |
+| ClinicalAssessmentEngine lines | 90.00% |
+
+Kaetud on rule evaluation, puuduv sekkumine, vale järjekord, duplikaat, rejected
+intervention, resource conflict, structured debrief, input-snapshoti muutmatus,
+reeglite sisendjärjekorrast sõltumatus ning ScenarioEngine'i assessment/debrief/event/
+replay-hash determinism. Golden Pack jäi muutmata.

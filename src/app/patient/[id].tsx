@@ -49,6 +49,7 @@ import { getVitalSigns } from "@/repositories/VitalSignsRepository";
 import { recordVitalSigns } from "@/services/VitalSignsService";
 import ResourceDeveloperCard from "@/components/patient/ResourceDeveloperCard";
 import ActiveInterventionsCard from "@/components/patient/ActiveInterventionsCard";
+import ClinicalAssessmentDeveloperCard from "@/components/patient/ClinicalAssessmentDeveloperCard";
 type PatientTab =
   | "overview"
   | "vitals"
@@ -252,6 +253,7 @@ useEffect(() => {
             />
             <ActiveInterventionsCard patientId={patient.id} />
             {__DEV__ && <ResourceDeveloperCard patientId={patient.id} />}
+            {__DEV__ && <ClinicalAssessmentDeveloperCard />}
           </>
         )}
 

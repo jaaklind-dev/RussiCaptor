@@ -15,6 +15,7 @@ import type { RuntimeState } from "@/models/RuntimeAggregation";
 import type { ClinicalEffect, ClinicalProcessRuntime } from "@/models/ClinicalIntegration";
 import type { InterventionInstance } from "@/models/InterventionInstance";
 import type { AirwayState } from "@/models/AirwayState";
+import type { AssessmentRule, AssessmentSnapshot } from "@/models/ClinicalAssessment";
 import type { ResourceRuntimeEvent, RuntimeResource, ResourceType, SchedulableIntervention } from "@/models/ResourceRuntime";
 import {
   applyHvTimedTransition,
@@ -37,6 +38,8 @@ import { InterventionDefinitionRegistry } from "@/services/runtime/clinical/Inte
 import { InterventionRuntime } from "@/services/runtime/clinical/InterventionRuntime";
 import { airwayInterventionDefinitions } from "@/services/runtime/clinical/AirwayInterventionDefinitions";
 import { AirwayManagementFramework } from "@/services/runtime/clinical/AirwayManagementFramework";
+import { ClinicalAssessmentEngine } from "@/services/runtime/assessment/ClinicalAssessmentEngine";
+import { publishAssessmentDebugSnapshot } from "@/services/AssessmentRuntimeDebugService";
 import { hvClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HvClinicalProcessHandler";
 import { hypoxiaClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HypoxiaClinicalProcessHandler";
 import { sha256Text } from "@/utils/sha256";
@@ -184,6 +187,8 @@ export class ClinicalScenarioEngine {
     new InterventionDefinitionRegistry(airwayInterventionDefinitions)
   );
   private readonly airwayManagement = new AirwayManagementFramework();
+  private readonly assessmentEngine = new ClinicalAssessmentEngine();
+  private assessmentRules: AssessmentRule[] = [];
 
   reset(fixture: GoldenFixture): void {
     const initial = eventPayload({ payload: fixture.initialState } as GoldenInputEvent);
@@ -448,6 +453,25 @@ export class ClinicalScenarioEngine {
     return this.airwayManagement.getState(patientId);
   }
 
+  setAssessmentRules(rules: AssessmentRule[]): void {
+    this.assessmentRules = structuredClone(rules);
+    this.publishAssessmentSnapshot();
+  }
+
+  getAssessmentSnapshot(): AssessmentSnapshot {
+    return this.assessmentEngine.evaluate(this.assessmentRules, {
+      timestamp: this.simulationTimeSec,
+      runtimeState: this.requireRuntimeState(),
+      eventLog: this.getEventLog(),
+      interventionLog: structuredClone(this.resourceEventLog),
+      interventionInstances: this.interventionRuntime.snapshot(),
+      resourcePool: this.resourcePool.snapshot(),
+      airwayState: this.getAirwayState(),
+      clinicalEffects: this.clinicalIntegration.snapshot().events,
+      timeline: this.getEventLog(),
+    });
+  }
+
   getHashes(): { stateHash: string; eventLogHash: string; processTreeHash: string; resourcePoolHash: string; replayHash: string } {
     const stateHash = sha256Text(stableJson(this.requireRuntimeState()));
     const eventLogHash = sha256Text(stableJson(this.eventLog));
@@ -457,6 +481,7 @@ export class ClinicalScenarioEngine {
     const clinicalIntegrationHash = sha256Text(stableJson({
       framework: this.clinicalIntegration.snapshot(), instances: this.interventionRuntime.snapshot(),
       airway: this.airwayManagement.snapshot(),
+      assessment: this.getAssessmentSnapshot(),
     }));
     return {
       stateHash,
@@ -552,6 +577,7 @@ export class ClinicalScenarioEngine {
       recentEvents: this.resourceEventLog,
       updatedAt: this.simulationTimeSec,
     });
+    this.publishAssessmentSnapshot();
   }
 
   private sortedHypoxia(): HypoxiaPatientProcessRuntime[] {
@@ -664,5 +690,10 @@ export class ClinicalScenarioEngine {
       gagReflexAbsent: mentalStatus === "Unresponsive" || mentalStatus === "Arrest",
       spontaneousBreathing: !this.requireProcess().clinicalState.respiratoryArrest,
     };
+  }
+
+  private publishAssessmentSnapshot(): void {
+    if (!this.process || !this.runtimeState) return;
+    publishAssessmentDebugSnapshot(this.getAssessmentSnapshot());
   }
 }

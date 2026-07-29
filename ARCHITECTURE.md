@@ -706,3 +706,34 @@ WP-11 intentionally does not model advanced ventilation or gas-exchange
 physiology. Mechanical ventilation produces lifecycle and AirwayState events;
 future physiology must be added as general clinical effects rather than direct
 RuntimeState writes.
+
+## WP-12 – Clinical Assessment & Protocol Engine
+
+WP-12 is a read-only projection over existing simulation evidence. It does not
+dispatch inputs, reserve resources, alter intervention state, or write RuntimeState.
+
+```text
+RuntimeState + event/intervention logs + resources + AirwayState + effects + timeline
+                                      |
+                                      v
+                         ClinicalAssessmentEngine
+                              |              |
+                              v              v
+                      AssessmentEvents    DebriefReport
+```
+
+Protocols are ordered collections of data-only `AssessmentRule` values. The rule
+DSL supports event presence and deadlines, absence, order, maximum counts,
+intervention rejection, resource conflict, and AirwayState checks. Rule IDs provide
+deterministic ordering; no ALS, ATLS, MASCAL, or hospital-specific protocol logic is
+compiled into the evaluator.
+
+Results are `PASS`, `WARNING`, `FAIL`, `INFO`, or `NOT_APPLICABLE`. PASS, WARNING,
+and FAIL produce deterministic `AssessmentPassed`, `AssessmentWarning`, and
+`AssessmentFailed` events. Debrief is derived from the same immutable source
+snapshot and contains summary, completed interventions, timeline, findings,
+warnings, failures, strengths, and improvement opportunities.
+
+Assessment content participates in replay hashing. Because the engine receives
+cloned/read-only snapshots and has no references to mutating runtime services, an
+assessment cannot change simulation results.
