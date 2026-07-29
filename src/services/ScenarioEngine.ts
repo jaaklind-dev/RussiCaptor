@@ -18,6 +18,7 @@ import type { AirwayState } from "@/models/AirwayState";
 import type { AssessmentRule, AssessmentSnapshot } from "@/models/ClinicalAssessment";
 import type { CirculationState } from "@/models/CirculationState";
 import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatientProcess";
+import type { MedicationAdministration, MedicationDefinition, MedicationInstance } from "@/models/MedicationRuntime";
 import type { ResourceRuntimeEvent, RuntimeResource, ResourceType, SchedulableIntervention } from "@/models/ResourceRuntime";
 import {
   applyHvTimedTransition,
@@ -44,6 +45,7 @@ import { ClinicalAssessmentEngine } from "@/services/runtime/assessment/Clinical
 import { circulationInterventionDefinitions } from "@/services/runtime/clinical/CirculationInterventionDefinitions";
 import { CirculationManagementFramework } from "@/services/runtime/clinical/CirculationManagementFramework";
 import { bootstrapHemorrhagePatientProcess, setHemorrhageEffects, tickHemorrhagePatientProcess } from "@/services/runtime/HemorrhagePatientProcess";
+import { MedicationEngine } from "@/services/runtime/medication/MedicationEngine";
 import { publishAssessmentDebugSnapshot } from "@/services/AssessmentRuntimeDebugService";
 import { hvClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HvClinicalProcessHandler";
 import { hypoxiaClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HypoxiaClinicalProcessHandler";
@@ -204,6 +206,7 @@ export class ClinicalScenarioEngine {
   private readonly circulationManagement = new CirculationManagementFramework();
   private assessmentRules: AssessmentRule[] = [];
   private hemorrhageProcess?: HemorrhagePatientProcessRuntime;
+  private readonly medicationEngine = new MedicationEngine();
 
   reset(fixture: GoldenFixture): void {
     const initial = eventPayload({ payload: fixture.initialState } as GoldenInputEvent);
@@ -253,6 +256,7 @@ export class ClinicalScenarioEngine {
     this.interventionRuntime.reset();
     this.airwayManagement.reset();
     this.circulationManagement.reset();
+    this.medicationEngine.reset();
     this.publishResourceDebugSnapshot();
     if (this.botulismRoot) this.aggregateProcesses(this.runtimeState);
   }
@@ -262,6 +266,7 @@ export class ClinicalScenarioEngine {
       throw new Error("Simulatsiooniaeg peab liikuma deterministlikult edasi.");
     }
     const targetTime = simulationTimeSec;
+    for (const medicationEvent of this.medicationEngine.advanceTo(targetTime)) this.logEvent(medicationEvent.eventType, medicationEvent, medicationEvent.patientId);
     if (this.botulismRoot) this.botulismRoot = tickBotulismRoot(this.botulismRoot, targetTime);
     const due = this.pendingTransitions.filter((item) => item.dueSec <= simulationTimeSec)
       .sort((left, right) => left.dueSec - right.dueSec || left.transition.localeCompare(right.transition));
@@ -401,7 +406,8 @@ export class ClinicalScenarioEngine {
         }, true);
       }
     }
-    const activeEffects = this.interventionRuntime.effectsAt(this.simulationTimeSec);
+    const activeEffects = [...this.interventionRuntime.effectsAt(this.simulationTimeSec), ...this.medicationEngine.activeEffects()]
+      .sort((a,b) => a.effectType.localeCompare(b.effectType) || a.effectId.localeCompare(b.effectId));
     if (this.hemorrhageProcess) this.hemorrhageProcess = setHemorrhageEffects(this.hemorrhageProcess, activeEffects);
     for (const effect of activeEffects) {
       if (["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED"].includes(effect.effectType)) continue;
@@ -489,6 +495,19 @@ export class ClinicalScenarioEngine {
     return this.circulationManagement.getState(patientId);
   }
 
+  installMedicationDefinitions(definitions: MedicationDefinition[]): void { this.medicationEngine.installDefinitions(definitions); }
+  administerMedication(administration: MedicationAdministration): void {
+    const result = this.medicationEngine.administer(administration, this.getCirculationState(administration.patientId));
+    for (const event of result.events) this.logEvent(event.eventType, event, event.patientId);
+    this.publishResourceDebugSnapshot();
+  }
+  cancelMedication(administrationId: string, timestamp: number): void {
+    const event = this.medicationEngine.cancel(administrationId, timestamp); this.logEvent(event.eventType, event, event.patientId); this.publishResourceDebugSnapshot();
+  }
+  getMedicationState(patientId?: string): MedicationInstance[] {
+    return this.medicationEngine.snapshot().instances.filter(x => !patientId || x.patientId === patientId);
+  }
+
   setAssessmentRules(rules: AssessmentRule[]): void {
     this.assessmentRules = structuredClone(rules);
     this.publishAssessmentSnapshot();
@@ -519,6 +538,7 @@ export class ClinicalScenarioEngine {
       airway: this.airwayManagement.snapshot(),
       circulation: this.circulationManagement.snapshot(),
       assessment: this.getAssessmentSnapshot(),
+      medication: this.medicationEngine.snapshot(),
     }));
     return {
       stateHash,
@@ -613,6 +633,7 @@ export class ClinicalScenarioEngine {
       airwayStates: this.airwayManagement.snapshot().states,
       circulationStates: this.circulationManagement.snapshot().states,
       hemorrhageProcesses: this.hemorrhageProcess ? [this.hemorrhageProcess] : [],
+      medicationState: this.medicationEngine.snapshot(),
       recentEvents: this.resourceEventLog,
       updatedAt: this.simulationTimeSec,
     });

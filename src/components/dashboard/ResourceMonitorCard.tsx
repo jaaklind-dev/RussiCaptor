@@ -17,6 +17,7 @@ export default function ResourceMonitorCard() {
   const snapshot = getResourceRuntimeDebugSnapshot();
   const rows = summarizeResources(snapshot.resources);
   const hemorrhage = snapshot.hemorrhageProcesses?.[0];
+  const medications = snapshot.medicationState;
 
   return (
     <View style={styles.card}>
@@ -47,6 +48,13 @@ export default function ResourceMonitorCard() {
           <Text style={styles.clinicalText}>Blood loss: {hemorrhage.clinicalState.estimatedBloodLossMl.toFixed(0)} ml</Text>
           <Text style={styles.clinicalText}>Compensation: {hemorrhage.clinicalState.compensation}</Text>
           <Text style={styles.clinicalText}>Active effects: {hemorrhage.clinicalState.activeEffects.length}</Text>
+        </View>
+      )}
+      {medications && (
+        <View style={styles.clinicalBlock}>
+          <Text style={styles.clinicalTitle}>Running medications: {medications.instances.filter(x => x.status === "ACTIVE").length}</Text>
+          <Text style={styles.clinicalText}>Medication history: {medications.events.length}</Text>
+          <Text style={styles.clinicalText}>Medication effects: {medications.effects.length}</Text>
         </View>
       )}
       <Text style={styles.caption}>

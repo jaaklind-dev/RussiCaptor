@@ -371,3 +371,18 @@ konfliktid, circulation state, assessment, event log ning replay determinism.
 
 Kaetud on progression, tourniquet, pelvic binder, infusion, blood product, mitu
 samaaegset effect'i, STOP konfliktivõitja, event log, assessment ja replay.
+
+## WP-15 Medication Framework
+
+| Mõõdik | Tulemus |
+|---|---:|
+| Testipakid | 29 / 29 PASS |
+| Automaattestid | 159 / 159 PASS |
+| MedicationEngine statements | 90.66% |
+| MedicationEngine branches | 84.48% |
+| MedicationEngine functions | 87.50% |
+| MedicationEngine lines | 100% |
+
+Kaetud on IV/IO, invalid route, missing access, duplicate ID, cancellation,
+completion, mitu samaaegset ravimit, abstract effects, event log, assessment ja
+replay determinism.

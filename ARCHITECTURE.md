@@ -777,3 +777,18 @@ Hemorrhage contributes only process-owned runtime fields through OwnershipResolv
 and RuntimeAggregationPipeline. InterventionEngine never changes blood loss,
 perfusion, vital trends, or RuntimeState. Fixed decimal precision ensures stable
 cross-runtime replay hashes.
+
+## WP-15 – Medication Framework
+
+WP-15 provides a data-only medication definition registry and deterministic
+administration state machine. Definitions declare supported routes, category,
+abstract effects, duration, and metadata. The engine validates identity, route,
+dose shape, and matching IV/IO access from CirculationState; it does not decide
+whether treatment is clinically indicated.
+
+Administration produces MedicationOrdered/Started/Completed/Cancelled/Rejected and
+abstract Clinical Effects. PatientProcesses may consume supported effects through
+the existing clinical layer; unsupported effects do not become direct vital or
+RuntimeState changes. Medication state, history, and effects participate in replay
+hashing. ResourcePool is read-only to MedicationEngine and no resources are
+reserved by medication administration.

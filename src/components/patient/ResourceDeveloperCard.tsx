@@ -36,6 +36,7 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
   const airway = snapshot.airwayStates?.[0];
   const circulation = snapshot.circulationStates?.[0];
   const hemorrhage = snapshot.hemorrhageProcesses?.[0];
+  const medications = snapshot.medicationState;
 
   return (
     <View style={styles.card}>
@@ -99,6 +100,12 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
       <Text style={styles.itemText}>Perfusion state: {hemorrhage?.clinicalState.perfusion ?? "NONE"}</Text>
       <Text style={styles.itemText}>Compensation state: {hemorrhage?.clinicalState.compensation ?? "NONE"}</Text>
       <Text style={styles.itemText}>Resolved clinical effects: {hemorrhage?.clinicalState.resolvedEffectIds.join(", ") || "NONE"}</Text>
+
+      <Text style={styles.sectionTitle}>Medication runtime</Text>
+      <Text style={styles.itemText}>Active medications: {medications?.instances.filter(x => x.status === "ACTIVE").map(x => x.medicationName).join(", ") || "NONE"}</Text>
+      <Text style={styles.itemText}>Completed medications: {medications?.instances.filter(x => x.status === "COMPLETED").map(x => x.medicationName).join(", ") || "NONE"}</Text>
+      <Text style={styles.itemText}>Medication effects: {medications?.effects.map(x => x.effectType).join(", ") || "NONE"}</Text>
+      <Text style={styles.itemText}>Administration history: {medications?.events.length ?? 0}</Text>
 
       <Text style={styles.sectionTitle}>Recent resource events</Text>
       {snapshot.recentEvents.length === 0 ? (
