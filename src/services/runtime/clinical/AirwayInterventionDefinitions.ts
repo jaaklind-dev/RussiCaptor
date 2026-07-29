@@ -54,8 +54,12 @@ export const airwayInterventionDefinitions: InterventionDefinition[] = [
   {
     definitionId: "MECHANICAL_VENTILATION", version: "1.0.0", name: "Mechanical ventilation",
     requiredResources: [{ resourceType: "ventilator", quantity: 1 }],
-    effects: [], duration: continuous,
-    parameters: [{ name: "mode", type: "STRING", required: true, defaultValue: "VC" },
+    effects: [{ effectType: "EFFECTIVE_VENTILATION", parameterMap: {
+      mode: "supportMode", ventilatorMode: "mode", respiratoryRate: "respiratoryRate",
+      tidalVolumeMl: "tidalVolumeMl", peep: "peep", fio2: "fio2",
+    } }], duration: continuous,
+    parameters: [{ name: "supportMode", type: "STRING", required: true, defaultValue: "MECHANICAL" },
+      { name: "mode", type: "STRING", required: true, defaultValue: "VC" },
       { name: "respiratoryRate", type: "NUMBER", required: true, defaultValue: 12, min: 1, max: 60 },
       { name: "tidalVolumeMl", type: "NUMBER", required: true, defaultValue: 500, min: 50, max: 1500 },
       { name: "peep", type: "NUMBER", required: true, defaultValue: 5, min: 0, max: 30 },

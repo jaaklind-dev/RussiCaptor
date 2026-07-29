@@ -30,6 +30,54 @@ export class InterventionRuntime {
     this.instances.clear();
   }
 
+  startAllocated(input: {
+    sourceInterventionId: string;
+    definitionId: string;
+    encounterId: string;
+    patientId: string;
+    startedAt: number;
+    parameters?: Record<string, ClinicalParameterValue>;
+    resourceIds: string[];
+    clinicalContext?: Record<string, boolean>;
+  }): InterventionInstance {
+    const instanceId = `${input.sourceInterventionId}:INSTANCE`;
+    const existing = this.instances.get(instanceId);
+    if (existing) return structuredClone(existing);
+    const definition = this.definitions.get(input.definitionId);
+    if (!definition) {
+      return this.storeFailed(input, "DEFINITION_NOT_FOUND");
+    }
+    let parameters: Record<string, ClinicalParameterValue>;
+    try {
+      parameters = this.definitions.normalizeParameters(definition, input.parameters);
+      if (!input.encounterId && definition.preconditions.some(item => item.kind === "ACTIVE_ENCOUNTER")) {
+        throw new Error("Active encounter puudub.");
+      }
+      for (const precondition of definition.preconditions) {
+        if (precondition.kind === "CLINICAL_FLAG" && input.clinicalContext?.[precondition.flag] !== precondition.equals) {
+          throw new Error(`Clinical precondition ${precondition.flag} ei ole täidetud.`);
+        }
+      }
+    } catch {
+      return this.storeFailed(input, "PRECONDITION_FAILED");
+    }
+    const instance: InterventionInstance = {
+      instanceId, definitionId: definition.definitionId, definitionVersion: definition.version,
+      definitionName: definition.name, encounterId: input.encounterId, patientId: input.patientId,
+      status: "RUNNING", startedAt: input.startedAt, parameters,
+      resourceIds: [...input.resourceIds].sort(), sourceInterventionId: input.sourceInterventionId,
+    };
+    this.instances.set(instanceId, instance);
+    return structuredClone(instance);
+  }
+
+  finishBySource(sourceInterventionId: string, status: "COMPLETED" | "CANCELLED", endedAt: number): InterventionInstance | undefined {
+    const instance = [...this.instances.values()].find(item =>
+      item.sourceInterventionId === sourceInterventionId && item.status === "RUNNING"
+    );
+    return instance ? this.finish(instance.instanceId, status, endedAt) : undefined;
+  }
+
   consumeResourceEvent(
     event: ResourceRuntimeEvent,
     encounterId: string,
@@ -172,6 +220,22 @@ export class InterventionRuntime {
       patientId: event.patientId, status: "FAILED", startedAt: event.timestamp, endedAt: event.timestamp,
       parameters: event.parameters ?? {}, resourceIds: [event.resourceId],
       sourceInterventionId: event.interventionId ?? event.resourceId, failureReason,
+    };
+    this.instances.set(instance.instanceId, instance);
+    return structuredClone(instance);
+  }
+
+  private storeFailed(
+    input: { sourceInterventionId: string; definitionId: string; encounterId: string; patientId: string; startedAt: number;
+      parameters?: Record<string, ClinicalParameterValue>; resourceIds: string[] },
+    failureReason: InterventionFailureReason
+  ): InterventionInstance {
+    const instance: InterventionInstance = {
+      instanceId: `${input.sourceInterventionId}:INSTANCE`, definitionId: input.definitionId,
+      definitionVersion: "UNKNOWN", definitionName: input.definitionId, encounterId: input.encounterId,
+      patientId: input.patientId, status: "FAILED", startedAt: input.startedAt, endedAt: input.startedAt,
+      parameters: input.parameters ?? {}, resourceIds: [...input.resourceIds].sort(),
+      sourceInterventionId: input.sourceInterventionId, failureReason,
     };
     this.instances.set(instance.instanceId, instance);
     return structuredClone(instance);

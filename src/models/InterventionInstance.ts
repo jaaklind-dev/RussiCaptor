@@ -1,6 +1,8 @@
 import type { ClinicalParameterValue } from "@/models/ClinicalIntegration";
 
-export type InterventionInstanceStatus = "RUNNING" | "COMPLETED" | "CANCELLED" | "FAILED";
+export type InterventionInstanceStatus =
+  | "REQUESTED" | "WAITING_FOR_RESOURCES" | "RESOURCES_ALLOCATED"
+  | "RUNNING" | "COMPLETED" | "CANCELLED" | "FAILED";
 
 export type InterventionFailureReason =
   | "DEFINITION_NOT_FOUND"

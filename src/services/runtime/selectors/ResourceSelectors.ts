@@ -1,4 +1,5 @@
 import type { ResourceType, RuntimeResource } from "@/models/ResourceRuntime";
+import type { ClinicalResourceType, ResourceAllocationRuntimeState } from "@/models/ResourceAllocation";
 
 const typeOrder: ResourceType[] = [
   "oxygen", "nasalCannula", "simpleMask", "nonRebreatherMask", "oxygenMask",
@@ -57,5 +58,33 @@ export function summarizeResources(resources: RuntimeResource[]): ResourceMonito
       resource.status === "AVAILABLE" && !resource.assignedPatientId
     ).length;
     return [{ type, label: labels[type], total: matching.length, free, inUse: matching.length - free }];
+  });
+}
+
+export type CanonicalResourceMonitorRow = {
+  type: ClinicalResourceType;
+  label: string;
+  total: number;
+  free: number;
+  inUse: number;
+  waiting: number;
+  activePatientIds: readonly string[];
+};
+
+/** Read-only projection. Capacity and queue truth remain in ResourceAllocationRuntimeState. */
+export function summarizeCanonicalResources(state: ResourceAllocationRuntimeState): CanonicalResourceMonitorRow[] {
+  const active = state.allocations.filter(item => item.status === "ACTIVE");
+  const waiting = state.requests.filter(item => item.status === "WAITING");
+  return [...state.configuration.resources].sort((a, b) => a.resourceType.localeCompare(b.resourceType)).map(definition => {
+    const matching = active.filter(allocation => allocation.resources.some(item => item.resourceType === definition.resourceType));
+    const inUse = matching.flatMap(item => item.resources).filter(item => item.resourceType === definition.resourceType)
+      .reduce((sum, item) => sum + item.quantity, 0);
+    return {
+      type: definition.resourceType,
+      label: definition.resourceType.split("_").map(item => item[0] + item.slice(1).toLowerCase()).join(" "),
+      total: definition.capacity, free: definition.capacity - inUse, inUse,
+      waiting: waiting.filter(request => request.requirements.some(item => item.resourceType === definition.resourceType && !item.optional)).length,
+      activePatientIds: [...new Set(matching.map(item => item.patientId))].sort(),
+    };
   });
 }

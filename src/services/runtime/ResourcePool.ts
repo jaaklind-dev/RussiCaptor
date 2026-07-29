@@ -2,6 +2,7 @@ import type { RuntimeResource } from "@/models/ResourceRuntime";
 import { sha256Text } from "@/utils/sha256";
 import { stableJson } from "@/utils/stableJson";
 
+/** @deprecated Compatibility runtime for pre-WP-18 scenarios. New writes must use ResourceAllocationEngine. */
 export class ResourcePool {
   private readonly resources = new Map<string, RuntimeResource>();
 

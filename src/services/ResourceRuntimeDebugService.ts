@@ -6,9 +6,11 @@ import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatient
 import type { ClinicalEffect } from "@/models/ClinicalIntegration";
 import type { MedicationInstance, MedicationRuntimeEvent } from "@/models/MedicationRuntime";
 import type { VitalSignState } from "@/models/VitalSign";
+import type { ResourceAllocationRuntimeState } from "@/models/ResourceAllocation";
 
 export type ResourceRuntimeDebugSnapshot = {
   resources: RuntimeResource[];
+  allocationState?: ResourceAllocationRuntimeState;
   activeInterventions: RuntimeIntervention[];
   clinicalInterventions?: InterventionInstance[];
   airwayStates?: AirwayState[];
@@ -40,6 +42,7 @@ export function getResourceRuntimeDebugVersion(): number {
 export function getPatientResourceDebugSnapshot(patientId: string): ResourceRuntimeDebugSnapshot {
   return {
     resources: snapshot.resources.map(resource => structuredClone(resource)),
+    allocationState: snapshot.allocationState ? structuredClone(snapshot.allocationState) : undefined,
     activeInterventions: snapshot.activeInterventions
       .filter(intervention => intervention.patientId === patientId)
       .map(intervention => structuredClone(intervention)),

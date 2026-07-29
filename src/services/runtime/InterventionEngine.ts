@@ -23,6 +23,7 @@ function compareInterventions(left: RuntimeIntervention, right: RuntimeIntervent
     left.interventionId.localeCompare(right.interventionId);
 }
 
+/** @deprecated Compatibility runtime for pre-WP-18 scenarios. New resource-aware writes use ResourceAwareInterventionRuntime. */
 export class InterventionEngine {
   private readonly pending = new Map<string, RuntimeIntervention>();
   private readonly completed = new Set<string>();

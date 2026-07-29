@@ -6,7 +6,7 @@ import {
   getResourceRuntimeDebugVersion,
   subscribeToResourceRuntimeDebug,
 } from "@/services/ResourceRuntimeDebugService";
-import { summarizeResources } from "@/services/runtime/selectors/ResourceSelectors";
+import { summarizeCanonicalResources, summarizeResources } from "@/services/runtime/selectors/ResourceSelectors";
 
 export default function ResourceMonitorCard() {
   useSyncExternalStore(
@@ -15,7 +15,9 @@ export default function ResourceMonitorCard() {
     getResourceRuntimeDebugVersion
   );
   const snapshot = getResourceRuntimeDebugSnapshot();
-  const rows = summarizeResources(snapshot.resources);
+  const rows = snapshot.allocationState
+    ? summarizeCanonicalResources(snapshot.allocationState)
+    : summarizeResources(snapshot.resources);
   const hemorrhage = snapshot.hemorrhageProcesses?.[0];
   const medications = snapshot.medicationState;
   const vitals = snapshot.vitalSignStates?.[0]?.state;
@@ -68,7 +70,7 @@ export default function ResourceMonitorCard() {
         </View>
       )}
       <Text style={styles.caption}>
-        Read-only ResourcePool snapshot · t={snapshot.updatedAt}s
+        Read-only resource runtime snapshot · t={snapshot.updatedAt}s
       </Text>
     </View>
   );
