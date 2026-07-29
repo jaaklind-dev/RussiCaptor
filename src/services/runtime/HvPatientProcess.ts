@@ -202,3 +202,18 @@ export function markOxygenMaskingWarning(
   };
   return { ...processWithoutOutput, outputs: output(processWithoutOutput) };
 }
+
+export function setHvOxygenTherapy(
+  previous: PatientProcessRuntime,
+  active: boolean
+): PatientProcessRuntime {
+  const processWithoutOutput: Omit<PatientProcessRuntime, "outputs"> = {
+    ...structuredClone(previous),
+    clinicalState: {
+      ...previous.clinicalState,
+      oxygenTherapyActive: active,
+      directOxygenEffectOnCO2: 0,
+    },
+  };
+  return { ...processWithoutOutput, outputs: output(processWithoutOutput) };
+}

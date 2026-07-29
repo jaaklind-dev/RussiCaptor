@@ -12,9 +12,10 @@ import type { GoldenActualEvent, GoldenFixture, GoldenInputEvent } from "@/model
 import type { OwnershipRule } from "@/models/ModuleImport";
 import type { BotulismRootPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime } from "@/models/PatientProcessRuntime";
 import type { RuntimeState } from "@/models/RuntimeAggregation";
+import type { ClinicalEffect, ClinicalProcessRuntime } from "@/models/ClinicalIntegration";
+import type { InterventionInstance } from "@/models/InterventionInstance";
 import type { ResourceRuntimeEvent, RuntimeResource, ResourceType, SchedulableIntervention } from "@/models/ResourceRuntime";
 import {
-  applyHvAction,
   applyHvTimedTransition,
   bootstrapHvPatientProcess,
   tickHvPatientProcess,
@@ -22,17 +23,20 @@ import {
   type HvTimedTransition,
 } from "@/services/runtime/HvPatientProcess";
 import { markOxygenMaskingWarning } from "@/services/runtime/HvPatientProcess";
-import {
-  applyHypoxiaOxygen,
-  bootstrapHypoxiaPatientProcess,
-  tickHypoxiaPatientProcess,
-} from "@/services/runtime/HypoxiaPatientProcess";
+import { bootstrapHypoxiaPatientProcess, tickHypoxiaPatientProcess } from "@/services/runtime/HypoxiaPatientProcess";
 import { bootstrapBotulismRoot, tickBotulismRoot } from "@/services/runtime/BotulismRootPatientProcess";
 import { InterventionEngine } from "@/services/runtime/InterventionEngine";
 import { ResourcePool } from "@/services/runtime/ResourcePool";
 import { publishResourceRuntimeDebugSnapshot } from "@/services/ResourceRuntimeDebugService";
 import { RuntimeOwnershipResolver } from "@/services/runtime/OwnershipResolver";
 import { aggregateRuntimeState } from "@/services/runtime/RuntimeAggregationPipeline";
+import { ClinicalIntegrationFramework } from "@/services/runtime/clinical/ClinicalIntegrationFramework";
+import { ClinicalProcessRegistry } from "@/services/runtime/clinical/ClinicalProcessRegistry";
+import { InterventionDefinitionRegistry } from "@/services/runtime/clinical/InterventionDefinitionRegistry";
+import { InterventionRuntime } from "@/services/runtime/clinical/InterventionRuntime";
+import { oxygenTherapyDefinition } from "@/services/runtime/clinical/OxygenTherapyDefinition";
+import { hvClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HvClinicalProcessHandler";
+import { hypoxiaClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HypoxiaClinicalProcessHandler";
 import { sha256Text } from "@/utils/sha256";
 import { stableJson } from "@/utils/stableJson";
 
@@ -168,6 +172,12 @@ export class ClinicalScenarioEngine {
   private readonly resolver = new RuntimeOwnershipResolver(firstClinicalOwnershipRules);
   private resourcePool = new ResourcePool();
   private interventionEngine = new InterventionEngine();
+  private readonly clinicalIntegration = new ClinicalIntegrationFramework(
+    new ClinicalProcessRegistry([hvClinicalProcessHandler, hypoxiaClinicalProcessHandler])
+  );
+  private readonly interventionRuntime = new InterventionRuntime(
+    new InterventionDefinitionRegistry([oxygenTherapyDefinition])
+  );
 
   reset(fixture: GoldenFixture): void {
     const initial = eventPayload({ payload: fixture.initialState } as GoldenInputEvent);
@@ -211,6 +221,8 @@ export class ClinicalScenarioEngine {
     this.appliedEventIds.clear();
     this.resourcePool = new ResourcePool(fixtureResources(fixture.activeResources));
     this.interventionEngine = new InterventionEngine();
+    this.clinicalIntegration.reset();
+    this.interventionRuntime.reset();
     this.publishResourceDebugSnapshot();
     if (this.botulismRoot) this.aggregateProcesses(this.runtimeState);
   }
@@ -286,10 +298,7 @@ export class ClinicalScenarioEngine {
       if (!event.actionId || !allowed.has(event.actionId as HvAction)) {
         throw new Error(`NOT_IMPLEMENTED: HV action ${event.actionId ?? "puudub"}.`);
       }
-      this.process = applyHvAction(process, event.actionId as HvAction);
-      if (event.actionId === "OXYGEN_HIGH_FLOW") {
-        for (const [id, child] of this.hypoxiaProcesses) this.hypoxiaProcesses.set(id, applyHypoxiaOxygen(child));
-      }
+      this.applyClinicalEffect(this.effectForAction(event.eventId, event.actionId as HvAction), false);
       this.processControlledEventPending ||= event.actionId === "MECHANICAL_VENTILATION";
       this.aggregateProcesses();
       this.appliedEventIds.add(event.eventId);
@@ -330,6 +339,24 @@ export class ClinicalScenarioEngine {
     this.resourcePool.update(this.simulationTimeSec);
     for (const resourceEvent of this.interventionEngine.applyDue(this.simulationTimeSec, this.resourcePool)) {
       this.logResourceEvent(resourceEvent);
+      const changedInstance = this.interventionRuntime.consumeResourceEvent(
+        resourceEvent, this.requireProcess().encounterId, this.resourcePool.snapshot()
+      );
+      if (changedInstance?.definitionId === "OXYGEN_THERAPY" && changedInstance.status === "CANCELLED" &&
+        !this.interventionRuntime.active(changedInstance.patientId).some(item => item.definitionId === "OXYGEN_THERAPY")) {
+        this.applyClinicalEffect({
+          effectId: `${changedInstance.instanceId}:STOP:${resourceEvent.timestamp}`,
+          effectType: "INSPIRED_OXYGEN_REMOVED",
+          encounterId: changedInstance.encounterId,
+          patientId: changedInstance.patientId,
+          timestamp: resourceEvent.timestamp,
+          sourceInterventionInstanceId: changedInstance.instanceId,
+          parameters: {},
+        }, true);
+      }
+    }
+    for (const effect of this.interventionRuntime.effectsAt(this.simulationTimeSec)) {
+      this.applyClinicalEffect(effect, true);
     }
     const payload = eventPayload(event);
     const tickMinutes = Number(payload.tickMin ?? payload.elapsedMin);
@@ -396,18 +423,27 @@ export class ClinicalScenarioEngine {
     return this.resourcePool.hash();
   }
 
+  getInterventionInstances(patientId?: string): InterventionInstance[] {
+    return patientId ? this.interventionRuntime.forPatient(patientId) : this.interventionRuntime.snapshot();
+  }
+
   getHashes(): { stateHash: string; eventLogHash: string; processTreeHash: string; resourcePoolHash: string; replayHash: string } {
     const stateHash = sha256Text(stableJson(this.requireRuntimeState()));
     const eventLogHash = sha256Text(stableJson(this.eventLog));
     const processTreeHash = sha256Text(stableJson({ root: this.botulismRoot, processes: this.getPatientProcesses() }));
     const resourcePoolHash = this.resourcePool.hash();
     const interventionHash = sha256Text(stableJson(this.interventionEngine.snapshot()));
+    const clinicalIntegrationHash = sha256Text(stableJson({
+      framework: this.clinicalIntegration.snapshot(), instances: this.interventionRuntime.snapshot(),
+    }));
     return {
       stateHash,
       eventLogHash,
       processTreeHash,
       resourcePoolHash,
-      replayHash: sha256Text(stableJson({ stateHash, eventLogHash, processTreeHash, resourcePoolHash, interventionHash })),
+      replayHash: sha256Text(stableJson({
+        stateHash, eventLogHash, processTreeHash, resourcePoolHash, interventionHash, clinicalIntegrationHash,
+      })),
     };
   }
 
@@ -479,6 +515,8 @@ export class ClinicalScenarioEngine {
         ...(event.reasonCode ? { reasonCode: event.reasonCode } : {}),
         ...(event.conflictingInterventionId ? { conflictingInterventionId: event.conflictingInterventionId } : {}),
         ...(event.exclusiveGroup ? { exclusiveGroup: event.exclusiveGroup } : {}),
+        ...(event.definitionId ? { definitionId: event.definitionId } : {}),
+        ...(event.parameters ? { parameters: structuredClone(event.parameters) } : {}),
       },
     });
   }
@@ -487,6 +525,7 @@ export class ClinicalScenarioEngine {
     publishResourceRuntimeDebugSnapshot({
       resources: this.resourcePool.snapshot(),
       activeInterventions: this.interventionEngine.snapshot().active,
+      clinicalInterventions: this.interventionRuntime.snapshot(),
       recentEvents: this.resourceEventLog,
       updatedAt: this.simulationTimeSec,
     });
@@ -530,5 +569,68 @@ export class ClinicalScenarioEngine {
     this.process = markOxygenMaskingWarning(hv);
     this.aggregateProcesses();
     this.logEvent("OXYGEN_MASKING_WARNING", {}, target);
+  }
+
+  private effectForAction(eventId: string, action: HvAction): ClinicalEffect {
+    const effectType = action === "OXYGEN_HIGH_FLOW" ? "INSPIRED_OXYGEN_INCREASED" as const
+      : action === "INTUBATION" ? "AIRWAY_PROTECTED" as const
+        : "EFFECTIVE_VENTILATION" as const;
+    return {
+      effectId: `ACTION:${eventId}`,
+      effectType,
+      encounterId: this.requireProcess().encounterId,
+      patientId: this.requireProcess().encounterId,
+      timestamp: this.simulationTimeSec,
+      sourceInterventionInstanceId: `ACTION:${eventId}`,
+      parameters: action === "OXYGEN_HIGH_FLOW"
+        ? { flowRateLMin: 15, deliveryInterface: "oxygenMask" }
+        : effectType === "EFFECTIVE_VENTILATION"
+          ? { mode: action === "MECHANICAL_VENTILATION" ? "MECHANICAL" : "BVM" }
+          : {},
+    };
+  }
+
+  private applyClinicalEffect(effect: ClinicalEffect, logEvents: boolean): void {
+    const inputId = `EFFECT:${effect.effectId}`;
+    const result = this.clinicalIntegration.apply({
+      inputId,
+      encounterId: effect.encounterId,
+      patientId: effect.patientId,
+      timestamp: effect.timestamp,
+      inputType: "CLINICAL_EFFECT",
+      source: { kind: "INTERVENTION", sourceId: effect.sourceInterventionInstanceId },
+      payload: effect,
+    }, [this.requireProcess(), ...this.sortedHypoxia()]);
+    if (result.status === "REJECTED") {
+      if (logEvents) {
+        const event = result.events[0];
+        this.logEvent("ClinicalEffectRejected", {
+          inputId, effectType: effect.effectType, reasonCode: event.reasonCode,
+          sourceInterventionInstanceId: effect.sourceInterventionInstanceId,
+        }, effect.patientId);
+      }
+      return;
+    }
+    if (result.status === "NO_OP") return;
+    this.replaceClinicalProcesses(result.processes);
+    if (logEvents) {
+      for (const event of result.events) {
+        const source = result.processes.find(item => item.processId === event.sourceProcessId);
+        this.logEvent("ClinicalEffectApplied", {
+          inputId, effectType: event.effectType,
+          sourceInterventionInstanceId: effect.sourceInterventionInstanceId,
+        }, effect.patientId, source ?? this.requireProcess());
+      }
+    }
+  }
+
+  private replaceClinicalProcesses(processes: ClinicalProcessRuntime[]): void {
+    const hv = processes.find(item => item.processType === "HYPOVENTILATION_HYPERCAPNIA");
+    if (!hv) throw new Error("Clinical integration tulemusest puudub HV PatientProcess.");
+    this.process = hv as PatientProcessRuntime;
+    this.hypoxiaProcesses.clear();
+    for (const process of processes.filter(item => item.processType === "HYPOXIA")) {
+      this.hypoxiaProcesses.set(process.processId, process as HypoxiaPatientProcessRuntime);
+    }
   }
 }

@@ -53,9 +53,16 @@ export function bootstrapHypoxiaPatientProcess(
 export function applyHypoxiaOxygen(
   previous: HypoxiaPatientProcessRuntime
 ): HypoxiaPatientProcessRuntime {
+  return setHypoxiaOxygenTherapy(previous, true);
+}
+
+export function setHypoxiaOxygenTherapy(
+  previous: HypoxiaPatientProcessRuntime,
+  active: boolean
+): HypoxiaPatientProcessRuntime {
   const processWithoutOutput: Omit<HypoxiaPatientProcessRuntime, "outputs"> = {
     ...structuredClone(previous),
-    clinicalState: { ...previous.clinicalState, oxygenTherapyActive: true },
+    clinicalState: { ...previous.clinicalState, oxygenTherapyActive: active },
   };
   return { ...processWithoutOutput, outputs: output(processWithoutOutput) };
 }

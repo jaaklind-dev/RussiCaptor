@@ -27,6 +27,8 @@ export type RuntimeIntervention = {
   timestamp: number;
   priority: number;
   sourceProcessId?: string;
+  definitionId?: string;
+  parameters?: Record<string, string | number | boolean | null>;
 };
 
 export type SchedulableIntervention = Omit<RuntimeIntervention, "priority"> & { priority?: number };
@@ -56,4 +58,6 @@ export type ResourceRuntimeEvent = {
   reasonCode?: InterventionRejectionReason;
   conflictingInterventionId?: string;
   exclusiveGroup?: string;
+  definitionId?: string;
+  parameters?: Record<string, string | number | boolean | null>;
 };

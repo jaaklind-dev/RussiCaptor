@@ -173,6 +173,8 @@ export class InterventionEngine {
       eventType, timestamp: intervention.timestamp, resourceId: intervention.resourceId,
       patientId: intervention.patientId, interventionId: intervention.interventionId,
       sourceProcessId: intervention.sourceProcessId,
+      definitionId: intervention.definitionId,
+      parameters: intervention.parameters ? structuredClone(intervention.parameters) : undefined,
     };
   }
 

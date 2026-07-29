@@ -276,3 +276,33 @@ Dashboardil kuvatakse arendusbuildis sama read-only snapshot'i kasutav Resource 
 Paneel koondab iga olemasoleva ressursitüübi `Total / Free / In use` väärtused ning näitab
 snapshot'i simulatsiooniaega. Ressursitüübid on alati stabiilses järjekorras ja nullkogusega
 tüüpe ei kuvata. Koondamisloogika on eraldi automaattestiga kaetud.
+## WP-10 Clinical Integration Framework
+
+WP-10 lisas definition-driven intervention runtime'i ja mehhanismipõhise clinical
+effect pipeline'i. Coverage mõõdeti 2026-07-29 kogu tavapärase Jest komplektiga.
+
+| Mõõdik | Tulemus |
+|---|---:|
+| Testipakid | 24 / 24 PASS |
+| Automaattestid | 131 / 131 PASS |
+| Testides laaditud failide statements | 80.98% |
+| Testides laaditud failide branches | 72.84% |
+| Testides laaditud failide functions | 82.35% |
+| Testides laaditud failide lines | 83.14% |
+
+| WP-10 komponent | Statements | Branches | Lines |
+|---|---:|---:|---:|
+| ClinicalIntegrationFramework | 91.11% | 68.00% | 91.89% |
+| ClinicalProcessRegistry | 84.61% | 40.00% | 90.90% |
+| InterventionDefinitionRegistry | 64.70% | 68.18% | 68.96% |
+| InterventionRuntime | 82.08% | 60.00% | 84.61% |
+| OxygenTherapyDefinition | 100% | 100% | 100% |
+| HV clinical handler | 83.33% | 81.25% | 92.30% |
+| Hypoxia clinical handler | 100% | 100% | 100% |
+
+Kontrollitud on handlerite registreerimisjärjekorrast sõltumatus, duplicate-input
+idempotentsus, encounter mismatch'i atomaarne rejection, Oxygen Therapy parameetrite
+valideerimine, RUNNING → CANCELLED elutsükkel, typed effect'i teke, Hypoxia kaudu
+SpO2 muutumine ning ScenarioEngine'i identne RuntimeState, protsessiseis, sündmuslogi
+ja replay hash. Olemasolev Golden Pack jäi muutmata ning kõik senised Golden-testid
+läbisid.

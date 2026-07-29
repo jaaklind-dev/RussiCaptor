@@ -48,6 +48,7 @@ import VitalsTab from "@/components/patient/VitalsTab";
 import { getVitalSigns } from "@/repositories/VitalSignsRepository";
 import { recordVitalSigns } from "@/services/VitalSignsService";
 import ResourceDeveloperCard from "@/components/patient/ResourceDeveloperCard";
+import ActiveInterventionsCard from "@/components/patient/ActiveInterventionsCard";
 type PatientTab =
   | "overview"
   | "vitals"
@@ -249,6 +250,7 @@ useEffect(() => {
               latestVitals={getVitalSigns(patient.id)[0]}
               recentEvents={getTimelineEvents(patient.id).slice(-3).reverse()}
             />
+            <ActiveInterventionsCard patientId={patient.id} />
             {__DEV__ && <ResourceDeveloperCard patientId={patient.id} />}
           </>
         )}
