@@ -17,6 +17,7 @@ import type { InterventionInstance } from "@/models/InterventionInstance";
 import type { AirwayState } from "@/models/AirwayState";
 import type { AssessmentRule, AssessmentSnapshot } from "@/models/ClinicalAssessment";
 import type { CirculationState } from "@/models/CirculationState";
+import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatientProcess";
 import type { ResourceRuntimeEvent, RuntimeResource, ResourceType, SchedulableIntervention } from "@/models/ResourceRuntime";
 import {
   applyHvTimedTransition,
@@ -42,6 +43,7 @@ import { AirwayManagementFramework } from "@/services/runtime/clinical/AirwayMan
 import { ClinicalAssessmentEngine } from "@/services/runtime/assessment/ClinicalAssessmentEngine";
 import { circulationInterventionDefinitions } from "@/services/runtime/clinical/CirculationInterventionDefinitions";
 import { CirculationManagementFramework } from "@/services/runtime/clinical/CirculationManagementFramework";
+import { bootstrapHemorrhagePatientProcess, setHemorrhageEffects, tickHemorrhagePatientProcess } from "@/services/runtime/HemorrhagePatientProcess";
 import { publishAssessmentDebugSnapshot } from "@/services/AssessmentRuntimeDebugService";
 import { hvClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HvClinicalProcessHandler";
 import { hypoxiaClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HypoxiaClinicalProcessHandler";
@@ -81,6 +83,11 @@ const firstClinicalOwnershipRules: OwnershipRule[] = [{
   contributionAllowedFrom: "BOTULISM_V1 through HV child activation",
   aggregationOrWriteRule: "LATEST attributable owner value",
   conflictAction: "REJECT_CONFLICTING_OWNER",
+}, {
+  objectType: "RuntimeField",
+  objectOrField: "estimatedBloodLossMl / cumulativeBloodLossMl / bleedingRateMlMin / hemorrhageSeverity / perfusionState / compensationState / HRTrend / BPTrend / PerfusionTrend",
+  canonicalOwner: "HEMORRHAGE_V1", contributionAllowedFrom: "CORE_ENGINE",
+  aggregationOrWriteRule: "LATEST attributable owner value", conflictAction: "REJECT_CONFLICTING_OWNER",
 }, {
   objectType: "RuntimeField",
   objectOrField: "airwayProtected / effectiveVentilationActive / directOxygenEffectOnCO2 / ventilationEffectCount / definitiveControl / causeControlled / respiratoryArrest / mentalStatusSourceModule / mentalStatusSourceProcessType / CO2Trend",
@@ -196,6 +203,7 @@ export class ClinicalScenarioEngine {
   private readonly assessmentEngine = new ClinicalAssessmentEngine();
   private readonly circulationManagement = new CirculationManagementFramework();
   private assessmentRules: AssessmentRule[] = [];
+  private hemorrhageProcess?: HemorrhagePatientProcessRuntime;
 
   reset(fixture: GoldenFixture): void {
     const initial = eventPayload({ payload: fixture.initialState } as GoldenInputEvent);
@@ -219,6 +227,8 @@ export class ClinicalScenarioEngine {
       this.process.parentProcessType = respiratory.processType;
     }
     this.hypoxiaProcesses.clear();
+    this.hemorrhageProcess = initial.hemorrhage && typeof initial.hemorrhage === "object"
+      ? bootstrapHemorrhagePatientProcess(this.process.encounterId, initial.hemorrhage as Record<string, unknown>) : undefined;
     if (initial.hypoxia && typeof initial.hypoxia === "object") {
       const child = bootstrapHypoxiaPatientProcess(fixture, initial.hypoxia as Record<string, unknown>, this.parentRef());
       this.hypoxiaProcesses.set(child.processId, child);
@@ -391,7 +401,10 @@ export class ClinicalScenarioEngine {
         }, true);
       }
     }
-    for (const effect of this.interventionRuntime.effectsAt(this.simulationTimeSec)) {
+    const activeEffects = this.interventionRuntime.effectsAt(this.simulationTimeSec);
+    if (this.hemorrhageProcess) this.hemorrhageProcess = setHemorrhageEffects(this.hemorrhageProcess, activeEffects);
+    for (const effect of activeEffects) {
+      if (["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED"].includes(effect.effectType)) continue;
       this.applyClinicalEffect(effect, true);
     }
     const payload = eventPayload(event);
@@ -402,6 +415,11 @@ export class ClinicalScenarioEngine {
     this.process = tickHvPatientProcess(process, tickMinutes * 60);
     for (const [id, child] of [...this.hypoxiaProcesses.entries()].sort(([a], [b]) => a.localeCompare(b))) {
       this.hypoxiaProcesses.set(id, tickHypoxiaPatientProcess(child, tickMinutes * 60));
+    }
+    if (this.hemorrhageProcess) {
+      const result = tickHemorrhagePatientProcess(this.hemorrhageProcess, tickMinutes * 60);
+      this.hemorrhageProcess = result.process;
+      for (const generated of result.events) this.logEvent(generated.eventType, generated.details, event.target, this.requireProcess());
     }
     this.aggregateProcesses(runtimeState);
     this.appliedEventIds.add(event.eventId);
@@ -427,8 +445,8 @@ export class ClinicalScenarioEngine {
     return structuredClone(this.requireProcess());
   }
 
-  getPatientProcesses(): (PatientProcessRuntime | HypoxiaPatientProcessRuntime)[] {
-    return [this.requireProcess(), ...this.sortedHypoxia()].map(item => structuredClone(item));
+  getPatientProcesses(): (PatientProcessRuntime | HypoxiaPatientProcessRuntime | HemorrhagePatientProcessRuntime)[] {
+    return [this.requireProcess(), ...this.sortedHypoxia(), ...(this.hemorrhageProcess ? [this.hemorrhageProcess] : [])].map(item => structuredClone(item));
   }
 
   getBotulismRoot(): BotulismRootPatientProcessRuntime | undefined {
@@ -524,7 +542,7 @@ export class ClinicalScenarioEngine {
   }
 
   private aggregateProcesses(previous = this.requireRuntimeState()): void {
-    const processes = [this.requireProcess(), ...this.sortedHypoxia()];
+    const processes = [this.requireProcess(), ...this.sortedHypoxia(), ...(this.hemorrhageProcess ? [this.hemorrhageProcess] : [])];
     const aggregated = aggregateRuntimeState({
       previous,
       expectedStateVersion: previous.stateVersion,
@@ -594,6 +612,7 @@ export class ClinicalScenarioEngine {
       clinicalInterventions: this.interventionRuntime.snapshot(),
       airwayStates: this.airwayManagement.snapshot().states,
       circulationStates: this.circulationManagement.snapshot().states,
+      hemorrhageProcesses: this.hemorrhageProcess ? [this.hemorrhageProcess] : [],
       recentEvents: this.resourceEventLog,
       updatedAt: this.simulationTimeSec,
     });

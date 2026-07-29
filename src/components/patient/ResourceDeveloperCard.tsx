@@ -35,6 +35,7 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
   const snapshot = getPatientResourceDebugSnapshot(patientId);
   const airway = snapshot.airwayStates?.[0];
   const circulation = snapshot.circulationStates?.[0];
+  const hemorrhage = snapshot.hemorrhageProcesses?.[0];
 
   return (
     <View style={styles.card}>
@@ -91,6 +92,13 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
         resource.assignedPatientId === patientId && ["peripheralIV", "centralVenousCatheter", "intraosseousAccess",
           "pressureBag", "fluidWarmer", "infusionPump", "bloodAdministrationSet", "rapidInfuser", "tourniquet", "pelvicBinder"].includes(resource.type)
       ).map(resource => resource.resourceId).join(", ") || "NONE"}</Text>
+
+      <Text style={styles.sectionTitle}>Hemorrhage</Text>
+      <Text style={styles.itemText}>Current hemorrhage: {hemorrhage?.clinicalState.severity ?? "NONE"}</Text>
+      <Text style={styles.itemText}>Estimated blood loss: {hemorrhage ? `${hemorrhage.clinicalState.estimatedBloodLossMl.toFixed(0)} ml` : "NONE"}</Text>
+      <Text style={styles.itemText}>Perfusion state: {hemorrhage?.clinicalState.perfusion ?? "NONE"}</Text>
+      <Text style={styles.itemText}>Compensation state: {hemorrhage?.clinicalState.compensation ?? "NONE"}</Text>
+      <Text style={styles.itemText}>Resolved clinical effects: {hemorrhage?.clinicalState.resolvedEffectIds.join(", ") || "NONE"}</Text>
 
       <Text style={styles.sectionTitle}>Recent resource events</Text>
       {snapshot.recentEvents.length === 0 ? (

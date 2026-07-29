@@ -26,7 +26,7 @@ export const circulationInterventionDefinitions: InterventionDefinition[] = [
   ...(["CRYSTALLOID_INFUSION", "BLOOD_PRODUCT_ADMINISTRATION", "PRESSURE_INFUSION"] as const).map((id): InterventionDefinition => ({
     definitionId: id, version: "1.0.0", name: id.split("_").map(x => x[0] + x.slice(1).toLowerCase()).join(" "),
     requiredResources: [{ resourceType: id === "BLOOD_PRODUCT_ADMINISTRATION" ? "bloodAdministrationSet" : id === "PRESSURE_INFUSION" ? "pressureBag" : "infusionPump", quantity: 1 }],
-    effects: [{ effectType: "INFUSION_RUNNING", parameterMap: { fluidType: "fluidType", volumeMl: "volumeMl", rateMlHour: "rateMlHour" } }], duration,
+    effects: [{ effectType: id === "BLOOD_PRODUCT_ADMINISTRATION" ? "BLOOD_PRODUCT_STARTED" : "INFUSION_RUNNING", parameterMap: { fluidType: "fluidType", volumeMl: "volumeMl", rateMlHour: "rateMlHour" } }], duration,
     parameters: [{ name: "fluidType", type: "STRING", required: true, defaultValue: id === "CRYSTALLOID_INFUSION" ? "crystalloid" : "packedRBC" },
       { name: "volumeMl", type: "NUMBER", required: true, defaultValue: 500, min: 1 },
       { name: "rateMlHour", type: "NUMBER", required: true, defaultValue: 500, min: 1 }], preconditions: [active],

@@ -16,6 +16,7 @@ export default function ResourceMonitorCard() {
   );
   const snapshot = getResourceRuntimeDebugSnapshot();
   const rows = summarizeResources(snapshot.resources);
+  const hemorrhage = snapshot.hemorrhageProcesses?.[0];
 
   return (
     <View style={styles.card}>
@@ -39,6 +40,15 @@ export default function ResourceMonitorCard() {
           <Text style={[styles.numberText, row.inUse > 0 && styles.inUseText]}>{row.inUse}</Text>
         </View>
       ))}
+      {hemorrhage && (
+        <View style={styles.clinicalBlock}>
+          <Text style={styles.clinicalTitle}>Hemorrhage · {hemorrhage.clinicalState.severity}</Text>
+          <Text style={styles.clinicalText}>Perfusion: {hemorrhage.clinicalState.perfusion}</Text>
+          <Text style={styles.clinicalText}>Blood loss: {hemorrhage.clinicalState.estimatedBloodLossMl.toFixed(0)} ml</Text>
+          <Text style={styles.clinicalText}>Compensation: {hemorrhage.clinicalState.compensation}</Text>
+          <Text style={styles.clinicalText}>Active effects: {hemorrhage.clinicalState.activeEffects.length}</Text>
+        </View>
+      )}
       <Text style={styles.caption}>
         Read-only ResourcePool snapshot · t={snapshot.updatedAt}s
       </Text>
@@ -65,4 +75,7 @@ const styles = StyleSheet.create({
   inUseText: { color: "#b54708", fontWeight: "bold" },
   empty: { color: "#64748b", fontStyle: "italic", paddingVertical: 8 },
   caption: { color: "#64748b", fontSize: 11, marginTop: 9 },
+  clinicalBlock: { borderTopColor: "#cbd5e1", borderTopWidth: 1, marginTop: 10, paddingTop: 9 },
+  clinicalTitle: { color: "#7f1d1d", fontWeight: "bold", marginBottom: 3 },
+  clinicalText: { color: "#334155", fontSize: 12, marginTop: 2 },
 });

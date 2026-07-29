@@ -760,3 +760,20 @@ Tourniquet emits `REDUCE_EXTERNAL_BLEEDING`, but no temporary physiology is appl
 when a Hemorrhage PatientProcess is absent. A later Hemorrhage process can consume
 the same general effect without changing this framework. WP-13 adds no medication
 or transfusion decision logic.
+
+## WP-14 – Hemorrhage PatientProcess
+
+WP-14 is the first process whose physiology is driven entirely by the active
+Clinical Effect set. Its fixture-provided configuration contains baseline bleeding,
+effect efficiencies, infusion offsets, severity/perfusion/compensation thresholds,
+and trend thresholds; the process contains no embedded clinical cut-offs.
+
+Each tick sorts active effects canonically, resolves STOP before reductions, uses
+the strongest bleeding reduction, combines configured infusion support, advances
+cumulative loss, and derives severity, perfusion, compensation, and trends. It emits
+HemorrhageStarted/Reduced/Stopped, PerfusionChanged, and CompensationChanged.
+
+Hemorrhage contributes only process-owned runtime fields through OwnershipResolver
+and RuntimeAggregationPipeline. InterventionEngine never changes blood loss,
+perfusion, vital trends, or RuntimeState. Fixed decimal precision ensures stable
+cross-runtime replay hashes.

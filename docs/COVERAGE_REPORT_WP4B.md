@@ -357,3 +357,17 @@ replay-hash determinism. Golden Pack jäi muutmata.
 Kaetud on IV/IO reserve-release foundation, mitu samaaegset IV ligipääsu,
 tourniquet/pelvic binder/infusion apply-remove, priority ja exclusive-group
 konfliktid, circulation state, assessment, event log ning replay determinism.
+
+## WP-14 Hemorrhage PatientProcess
+
+| Mõõdik | Tulemus |
+|---|---:|
+| Testipakid | 28 / 28 PASS |
+| Automaattestid | 155 / 155 PASS |
+| Hemorrhage statements | 96.07% |
+| Hemorrhage branches | 89.47% |
+| Hemorrhage functions | 100% |
+| Hemorrhage lines | 100% |
+
+Kaetud on progression, tourniquet, pelvic binder, infusion, blood product, mitu
+samaaegset effect'i, STOP konfliktivõitja, event log, assessment ja replay.
