@@ -55,6 +55,10 @@ function refreshSession(): void {
 
       <Text style={styles.subtitle}>Õppuse juhtimiskeskus</Text>
 
+      <Pressable style={styles.instructorButton} onPress={() => router.push("/excon/dashboard")}>
+        <Text style={styles.instructorButtonText}>Open Instructor Dashboard</Text>
+      </Pressable>
+
       <ExerciseStatusCard session={session} />
 
       <WorkbookImportCard onImported={refreshSession} />
@@ -120,6 +124,13 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 12,
   },
+
+  instructorButton: {
+    width: "100%", backgroundColor: "#172b4d", borderRadius: 12,
+    paddingVertical: 14, alignItems: "center", marginTop: 18,
+  },
+
+  instructorButtonText: { color: "#fff", fontWeight: "bold", fontSize: 17 },
 
   backButtonText: {
     color: "#005BBB",

@@ -33,6 +33,7 @@ import { bootstrapBotulismRoot, tickBotulismRoot } from "@/services/runtime/Botu
 import { InterventionEngine } from "@/services/runtime/InterventionEngine";
 import { ResourcePool } from "@/services/runtime/ResourcePool";
 import { publishResourceRuntimeDebugSnapshot } from "@/services/ResourceRuntimeDebugService";
+import { publishRuntimeSnapshot } from "@/services/RuntimeSnapshotService";
 import { RuntimeOwnershipResolver } from "@/services/runtime/OwnershipResolver";
 import { aggregateRuntimeState } from "@/services/runtime/AlignedRuntimePipeline";
 import { ClinicalIntegrationFramework } from "@/services/runtime/clinical/ClinicalIntegrationFramework";
@@ -281,6 +282,7 @@ export class ClinicalScenarioEngine {
     this.circulationManagement.reset();
     this.medicationEngine.reset();
     this.vitalSignEvents = [];
+    publishRuntimeSnapshot(this.runtimeState);
     this.publishResourceDebugSnapshot();
     this.publishAssessmentSnapshot(true);
     if (this.botulismRoot) this.aggregateProcesses(this.runtimeState);
@@ -605,6 +607,7 @@ export class ClinicalScenarioEngine {
       throw new Error(`PatientProcess output lükati ownership'i või agregatsiooni poolt tagasi.`);
     }
     this.runtimeState = aggregated.state;
+    publishRuntimeSnapshot(this.runtimeState);
     for (const event of aggregated.events.filter(item => ["VitalSignChanged", "TrendChanged", "MonitorStateChanged"].includes(item.eventType))) {
       this.vitalSignEvents.push({
         eventType: event.eventType as VitalSignEvent["eventType"], timestamp: this.simulationTimeSec,
