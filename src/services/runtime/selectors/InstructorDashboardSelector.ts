@@ -16,10 +16,11 @@ function projectedStatus(patient: InstructorPatientMetadata, runtime?: RuntimeSt
   return "Stable";
 }
 
-const severityOrder: Record<InstructorPatientStatus, number> = {
-  "Life threatening": 0, Critical: 1, "Requires attention": 2, Stable: 3, Completed: 4,
-};
-const triageOrder: Record<string, number> = { P1: 0, P2: 1, P3: 2, P4: 3, Expectant: 4 };
+export function comparePatientIds(a: string, b: string): number {
+  const aNumber = Number(a.match(/\d+/)?.[0] ?? Number.MAX_SAFE_INTEGER);
+  const bNumber = Number(b.match(/\d+/)?.[0] ?? Number.MAX_SAFE_INTEGER);
+  return aNumber !== bNumber ? aNumber - bNumber : a.localeCompare(b);
+}
 
 export function projectInstructorPatients(
   patients: readonly InstructorPatientMetadata[],
@@ -40,8 +41,7 @@ export function projectInstructorPatients(
       lastUpdate: runtime?.lastAggregatedAt ?? (runtime ? `T+${runtime.exerciseTimeSec}s` : undefined),
       hasCanonicalRuntime: Boolean(runtime?.vitalSignState),
     };
-  }).sort((a, b) => severityOrder[a.status] - severityOrder[b.status] ||
-    (triageOrder[a.triage] ?? 99) - (triageOrder[b.triage] ?? 99) || a.patientId.localeCompare(b.patientId));
+  }).sort((a, b) => comparePatientIds(a.patientId, b.patientId));
 }
 
 export function filterInstructorPatients(

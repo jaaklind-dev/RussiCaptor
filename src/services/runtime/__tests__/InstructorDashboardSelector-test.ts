@@ -1,7 +1,7 @@
 import type { RuntimeState } from "@/models/RuntimeAggregation";
 import { defaultVitalSignConfiguration, VitalSignEngine } from "@/services/runtime/vitals/VitalSignEngine";
 import {
-  filterInstructorPatients, projectInstructorPatients,
+  comparePatientIds, filterInstructorPatients, projectInstructorPatients,
 } from "@/services/runtime/selectors/InstructorDashboardSelector";
 
 function runtime(patientId: string, status: RuntimeState["globalStatus"], spo2: number): RuntimeState {
@@ -34,7 +34,7 @@ describe("IC-1 Instructor Dashboard projection", () => {
     expect(source.targetVitals).toEqual({ spo2: 1, hr: 999 });
   });
 
-  test("sorts by severity, triage and patient id and supports all filters", () => {
+  test("uses natural Patient ID as the primary default order and preserves filters", () => {
     const patients = [
       { id: "P03", name: "Three", location: "Ward", triage: "P3" as const, status: "Completed" as const },
       { id: "P02", name: "Two", location: "EMO", triage: "P2" as const, status: "Active" as const,
@@ -42,11 +42,20 @@ describe("IC-1 Instructor Dashboard projection", () => {
       { id: "P01", name: "One", location: "Resus", triage: "P1" as const, status: "Active" as const,
         assignment: { caseManagerId: "CM-1", caseManagerName: "Jaak" } },
     ];
-    const projected = projectInstructorPatients(patients, [runtime("P01", "Arrest", 70), runtime("P02", "Stable", 97)]);
+    const projected = projectInstructorPatients(patients, [runtime("P01", "Stable", 97), runtime("P02", "Arrest", 70)]);
     expect(projected.map(item => item.patientId)).toEqual(["P01", "P02", "P03"]);
     expect(filterInstructorPatients(projected, {
-      location: "Resus", triage: "P1", caseManager: "Jaak", status: "Life threatening",
+      location: "Resus", triage: "P1", caseManager: "Jaak", status: "Stable",
     }).map(item => item.patientId)).toEqual(["P01"]);
+  });
+
+  test.each([
+    [["P012", "P003", "P010", "P001", "P011", "P002"], ["P001", "P002", "P003", "P010", "P011", "P012"]],
+    [["P10", "P2", "P1"], ["P1", "P2", "P10"]],
+    [["PATIENT-12", "PATIENT-2", "PATIENT-1"], ["PATIENT-1", "PATIENT-2", "PATIENT-12"]],
+    [["P1", "P01", "P001"], ["P001", "P01", "P1"]],
+  ])("naturally sorts %j as %j", (source, expected) => {
+    expect([...source].sort(comparePatientIds)).toEqual(expected);
   });
 
   test("projects 100 patients deterministically without mutating input", () => {
