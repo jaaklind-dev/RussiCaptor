@@ -282,7 +282,9 @@ export class ClinicalScenarioEngine {
     this.circulationManagement.reset();
     this.medicationEngine.reset();
     this.vitalSignEvents = [];
-    publishRuntimeSnapshot(this.runtimeState);
+    publishRuntimeSnapshot(this.runtimeState, [this.requireProcess(), ...this.sortedHypoxia(), ...(this.hemorrhageProcess ? [this.hemorrhageProcess] : [])].map(process => process.outputs).map(output => ({
+      processId: output.processId, moduleId: output.moduleId, status: output.status,
+    })));
     this.publishResourceDebugSnapshot();
     this.publishAssessmentSnapshot(true);
     if (this.botulismRoot) this.aggregateProcesses(this.runtimeState);
@@ -607,7 +609,9 @@ export class ClinicalScenarioEngine {
       throw new Error(`PatientProcess output lükati ownership'i või agregatsiooni poolt tagasi.`);
     }
     this.runtimeState = aggregated.state;
-    publishRuntimeSnapshot(this.runtimeState);
+    publishRuntimeSnapshot(this.runtimeState, processes.map(process => ({
+      processId: process.outputs.processId, moduleId: process.outputs.moduleId, status: process.outputs.status,
+    })));
     for (const event of aggregated.events.filter(item => ["VitalSignChanged", "TrendChanged", "MonitorStateChanged"].includes(item.eventType))) {
       this.vitalSignEvents.push({
         eventType: event.eventType as VitalSignEvent["eventType"], timestamp: this.simulationTimeSec,
