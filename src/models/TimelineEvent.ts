@@ -11,7 +11,8 @@ export type TimelineEventType =
   | "status"
   | "intervention"
   | "medication"
-  | "vitals";
+  | "vitals"
+  | "instructor";
 
 export type TimelineEvent = {
   id: string;

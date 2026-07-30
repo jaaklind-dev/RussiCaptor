@@ -500,6 +500,20 @@ export class ClinicalScenarioEngine {
     return structuredClone(this.eventLog);
   }
 
+  /** Instructor command boundary: process transition first, canonical aggregation second. */
+  injectRespiratoryDeterioration(commandId: string, patientId: string, simulationTimeSec: number): { ok: true; runtimeEventId: string } | { ok: false; reason: string } {
+    const process = this.requireProcess();
+    if (patientId !== process.encounterId) return { ok: false, reason: "Patient runtime is not available" };
+    if (simulationTimeSec !== this.simulationTimeSec) return { ok: false, reason: "Command simulation time does not match the runtime" };
+    const runtimeEventId = `INSTRUCTOR:${commandId}:RESPIRATORY_DETERIORATION`;
+    if (this.appliedEventIds.has(runtimeEventId)) return { ok: true, runtimeEventId };
+    this.process = applyHvTimedTransition(process, "CO2_NARCOSIS_TRIGGERED");
+    this.aggregateProcesses();
+    this.appliedEventIds.add(runtimeEventId);
+    this.logEvent("INSTRUCTOR_EVENT_APPLIED", { commandId, eventType: "RESPIRATORY_DETERIORATION", sourceProcessId: process.processId }, patientId);
+    return { ok: true, runtimeEventId };
+  }
+
   scheduleIntervention(intervention: SchedulableIntervention): void {
     this.interventionEngine.schedule(intervention);
   }

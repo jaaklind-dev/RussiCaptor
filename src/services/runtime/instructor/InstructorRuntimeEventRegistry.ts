@@ -1,0 +1,9 @@
+import type { InstructorEventType, InstructorPatientCommand } from "@/models/InstructorCommand";
+export type InstructorRuntimeEventResult = { readonly ok: true; readonly runtimeEventId: string } | { readonly ok: false; readonly reason: string };
+export type InstructorRuntimeOwner = { readonly exerciseId: string; readonly patientId: string; readonly supportedEvents: readonly InstructorEventType[]; execute(command: InstructorPatientCommand): InstructorRuntimeEventResult };
+const owners = new Map<string, InstructorRuntimeOwner>();
+const key = (exerciseId: string, patientId: string) => `${exerciseId}\u0000${patientId}`;
+export function registerInstructorRuntimeOwner(owner: InstructorRuntimeOwner): () => void { const ownerKey = key(owner.exerciseId, owner.patientId); owners.set(ownerKey, owner); return () => { if (owners.get(ownerKey) === owner) owners.delete(ownerKey); }; }
+export function getInstructorRuntimeOwner(exerciseId: string, patientId: string): InstructorRuntimeOwner | undefined { return owners.get(key(exerciseId, patientId)); }
+export function getInstructorEventAvailability(exerciseId: string, patientId: string, eventType: InstructorEventType): { available: boolean; reason?: string } { const owner = getInstructorRuntimeOwner(exerciseId, patientId); if (!owner) return { available: false, reason: "Patient runtime is not available" }; if (!owner.supportedEvents.includes(eventType)) return { available: false, reason: "No registered runtime handler" }; return { available: true }; }
+export function clearInstructorRuntimeOwners(): void { owners.clear(); }

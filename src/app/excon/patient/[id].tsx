@@ -3,12 +3,13 @@ import { InspectorClinicalTabs } from "@/components/instructor/InspectorClinical
 import { InspectorHeader } from "@/components/instructor/InspectorHeader";
 import { InspectorListPanel } from "@/components/instructor/InspectorListPanel";
 import { InspectorTimeline } from "@/components/instructor/InspectorTimeline";
+import { InstructorEventInjectionModal } from "@/components/instructor/InstructorEventInjectionModal";
 import type { InspectorTab } from "@/models/InstructorPatientInspector";
 import {
   getInstructorPatientInspector, getInstructorPatientInspectorVersion, subscribeToInstructorPatientInspector,
 } from "@/services/InstructorPatientInspectorService";
 import { router, useLocalSearchParams } from "expo-router";
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 export default function InstructorPatientInspectorStub() {
@@ -19,6 +20,7 @@ export default function InstructorPatientInspectorStub() {
     getInstructorPatientInspectorVersion
   );
   const model = getInstructorPatientInspector(id);
+  const [injectionOpen, setInjectionOpen] = useState(false);
   const { width } = useWindowDimensions();
   const desktop = width >= 900;
   if (!model) {
@@ -35,9 +37,10 @@ export default function InstructorPatientInspectorStub() {
   };
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.topRow}>
+      <View style={[styles.topRow, !desktop && styles.topRowStacked]}>
         <Text style={styles.title}>Instructor Patient Inspector</Text>
-        <Pressable style={styles.button} onPress={() => router.back()}><Text style={styles.buttonText}>Back to Dashboard</Text></Pressable>
+        <View style={styles.actions}><Pressable style={styles.injectButton} onPress={() => setInjectionOpen(true)}><Text style={styles.injectButtonText}>Inject event</Text></Pressable>
+          <Pressable style={styles.button} onPress={() => router.back()}><Text style={styles.buttonText}>Back to Dashboard</Text></Pressable></View>
       </View>
       <InspectorHeader header={model.header} />
       <View style={[styles.columns, !desktop && styles.stacked]}>
@@ -50,13 +53,15 @@ export default function InstructorPatientInspectorStub() {
         <View style={styles.rightColumn}><InspectorTimeline items={model.timeline} scrollEnabled={desktop} /></View>
       </View>
       <InspectorClinicalTabs data={tabData} />
+      <InstructorEventInjectionModal visible={injectionOpen} onClose={() => setInjectionOpen(false)} patient={{ patientId: model.header.patientId, name: model.header.name, location: model.header.location, simulationTimeSec: model.header.simulationTimeSec }} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { padding: 18, paddingBottom: 36, backgroundColor: "#fff", gap: 14 }, notFound: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
-  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
+  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }, topRowStacked: { flexDirection: "column", alignItems: "stretch" },
+  actions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }, injectButton: { backgroundColor: "#005bbb", borderRadius: 12, paddingHorizontal: 13, paddingVertical: 11 }, injectButtonText: { color: "#fff", fontWeight: "800" },
   title: { fontSize: 26, fontWeight: "800", color: "#172b4d" }, columns: { flexDirection: "row", gap: 14, minHeight: 560 },
   stacked: { flexDirection: "column" }, leftColumn: { flex: 1, gap: 12 }, rightColumn: { flex: 1 },
   button: { borderWidth: 2, borderColor: "#005bbb", borderRadius: 12, paddingHorizontal: 13, paddingVertical: 9 },
