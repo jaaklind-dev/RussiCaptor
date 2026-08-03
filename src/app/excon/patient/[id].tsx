@@ -12,7 +12,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useState, useSyncExternalStore } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
-export default function InstructorPatientInspectorStub() {
+export default function PatientInspectorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   useSyncExternalStore(
     subscribeToInstructorPatientInspector,
@@ -27,7 +27,7 @@ export default function InstructorPatientInspectorStub() {
     return (
       <View style={styles.notFound}>
         <Text style={styles.title}>Patient not found</Text>
-        <Pressable style={styles.button} onPress={() => router.back()}><Text style={styles.buttonText}>Back to Instructor Dashboard</Text></Pressable>
+        <Pressable style={styles.button} onPress={() => router.back()}><Text style={styles.buttonText}>Back to Exercise Dashboard</Text></Pressable>
       </View>
     );
   }
@@ -38,7 +38,7 @@ export default function InstructorPatientInspectorStub() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={[styles.topRow, !desktop && styles.topRowStacked]}>
-        <Text style={styles.title}>Instructor Patient Inspector</Text>
+        <Text style={styles.title}>Patient Inspector</Text>
         <View style={styles.actions}><Pressable style={styles.injectButton} onPress={() => setInjectionOpen(true)}><Text style={styles.injectButtonText}>Inject event</Text></Pressable>
           <Pressable style={styles.button} onPress={() => router.back()}><Text style={styles.buttonText}>Back to Dashboard</Text></Pressable></View>
       </View>

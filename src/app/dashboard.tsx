@@ -20,7 +20,6 @@ import TakeoverRequestsCard from "@/components/dashboard/TakeoverRequestsCard";
 import LocalSaveStatusCard from "@/components/dashboard/LocalSaveStatusCard";
 import CloudSyncStatusCard from "@/components/dashboard/CloudSyncStatusCard";
 import { getCurrentLocationZone } from "@/services/CurrentLocationService";
-import ResourceMonitorCard from "@/components/dashboard/ResourceMonitorCard";
 
 export default function DashboardScreen() {
 
@@ -105,8 +104,6 @@ export default function DashboardScreen() {
       <LocalSaveStatusCard />
 
       <CloudSyncStatusCard />
-
-      {__DEV__ && <ResourceMonitorCard />}
 
       <TakeoverRequestsCard />
 

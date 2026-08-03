@@ -257,6 +257,16 @@ Forbidden:
 - physiology or vital calculations;
 - direct Runtime mutation.
 
+The application has two primary operational workspaces:
+
+- **Case Manager** — patient-facing clinical workflow;
+- **Exercise Controller (ExCon)** — exercise overview, patient inspection,
+  resources, and validated control commands.
+
+The former “Instructor Console” terminology is superseded by ExCon. ExCon is a
+presentation and command client of canonical runtime contracts; consolidation of
+the workspace does not add a runtime layer or grant direct Runtime mutation.
+
 ## 4. Dependency Rules
 
 Dependencies flow in one direction only:
@@ -491,6 +501,14 @@ confidence depend on exactly reproducible results.
 owns final monitor synthesis.  
 **Reason:** disease and medication logic remain in their own domains while monitor
 limits, trends, derived values, and quality have one deterministic owner.
+
+### ADR-006 — Exercise Controller Workspace Consolidation
+
+**Decision:** exercise management capabilities are presented through one Exercise
+Controller (ExCon) workspace. The separate Instructor Console terminology is
+superseded; stable internal `Instructor*` command contracts may retain their names.
+**Reason:** one operational workspace avoids duplicate navigation and role concepts
+without cosmetic churn in the deterministic runtime and command architecture.
 
 ## 17. Architecture Checklist
 

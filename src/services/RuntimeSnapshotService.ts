@@ -17,7 +17,7 @@ const states = new Map<string, CanonicalPatientRuntimeSnapshot>();
 const listeners = new Set<Listener>();
 let version = 0;
 
-/** Publishes an immutable copy for read-only runtime consumers such as Instructor Console. */
+/** Publishes an immutable copy for read-only runtime consumers such as the ExCon workspace. */
 export function publishRuntimeSnapshot(state: RuntimeState, processes?: readonly RuntimeProcessProjection[]): void {
   const previous = states.get(state.encounterId);
   states.set(state.encounterId, structuredClone({

@@ -32,7 +32,7 @@ export function handleInstructorPatientCommand(command: InstructorPatientCommand
     audit.push({ commandId: command.commandId, exerciseId: command.exerciseId, patientId: command.patientId, eventType: command.eventType,
       issuedBy: command.issuedBy, simulationTime: command.issuedAtSimulationTime, outcome: "ACCEPTED" });
     addTimelineEvent({ id: `TL-INSTRUCTOR-${command.commandId}`, exerciseId: command.exerciseId, patientId: command.patientId,
-      timestamp: `T+${command.issuedAtSimulationTime}s`, type: "instructor", title: "Instructor event injected",
+      timestamp: `T+${command.issuedAtSimulationTime}s`, type: "instructor", title: "Exercise Controller event injected",
       description: command.eventType.replaceAll("_", " ").toLowerCase(), author: command.issuedBy, visibility: "revealed" });
     notifySync("local");
     return result;

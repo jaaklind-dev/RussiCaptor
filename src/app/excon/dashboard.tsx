@@ -1,5 +1,6 @@
 import { InstructorFilterBar } from "@/components/instructor/InstructorFilterBar";
 import { InstructorPatientCard } from "@/components/instructor/InstructorPatientCard";
+import ResourceMonitorCard from "@/components/dashboard/ResourceMonitorCard";
 import type { InstructorDashboardFilters } from "@/models/InstructorDashboard";
 import {
   getInstructorDashboardSnapshot, getInstructorDashboardVersion, subscribeToInstructorDashboard,
@@ -14,7 +15,7 @@ const initialFilters: InstructorDashboardFilters = {
 };
 const unique = (values: string[]) => ["All", ...new Set(values.filter(Boolean).sort())];
 
-export default function InstructorDashboardScreen() {
+export default function ExerciseDashboardScreen() {
   useSyncExternalStore(subscribeToInstructorDashboard, getInstructorDashboardVersion, getInstructorDashboardVersion);
   const snapshot = getInstructorDashboardSnapshot();
   const [filters, setFilters] = useState(initialFilters);
@@ -42,7 +43,7 @@ export default function InstructorDashboardScreen() {
         <View>
           <View style={styles.topBar}>
             <View>
-              <Text style={styles.title}>Instructor Dashboard</Text>
+              <Text style={styles.title}>Exercise Dashboard</Text>
               <Text style={styles.exercise}>{snapshot.exerciseName}</Text>
             </View>
             <View style={styles.exerciseState}>
@@ -57,13 +58,14 @@ export default function InstructorDashboardScreen() {
             options={options}
             onChange={(key, value) => setFilters(current => ({ ...current, [key]: value }))}
           />
+          {__DEV__ && <ResourceMonitorCard />}
           <Text style={styles.count}>{visiblePatients.length} / {snapshot.patients.length} patients</Text>
         </View>
       )}
       ListEmptyComponent={<Text style={styles.empty}>No patients match the selected filters.</Text>}
       ListFooterComponent={(
         <Pressable style={styles.backButton} onPress={() => router.replace("/excon")}>
-          <Text style={styles.backText}>Back to EXCON</Text>
+          <Text style={styles.backText}>Back to Exercise Controller</Text>
         </Pressable>
       )}
     />

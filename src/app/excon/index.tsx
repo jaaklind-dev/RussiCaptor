@@ -51,12 +51,12 @@ function refreshSession(): void {
 
     <ScrollView contentContainerStyle={styles.container}>
 
-      <Text style={styles.title}>EXCON</Text>
+      <Text style={styles.title}>Exercise Controller</Text>
 
-      <Text style={styles.subtitle}>Õppuse juhtimiskeskus</Text>
+      <Text style={styles.subtitle}>EXCON · Õppuse juhtimiskeskus</Text>
 
       <Pressable style={styles.instructorButton} onPress={() => router.push("/excon/dashboard")}>
-        <Text style={styles.instructorButtonText}>Open Instructor Dashboard</Text>
+        <Text style={styles.instructorButtonText}>Open Exercise Dashboard</Text>
       </Pressable>
 
       <ExerciseStatusCard session={session} />

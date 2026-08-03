@@ -24,7 +24,7 @@ export function InstructorEventInjectionModal({ visible, patient, onClose }: Pro
     if (!selectedDefinition?.availability.available || submission === "Submitting") return;
     setSubmission("Submitting");
     const next = handleInstructorPatientCommand(createInstructorPatientCommand({ exerciseId: exercise.id, patientId: patient.patientId,
-      eventType: selectedDefinition.definition.eventType, issuedBy: "Instructor", simulationTime: patient.simulationTimeSec ?? 0 }));
+      eventType: selectedDefinition.definition.eventType, issuedBy: "Exercise Controller", simulationTime: patient.simulationTimeSec ?? 0 }));
     setResult(next);
     setSubmission(next.ok ? "Succeeded" : "Failed");
   }
