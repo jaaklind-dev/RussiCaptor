@@ -1,6 +1,7 @@
 import type { InstructorPatientCardModel } from "@/models/InstructorDashboard";
 import { getCurrentExercise } from "@/repositories/ExerciseRepository";
-import { getExerciseSession } from "@/repositories/ExerciseSessionRepository";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import type { ExerciseLifecycleState, CanonicalExerciseSpeed } from "@/models/exercise/CanonicalExerciseSnapshot";
 import { getAllPatients } from "@/repositories/PatientRepository";
 import { getPatientAssignment } from "@/services/AssignmentRepository";
 import {
@@ -12,7 +13,9 @@ import { projectInstructorPatients } from "@/services/runtime/selectors/Instruct
 export type InstructorDashboardSnapshot = {
   readonly exerciseName: string;
   readonly exerciseTimeSec: number;
-  readonly exerciseState: "stopped" | "running" | "paused";
+  readonly exerciseState: ExerciseLifecycleState;
+  readonly exerciseSpeed: CanonicalExerciseSpeed;
+  readonly exerciseVersion: number;
   readonly patients: readonly InstructorPatientCardModel[];
 };
 
@@ -23,12 +26,14 @@ let cachedSnapshot: InstructorDashboardSnapshot | undefined;
 export function getInstructorDashboardSnapshot(): InstructorDashboardSnapshot {
   const version = getInstructorDashboardVersion();
   if (cachedSnapshot && cachedVersion === version) return cachedSnapshot;
-  const session = getExerciseSession();
+  const session = getCanonicalExerciseSnapshot();
   const runtimeStates = getRuntimeSnapshots();
   cachedSnapshot = {
     exerciseName: getCurrentExercise().name,
-    exerciseTimeSec: runtimeStates.reduce((latest, state) => Math.max(latest, state.exerciseTimeSec), session.currentMinute * 60),
-    exerciseState: session.state,
+    exerciseTimeSec: session.simulationTimeSec,
+    exerciseState: session.lifecycleState,
+    exerciseSpeed: session.speed,
+    exerciseVersion: session.version,
     patients: projectInstructorPatients(
       getAllPatients().map(patient => ({ ...patient, assignment: getPatientAssignment(patient.id) })),
       runtimeStates

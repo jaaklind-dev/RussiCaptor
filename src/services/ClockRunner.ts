@@ -14,7 +14,7 @@ export function startClockRunner(): void {
 
     tickExerciseClock();
 
-  }, 10000);
+  }, 1000);
 
 }
 

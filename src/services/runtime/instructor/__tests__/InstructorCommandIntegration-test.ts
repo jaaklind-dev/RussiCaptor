@@ -6,6 +6,7 @@ import { clearTimelineEvents, getTimelineEvents } from "@/repositories/TimelineR
 import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
 import { clearInstructorRuntimeOwners, registerInstructorRuntimeOwner } from "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
 import { createScenarioEngineInstructorRuntimeOwner } from "@/services/runtime/instructor/ScenarioEngineInstructorRuntimeOwner";
+import { replaceCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 
 const patientId = getAllPatients()[0].id;
 const fixture: GoldenFixture = { fixtureId: "FX-IC3", fixtureType: "Runtime", patientId, seed: 17, clockState: "Running", ownershipVersion: 1,
@@ -15,7 +16,8 @@ const command: InstructorPatientCommand = { commandId: "CMD-IC3-1", exerciseId: 
 function setup() { const engine = new ClinicalScenarioEngine(); engine.reset(fixture); registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(engine, "demo", patientId)); return engine; }
 
 describe("IC-3 authoritative runtime integration", () => {
-  beforeEach(() => { clearInstructorRuntimeOwners(); resetInstructorCommandHandler(); clearTimelineEvents(); });
+  beforeEach(() => { clearInstructorRuntimeOwners(); resetInstructorCommandHandler(); clearTimelineEvents();
+    replaceCanonicalExerciseSnapshot({ exerciseId: "demo", lifecycleState: "RUNNING", simulationTimeSec: 0, speed: 1, version: 1 }); });
   it("applies once through PatientProcess aggregation and creates one timeline entry", () => {
     const engine = setup(); const before = engine.getRuntimeState().stateVersion;
     const first = handleInstructorPatientCommand(command);

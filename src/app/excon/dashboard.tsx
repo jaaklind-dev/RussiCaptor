@@ -7,8 +7,11 @@ import {
 } from "@/services/InstructorDashboardService";
 import { filterInstructorPatients } from "@/services/runtime/selectors/InstructorDashboardSelector";
 import { router } from "expo-router";
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import ExerciseControlsCard from "@/components/excon/ExerciseControlsCard";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { initializeAuthoritativeExerciseRuntime } from "@/services/runtime/exercise/AuthoritativeExerciseRuntime";
 
 const initialFilters: InstructorDashboardFilters = {
   location: "All", triage: "All", caseManager: "All", status: "All",
@@ -18,6 +21,8 @@ const unique = (values: string[]) => ["All", ...new Set(values.filter(Boolean).s
 export default function ExerciseDashboardScreen() {
   useSyncExternalStore(subscribeToInstructorDashboard, getInstructorDashboardVersion, getInstructorDashboardVersion);
   const snapshot = getInstructorDashboardSnapshot();
+  const exerciseSnapshot = getCanonicalExerciseSnapshot();
+  useEffect(() => initializeAuthoritativeExerciseRuntime(exerciseSnapshot.exerciseId), [exerciseSnapshot.exerciseId]);
   const [filters, setFilters] = useState(initialFilters);
   const { width } = useWindowDimensions();
   const columns = width >= 1180 ? 4 : width >= 860 ? 3 : width >= 560 ? 2 : 1;
@@ -48,11 +53,12 @@ export default function ExerciseDashboardScreen() {
             </View>
             <View style={styles.exerciseState}>
               <Text style={styles.exerciseTime}>T+{snapshot.exerciseTimeSec}s</Text>
-              <Text style={[styles.state, snapshot.exerciseState === "running" ? styles.running : styles.paused]}>
-                {snapshot.exerciseState.toUpperCase()}
+              <Text style={[styles.state, snapshot.exerciseState === "RUNNING" ? styles.running : styles.paused]}>
+                {snapshot.exerciseState} · ×{snapshot.exerciseSpeed}
               </Text>
             </View>
           </View>
+          <ExerciseControlsCard snapshot={exerciseSnapshot} />
           <InstructorFilterBar
             filters={filters}
             options={options}

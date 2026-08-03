@@ -1,6 +1,8 @@
 import * as FileSystem from "expo-file-system/legacy";
 
 import type { ExerciseSession } from "@/models/ExerciseSession";
+import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
+import type { ExerciseControlAuditEntry } from "@/models/exercise/ExerciseControlCommand";
 import type { ImagingStudy } from "@/models/ImagingStudy";
 import type { LabResult } from "@/models/LabResult";
 import type { Note } from "@/models/Note";
@@ -12,10 +14,10 @@ import type { Question } from "@/models/Question";
 import type { ScenarioEvent } from "@/models/ScenarioEvent";
 import type { TimelineEvent } from "@/models/TimelineEvent";
 import { clinicalDataProvider, dataProvider } from "@/providers/ProviderFactory";
-import { getExerciseSession, restoreExerciseSession } from "@/repositories/ExerciseSessionRepository";
+import { getCanonicalExerciseSnapshot, restoreExerciseSession } from "@/repositories/ExerciseSessionRepository";
 import { getAllTimelineEvents, restoreTimelineEvents } from "@/repositories/TimelineRepository";
 import { getAssignmentState, restoreAssignmentState } from "@/services/AssignmentRepository";
-import { startClockRunner, stopClockRunner } from "@/services/ClockRunner";
+import { stopClockRunner } from "@/services/ClockRunner";
 import { getCurrentCaseManager, restoreCurrentCaseManager } from "@/services/CurrentUserService";
 import { subscribeToSync } from "@/services/SyncService";
 import type { CaseManager } from "@/models/CaseManager";
@@ -31,12 +33,13 @@ import {
   getCaseManagerLocationState,
   restoreCaseManagerLocationState,
 } from "@/services/CurrentLocationService";
+import { getExerciseControlAudit, restoreExerciseControlAudit } from "@/services/runtime/exercise/ExerciseControlCommandHandler";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
 
 export type SharedExerciseState = {
-  exerciseSession: ExerciseSession;
+  exerciseSession: ExerciseSession | CanonicalExerciseSnapshot;
   patients: Patient[];
   assignments: PatientAssignment[];
   transfers: PatientTransfer[];
@@ -52,6 +55,7 @@ export type SharedExerciseState = {
   vitalSigns?: VitalSigns[];
   caseManagerZoneIds?: Record<string, string>;
   installedWorkbook?: InstalledWorkbook;
+  exerciseControlAudit?: ExerciseControlAuditEntry[];
 };
 
 type PersistedState = SharedExerciseState & {
@@ -118,7 +122,7 @@ function createSnapshot(): PersistedState {
     version: STATE_VERSION,
     savedAt: new Date().toISOString(),
     currentCaseManager: { ...getCurrentCaseManager() },
-    exerciseSession: { ...getExerciseSession() },
+    exerciseSession: getCanonicalExerciseSnapshot(),
     patients: patients.map((patient) => ({ ...patient, mist: { ...patient.mist } })),
     assignments: assignmentState.assignments,
     transfers: assignmentState.transfers,
@@ -136,6 +140,7 @@ function createSnapshot(): PersistedState {
     vitalSigns: vitalSigns.map((item) => ({ ...item })),
     caseManagerZoneIds: getCaseManagerLocationState(),
     installedWorkbook: getInstalledWorkbook(),
+    exerciseControlAudit: [...getExerciseControlAudit()],
   };
 }
 
@@ -149,6 +154,7 @@ export function restoreSharedExerciseState(restored: SharedExerciseState): void 
   stopClockRunner();
   restoreInstalledWorkbook(restored.installedWorkbook);
   restoreExerciseSession(restored.exerciseSession);
+  restoreExerciseControlAudit(restored.exerciseControlAudit ?? []);
   replaceItems(dataProvider.getPatients(), restored.patients);
   restoreAssignmentState(restored);
   restoreCaseManagerLocationState(restored.caseManagerZoneIds ?? {});
@@ -178,9 +184,6 @@ export function restoreSharedExerciseState(restored: SharedExerciseState): void 
     replaceItems(clinicalDataProvider.getVitalSigns(), restored.vitalSigns);
   }
 
-  if (restored.exerciseSession.state === "running") {
-    startClockRunner();
-  }
 }
 
 export async function loadPersistedState(): Promise<void> {
@@ -204,6 +207,7 @@ export async function loadPersistedState(): Promise<void> {
     restoreInstalledWorkbook(restored.installedWorkbook);
     restoreCurrentCaseManager(restored.currentCaseManager);
     restoreExerciseSession(restored.exerciseSession);
+    restoreExerciseControlAudit(restored.exerciseControlAudit ?? []);
     replaceItems(dataProvider.getPatients(), restored.patients);
     restoreAssignmentState(restored);
     restoreCaseManagerLocationState(restored.caseManagerZoneIds ?? {});
@@ -240,9 +244,6 @@ export async function loadPersistedState(): Promise<void> {
       replaceItems(clinicalDataProvider.getVitalSigns(), restored.vitalSigns);
     }
 
-    if (restored.exerciseSession.state === "running") {
-      startClockRunner();
-    }
   } catch (error) {
     console.warn("Saved exercise state could not be loaded.", error);
   }

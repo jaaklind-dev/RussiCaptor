@@ -20,6 +20,8 @@ import TakeoverRequestsCard from "@/components/dashboard/TakeoverRequestsCard";
 import LocalSaveStatusCard from "@/components/dashboard/LocalSaveStatusCard";
 import CloudSyncStatusCard from "@/components/dashboard/CloudSyncStatusCard";
 import { getCurrentLocationZone } from "@/services/CurrentLocationService";
+import ExerciseReadOnlyStatusCard from "@/components/dashboard/ExerciseReadOnlyStatusCard";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 
 export default function DashboardScreen() {
 
@@ -64,6 +66,8 @@ export default function DashboardScreen() {
       <Text style={styles.locationLine}>
         Asukoht: {getCurrentLocationZone()?.name ?? "Määramata"}
       </Text>
+
+      <ExerciseReadOnlyStatusCard snapshot={getCanonicalExerciseSnapshot()} />
 
       <View style={styles.demoUserBlock}>
         <Text style={styles.demoUserLabel}>Demo CM</Text>

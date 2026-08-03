@@ -5,6 +5,7 @@ import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { getInstructorRuntimeOwner } from "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
 import { notifySync } from "@/services/SyncService";
 import { validateInstructorPatientCommand } from "./InstructorPatientCommandValidator";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 
 const results = new Map<string, InstructorCommandResult>();
 const audit: InstructorCommandAuditEntry[] = [];
@@ -22,7 +23,8 @@ export function handleInstructorPatientCommand(command: InstructorPatientCommand
   const exercise = getCurrentExercise();
   const patient = findPatientById(command?.patientId);
   const owner = command ? getInstructorRuntimeOwner(command.exerciseId, command.patientId) : undefined;
-  const validation = validateInstructorPatientCommand(command, { activeExerciseId: exercise?.id, patientExists: Boolean(patient), patientBelongsToExercise: Boolean(patient), runtimeOwner: owner });
+  const validation = validateInstructorPatientCommand(command, { activeExerciseId: exercise?.id, exerciseLifecycleState: getCanonicalExerciseSnapshot().lifecycleState,
+    patientExists: Boolean(patient), patientBelongsToExercise: Boolean(patient), runtimeOwner: owner });
   if (validation && !validation.ok) return recordRejected(command, validation);
   try {
     const runtimeResult = owner!.execute(command);

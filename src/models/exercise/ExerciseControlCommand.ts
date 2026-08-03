@@ -1,0 +1,9 @@
+import type { CanonicalExerciseSnapshot, CanonicalExerciseSpeed, ExerciseLifecycleState } from "./CanonicalExerciseSnapshot";
+
+export const exerciseControlCommandTypes = ["START_EXERCISE", "PAUSE_EXERCISE", "RESUME_EXERCISE", "COMPLETE_EXERCISE", "SET_EXERCISE_SPEED"] as const;
+export type ExerciseControlCommandType = typeof exerciseControlCommandTypes[number];
+export type ExerciseControlCommand = { readonly commandId: string; readonly exerciseId: string; readonly commandType: ExerciseControlCommandType; readonly issuedBy: string; readonly expectedVersion?: number; readonly issuedAtWallClock: string; readonly payload?: Readonly<{ speed?: CanonicalExerciseSpeed }> };
+export type ExerciseControlErrorCode = "EXERCISE_NOT_FOUND" | "EXERCISE_NOT_ACTIVE" | "INVALID_TRANSITION" | "INVALID_SPEED" | "DUPLICATE_COMMAND" | "VERSION_CONFLICT" | "UNAUTHORIZED" | "MALFORMED_COMMAND" | "NO_AUTHORITATIVE_OWNER" | "RUNTIME_FAILURE";
+export type ExerciseControlResult = { readonly ok: true; readonly commandId: string; readonly snapshot: CanonicalExerciseSnapshot; readonly eventType: ExerciseControlEventType } | { readonly ok: false; readonly commandId?: string; readonly errorCode: ExerciseControlErrorCode; readonly message: string };
+export type ExerciseControlEventType = "ExerciseStarted" | "ExercisePaused" | "ExerciseResumed" | "ExerciseCompleted" | "ExerciseSpeedChanged";
+export type ExerciseControlAuditEntry = { readonly commandId?: string; readonly exerciseId?: string; readonly issuer?: string; readonly commandType?: ExerciseControlCommandType; readonly simulationTimeSec: number; readonly previousState: ExerciseLifecycleState; readonly resultingState?: ExerciseLifecycleState; readonly previousSpeed: CanonicalExerciseSpeed; readonly resultingSpeed?: CanonicalExerciseSpeed; readonly outcome: "ACCEPTED" | "REJECTED"; readonly eventType?: ExerciseControlEventType; readonly rejectionCode?: ExerciseControlErrorCode };

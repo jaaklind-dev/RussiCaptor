@@ -1,286 +1,43 @@
-import {
-
-  getExerciseSession,
-
-  pauseExerciseSession,
-
-  setExerciseSpeed,
-
-  startExerciseSession,
-
-} from "@/repositories/ExerciseSessionRepository";
-
-import { advanceExerciseMinutes } from "@/services/ClockService";
-
-import {
-
-  startClockRunner,
-
-} from "@/services/ClockRunner";
-
-import { resetExercise } from "@/services/ExerciseResetService";
-
-import { notifySync } from "@/services/SyncService";
-
-import { Pressable, StyleSheet, Text, View } from "react-native";
-
-const SPEEDS = [1, 2, 5, 10] as const;
-
-type Props = {
-
-  onSessionChange: () => void;
-
-};
-
-export default function ExerciseControlsCard({
-
-  onSessionChange,
-
-}: Props) {
-
-  const session = getExerciseSession();
-
-  function refresh(): void {
-
-    notifySync();
-
-    onSessionChange();
-
-  }
-
-  return (
-
-    <View style={styles.card}>
-
-      <Text style={styles.title}>Juhtimine</Text>
-
-      <Pressable
-        style={styles.button}
-        onPress={() => {
-
-
-          startExerciseSession();
-
-
-
-          startClockRunner();
-          refresh();
-        }}
-      >
-        <Text style={styles.buttonText}>▶ Start</Text>
-      </Pressable>
-
-      <Pressable
-
-        style={styles.button}
-
-        onPress={() => {
-
-          pauseExerciseSession();
-
-          refresh();
-
-        }}
-
-      >
-
-        <Text style={styles.buttonText}>⏸ Pause</Text>
-
-      </Pressable>
-
-      <Pressable
-
-        style={styles.button}
-
-        onPress={() => {
-
-          resetExercise();
-          onSessionChange();
-
-        }}
-
-      >
-
-        <Text style={styles.buttonText}>⏹ Stop</Text>
-
-      </Pressable>
-
-      <View style={styles.row}>
-
-        <Pressable
-
-          style={styles.smallButton}
-
-          onPress={() => {
-
-            advanceExerciseMinutes(1);
-
-            refresh();
-
-          }}
-
-        >
-
-          <Text style={styles.buttonText}>+1 min</Text>
-
-        </Pressable>
-
-        <Pressable
-
-          style={styles.smallButton}
-
-          onPress={() => advanceExerciseMinutes(5)}
-
-        >
-
-          <Text style={styles.buttonText}>+5 min</Text>
-
-        </Pressable>
-
-      </View>
-
-      <Text style={styles.sectionLabel}>Kiirus</Text>
-
-      <View style={styles.row}>
-
-        {SPEEDS.map((speed) => (
-
-          <Pressable
-
-            key={speed}
-
-            style={
-
-              session.speed === speed
-
-                ? styles.activeSmallButton
-
-                : styles.smallButton
-
-            }
-
-            onPress={() => {
-
-              setExerciseSpeed(speed);
-
-              refresh();
-
-            }}
-
-          >
-
-            <Text style={styles.buttonText}>×{speed}</Text>
-
-          </Pressable>
-
-        ))}
-
-      </View>
-
+import { createExerciseControlCommand } from "@/features/exercise/ExerciseControlCommandFactory";
+import type { ExerciseControlCommandType } from "@/models/exercise/ExerciseControlCommand";
+import type { CanonicalExerciseSnapshot, CanonicalExerciseSpeed } from "@/models/exercise/CanonicalExerciseSnapshot";
+import { handleExerciseControlCommand } from "@/services/runtime/exercise/ExerciseControlCommandHandler";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+
+const SPEEDS: readonly CanonicalExerciseSpeed[] = [1, 2, 4];
+export function getExerciseControlAvailability(state: CanonicalExerciseSnapshot["lifecycleState"]) {
+  return { start: state === "READY", pause: state === "RUNNING", resume: state === "PAUSED",
+    complete: state === "RUNNING" || state === "PAUSED", speed: state !== "COMPLETED" };
+}
+
+export default function ExerciseControlsCard({ snapshot }: { snapshot: CanonicalExerciseSnapshot }) {
+  const enabled = getExerciseControlAvailability(snapshot.lifecycleState);
+  const issue = (commandType: ExerciseControlCommandType, speed?: CanonicalExerciseSpeed) => {
+    const result = handleExerciseControlCommand(createExerciseControlCommand({ exerciseId: snapshot.exerciseId, commandType, expectedVersion: snapshot.version, speed }));
+    if (!result.ok) Alert.alert("Command rejected", result.message);
+  };
+  const confirmComplete = () => Alert.alert("Complete exercise?", "This is final and does not reset exercise state.", [
+    { text: "Cancel", style: "cancel" }, { text: "Complete", style: "destructive", onPress: () => issue("COMPLETE_EXERCISE") },
+  ]);
+  const action = snapshot.lifecycleState === "READY" ? { label: "▶ Start", type: "START_EXERCISE" as const, enabled: enabled.start }
+    : snapshot.lifecycleState === "PAUSED" ? { label: "▶ Resume", type: "RESUME_EXERCISE" as const, enabled: enabled.resume }
+      : { label: "⏸ Pause", type: "PAUSE_EXERCISE" as const, enabled: enabled.pause };
+  return <View style={styles.card}>
+    <Text style={styles.title}>Exercise controls</Text>
+    <View style={styles.row}>
+      <Pressable disabled={!action.enabled} style={[styles.button, !action.enabled && styles.disabled]} onPress={() => issue(action.type)}><Text style={styles.buttonText}>{action.label}</Text></Pressable>
+      <Pressable disabled={!enabled.complete} style={[styles.complete, !enabled.complete && styles.disabled]} onPress={confirmComplete}><Text style={styles.buttonText}>✓ Complete</Text></Pressable>
     </View>
-
-  );
-
+    <Text style={styles.label}>Simulation speed</Text>
+    <View style={styles.row}>{SPEEDS.map(speed => <Pressable key={speed} disabled={!enabled.speed}
+      style={[styles.speed, snapshot.speed === speed && styles.active, !enabled.speed && styles.disabled]}
+      onPress={() => issue("SET_EXERCISE_SPEED", speed)}><Text style={styles.buttonText}>×{speed}</Text></Pressable>)}</View>
+  </View>;
 }
 
 const styles = StyleSheet.create({
-
-  card: {
-
-    marginTop: 20,
-
-    backgroundColor: "#f2f4f7",
-
-    borderRadius: 16,
-
-    padding: 18,
-
-    width: "100%",
-
-  },
-
-  title: {
-
-    fontSize: 22,
-
-    fontWeight: "bold",
-
-    marginBottom: 16,
-
-  },
-
-  sectionLabel: {
-
-    marginTop: 16,
-
-    marginBottom: 8,
-
-    fontSize: 16,
-
-    fontWeight: "600",
-
-  },
-
-  button: {
-
-    backgroundColor: "#005BBB",
-
-    paddingVertical: 14,
-
-    borderRadius: 12,
-
-    alignItems: "center",
-
-    marginBottom: 10,
-
-  },
-
-  row: {
-
-    flexDirection: "row",
-
-    gap: 10,
-
-    marginTop: 2,
-
-  },
-
-  smallButton: {
-
-    flex: 1,
-
-    backgroundColor: "#005BBB",
-
-    paddingVertical: 12,
-
-    borderRadius: 12,
-
-    alignItems: "center",
-
-  },
-
-  activeSmallButton: {
-
-    flex: 1,
-
-    backgroundColor: "#2E7D32",
-
-    paddingVertical: 12,
-
-    borderRadius: 12,
-
-    alignItems: "center",
-
-  },
-
-  buttonText: {
-
-    color: "#fff",
-
-    fontWeight: "bold",
-
-    fontSize: 18,
-
-  },
-
+  card: { backgroundColor: "#f2f4f7", borderRadius: 14, padding: 14, marginBottom: 14 }, title: { fontSize: 18, fontWeight: "800", color: "#172b4d", marginBottom: 10 },
+  label: { color: "#42526e", fontWeight: "700", marginTop: 12, marginBottom: 7 }, row: { flexDirection: "row", gap: 8 },
+  button: { flex: 1, backgroundColor: "#005bbb", padding: 12, borderRadius: 10, alignItems: "center" }, complete: { flex: 1, backgroundColor: "#9b1c1c", padding: 12, borderRadius: 10, alignItems: "center" },
+  speed: { flex: 1, backgroundColor: "#5e6c84", padding: 10, borderRadius: 10, alignItems: "center" }, active: { backgroundColor: "#2e7d32" }, disabled: { opacity: 0.35 }, buttonText: { color: "white", fontWeight: "800" },
 });

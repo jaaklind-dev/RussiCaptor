@@ -1,5 +1,3 @@
-import ExerciseControlsCard from "@/components/excon/ExerciseControlsCard";
-
 import ExerciseStatusCard from "@/components/excon/ExerciseStatusCard";
 
 import UpcomingEventsCard from "@/components/excon/UpcomingEventsCard";
@@ -62,8 +60,6 @@ function refreshSession(): void {
       <ExerciseStatusCard session={session} />
 
       <WorkbookImportCard onImported={refreshSession} />
-
-<ExerciseControlsCard onSessionChange={refreshSession} />
 
       <ActivePatientsCard />
 
