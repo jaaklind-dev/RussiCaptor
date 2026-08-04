@@ -60,6 +60,7 @@ export default function ExerciseDashboardScreen() {
           </View>
           <ExerciseControlsCard snapshot={exerciseSnapshot} />
           <Pressable style={styles.timelineButton} onPress={() => router.push("/excon/timeline")}><Text style={styles.timelineButtonText}>Open Exercise Timeline</Text></Pressable>
+          <Pressable style={styles.debriefButton} onPress={() => router.push("/excon/debrief")}><Text style={styles.timelineButtonText}>Open Debrief</Text></Pressable>
           <InstructorFilterBar
             filters={filters}
             options={options}
@@ -90,5 +91,6 @@ const styles = StyleSheet.create({
   backButton: { marginTop: 20, borderColor: "#005bbb", borderWidth: 2, borderRadius: 12, padding: 13, alignItems: "center" },
   backText: { color: "#005bbb", fontWeight: "800" },
   timelineButton: { backgroundColor: "#172b4d", borderRadius: 10, padding: 12, alignItems: "center", marginBottom: 14 },
+  debriefButton: { backgroundColor: "#005bbb", borderRadius: 10, padding: 12, alignItems: "center", marginBottom: 14 },
   timelineButtonText: { color: "#fff", fontWeight: "800" },
 });
