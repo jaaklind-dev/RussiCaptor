@@ -57,6 +57,10 @@ function refreshSession(): void {
         <Text style={styles.instructorButtonText}>Open Exercise Dashboard</Text>
       </Pressable>
 
+      <Pressable style={styles.catalogButton} onPress={() => router.push("/excon/catalog")}>
+        <Text style={styles.instructorButtonText}>Open Exercise Catalog</Text>
+      </Pressable>
+
       <ExerciseStatusCard session={session} />
 
       <WorkbookImportCard onImported={refreshSession} />
@@ -127,6 +131,11 @@ const styles = StyleSheet.create({
   },
 
   instructorButtonText: { color: "#fff", fontWeight: "bold", fontSize: 17 },
+
+  catalogButton: {
+    width: "100%", backgroundColor: "#005bbb", borderRadius: 12,
+    paddingVertical: 14, alignItems: "center", marginTop: 10,
+  },
 
   backButtonText: {
     color: "#005BBB",
