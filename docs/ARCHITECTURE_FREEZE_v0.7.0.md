@@ -131,6 +131,9 @@ flowchart TB
         Snapshot --> UI["CM / ExCon UI"]
         Audit["Canonical audits and source events"] --> Timeline["Exercise Timeline"]
         Timeline --> UI
+        Snapshot --> Debrief["Canonical Debrief"]
+        Debrief --> Analytics["Analytics Framework"]
+        Analytics --> UI
     end
 
     Owner --> Scenario
@@ -638,6 +641,14 @@ time.
 
 Cloud/local synchronization carries canonical state and commands but cannot decide
 runtime ownership, clock progression, ordering semantics, or command outcome.
+
+### ADR-013 — Analytics Provider Boundary
+
+Analytics consumes only the immutable canonical Debrief and executes independently
+versioned, statically registered metric providers. Provider failures are isolated,
+all values require canonical evidence, and deterministic ordering, precision, and
+hashing belong to the framework rather than React components or metric packs.
+Analytics cannot mutate Debrief, runtime, timeline, replay, or patient state.
 
 ## 23. Architecture Checklist
 

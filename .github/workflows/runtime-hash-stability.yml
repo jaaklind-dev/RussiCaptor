@@ -19,3 +19,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx jest src/services/golden/__tests__/RuntimeHardening-test.ts --runInBand
+      - run: npx jest src/services/analytics/__tests__/AnalyticsHashStability-test.ts --runInBand

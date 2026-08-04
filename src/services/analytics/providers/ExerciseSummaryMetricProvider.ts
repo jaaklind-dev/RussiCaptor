@@ -1,0 +1,11 @@
+import type { AnalyticsEvaluationContext, AnalyticsMetricProvider, MetricDefinition, MetricResult } from "@/models/analytics/Analytics";
+
+const definitions: readonly MetricDefinition[] = Object.freeze([
+  Object.freeze({ metricId: "exercise.duration.seconds", version: "1.0.0", name: "Exercise duration", description: "Canonical Exercise Snapshot duration", category: "EXERCISE_FLOW", unit: "SECONDS", scope: "EXERCISE", providerId: "core.exercise-summary" }),
+  Object.freeze({ metricId: "exercise.timeline.event_count", version: "1.0.0", name: "Timeline event count", description: "Number of canonical exercise timeline events", category: "EXERCISE_FLOW", unit: "COUNT", scope: "EXERCISE", providerId: "core.exercise-summary" }),
+]);
+const evaluate = ({ debrief }: AnalyticsEvaluationContext): readonly MetricResult[] => Object.freeze([
+  debrief.clockMigrationStatus === "CANONICAL" ? Object.freeze({ metricId: definitions[0].metricId, metricVersion: definitions[0].version, providerId: definitions[0].providerId, scope: definitions[0].scope, category: definitions[0].category, status: "VALUE", value: debrief.simulationDurationSec, unit: "SECONDS", evidence: [Object.freeze({ sourceType: "DEBRIEF_FIELD", fieldPath: "simulationDurationSec" })] }) : Object.freeze({ metricId: definitions[0].metricId, metricVersion: definitions[0].version, providerId: definitions[0].providerId, scope: definitions[0].scope, category: definitions[0].category, status: "UNAVAILABLE", reasonCode: "LEGACY_EXERCISE_CLOCK", message: "Canonical duration is not trustworthy", unit: "SECONDS", evidence: [Object.freeze({ sourceType: "DEBRIEF_FIELD", fieldPath: "clockMigrationStatus" })] }),
+  Object.freeze({ metricId: definitions[1].metricId, metricVersion: definitions[1].version, providerId: definitions[1].providerId, scope: definitions[1].scope, category: definitions[1].category, status: "VALUE", value: debrief.timelineLength, unit: "COUNT", evidence: [Object.freeze({ sourceType: "DEBRIEF_FIELD", fieldPath: "timelineLength" })] }),
+]);
+export const ExerciseSummaryMetricProvider: AnalyticsMetricProvider = Object.freeze({ providerId: "core.exercise-summary", version: "1.0.0", getDefinitions: () => definitions, evaluate });
