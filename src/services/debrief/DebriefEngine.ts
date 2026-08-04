@@ -6,6 +6,7 @@ import { comparePatientIds } from "@/services/runtime/selectors/InstructorDashbo
 import { sha256Text } from "@/utils/sha256";
 import { stableJson } from "@/utils/stableJson";
 import type { DebriefPatientRecord, DebriefReport, PatientDebriefSummary, PatientOutcome } from "./DebriefModel";
+import { validateExerciseClock } from "@/services/runtime/exercise/ExerciseClockIntegrityValidator";
 
 export type DebriefPatientSource = Readonly<{
   patient: Pick<Patient, "id" | "name" | "location" | "status">;
@@ -68,7 +69,8 @@ export function reconstructDebrief(source: DebriefSource): DebriefReport {
   const timeline = source.timeline.map(event => immutable(structuredClone(event)));
   const patients = source.patients.map(patient => summarizePatient(patient, timeline))
     .sort((a, b) => comparePatientIds(a.patientId, b.patientId));
-  const { updatedAtWallClock: _wallClock, ...exercise } = source.exercise;
+  const { updatedAtWallClock: _wallClock, clockVersion: _clockVersion, clockInitializedAtSimulationTimeSec: _clockInitialized, ...exercise } = source.exercise;
+  const clockIntegrity = validateExerciseClock(source.exercise);
   const generatedFromReplayHash = sha256Text(stableJson({
     exercise, timeline, replayEvents: source.replayEvents ?? [],
     runtime: source.patients.map(item => ({ patientId: item.patient.id, runtime: item.runtime })),
@@ -82,6 +84,6 @@ export function reconstructDebrief(source: DebriefSource): DebriefReport {
     auditCount: timeline.filter(event => event.category === "AUDIT").length,
     timelineLength: timeline.length, patients: immutable(patients), timeline: immutable(timeline),
     generatedAtSimulationTime: source.exercise.simulationTimeSec,
+    clockMigrationStatus: clockIntegrity.migrationStatus, clockDiagnostics: clockIntegrity.diagnostics,
   });
 }
-

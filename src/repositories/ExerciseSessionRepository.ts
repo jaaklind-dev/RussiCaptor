@@ -2,7 +2,7 @@ import type { ExerciseSession } from "@/models/ExerciseSession";
 import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
 import { getCurrentExercise } from "@/repositories/ExerciseRepository";
 
-let snapshot: CanonicalExerciseSnapshot = { exerciseId: getCurrentExercise().id, lifecycleState: "READY", simulationTimeSec: 0, speed: 1, version: 0 };
+let snapshot: CanonicalExerciseSnapshot = { exerciseId: getCurrentExercise().id, lifecycleState: "READY", simulationTimeSec: 0, speed: 1, version: 0, clockVersion: 2, clockInitializedAtSimulationTimeSec: 0 };
 
 export function getCanonicalExerciseSnapshot(): CanonicalExerciseSnapshot { return structuredClone(snapshot); }
 export function replaceCanonicalExerciseSnapshot(next: CanonicalExerciseSnapshot): void { snapshot = structuredClone(next); }
@@ -17,7 +17,7 @@ function legacyMutation(patch: Partial<CanonicalExerciseSnapshot>): void { snaps
 export function startExerciseSession(): void { legacyMutation({ lifecycleState: "RUNNING", updatedAtWallClock: new Date().toISOString() }); }
 /** @deprecated Production controls use ExerciseControlCommandHandler. */
 export function pauseExerciseSession(): void { legacyMutation({ lifecycleState: "PAUSED" }); }
-export function resetExerciseSession(): void { snapshot = { exerciseId: getCurrentExercise().id, lifecycleState: "READY", simulationTimeSec: 0, speed: 1, version: 0 }; }
+export function resetExerciseSession(): void { snapshot = { exerciseId: getCurrentExercise().id, lifecycleState: "READY", simulationTimeSec: 0, speed: 1, version: 0, clockVersion: 2, clockInitializedAtSimulationTimeSec: 0 }; }
 /** @deprecated Compatibility helper. */
 export function setExerciseMinute(minute: number): void { legacyMutation({ simulationTimeSec: minute * 60 }); }
 /** @deprecated Compatibility helper. Values outside canonical speeds are retained only for legacy tests and are never exposed by WP-22 controls. */

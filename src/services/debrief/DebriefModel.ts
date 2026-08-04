@@ -1,6 +1,7 @@
 import type { ExerciseLifecycleState } from "@/models/exercise/CanonicalExerciseSnapshot";
 import type { ExerciseTimelineCategory, ExerciseTimelineEvent } from "@/models/exercise/ExerciseTimelineEvent";
 import type { RuntimeProcessProjection } from "@/services/RuntimeSnapshotService";
+import type { ClockMigrationStatus, ExerciseClockDiagnostic } from "@/services/runtime/exercise/ExerciseClockDiagnostics";
 
 export type PatientOutcome = "ALIVE" | "DECEASED" | "TRANSFERRED" | "STILL_ACTIVE" | "COMPLETED_SCENARIO";
 
@@ -41,6 +42,8 @@ export type DebriefReport = Readonly<{
   patients: readonly PatientDebriefSummary[];
   timeline: readonly ExerciseTimelineEvent[];
   generatedAtSimulationTime: number;
+  clockMigrationStatus: ClockMigrationStatus;
+  clockDiagnostics: readonly ExerciseClockDiagnostic[];
 }>;
 
 export type PlaybackCursor = Readonly<{
@@ -65,4 +68,3 @@ export type PatientPlaybackView = Readonly<{
   processes: readonly RuntimeProcessProjection[];
   simulationTimeSec: number;
 }>;
-

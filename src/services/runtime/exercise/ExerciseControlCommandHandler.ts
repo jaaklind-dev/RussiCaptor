@@ -54,7 +54,7 @@ export function handleExerciseControlCommand(command: ExerciseControlCommand): E
 
 export function getExerciseControlAudit(): readonly ExerciseControlAuditEntry[] { return structuredClone(audit); }
 export function getExerciseControlReplayHash(): string {
-  const { updatedAtWallClock: _metadata, ...snapshot } = getCanonicalExerciseSnapshot();
+  const { updatedAtWallClock: _metadata, clockVersion: _clockVersion, clockInitializedAtSimulationTimeSec: _clockInitialized, ...snapshot } = getCanonicalExerciseSnapshot();
   return sha256Text(stableJson({ snapshot, audit }));
 }
 export function resetExerciseControlCommandHandler(): void { results.clear(); audit.length = 0; }

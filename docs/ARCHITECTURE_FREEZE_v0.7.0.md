@@ -380,6 +380,14 @@ lifecycle state, simulation seconds, speed, command version, and last command ID
 It is immutable, serializable, deterministic, synchronizable, replay-safe, and the
 single source for all exercise status displays.
 
+Canonical newly initialized clocks carry explicit `clockVersion: 2` and
+initialization metadata. Missing or legacy clock metadata is diagnosed
+deterministically and never causes automatic normalization or historical rewriting.
+Clock migration metadata is informational and excluded from replay hashes. An
+explicit reset may prepare a distinct READY exercise at T+0 only through the
+authorized, version-safe reset boundary; RUNNING and PAUSED exercises cannot be
+silently reset, and completed snapshots remain historical records.
+
 Wall-clock timestamps, transport state, UI timers, and local connection state are
 excluded from canonical replay/hash input.
 

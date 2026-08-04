@@ -16,6 +16,7 @@ import { stopClockRunner } from "@/services/ClockRunner";
 import { notifySync } from "@/services/SyncService";
 import { resetCurrentCaseManager } from "@/services/CurrentUserService";
 
+/** @deprecated Test/reset compatibility helper. Production exercise preparation uses runtime/exercise/ExerciseResetService. */
 export function resetExercise(): void {
   stopClockRunner();
   resetExerciseSession();
