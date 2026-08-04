@@ -20,6 +20,6 @@ export type AnalyticsConfiguration = Readonly<{ enabledProviderIds?: readonly st
 export type AnalyticsEvaluationContext = Readonly<{ debrief: DebriefReport; exerciseId: string; sourceDebriefHash: string; configuration: AnalyticsConfiguration }>;
 export interface AnalyticsMetricProvider { readonly providerId: string; readonly version: string; getDefinitions(): readonly MetricDefinition[]; evaluate(context: AnalyticsEvaluationContext): readonly MetricResult[]; }
 export type AnalyticsCategorySummary = Readonly<{ category: AnalyticsCategory; metricCount: number; valueCount: number; unavailableCount: number; notApplicableCount: number; errorCount: number }>;
-export type AnalyticsReport = Readonly<{ analyticsVersion: 1; exerciseId: string; sourceDebriefHash: string; generatedAtSimulationTimeSec: number; providerRegistryVersion: string; metrics: readonly MetricResult[]; categories: readonly AnalyticsCategorySummary[]; diagnostics: readonly AnalyticsDiagnostic[]; analyticsHash: string }>;
+export type AnalyticsPackageMetadata = Readonly<{ packageId: string; packageVersion: string; packageHash: string }>;
+export type AnalyticsReport = Readonly<{ analyticsVersion: 1; exerciseId: string; sourceDebriefHash: string; generatedAtSimulationTimeSec: number; providerRegistryVersion: string; metrics: readonly MetricResult[]; categories: readonly AnalyticsCategorySummary[]; diagnostics: readonly AnalyticsDiagnostic[]; analyticsHash: string; exercisePackage?: AnalyticsPackageMetadata }>;
 export type AnalyticsFilters = Readonly<{ category?: AnalyticsCategory; providerId?: string; scope?: MetricScope; status?: MetricStatus; patientId?: string; search?: string }>;
-

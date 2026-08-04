@@ -9,10 +9,12 @@ import { timelineAt } from "@/services/debrief/TimelinePlayback";
 import type { PatientOutcome, PlaybackCursor } from "@/services/debrief/DebriefModel";
 import type { ExerciseTimelineCategory } from "@/models/exercise/ExerciseTimelineEvent";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ExerciseInformationCard } from "@/components/excon/ExerciseInformationCard";
 import { getExerciseDefinition } from "@/services/exercise/ExerciseDefinitionService";
+import { ExercisePackageInformationCard } from "@/components/excon/ExercisePackageInformationCard";
+import { exercisePackageValidator, getExercisePackage } from "@/services/exercise/ExercisePackageService";
 
 const categories: readonly ExerciseTimelineCategory[] = ["EXERCISE", "PATIENT", "COMMAND", "AUDIT"];
 const outcomes: readonly PatientOutcome[] = ["ALIVE", "DECEASED", "TRANSFERRED", "STILL_ACTIVE", "COMPLETED_SCENARIO"];
@@ -21,17 +23,18 @@ export default function DebriefScreen() {
   useSyncExternalStore(subscribeToDebrief, getDebriefVersion, getDebriefVersion);
   const report = getDebriefReport();
   const definition = getExerciseDefinition(report.exerciseId);
+  const exercisePackage = getExercisePackage(report.exerciseId);
   const [cursor, setCursor] = useState<PlaybackCursor>(() => createPlaybackCursor());
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<ExerciseTimelineCategory>();
   const [outcome, setOutcome] = useState<PatientOutcome>();
   const [caseManager, setCaseManager] = useState<string>();
   const [phaseOnly, setPhaseOnly] = useState(false);
-  const caseManagers = useMemo(() => [...new Set(report.patients.flatMap(item => item.assignedCaseManagers))].sort(), [report]);
-  const visiblePatients = useMemo(() => filterDebriefPatients(report, {
+  const caseManagers = [...new Set(report.patients.flatMap(item => item.assignedCaseManagers))].sort();
+  const visiblePatients = filterDebriefPatients(report, {
     search, category, outcome, caseManager, exercisePhase: phaseOnly ? report.exerciseState : undefined,
-  }), [report, search, category, outcome, caseManager, phaseOnly]);
-  const visibleTimeline = useMemo(() => timelineAt(report.timeline, cursor.simulationTimeSec), [report.timeline, cursor.simulationTimeSec]);
+  });
+  const visibleTimeline = timelineAt(report.timeline, cursor.simulationTimeSec);
   const previous = visibleTimeline.at(-1);
   const next = report.timeline.find(event => event.simulationTimeSec > cursor.simulationTimeSec);
   const patient = cursor.selectedPatientId ? patientPlayback(report, cursor.selectedPatientId, cursor) : undefined;
@@ -43,6 +46,7 @@ export default function DebriefScreen() {
   return <FlatList data={visibleTimeline} keyExtractor={event => event.id} contentContainerStyle={styles.container}
     ListHeaderComponent={<View><View style={styles.top}><View><Text style={styles.title}>Debrief</Text><Text style={styles.subtitle}>Canonical read-only exercise reconstruction</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Back</Text></Pressable></View>
       <DebriefSummary report={report} />
+      <ExercisePackageInformationCard exercisePackage={exercisePackage} compatibility={exercisePackageValidator.compatibility(exercisePackage)} />
       <ExerciseInformationCard definition={definition} />
       <Pressable style={styles.analyticsButton} onPress={() => router.push("/excon/analytics")}><Text style={styles.analyticsButtonText}>Open Analytics</Text></Pressable>
       <TimelinePlaybackControls cursor={cursor} durationSec={report.simulationDurationSec} previous={previous} next={next} onToggle={() => setCursor(current => current.playing ? pause(current) : play(current))} onSeek={(seconds, event) => setCursor(current => event ? jumpToEvent(current, event) : seek(current, seconds, report.simulationDurationSec))} />

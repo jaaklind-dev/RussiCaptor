@@ -6,6 +6,8 @@ import { notifySync } from "@/services/SyncService";
 import { getExerciseRuntimeOwner, registerExerciseRuntimeOwner, type ExerciseRuntimeOwner } from "./ExerciseRuntimeOwnerRegistry";
 import type { ExerciseDefinition } from "@/models/exercise/ExerciseDefinition";
 import { getExerciseDefinition } from "@/services/exercise/ExerciseDefinitionService";
+import type { ExercisePackage } from "@/models/exercise/ExercisePackage";
+import { getExercisePackage } from "@/services/exercise/ExercisePackageService";
 
 const transition: Record<Exclude<ExerciseControlCommand["commandType"], "SET_EXERCISE_SPEED">, { state: ExerciseLifecycleState; event: ExerciseControlEventType }> = {
   START_EXERCISE: { state: "RUNNING", event: "ExerciseStarted" }, PAUSE_EXERCISE: { state: "PAUSED", event: "ExercisePaused" },
@@ -14,7 +16,8 @@ const transition: Record<Exclude<ExerciseControlCommand["commandType"], "SET_EXE
 
 export class AuthoritativeExerciseRuntime implements ExerciseRuntimeOwner {
   readonly definition: ExerciseDefinition;
-  constructor(readonly exerciseId: string) { this.definition = getExerciseDefinition(exerciseId); }
+  readonly exercisePackage: ExercisePackage;
+  constructor(readonly exerciseId: string) { this.exercisePackage = getExercisePackage(exerciseId); this.definition = getExerciseDefinition(exerciseId); }
   apply(command: ExerciseControlCommand): { snapshot: CanonicalExerciseSnapshot; eventType: ExerciseControlEventType } {
     const previous = getCanonicalExerciseSnapshot();
     const change = command.commandType === "SET_EXERCISE_SPEED" ? undefined : transition[command.commandType];

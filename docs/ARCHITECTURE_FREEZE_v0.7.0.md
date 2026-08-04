@@ -661,12 +661,25 @@ embedding it into or rewriting historical hashed runtime and Debrief artifacts.
 Definitions are registered deterministically from a static catalog; dynamic
 downloading and runtime editing are forbidden.
 
+### ADR-015 — Exercise Package Architecture
+
+The immutable and versioned Exercise Package is the canonical distribution unit
+above Exercise Definition. It bundles only validated configuration references,
+provider/module selections, metadata and a compatibility manifest. Package hashes
+exclude runtime, timeline, Debrief, Analytics output, replay, wall-clock and device
+state. Runtime receives a package and its definition as read-only inputs. Static
+registration, deterministic version resolution and compatibility validation are
+mandatory; package editing, downloads and package-specific runtime branches are
+forbidden.
+
 ## 23. Architecture Checklist
 
 Every pull request must answer:
 
 - [ ] Does exercise behavior originate from one validated, immutable and versioned
   Exercise Definition rather than scattered mutable configuration?
+- [ ] Is the exercise deployment input a validated, immutable, versioned and
+  deterministically hashed Exercise Package with no runtime state?
 
 - [ ] Does this add or move a runtime mutation? Is there exactly one canonical
   owner and an existing public command/aggregation path?

@@ -10,9 +10,12 @@ import { TimelineMetricsProvider } from "./analytics/providers/TimelineMetricsPr
 import { ResourceMetricsProvider } from "./analytics/providers/ResourceMetricsProvider";
 import { getCurrentExercise } from "@/repositories/ExerciseRepository";
 import { getExerciseDefinition } from "./exercise/ExerciseDefinitionService";
+import type { AnalyticsReport } from "@/models/analytics/Analytics";
+import { getExercisePackage } from "./exercise/ExercisePackageService";
+import { withExercisePackageMetadata } from "./analytics/AnalyticsPackageMetadata";
 
 const registry = new AnalyticsProviderRegistry([ExerciseMetricsProvider, PatientFlowMetricsProvider, OwnershipMetricsProvider, InterventionMetricsProvider, TimelineMetricsProvider, ResourceMetricsProvider]);
-let version = ""; let report: ReturnType<typeof generateAnalytics> | undefined;
+let version = ""; let report: AnalyticsReport | undefined;
 function configuration() {
   const definition = getExerciseDefinition(getCurrentExercise().id);
   const allProviders = registry.providers.map(provider => provider.providerId);
@@ -24,7 +27,7 @@ function configuration() {
     ...(enabledMetrics.length === allMetrics.length ? {} : { enabledMetricIds: Object.freeze(enabledMetrics) }),
   });
 }
-export function getAnalyticsReport() { const next = getDebriefVersion(); if (!report || version !== next) { report = generateAnalytics(getDebriefReport(), registry, configuration()); version = next; } return report; }
+export function getAnalyticsReport() { const next = getDebriefVersion(); if (!report || version !== next) { const generated = generateAnalytics(getDebriefReport(), registry, configuration()); report = withExercisePackageMetadata(generated, getExercisePackage(generated.exerciseId)); version = next; } return report; }
 export function getAnalyticsVersion(): string { return getDebriefVersion(); }
 export function subscribeToAnalytics(listener: () => void): () => void { return subscribeToDebrief(listener); }
 export function getAnalyticsMetricDefinitions() { return registry.definitions; }
