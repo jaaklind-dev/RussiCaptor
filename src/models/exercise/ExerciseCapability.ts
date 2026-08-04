@@ -1,0 +1,2 @@
+export const EXERCISE_CAPABILITIES = ["EXERCISE_CONTROLS", "TIMELINE", "DEBRIEF", "ANALYTICS", "METRICS", "RESOURCES", "PATIENT_PLAYBACK"] as const;
+export type ExerciseCapability = typeof EXERCISE_CAPABILITIES[number];

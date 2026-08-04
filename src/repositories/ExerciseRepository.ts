@@ -1,4 +1,5 @@
 import { Exercise } from "@/models/Exercise";
+import { bindExerciseDefinition, DEFAULT_EXERCISE_DEFINITION } from "@/services/exercise/ExerciseDefinitionService";
 
 const currentExercise: Exercise = {
 
@@ -25,4 +26,5 @@ export function installCurrentExercise(id: string, name: string): void {
   currentExercise.name = name;
   currentExercise.description = "Excelist imporditud harjutus";
   currentExercise.status = "draft";
+  bindExerciseDefinition(id, DEFAULT_EXERCISE_DEFINITION);
 }

@@ -650,9 +650,23 @@ all values require canonical evidence, and deterministic ordering, precision, an
 hashing belong to the framework rather than React components or metric packs.
 Analytics cannot mutate Debrief, runtime, timeline, replay, or patient state.
 
+### ADR-014 — Canonical Exercise Definition
+
+An immutable, validated and explicitly versioned `ExerciseDefinition` is the
+single source of truth for exercise profile, objectives, capabilities, enabled
+PatientProcesses, Analytics providers and Metric providers. Runtime sessions bind
+to a definition version and may never mutate it. ExCon and Debrief render only a
+read-only projection. Analytics may use it for static provider selection, without
+embedding it into or rewriting historical hashed runtime and Debrief artifacts.
+Definitions are registered deterministically from a static catalog; dynamic
+downloading and runtime editing are forbidden.
+
 ## 23. Architecture Checklist
 
 Every pull request must answer:
+
+- [ ] Does exercise behavior originate from one validated, immutable and versioned
+  Exercise Definition rather than scattered mutable configuration?
 
 - [ ] Does this add or move a runtime mutation? Is there exactly one canonical
   owner and an existing public command/aggregation path?

@@ -12,6 +12,8 @@ import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from
 import ExerciseControlsCard from "@/components/excon/ExerciseControlsCard";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { initializeAuthoritativeExerciseRuntime } from "@/services/runtime/exercise/AuthoritativeExerciseRuntime";
+import { ExerciseInformationCard } from "@/components/excon/ExerciseInformationCard";
+import { getExerciseDefinition } from "@/services/exercise/ExerciseDefinitionService";
 
 const initialFilters: InstructorDashboardFilters = {
   location: "All", triage: "All", caseManager: "All", status: "All",
@@ -22,6 +24,7 @@ export default function ExerciseDashboardScreen() {
   useSyncExternalStore(subscribeToInstructorDashboard, getInstructorDashboardVersion, getInstructorDashboardVersion);
   const snapshot = getInstructorDashboardSnapshot();
   const exerciseSnapshot = getCanonicalExerciseSnapshot();
+  const exerciseDefinition = getExerciseDefinition(exerciseSnapshot.exerciseId);
   useEffect(() => initializeAuthoritativeExerciseRuntime(exerciseSnapshot.exerciseId), [exerciseSnapshot.exerciseId]);
   const [filters, setFilters] = useState(initialFilters);
   const { width } = useWindowDimensions();
@@ -59,6 +62,7 @@ export default function ExerciseDashboardScreen() {
             </View>
           </View>
           <ExerciseControlsCard snapshot={exerciseSnapshot} />
+          <ExerciseInformationCard definition={exerciseDefinition} />
           <Pressable style={styles.timelineButton} onPress={() => router.push("/excon/timeline")}><Text style={styles.timelineButtonText}>Open Exercise Timeline</Text></Pressable>
           <Pressable style={styles.debriefButton} onPress={() => router.push("/excon/debrief")}><Text style={styles.timelineButtonText}>Open Debrief</Text></Pressable>
           <InstructorFilterBar

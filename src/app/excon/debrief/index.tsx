@@ -11,6 +11,8 @@ import type { ExerciseTimelineCategory } from "@/models/exercise/ExerciseTimelin
 import { router } from "expo-router";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ExerciseInformationCard } from "@/components/excon/ExerciseInformationCard";
+import { getExerciseDefinition } from "@/services/exercise/ExerciseDefinitionService";
 
 const categories: readonly ExerciseTimelineCategory[] = ["EXERCISE", "PATIENT", "COMMAND", "AUDIT"];
 const outcomes: readonly PatientOutcome[] = ["ALIVE", "DECEASED", "TRANSFERRED", "STILL_ACTIVE", "COMPLETED_SCENARIO"];
@@ -18,6 +20,7 @@ const outcomes: readonly PatientOutcome[] = ["ALIVE", "DECEASED", "TRANSFERRED",
 export default function DebriefScreen() {
   useSyncExternalStore(subscribeToDebrief, getDebriefVersion, getDebriefVersion);
   const report = getDebriefReport();
+  const definition = getExerciseDefinition(report.exerciseId);
   const [cursor, setCursor] = useState<PlaybackCursor>(() => createPlaybackCursor());
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<ExerciseTimelineCategory>();
@@ -40,6 +43,7 @@ export default function DebriefScreen() {
   return <FlatList data={visibleTimeline} keyExtractor={event => event.id} contentContainerStyle={styles.container}
     ListHeaderComponent={<View><View style={styles.top}><View><Text style={styles.title}>Debrief</Text><Text style={styles.subtitle}>Canonical read-only exercise reconstruction</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Back</Text></Pressable></View>
       <DebriefSummary report={report} />
+      <ExerciseInformationCard definition={definition} />
       <Pressable style={styles.analyticsButton} onPress={() => router.push("/excon/analytics")}><Text style={styles.analyticsButtonText}>Open Analytics</Text></Pressable>
       <TimelinePlaybackControls cursor={cursor} durationSec={report.simulationDurationSec} previous={previous} next={next} onToggle={() => setCursor(current => current.playing ? pause(current) : play(current))} onSeek={(seconds, event) => setCursor(current => event ? jumpToEvent(current, event) : seek(current, seconds, report.simulationDurationSec))} />
       <TextInput value={search} onChangeText={setSearch} placeholder="Search patients" style={styles.input} />
