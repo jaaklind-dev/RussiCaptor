@@ -1,0 +1,7 @@
+import type { AnalyticsEvaluationContext, AnalyticsMetricProvider, MetricResult } from "@/models/analytics/Analytics";
+import { definition, evidence, unavailableResult } from "./CoreMetricsSupport";
+const id = "core.resources"; const defs = Object.freeze([
+  definition(id, "resource.assignment.count", "Resource assignments", "Canonical resource assignments", "RESOURCES", "COUNT", "RESOURCE"), definition(id, "resource.release.count", "Resource releases", "Canonical resource releases", "RESOURCES", "COUNT", "RESOURCE"), definition(id, "resource.peak_concurrent.count", "Peak concurrent usage", "Peak concurrent allocated resources", "RESOURCES", "COUNT", "RESOURCE"), definition(id, "resource.utilization.average.percent", "Average resource utilization", "Average utilization", "RESOURCES", "PERCENT", "RESOURCE"), definition(id, "resource.unused.count", "Unused resources", "Configured resources never allocated", "RESOURCES", "COUNT", "RESOURCE"),
+]);
+function evaluate(_context: AnalyticsEvaluationContext): readonly MetricResult[] { return Object.freeze(defs.map(def => unavailableResult(def, "RESOURCE_DATA_NOT_AVAILABLE", "Canonical resource history is not present in Debrief", [evidence("DEBRIEF_FIELD", "timeline")], undefined, "NOT_APPLICABLE"))); }
+export const ResourceMetricsProvider: AnalyticsMetricProvider = Object.freeze({ providerId: id, version: "1.0.0", getDefinitions: () => defs, evaluate });
