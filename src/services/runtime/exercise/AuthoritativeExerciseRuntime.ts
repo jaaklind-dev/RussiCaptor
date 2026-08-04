@@ -5,7 +5,6 @@ import { startClockRunner, stopClockRunner } from "@/services/ClockRunner";
 import { notifySync } from "@/services/SyncService";
 import { getExerciseRuntimeOwner, registerExerciseRuntimeOwner, type ExerciseRuntimeOwner } from "./ExerciseRuntimeOwnerRegistry";
 import type { ExerciseDefinition } from "@/models/exercise/ExerciseDefinition";
-import { getExerciseDefinition } from "@/services/exercise/ExerciseDefinitionService";
 import type { ExercisePackage } from "@/models/exercise/ExercisePackage";
 import { getExercisePackage } from "@/services/exercise/ExercisePackageService";
 
@@ -17,7 +16,7 @@ const transition: Record<Exclude<ExerciseControlCommand["commandType"], "SET_EXE
 export class AuthoritativeExerciseRuntime implements ExerciseRuntimeOwner {
   readonly definition: ExerciseDefinition;
   readonly exercisePackage: ExercisePackage;
-  constructor(readonly exerciseId: string) { this.exercisePackage = getExercisePackage(exerciseId); this.definition = getExerciseDefinition(exerciseId); }
+  constructor(readonly exerciseId: string) { this.exercisePackage = getExercisePackage(exerciseId); this.definition = this.exercisePackage.definition; }
   apply(command: ExerciseControlCommand): { snapshot: CanonicalExerciseSnapshot; eventType: ExerciseControlEventType } {
     const previous = getCanonicalExerciseSnapshot();
     const change = command.commandType === "SET_EXERCISE_SPEED" ? undefined : transition[command.commandType];

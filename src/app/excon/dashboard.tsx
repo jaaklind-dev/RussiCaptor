@@ -13,7 +13,6 @@ import ExerciseControlsCard from "@/components/excon/ExerciseControlsCard";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { initializeAuthoritativeExerciseRuntime } from "@/services/runtime/exercise/AuthoritativeExerciseRuntime";
 import { ExerciseInformationCard } from "@/components/excon/ExerciseInformationCard";
-import { getExerciseDefinition } from "@/services/exercise/ExerciseDefinitionService";
 import { ExercisePackageInformationCard } from "@/components/excon/ExercisePackageInformationCard";
 import { getExercisePackage, exercisePackageValidator } from "@/services/exercise/ExercisePackageService";
 
@@ -26,8 +25,8 @@ export default function ExerciseDashboardScreen() {
   useSyncExternalStore(subscribeToInstructorDashboard, getInstructorDashboardVersion, getInstructorDashboardVersion);
   const snapshot = getInstructorDashboardSnapshot();
   const exerciseSnapshot = getCanonicalExerciseSnapshot();
-  const exerciseDefinition = getExerciseDefinition(exerciseSnapshot.exerciseId);
   const exercisePackage = getExercisePackage(exerciseSnapshot.exerciseId);
+  const exerciseDefinition = exercisePackage.definition;
   useEffect(() => initializeAuthoritativeExerciseRuntime(exerciseSnapshot.exerciseId), [exerciseSnapshot.exerciseId]);
   const [filters, setFilters] = useState(initialFilters);
   const { width } = useWindowDimensions();

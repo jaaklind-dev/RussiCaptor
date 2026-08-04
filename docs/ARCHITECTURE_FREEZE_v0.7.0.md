@@ -1,8 +1,8 @@
 # RussiCaptor Architecture Freeze v0.7.0
 
-**Status:** FROZEN  
+**Status:** FROZEN — WP-29A readiness verified
 **Supersedes:** `ARCHITECTURE_FREEZE_v0.6.0.md`  
-**Scope:** invariant architecture rules after WP-17–WP-23  
+**Scope:** invariant architecture rules through WP-29A
 **Purpose:** prevent clinical runtime, exercise control, synchronization, audit,
 replay, and presentation responsibilities from drifting as the product expands.
 
@@ -655,7 +655,9 @@ Analytics cannot mutate Debrief, runtime, timeline, replay, or patient state.
 An immutable, validated and explicitly versioned `ExerciseDefinition` is the
 single source of truth for exercise profile, objectives, capabilities, enabled
 PatientProcesses, Analytics providers and Metric providers. Runtime sessions bind
-to a definition version and may never mutate it. ExCon and Debrief render only a
+only to an Exercise Package and derive its Definition from that package; an
+independent public Definition-binding path is forbidden. Runtime may never mutate
+the Definition. ExCon and Debrief render only a
 read-only projection. Analytics may use it for static provider selection, without
 embedding it into or rewriting historical hashed runtime and Debrief artifacts.
 Definitions are registered deterministically from a static catalog; dynamic
@@ -670,7 +672,9 @@ exclude runtime, timeline, Debrief, Analytics output, replay, wall-clock and dev
 state. Runtime receives a package and its definition as read-only inputs. Static
 registration, deterministic version resolution and compatibility validation are
 mandatory; package editing, downloads and package-specific runtime branches are
-forbidden.
+forbidden. `ExercisePackageLoader` is the sole exercise-to-package binding
+authority. A conflicting second binding is rejected before publication, and
+Runtime always receives the Definition from the bound canonical Package.
 
 ## 23. Architecture Checklist
 

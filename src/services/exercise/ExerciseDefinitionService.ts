@@ -18,7 +18,3 @@ export const DEFAULT_EXERCISE_DEFINITION: ExerciseDefinition = Object.freeze({
   ]), capabilities: Object.freeze<ExerciseCapability[]>(["EXERCISE_CONTROLS", "TIMELINE", "DEBRIEF", "ANALYTICS", "METRICS", "RESOURCES", "PATIENT_PLAYBACK"]),
 });
 export const exerciseDefinitionRegistry = new ExerciseDefinitionRegistry(new ExerciseDefinitionValidator(EXERCISE_DEFINITION_CATALOG), [DEFAULT_EXERCISE_DEFINITION]);
-const bindings = new Map<string, string>([["demo", "RUSSICAPTOR_DEMO@1"]]);
-export function bindExerciseDefinition(exerciseId: string, definition: ExerciseDefinition): void { const registered = exerciseDefinitionRegistry.require(definition.exerciseTypeId, definition.definitionVersion); bindings.set(exerciseId, `${registered.exerciseTypeId}@${registered.definitionVersion}`); }
-export function getExerciseDefinition(exerciseId: string): ExerciseDefinition { const key = bindings.get(exerciseId) ?? "RUSSICAPTOR_DEMO@1"; const split = key.lastIndexOf("@"); return exerciseDefinitionRegistry.require(key.slice(0, split), Number(key.slice(split + 1))); }
-export function isPatientProcessEnabled(exerciseId: string, processType: string): boolean { return getExerciseDefinition(exerciseId).enabledPatientProcesses.includes(processType); }

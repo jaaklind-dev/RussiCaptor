@@ -9,6 +9,7 @@ export const exercisePackageValidator = new ExercisePackageValidator(EXERCISE_DE
 export const exercisePackageRegistry = new ExercisePackageRegistry(exercisePackageValidator);
 export const exercisePackageLoader = new ExercisePackageLoader(exercisePackageValidator, exercisePackageRegistry);
 CANONICAL_EXERCISE_PACKAGES.forEach(pkg => exercisePackageLoader.load(pkg));
-const bindings = new Map<string, string>([["demo", `${DEFAULT_EXERCISE_PACKAGE.packageId}@${DEFAULT_EXERCISE_PACKAGE.packageVersion}`]]);
-export function bindExercisePackage(exerciseId: string, pkg: ExercisePackage): ExercisePackage { const loaded = exercisePackageLoader.load(pkg, exerciseId); bindings.set(exerciseId, `${loaded.packageId}@${loaded.packageVersion}`); return loaded; }
-export function getExercisePackage(exerciseId: string): ExercisePackage { const reference = bindings.get(exerciseId) ?? `${DEFAULT_EXERCISE_PACKAGE.packageId}@${DEFAULT_EXERCISE_PACKAGE.packageVersion}`; const split = reference.lastIndexOf("@"); return exercisePackageRegistry.require(reference.slice(0, split), reference.slice(split + 1)); }
+exercisePackageLoader.bind("demo", DEFAULT_EXERCISE_PACKAGE);
+export function getExercisePackage(exerciseId: string): ExercisePackage { return exercisePackageLoader.getBound(exerciseId) ?? DEFAULT_EXERCISE_PACKAGE; }
+export function getExerciseDefinition(exerciseId: string): ExercisePackage["definition"] { return getExercisePackage(exerciseId).definition; }
+export function isPatientProcessEnabled(exerciseId: string, processType: string): boolean { return getExerciseDefinition(exerciseId).enabledPatientProcesses.includes(processType); }

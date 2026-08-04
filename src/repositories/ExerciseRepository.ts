@@ -1,6 +1,6 @@
 import { Exercise } from "@/models/Exercise";
 import { DEFAULT_EXERCISE_PACKAGE } from "@/services/exercise/CanonicalExercisePackages";
-import { bindExercisePackage } from "@/services/exercise/ExercisePackageService";
+import { exercisePackageLoader } from "@/services/exercise/ExercisePackageService";
 
 const currentExercise: Exercise = {
 
@@ -27,5 +27,5 @@ export function installCurrentExercise(id: string, name: string): void {
   currentExercise.name = name;
   currentExercise.description = "Excelist imporditud harjutus";
   currentExercise.status = "draft";
-  bindExercisePackage(id, DEFAULT_EXERCISE_PACKAGE);
+  exercisePackageLoader.bind(id, DEFAULT_EXERCISE_PACKAGE);
 }

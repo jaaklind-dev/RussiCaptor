@@ -4,12 +4,13 @@ import type {
 import type { Patient } from "@/models/Patient";
 import type { PatientAssignment } from "@/models/PatientAssignment";
 import type { RuntimeState } from "@/models/RuntimeAggregation";
+import type { DeepReadonly } from "@/utils/immutable";
 
 export type InstructorPatientMetadata = Pick<Patient, "id" | "name" | "location" | "triage" | "status"> & {
   readonly assignment?: Pick<PatientAssignment, "caseManagerId" | "caseManagerName" | "endedAt">;
 };
 
-function projectedStatus(patient: InstructorPatientMetadata, runtime?: RuntimeState): InstructorPatientStatus {
+function projectedStatus(patient: InstructorPatientMetadata, runtime?: DeepReadonly<RuntimeState>): InstructorPatientStatus {
   if (patient.status === "Completed" || runtime?.globalStatus === "Resolved") return "Completed";
   if (runtime?.globalStatus === "Dead" || runtime?.globalStatus === "Arrest") return "Life threatening";
   if (runtime?.globalStatus === "Critical") return "Critical";
@@ -24,7 +25,7 @@ export function comparePatientIds(a: string, b: string): number {
 
 export function projectInstructorPatients(
   patients: readonly InstructorPatientMetadata[],
-  runtimeStates: readonly RuntimeState[]
+  runtimeStates: readonly DeepReadonly<RuntimeState>[]
 ): InstructorPatientCardModel[] {
   const runtimeByPatient = new Map(runtimeStates.map(state => [state.encounterId, state]));
   return patients.filter(patient => patient.status === "Active" || patient.status === "Completed").map(patient => {

@@ -4,7 +4,8 @@ import { ExerciseMetricsProvider } from "@/services/analytics/providers/Exercise
 import { generateAnalytics } from "@/services/analytics/AnalyticsEngine";
 import { DEFAULT_ANALYTICS_PRECISION } from "@/services/analytics/AnalyticsPrecision";
 import { reconstructDebrief } from "@/services/debrief/DebriefEngine";
-import { DEFAULT_EXERCISE_DEFINITION, EXERCISE_DEFINITION_CATALOG, getExerciseDefinition, isPatientProcessEnabled } from "../ExerciseDefinitionService";
+import { DEFAULT_EXERCISE_DEFINITION, EXERCISE_DEFINITION_CATALOG } from "../ExerciseDefinitionService";
+import { getExerciseDefinition, isPatientProcessEnabled } from "../ExercisePackageService";
 import { ExerciseDefinitionRegistry, hashExerciseDefinition } from "../ExerciseDefinitionRegistry";
 import { ExerciseDefinitionValidator } from "../ExerciseDefinitionValidator";
 

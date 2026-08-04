@@ -9,7 +9,6 @@ import { InterventionMetricsProvider } from "./analytics/providers/InterventionM
 import { TimelineMetricsProvider } from "./analytics/providers/TimelineMetricsProvider";
 import { ResourceMetricsProvider } from "./analytics/providers/ResourceMetricsProvider";
 import { getCurrentExercise } from "@/repositories/ExerciseRepository";
-import { getExerciseDefinition } from "./exercise/ExerciseDefinitionService";
 import type { AnalyticsReport } from "@/models/analytics/Analytics";
 import { getExercisePackage } from "./exercise/ExercisePackageService";
 import { withExercisePackageMetadata } from "./analytics/AnalyticsPackageMetadata";
@@ -17,7 +16,7 @@ import { withExercisePackageMetadata } from "./analytics/AnalyticsPackageMetadat
 const registry = new AnalyticsProviderRegistry([ExerciseMetricsProvider, PatientFlowMetricsProvider, OwnershipMetricsProvider, InterventionMetricsProvider, TimelineMetricsProvider, ResourceMetricsProvider]);
 let version = ""; let report: AnalyticsReport | undefined;
 function configuration() {
-  const definition = getExerciseDefinition(getCurrentExercise().id);
+  const definition = getExercisePackage(getCurrentExercise().id).definition;
   const allProviders = registry.providers.map(provider => provider.providerId);
   const allMetrics = registry.definitions.map(metric => metric.metricId);
   const enabledProviders = definition.enabledAnalyticsProviders.filter(id => allProviders.includes(id));

@@ -1,4 +1,5 @@
 import type { RuntimeState } from "@/models/RuntimeAggregation";
+import { immutableClone, type DeepReadonly } from "@/utils/immutable";
 
 type Listener = () => void;
 
@@ -9,7 +10,7 @@ export type RuntimeProcessProjection = {
 };
 
 export type CanonicalPatientRuntimeSnapshot = {
-  readonly state: RuntimeState;
+  readonly state: DeepReadonly<RuntimeState>;
   readonly processes: readonly RuntimeProcessProjection[];
 };
 
@@ -20,7 +21,7 @@ let version = 0;
 /** Publishes an immutable copy for read-only runtime consumers such as the ExCon workspace. */
 export function publishRuntimeSnapshot(state: RuntimeState, processes?: readonly RuntimeProcessProjection[]): void {
   const previous = states.get(state.encounterId);
-  states.set(state.encounterId, structuredClone({
+  states.set(state.encounterId, immutableClone({
     state,
     processes: processes ?? previous?.processes ?? [],
   }));
@@ -28,15 +29,15 @@ export function publishRuntimeSnapshot(state: RuntimeState, processes?: readonly
   listeners.forEach(listener => listener());
 }
 
-export function getRuntimeSnapshots(): RuntimeState[] {
+export function getRuntimeSnapshots(): readonly DeepReadonly<RuntimeState>[] {
   return [...states.values()]
     .sort((a, b) => a.state.encounterId.localeCompare(b.state.encounterId))
-    .map(snapshot => structuredClone(snapshot.state));
+    .map(snapshot => immutableClone(snapshot.state));
 }
 
 export function getCanonicalPatientRuntimeSnapshot(patientId: string): CanonicalPatientRuntimeSnapshot | undefined {
   const snapshot = states.get(patientId);
-  return snapshot ? structuredClone(snapshot) : undefined;
+  return snapshot ? immutableClone(snapshot) : undefined;
 }
 
 export function getRuntimeSnapshotVersion(): number {

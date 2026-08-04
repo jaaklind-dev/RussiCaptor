@@ -4,8 +4,8 @@ import { createExercisePackage, calculateExercisePackageHash } from "../Exercise
 import { ExercisePackageLoader } from "../ExercisePackageLoader";
 import { ExercisePackageRegistry } from "../ExercisePackageRegistry";
 import { ExercisePackageValidator } from "../ExercisePackageValidator";
-import { bindExercisePackage, getExercisePackage } from "../ExercisePackageService";
-import { EXERCISE_DEFINITION_CATALOG, getExerciseDefinition } from "../ExerciseDefinitionService";
+import { getExercisePackage } from "../ExercisePackageService";
+import { EXERCISE_DEFINITION_CATALOG } from "../ExerciseDefinitionService";
 import { withExercisePackageMetadata } from "@/services/analytics/AnalyticsPackageMetadata";
 import type { AnalyticsReport } from "@/models/analytics/Analytics";
 
@@ -30,6 +30,11 @@ describe("WP-28 Exercise Package Framework", () => {
     expect(a.packageHash).toBe(reordered.packageHash); expect(a.manifest.packageHash).toBe(a.packageHash); expect(calculateExercisePackageHash(a)).toBe(a.packageHash);
   });
 
+  test("WP-28 canonical package and definition hashes remain unchanged", () => {
+    expect(DEFAULT_EXERCISE_PACKAGE.packageHash).toBe("c6ff142e1cfbdcb37757f159fbbd95128f9ee4a961972d22264c44317b6e803d");
+    expect(DEFAULT_EXERCISE_PACKAGE.manifest.definitionHash).toBe("b488182cd19a1e09dbb0dcd23de1db0c922782ceb0ae4e6903b45d533409a81b");
+  });
+
   test("registry resolves versions deterministically and rejects duplicates", () => {
     const registry = new ExercisePackageRegistry(validator); registry.register(makePackage("registry", "2.0.0")); registry.register(makePackage("registry", "1.0.0"));
     expect(registry.packages.map(pkg => pkg.packageVersion)).toEqual(["1.0.0", "2.0.0"]); expect(registry.latest("registry")?.packageVersion).toBe("2.0.0"); expect(() => registry.register(makePackage("registry", "1.0.0"))).toThrow("DUPLICATE_EXERCISE_PACKAGE");
@@ -40,10 +45,12 @@ describe("WP-28 Exercise Package Framework", () => {
     const incompatible = makePackage("future", "1.0.0", 2); expect(validator.compatibility(incompatible)).toBe("INCOMPATIBLE"); expect(validator.validate(incompatible).some(issue => issue.code === "INCOMPATIBLE_PACKAGE")).toBe(true);
   });
 
-  test("loader validates, registers and binds the immutable definition", () => {
-    const registry = new ExercisePackageRegistry(validator); const loader = new ExercisePackageLoader(validator, registry); const pkg = makePackage("loader"); const loaded = loader.load(pkg, "EX-PACKAGE");
-    expect(loaded).toBe(pkg); expect(registry.require(pkg.packageId, pkg.packageVersion)).toBe(pkg); expect(getExerciseDefinition("EX-PACKAGE").exerciseTypeId).toBe(pkg.definition.exerciseTypeId);
-    bindExercisePackage("EX-PACKAGE", pkg); expect(getExercisePackage("EX-PACKAGE").packageHash).toBe(pkg.packageHash);
+  test("loader is the single deterministic package and definition binding authority", () => {
+    const registry = new ExercisePackageRegistry(validator); const loader = new ExercisePackageLoader(validator, registry); const pkg = makePackage("loader"); const loaded = loader.bind("EX-PACKAGE", pkg);
+    expect(loaded).toBe(pkg); expect(registry.require(pkg.packageId, pkg.packageVersion)).toBe(pkg); expect(loader.getBound("EX-PACKAGE")?.definition.exerciseTypeId).toBe(pkg.definition.exerciseTypeId);
+    expect(loader.bind("EX-PACKAGE", pkg)).toBe(pkg);
+    const conflict = makePackage("loader-other"); expect(() => loader.bind("EX-PACKAGE", conflict)).toThrow("EXERCISE_PACKAGE_BINDING_CONFLICT"); expect(registry.get(conflict.packageId, conflict.packageVersion)).toBeUndefined();
+    expect(getExercisePackage("demo").packageHash).toBe(DEFAULT_EXERCISE_PACKAGE.packageHash);
   });
 
   test("analytics metadata can record package identity without changing analytics hash", () => {

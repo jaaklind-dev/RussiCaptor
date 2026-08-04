@@ -1,11 +1,12 @@
 import type { ExerciseSession } from "@/models/ExerciseSession";
 import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
 import { getCurrentExercise } from "@/repositories/ExerciseRepository";
+import { immutableClone, type DeepReadonly } from "@/utils/immutable";
 
 let snapshot: CanonicalExerciseSnapshot = { exerciseId: getCurrentExercise().id, lifecycleState: "READY", simulationTimeSec: 0, speed: 1, version: 0, clockVersion: 2, clockInitializedAtSimulationTimeSec: 0 };
 
-export function getCanonicalExerciseSnapshot(): CanonicalExerciseSnapshot { return structuredClone(snapshot); }
-export function replaceCanonicalExerciseSnapshot(next: CanonicalExerciseSnapshot): void { snapshot = structuredClone(next); }
+export function getCanonicalExerciseSnapshot(): DeepReadonly<CanonicalExerciseSnapshot> { return immutableClone(snapshot); }
+export function replaceCanonicalExerciseSnapshot(next: CanonicalExerciseSnapshot): void { snapshot = immutableClone(next) as CanonicalExerciseSnapshot; }
 
 /** Read-only compatibility projection for legacy workflow services. */
 export function getExerciseSession(): ExerciseSession {

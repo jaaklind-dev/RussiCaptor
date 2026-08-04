@@ -12,7 +12,6 @@ import { router } from "expo-router";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ExerciseInformationCard } from "@/components/excon/ExerciseInformationCard";
-import { getExerciseDefinition } from "@/services/exercise/ExerciseDefinitionService";
 import { ExercisePackageInformationCard } from "@/components/excon/ExercisePackageInformationCard";
 import { exercisePackageValidator, getExercisePackage } from "@/services/exercise/ExercisePackageService";
 
@@ -22,8 +21,8 @@ const outcomes: readonly PatientOutcome[] = ["ALIVE", "DECEASED", "TRANSFERRED",
 export default function DebriefScreen() {
   useSyncExternalStore(subscribeToDebrief, getDebriefVersion, getDebriefVersion);
   const report = getDebriefReport();
-  const definition = getExerciseDefinition(report.exerciseId);
   const exercisePackage = getExercisePackage(report.exerciseId);
+  const definition = exercisePackage.definition;
   const [cursor, setCursor] = useState<PlaybackCursor>(() => createPlaybackCursor());
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<ExerciseTimelineCategory>();
