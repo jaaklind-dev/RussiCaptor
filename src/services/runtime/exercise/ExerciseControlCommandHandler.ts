@@ -4,6 +4,7 @@ import { getExerciseRuntimeOwner } from "./ExerciseRuntimeOwnerRegistry";
 import { validateExerciseControlCommand } from "./ExerciseControlValidator";
 import { stableJson } from "@/utils/stableJson";
 import { sha256Text } from "@/utils/sha256";
+import { notifySync } from "@/services/SyncService";
 
 const results = new Map<string, ExerciseControlResult>();
 const audit: ExerciseControlAuditEntry[] = [];
@@ -19,6 +20,7 @@ export function handleExerciseControlCommand(command: ExerciseControlCommand): E
     audit.push({ commandId: command.commandId, exerciseId: command.exerciseId, commandType: command.commandType,
       issuer: command.issuedBy, simulationTimeSec: snapshot.simulationTimeSec, previousState: snapshot.lifecycleState,
       previousSpeed: snapshot.speed, outcome: "REJECTED", rejectionCode: rejected.errorCode });
+    notifySync("local");
     return rejected;
   }
   if (!owner || owner.exerciseId !== command.exerciseId) {
@@ -27,6 +29,7 @@ export function handleExerciseControlCommand(command: ExerciseControlCommand): E
     audit.push({ commandId: command.commandId, exerciseId: command.exerciseId, commandType: command.commandType, issuer: command.issuedBy,
       simulationTimeSec: snapshot.simulationTimeSec, previousState: snapshot.lifecycleState, previousSpeed: snapshot.speed,
       outcome: "REJECTED", rejectionCode: result.errorCode });
+    notifySync("local");
     return result;
   }
   let applied: ReturnType<typeof owner.apply>;
@@ -37,6 +40,7 @@ export function handleExerciseControlCommand(command: ExerciseControlCommand): E
     audit.push({ commandId: command.commandId, exerciseId: command.exerciseId, commandType: command.commandType, issuer: command.issuedBy,
       simulationTimeSec: snapshot.simulationTimeSec, previousState: snapshot.lifecycleState, previousSpeed: snapshot.speed,
       outcome: "REJECTED", rejectionCode: result.errorCode });
+    notifySync("local");
     return result;
   }
   const result: ExerciseControlResult = { ok: true, commandId: command.commandId, ...applied };

@@ -3,6 +3,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import type { ExerciseSession } from "@/models/ExerciseSession";
 import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
 import type { ExerciseControlAuditEntry } from "@/models/exercise/ExerciseControlCommand";
+import type { InstructorCommandAuditEntry } from "@/models/InstructorCommand";
 import type { ImagingStudy } from "@/models/ImagingStudy";
 import type { LabResult } from "@/models/LabResult";
 import type { Note } from "@/models/Note";
@@ -34,6 +35,7 @@ import {
   restoreCaseManagerLocationState,
 } from "@/services/CurrentLocationService";
 import { getExerciseControlAudit, restoreExerciseControlAudit } from "@/services/runtime/exercise/ExerciseControlCommandHandler";
+import { getInstructorCommandAudit, restoreInstructorCommandAudit } from "@/features/instructor/commands/InstructorPatientCommandHandler";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
@@ -56,6 +58,7 @@ export type SharedExerciseState = {
   caseManagerZoneIds?: Record<string, string>;
   installedWorkbook?: InstalledWorkbook;
   exerciseControlAudit?: ExerciseControlAuditEntry[];
+  instructorCommandAudit?: InstructorCommandAuditEntry[];
 };
 
 type PersistedState = SharedExerciseState & {
@@ -141,6 +144,7 @@ function createSnapshot(): PersistedState {
     caseManagerZoneIds: getCaseManagerLocationState(),
     installedWorkbook: getInstalledWorkbook(),
     exerciseControlAudit: [...getExerciseControlAudit()],
+    instructorCommandAudit: [...getInstructorCommandAudit()],
   };
 }
 
@@ -155,6 +159,7 @@ export function restoreSharedExerciseState(restored: SharedExerciseState): void 
   restoreInstalledWorkbook(restored.installedWorkbook);
   restoreExerciseSession(restored.exerciseSession);
   restoreExerciseControlAudit(restored.exerciseControlAudit ?? []);
+  restoreInstructorCommandAudit(restored.instructorCommandAudit ?? []);
   replaceItems(dataProvider.getPatients(), restored.patients);
   restoreAssignmentState(restored);
   restoreCaseManagerLocationState(restored.caseManagerZoneIds ?? {});
@@ -208,6 +213,7 @@ export async function loadPersistedState(): Promise<void> {
     restoreCurrentCaseManager(restored.currentCaseManager);
     restoreExerciseSession(restored.exerciseSession);
     restoreExerciseControlAudit(restored.exerciseControlAudit ?? []);
+    restoreInstructorCommandAudit(restored.instructorCommandAudit ?? []);
     replaceItems(dataProvider.getPatients(), restored.patients);
     restoreAssignmentState(restored);
     restoreCaseManagerLocationState(restored.caseManagerZoneIds ?? {});

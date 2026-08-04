@@ -14,6 +14,7 @@ function recordRejected(command: InstructorPatientCommand, result: Extract<Instr
   results.set(command.commandId, result);
   audit.push({ commandId: command.commandId, exerciseId: command.exerciseId, patientId: command.patientId, eventType: command.eventType,
     issuedBy: command.issuedBy, simulationTime: command.issuedAtSimulationTime, outcome: "REJECTED", errorCode: result.errorCode });
+  notifySync("local");
   return result;
 }
 
@@ -32,7 +33,7 @@ export function handleInstructorPatientCommand(command: InstructorPatientCommand
     const result: InstructorCommandResult = { ok: true, commandId: command.commandId, runtimeEventId: runtimeResult.runtimeEventId };
     results.set(command.commandId, result);
     audit.push({ commandId: command.commandId, exerciseId: command.exerciseId, patientId: command.patientId, eventType: command.eventType,
-      issuedBy: command.issuedBy, simulationTime: command.issuedAtSimulationTime, outcome: "ACCEPTED" });
+      issuedBy: command.issuedBy, simulationTime: command.issuedAtSimulationTime, outcome: "ACCEPTED", runtimeEventId: runtimeResult.runtimeEventId });
     addTimelineEvent({ id: `TL-INSTRUCTOR-${command.commandId}`, exerciseId: command.exerciseId, patientId: command.patientId,
       timestamp: `T+${command.issuedAtSimulationTime}s`, type: "instructor", title: "Exercise Controller event injected",
       description: command.eventType.replaceAll("_", " ").toLowerCase(), author: command.issuedBy, visibility: "revealed" });
@@ -45,3 +46,11 @@ export function handleInstructorPatientCommand(command: InstructorPatientCommand
 
 export function getInstructorCommandAudit(): readonly InstructorCommandAuditEntry[] { return structuredClone(audit); }
 export function resetInstructorCommandHandler(): void { results.clear(); audit.length = 0; }
+export function restoreInstructorCommandAudit(entries: readonly InstructorCommandAuditEntry[]): void {
+  results.clear(); audit.splice(0, audit.length, ...structuredClone(entries));
+  for (const entry of audit) {
+    if (!entry.commandId) continue;
+    if (entry.outcome === "ACCEPTED" && entry.runtimeEventId) results.set(entry.commandId, { ok: true, commandId: entry.commandId, runtimeEventId: entry.runtimeEventId });
+    if (entry.outcome === "REJECTED" && entry.errorCode) results.set(entry.commandId, { ok: false, commandId: entry.commandId, errorCode: entry.errorCode, message: "Previously rejected command" });
+  }
+}

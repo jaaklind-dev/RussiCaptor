@@ -32,4 +32,9 @@ export type TimelineEvent = {
   author: string;
 
   visibility: Visibility;
+
+  /** Canonical exercise time assigned at creation. Legacy persisted rows may omit it. */
+  simulationTimeSec?: number;
+  /** Stable insertion order assigned at creation. Legacy persisted rows may omit it. */
+  sequenceNumber?: number;
 };
