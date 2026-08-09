@@ -1,7 +1,8 @@
 # ADR-016 — Clinical Module Composition
 
-**Status:** Proposed  
+**Status:** Accepted — implemented by WP-31
 **Date:** 2026-08-09  
+**Accepted:** 2026-08-09
 **Architecture baseline:** Architecture v0.7 (`architecture-v0.7`)  
 **Related decisions:** ADR-014 — Canonical Exercise Definition; ADR-015 — Exercise Package Architecture
 
@@ -217,19 +218,19 @@ validation input, not permission to create another Runtime or authority layer.
 
 ## Out of scope
 
-ADR-016 does not introduce:
+ADR-016 and its WP-31 foundation do not introduce:
 
-- implementation of `ClinicalModuleComposer`;
-- a Module Registry, Repository, download service or marketplace;
+- a dynamic Module Repository, download service or marketplace;
 - dynamic Runtime loading or hot module replacement;
 - Package or Exercise authoring;
 - Package import/export;
 - new clinical behavior;
 - changes to Runtime, Replay, Timeline, Debrief, Analytics or Core Metrics.
 
-Implementation requires a separate, bounded work package after this ADR is
-accepted. That work package must use existing Architecture v0.7 extension points
-and preserve all current regression and performance contracts.
+The bounded foundation implementation is documented in
+[`WP31_CLINICAL_MODULE_COMPOSITION_FOUNDATION.md`](./WP31_CLINICAL_MODULE_COMPOSITION_FOUNDATION.md).
+Production Clinical Modules require separate work packages and must use the
+foundation without changing the frozen Runtime architecture.
 
 ## Consequences
 
@@ -263,10 +264,9 @@ ADR-016 preserves:
 
 It introduces no new Runtime, canonical mutable owner or upward dependency.
 
-## Acceptance criteria
+## Acceptance and implementation status
 
-ADR-016 may move from **Proposed** to **Accepted** when the architectural review
-confirms that this contract:
+ADR-016 is **Accepted**. WP-31 verifies that this contract:
 
 - preserves one active Exercise Package and one canonical Exercise Definition;
 - enables exact-version reuse of ALS, Airway, Respiratory Failure and future
@@ -277,5 +277,7 @@ confirms that this contract:
 - preserves replay determinism and Architecture v0.7 guarantees;
 - has no unresolved contradiction with ADR-014 or ADR-015.
 
-Acceptance of the ADR authorizes a later implementation work package within this
-contract. It does not itself authorize Runtime changes or dynamic module loading.
+WP-31 implements only the immutable models, static registry, dependency resolver,
+conflict validator, composer, diagnostics, provenance and optional pre-Runtime
+Package Loader composition. No production Clinical Module is registered. This
+acceptance does not authorize Runtime changes or dynamic module loading.

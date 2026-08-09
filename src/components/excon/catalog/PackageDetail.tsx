@@ -21,6 +21,8 @@ export function PackageDetail({ entry, active, onActivate }: Readonly<{ entry?: 
     <List title="PatientProcesses" values={pkg.enabledPatientProcesses} />
     <List title="Analytics providers" values={pkg.enabledAnalyticsProviders} />
     <List title="Metric providers" values={pkg.enabledMetricProviders} />
+    <List title="Required Clinical Modules" values={(pkg.requiredClinicalModules ?? []).map(module => `${module.moduleId}@${module.version}`)} />
+    <List title="Composed Clinical Modules" values={(pkg.definition.clinicalModuleComposition?.modules ?? []).map(module => `${module.moduleId}@${module.version} · order ${module.compositionOrder}`)} />
     <List title="Tags" values={pkg.metadata.tags} />
     <Pressable testID="catalog-activate" disabled={active || entry.compatibility === "INCOMPATIBLE"} onPress={onActivate} style={[styles.button, (active || entry.compatibility === "INCOMPATIBLE") && styles.disabled]}><Text style={styles.buttonText}>{active ? "Active package" : entry.compatibility === "INCOMPATIBLE" ? "Incompatible package" : "Activate package"}</Text></Pressable>
     <Text style={styles.note}>Activation selects the package for future exercise setup. It does not start or modify the current exercise.</Text>

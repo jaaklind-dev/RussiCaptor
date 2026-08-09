@@ -1,6 +1,7 @@
 import type { ExerciseDefinition } from "./ExerciseDefinition";
 import type { ExercisePackageManifest } from "./ExercisePackageManifest";
 import type { PackageMetadata } from "./PackageMetadata";
+import type { ClinicalModuleDependency } from "@/models/clinical/ClinicalModuleDependency";
 
 export type ExercisePackage = Readonly<{
   packageId: string;
@@ -13,4 +14,5 @@ export type ExercisePackage = Readonly<{
   enabledMetricProviders: readonly string[];
   metadata: PackageMetadata;
   manifest: ExercisePackageManifest;
+  requiredClinicalModules?: readonly ClinicalModuleDependency[];
 }>;

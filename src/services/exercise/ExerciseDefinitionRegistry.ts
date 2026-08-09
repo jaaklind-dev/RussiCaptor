@@ -10,6 +10,22 @@ function canonicalize(input: ExerciseDefinition): ExerciseDefinition { return im
   enabledPatientProcesses: [...input.enabledPatientProcesses].sort(), enabledAnalyticsProviders: [...input.enabledAnalyticsProviders].sort(),
   enabledMetricProviders: [...input.enabledMetricProviders].sort(), capabilities: [...input.capabilities].sort(),
   objectives: [...input.objectives].sort((a, b) => a.objectiveId.localeCompare(b.objectiveId)),
+  ...(input.clinicalModuleComposition ? { clinicalModuleComposition: {
+    modules: [...input.clinicalModuleComposition.modules].sort((a, b) => a.compositionOrder - b.compositionOrder || a.moduleId.localeCompare(b.moduleId) || a.version.localeCompare(b.version)),
+    registrations: {
+      ...structuredClone(input.clinicalModuleComposition.registrations),
+      patientProcesses: [...input.clinicalModuleComposition.registrations.patientProcesses].sort(),
+      clinicalEffects: [...input.clinicalModuleComposition.registrations.clinicalEffects].sort(),
+      interventions: [...input.clinicalModuleComposition.registrations.interventions].sort(),
+      medications: [...input.clinicalModuleComposition.registrations.medications].sort(),
+      assessmentRules: [...input.clinicalModuleComposition.registrations.assessmentRules].sort(),
+      analyticsProviders: [...input.clinicalModuleComposition.registrations.analyticsProviders].sort(),
+      metricProviders: [...input.clinicalModuleComposition.registrations.metricProviders].sort(),
+      capabilities: [...input.clinicalModuleComposition.registrations.capabilities].sort(),
+      objectives: [...input.clinicalModuleComposition.registrations.objectives].sort((a, b) => a.objectiveId.localeCompare(b.objectiveId)),
+      validationRules: [...input.clinicalModuleComposition.registrations.validationRules].sort(),
+    },
+  } } : {}),
 }); }
 export const hashExerciseDefinition = (definition: ExerciseDefinition) => sha256Text(stableJson(canonicalize(definition)));
 

@@ -1,6 +1,7 @@
 import type { ExerciseCapability } from "./ExerciseCapability";
 import type { ExerciseObjective } from "./ExerciseObjective";
 import type { ExerciseProfile } from "./ExerciseProfile";
+import type { ClinicalModuleComposition } from "@/models/clinical/ClinicalModule";
 
 export type ExerciseDefinition = Readonly<{
   definitionVersion: number;
@@ -13,6 +14,7 @@ export type ExerciseDefinition = Readonly<{
   enabledMetricProviders: readonly string[];
   objectives: readonly ExerciseObjective[];
   capabilities: readonly ExerciseCapability[];
+  clinicalModuleComposition?: ClinicalModuleComposition;
 }>;
 
 export type ExerciseDefinitionCatalog = Readonly<{

@@ -4,10 +4,14 @@ import { EXERCISE_DEFINITION_CATALOG } from "./ExerciseDefinitionService";
 import { ExercisePackageLoader } from "./ExercisePackageLoader";
 import { ExercisePackageRegistry } from "./ExercisePackageRegistry";
 import { ExercisePackageValidator } from "./ExercisePackageValidator";
+import { ClinicalModuleRegistry } from "@/services/clinical/ClinicalModuleRegistry";
+import { ClinicalModuleComposer } from "@/services/clinical/ClinicalModuleComposer";
 
 export const exercisePackageValidator = new ExercisePackageValidator(EXERCISE_DEFINITION_CATALOG);
 export const exercisePackageRegistry = new ExercisePackageRegistry(exercisePackageValidator);
-export const exercisePackageLoader = new ExercisePackageLoader(exercisePackageValidator, exercisePackageRegistry);
+export const clinicalModuleRegistry = new ClinicalModuleRegistry();
+export const clinicalModuleComposer = new ClinicalModuleComposer(clinicalModuleRegistry);
+export const exercisePackageLoader = new ExercisePackageLoader(exercisePackageValidator, exercisePackageRegistry, clinicalModuleComposer);
 CANONICAL_EXERCISE_PACKAGES.forEach(pkg => exercisePackageLoader.load(pkg));
 exercisePackageLoader.bind("demo", DEFAULT_EXERCISE_PACKAGE);
 export function getExercisePackage(exerciseId: string): ExercisePackage { return exercisePackageLoader.getBound(exerciseId) ?? DEFAULT_EXERCISE_PACKAGE; }

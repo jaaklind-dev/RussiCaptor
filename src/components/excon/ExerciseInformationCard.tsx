@@ -9,9 +9,10 @@ export function ExerciseInformationCard({ definition }: { definition: ExerciseDe
     <Row title="Profile" values={[label(definition.profile)]} />
     <Row title="Objectives" values={definition.objectives.map(item => item.name)} />
     <Row title="Capabilities" values={definition.capabilities.map(label)} />
-    <Row title="Enabled modules" values={definition.enabledPatientProcesses.map(label)} />
+    <Row title="Enabled PatientProcesses" values={definition.enabledPatientProcesses.map(label)} />
     <Row title="Analytics providers" values={definition.enabledAnalyticsProviders} />
     <Row title="Metric providers" values={definition.enabledMetricProviders} />
+    <Row title="Clinical Modules" values={(definition.clinicalModuleComposition?.modules ?? []).map(module => `${module.moduleId}@${module.version}`)} />
   </View>;
 }
 function Row({ title, values }: { title: string; values: readonly string[] }) { return <View style={styles.row}><Text style={styles.label}>{title}</Text><Text style={styles.value}>{values.join(" · ") || "None"}</Text></View>; }
