@@ -5,6 +5,7 @@ import { createExercisePackage } from "./ExercisePackageHash";
 import { DEFAULT_EXERCISE_DEFINITION, EXERCISE_DEFINITION_CATALOG } from "./ExerciseDefinitionService";
 import { AIRWAY_MODULE_ID, AIRWAY_MODULE_VERSION } from "@/modules/airway/AirwayManifest";
 import { RESPIRATORY_FAILURE_MODULE_ID, RESPIRATORY_FAILURE_MODULE_VERSION } from "@/modules/respiratoryFailure/RespiratoryFailureManifest";
+import { MEDICATION_CORE_MODULE_ID, MEDICATION_CORE_MODULE_VERSION } from "@/modules/medicationCore/MedicationCoreManifest";
 
 const capabilities: readonly ExerciseCapability[] = ["EXERCISE_CONTROLS", "TIMELINE", "DEBRIEF", "ANALYTICS", "METRICS", "RESOURCES", "PATIENT_PLAYBACK"];
 const processes: Record<ExerciseProfile, readonly string[]> = {
@@ -86,5 +87,37 @@ export const RESPIRATORY_FAILURE_EXERCISE_PACKAGE = createExercisePackage({
     createdVersion: "0.7.0",
     exerciseType: "CUSTOM",
     tags: ["canonical", "clinical-module", "reference", "respiratory-failure"],
+  },
+});
+
+const medicationCoreDefinition: ExerciseDefinition = Object.freeze({
+  ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
+  exerciseTypeId: "RUSSICAPTOR_MEDICATION_CORE_REFERENCE",
+  name: "Medication Core Clinical Module Reference Exercise",
+  description: "Reference exercise composed from the configuration-driven MEDICATION_CORE_V1 framework",
+  profile: "CUSTOM",
+  enabledPatientProcesses: Object.freeze(DEFAULT_EXERCISE_DEFINITION.enabledPatientProcesses.filter(id => id !== "MEDICATION")),
+});
+
+export const MEDICATION_CORE_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.medication-core-reference",
+  packageVersion: "1.0.0",
+  definition: medicationCoreDefinition,
+  patientDatasetId: "patients.custom.v1",
+  enabledPatientProcesses: medicationCoreDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: medicationCoreDefinition.enabledAnalyticsProviders,
+  enabledMetricProviders: medicationCoreDefinition.enabledMetricProviders,
+  requiredClinicalModules: Object.freeze([{
+    moduleId: MEDICATION_CORE_MODULE_ID,
+    version: MEDICATION_CORE_MODULE_VERSION,
+  }]),
+  metadata: {
+    name: "Medication Core Clinical Module Reference Package",
+    description: "Reference package proving deterministic Medication Core composition",
+    author: "RussiCaptor",
+    organization: "RussiCaptor",
+    createdVersion: "0.7.0",
+    exerciseType: "CUSTOM",
+    tags: ["canonical", "clinical-module", "medication-core", "reference"],
   },
 });
