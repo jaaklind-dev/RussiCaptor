@@ -6,6 +6,7 @@ import { DEFAULT_EXERCISE_DEFINITION, EXERCISE_DEFINITION_CATALOG } from "./Exer
 import { AIRWAY_MODULE_ID, AIRWAY_MODULE_VERSION } from "@/modules/airway/AirwayManifest";
 import { RESPIRATORY_FAILURE_MODULE_ID, RESPIRATORY_FAILURE_MODULE_VERSION } from "@/modules/respiratoryFailure/RespiratoryFailureManifest";
 import { MEDICATION_CORE_MODULE_ID, MEDICATION_CORE_MODULE_VERSION } from "@/modules/medicationCore/MedicationCoreManifest";
+import { ALS_MODULE_ID, ALS_MODULE_VERSION } from "@/modules/als/AlsManifest";
 
 const capabilities: readonly ExerciseCapability[] = ["EXERCISE_CONTROLS", "TIMELINE", "DEBRIEF", "ANALYTICS", "METRICS", "RESOURCES", "PATIENT_PLAYBACK"];
 const processes: Record<ExerciseProfile, readonly string[]> = {
@@ -119,5 +120,36 @@ export const MEDICATION_CORE_EXERCISE_PACKAGE = createExercisePackage({
     createdVersion: "0.7.0",
     exerciseType: "CUSTOM",
     tags: ["canonical", "clinical-module", "medication-core", "reference"],
+  },
+});
+
+const alsDefinition: ExerciseDefinition = Object.freeze({
+  ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
+  exerciseTypeId: "RUSSICAPTOR_ALS_REFERENCE",
+  name: "ALS Clinical Module Reference Exercise",
+  description: "Reduced-capability ALS reference composed from Airway and Medication Core; cardiac arrest, rhythm, CPR physiology, defibrillation and ROSC are unavailable.",
+  profile: "ALS",
+  enabledPatientProcesses: Object.freeze(DEFAULT_EXERCISE_DEFINITION.enabledPatientProcesses.filter(id => id !== "MEDICATION")),
+  enabledAnalyticsProviders: Object.freeze(EXERCISE_DEFINITION_CATALOG.analyticsProviders.filter(id => id !== "core.interventions")),
+  enabledMetricProviders: Object.freeze(EXERCISE_DEFINITION_CATALOG.metricProviders.filter(id => id !== "core.interventions")),
+});
+
+export const ALS_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.als-reference",
+  packageVersion: "1.0.0",
+  definition: alsDefinition,
+  patientDatasetId: "patients.als.v1",
+  enabledPatientProcesses: alsDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: alsDefinition.enabledAnalyticsProviders,
+  enabledMetricProviders: alsDefinition.enabledMetricProviders,
+  requiredClinicalModules: Object.freeze([{ moduleId: ALS_MODULE_ID, version: ALS_MODULE_VERSION }]),
+  metadata: {
+    name: "ALS Clinical Module Reference Package",
+    description: "Reduced-capability ALS composition: Airway and Medication Core available; cardiac arrest, rhythm, CPR physiology, defibrillation and ROSC unavailable.",
+    author: "RussiCaptor",
+    organization: "RussiCaptor",
+    createdVersion: "0.7.0",
+    exerciseType: "ALS",
+    tags: ["als", "canonical", "clinical-module", "reduced-capability", "reference"],
   },
 });
