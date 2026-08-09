@@ -4,6 +4,7 @@ import type { ExerciseProfile } from "@/models/exercise/ExerciseProfile";
 import { createExercisePackage } from "./ExercisePackageHash";
 import { DEFAULT_EXERCISE_DEFINITION, EXERCISE_DEFINITION_CATALOG } from "./ExerciseDefinitionService";
 import { AIRWAY_MODULE_ID, AIRWAY_MODULE_VERSION } from "@/modules/airway/AirwayManifest";
+import { RESPIRATORY_FAILURE_MODULE_ID, RESPIRATORY_FAILURE_MODULE_VERSION } from "@/modules/respiratoryFailure/RespiratoryFailureManifest";
 
 const capabilities: readonly ExerciseCapability[] = ["EXERCISE_CONTROLS", "TIMELINE", "DEBRIEF", "ANALYTICS", "METRICS", "RESOURCES", "PATIENT_PLAYBACK"];
 const processes: Record<ExerciseProfile, readonly string[]> = {
@@ -51,5 +52,39 @@ export const AIRWAY_EXERCISE_PACKAGE = createExercisePackage({
     createdVersion: "0.7.0",
     exerciseType: "CUSTOM",
     tags: ["airway", "canonical", "clinical-module", "reference"],
+  },
+});
+
+const respiratoryFailureDefinition: ExerciseDefinition = Object.freeze({
+  ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
+  exerciseTypeId: "RUSSICAPTOR_RESPIRATORY_FAILURE_REFERENCE",
+  name: "Respiratory Failure Clinical Module Reference Exercise",
+  description: "Reference exercise composed transitively from RESPIRATORY_FAILURE_V1 and AIRWAY_V1",
+  profile: "CUSTOM",
+  enabledPatientProcesses: Object.freeze(DEFAULT_EXERCISE_DEFINITION.enabledPatientProcesses.filter(id => id !== "RESPIRATORY_FAILURE")),
+  enabledAnalyticsProviders: Object.freeze(EXERCISE_DEFINITION_CATALOG.analyticsProviders.filter(id => id !== "core.interventions")),
+  enabledMetricProviders: Object.freeze(EXERCISE_DEFINITION_CATALOG.metricProviders.filter(id => id !== "core.interventions")),
+});
+
+export const RESPIRATORY_FAILURE_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.respiratory-failure-reference",
+  packageVersion: "1.0.0",
+  definition: respiratoryFailureDefinition,
+  patientDatasetId: "patients.custom.v1",
+  enabledPatientProcesses: respiratoryFailureDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: respiratoryFailureDefinition.enabledAnalyticsProviders,
+  enabledMetricProviders: respiratoryFailureDefinition.enabledMetricProviders,
+  requiredClinicalModules: Object.freeze([{
+    moduleId: RESPIRATORY_FAILURE_MODULE_ID,
+    version: RESPIRATORY_FAILURE_MODULE_VERSION,
+  }]),
+  metadata: {
+    name: "Respiratory Failure Clinical Module Reference Package",
+    description: "Reference package proving deterministic transitive Respiratory Failure and Airway composition",
+    author: "RussiCaptor",
+    organization: "RussiCaptor",
+    createdVersion: "0.7.0",
+    exerciseType: "CUSTOM",
+    tags: ["canonical", "clinical-module", "reference", "respiratory-failure"],
   },
 });
