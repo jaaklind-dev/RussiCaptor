@@ -3,6 +3,7 @@ import type { ExerciseDefinition } from "@/models/exercise/ExerciseDefinition";
 import type { ExerciseProfile } from "@/models/exercise/ExerciseProfile";
 import { createExercisePackage } from "./ExercisePackageHash";
 import { DEFAULT_EXERCISE_DEFINITION, EXERCISE_DEFINITION_CATALOG } from "./ExerciseDefinitionService";
+import { AIRWAY_MODULE_ID, AIRWAY_MODULE_VERSION } from "@/modules/airway/AirwayManifest";
 
 const capabilities: readonly ExerciseCapability[] = ["EXERCISE_CONTROLS", "TIMELINE", "DEBRIEF", "ANALYTICS", "METRICS", "RESOURCES", "PATIENT_PLAYBACK"];
 const processes: Record<ExerciseProfile, readonly string[]> = {
@@ -22,3 +23,33 @@ const template = (profile: ExerciseProfile, author = "RussiCaptor") => { const d
 
 export const CANONICAL_EXERCISE_PACKAGES = Object.freeze((["ALS", "TRAUMA", "MASCAL", "BOTULISM", "EMERGENCY_DEPARTMENT", "CUSTOM"] as const).map(profile => template(profile)));
 export const DEFAULT_EXERCISE_PACKAGE = CANONICAL_EXERCISE_PACKAGES.find(pkg => pkg.definition.profile === "BOTULISM")!;
+
+const airwayDefinition: ExerciseDefinition = Object.freeze({
+  ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
+  exerciseTypeId: "RUSSICAPTOR_AIRWAY_REFERENCE",
+  name: "Airway Clinical Module Reference Exercise",
+  description: "Reference exercise composed from AIRWAY_V1 without changing Runtime behaviour",
+  profile: "CUSTOM",
+  enabledAnalyticsProviders: Object.freeze(EXERCISE_DEFINITION_CATALOG.analyticsProviders.filter(id => id !== "core.interventions")),
+  enabledMetricProviders: Object.freeze(EXERCISE_DEFINITION_CATALOG.metricProviders.filter(id => id !== "core.interventions")),
+});
+
+export const AIRWAY_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.airway-reference",
+  packageVersion: "1.0.0",
+  definition: airwayDefinition,
+  patientDatasetId: "patients.custom.v1",
+  enabledPatientProcesses: airwayDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: airwayDefinition.enabledAnalyticsProviders,
+  enabledMetricProviders: airwayDefinition.enabledMetricProviders,
+  requiredClinicalModules: Object.freeze([{ moduleId: AIRWAY_MODULE_ID, version: AIRWAY_MODULE_VERSION }]),
+  metadata: {
+    name: "Airway Clinical Module Reference Package",
+    description: "Reference package proving deterministic AIRWAY_V1 composition",
+    author: "RussiCaptor",
+    organization: "RussiCaptor",
+    createdVersion: "0.7.0",
+    exerciseType: "CUSTOM",
+    tags: ["airway", "canonical", "clinical-module", "reference"],
+  },
+});
