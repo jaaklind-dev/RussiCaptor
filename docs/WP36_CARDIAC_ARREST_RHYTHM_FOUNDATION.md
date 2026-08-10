@@ -2,11 +2,13 @@
 
 ## Status
 
-**BLOCKED BY ARCHITECTURE GATE — IMPLEMENTATION NOT STARTED**
+**BLOCKED PENDING ADR-017 ZERO-BEHAVIOUR MIGRATION — IMPLEMENTATION NOT STARTED**
 
-WP-36 was stopped before implementation code was changed. Architecture v0.7
-requires an accepted ADR before the canonical Scenario Runtime and replay
-orchestration contracts can be extended safely.
+WP-36 was stopped before implementation code was changed. Revised ADR-017 is
+accepted for a separate zero-new-functionality lifecycle-registry migration,
+but WP-36 remains blocked until that migration demonstrates byte-identical
+canonical behaviour, ordering and replay hashes and becomes sole production
+authority.
 
 ## Architecture Gate
 
@@ -64,13 +66,14 @@ or runtime test was changed. Implementing only an isolated process would create
 the appearance of canonical support without making the capability executable by
 the production Runtime, so it was deliberately not done.
 
-The proposed decision is documented in
+The revised and accepted migration decision is documented in
 [`ADR-017`](./ADR-017_PATIENT_PROCESS_LIFECYCLE_REGISTRY.md).
 
 ## WP-36 continuation after ADR acceptance
 
-After ADR-017 is accepted and its generic lifecycle boundary exists, WP-36 may
-continue entirely through that boundary:
+After all ADR-017 migration stages pass exact parity and its lifecycle boundary
+is the sole canonical production authority, WP-36 may continue through that
+boundary:
 
 1. add the typed Cardiac Arrest PatientProcess and validated deterministic
    configuration;
