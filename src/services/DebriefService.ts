@@ -4,6 +4,7 @@ import { getAllPatients } from "@/repositories/PatientRepository";
 import { getExerciseTimelineSnapshot, getExerciseTimelineVersion, subscribeToExerciseTimeline } from "./ExerciseTimelineService";
 import { getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots } from "./RuntimeSnapshotService";
 import { reconstructDebrief } from "./debrief/DebriefEngine";
+import { getExercisePackage } from "./exercise/ExercisePackageService";
 
 let cacheKey = "";
 let cached: ReturnType<typeof reconstructDebrief> | undefined;
@@ -13,7 +14,8 @@ export function getDebriefReport() {
   const key = `${exercise.version}:${exercise.simulationTimeSec}:${getExerciseTimelineVersion()}:${getRuntimeSnapshotVersion()}`;
   if (cached && key === cacheKey) return cached;
   const currentExercise = getCurrentExercise();
-  cached = reconstructDebrief({ exercise, timeline: getExerciseTimelineSnapshot(), patients: getAllPatients().map(patient => ({
+  cached = reconstructDebrief({ exercise, protocolProvenance: getExercisePackage(exercise.exerciseId).definition.protocolProvenance,
+    timeline: getExerciseTimelineSnapshot(), patients: getAllPatients().map(patient => ({
     patient, runtime: getCanonicalPatientRuntimeSnapshot(patient.id),
   })) });
   if (cached.exerciseId !== currentExercise.id) throw new Error("Debrief source exercise mismatch");

@@ -5,20 +5,32 @@ import { ExercisePackageValidator } from "./ExercisePackageValidator";
 import { exerciseDefinitionRegistry } from "./ExerciseDefinitionService";
 import type { ClinicalModuleComposer } from "@/services/clinical/ClinicalModuleComposer";
 import { createExercisePackage } from "./ExercisePackageHash";
+import type { ProtocolCompositionService } from "@/services/protocol/ProtocolCompositionService";
 
 export class ExercisePackageLoader {
   private readonly bindings = new Map<string, string>();
-  constructor(private readonly validator: ExercisePackageValidator, private readonly registry: ExercisePackageRegistry, private readonly moduleComposer?: ClinicalModuleComposer) {}
+  constructor(private readonly validator: ExercisePackageValidator, private readonly registry: ExercisePackageRegistry, private readonly moduleComposer?: ClinicalModuleComposer, private readonly protocolComposer?: ProtocolCompositionService) {}
   private compose(pkg: ExercisePackage): ExercisePackage {
-    if (!pkg.requiredClinicalModules?.length) return pkg;
-    if (!this.moduleComposer) throw new Error("CLINICAL_MODULE_COMPOSER_REQUIRED");
-    const result = this.moduleComposer.compose(pkg.definition, pkg.requiredClinicalModules);
-    if (!result.ok) throw new Error(`CLINICAL_MODULE_COMPOSITION_FAILED:${result.diagnostics.map(item => item.code).join(",")}`);
+    let definition = pkg.definition;
+    if (pkg.requiredClinicalModules?.length) {
+      if (!this.moduleComposer) throw new Error("CLINICAL_MODULE_COMPOSER_REQUIRED");
+      const result = this.moduleComposer.compose(definition, pkg.requiredClinicalModules);
+      if (!result.ok) throw new Error(`CLINICAL_MODULE_COMPOSITION_FAILED:${result.diagnostics.map(item => item.code).join(",")}`);
+      definition = result.definition;
+    }
+    if (pkg.protocolConfiguration) {
+      if (!this.protocolComposer) throw new Error("PROTOCOL_COMPOSER_REQUIRED");
+      const result = this.protocolComposer.compose(definition, pkg.protocolConfiguration, pkg.packageId);
+      if (!result.ok) throw new Error(`PROTOCOL_COMPOSITION_FAILED:${result.diagnostics.map(item => item.code).join(",")}`);
+      definition = result.definition;
+    }
+    if (definition === pkg.definition) return pkg;
     return createExercisePackage({
-      packageId: pkg.packageId, packageVersion: pkg.packageVersion, definition: result.definition,
-      patientDatasetId: pkg.patientDatasetId, enabledPatientProcesses: result.definition.enabledPatientProcesses,
-      enabledAnalyticsProviders: result.definition.enabledAnalyticsProviders, enabledMetricProviders: result.definition.enabledMetricProviders,
+      packageId: pkg.packageId, packageVersion: pkg.packageVersion, definition,
+      patientDatasetId: pkg.patientDatasetId, enabledPatientProcesses: definition.enabledPatientProcesses,
+      enabledAnalyticsProviders: definition.enabledAnalyticsProviders, enabledMetricProviders: definition.enabledMetricProviders,
       metadata: pkg.metadata, requiredClinicalModules: pkg.requiredClinicalModules,
+      protocolConfiguration: pkg.protocolConfiguration,
       compatibilityVersion: pkg.manifest.compatibilityVersion,
     });
   }

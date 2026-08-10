@@ -23,6 +23,12 @@ export function PackageDetail({ entry, active, onActivate }: Readonly<{ entry?: 
     <List title="Metric providers" values={pkg.enabledMetricProviders} />
     <List title="Required Clinical Modules" values={(pkg.requiredClinicalModules ?? []).map(module => `${module.moduleId}@${module.version}`)} />
     <List title="Composed Clinical Modules" values={(pkg.definition.clinicalModuleComposition?.modules ?? []).map(module => `${module.moduleId}@${module.version} · order ${module.compositionOrder}`)} />
+    {pkg.definition.protocolProvenance && <>
+      <List title="Protocol" values={[`${pkg.definition.protocolProvenance.name} · ${pkg.definition.protocolProvenance.protocolId}@${pkg.definition.protocolProvenance.version} · ${pkg.definition.protocolProvenance.status}`]} />
+      <Hash title="Protocol hash" value={pkg.definition.protocolProvenance.protocolHash} />
+      <List title="Protocol authority" values={[pkg.definition.protocolProvenance.authority, pkg.definition.protocolProvenance.publicationReference ?? "No publication reference"]} />
+      <List title="Required protocol capabilities" values={pkg.definition.protocolProvenance.requiredCapabilities} />
+    </>}
     <List title="Tags" values={pkg.metadata.tags} />
     <Pressable testID="catalog-activate" disabled={active || entry.compatibility === "INCOMPATIBLE"} onPress={onActivate} style={[styles.button, (active || entry.compatibility === "INCOMPATIBLE") && styles.disabled]}><Text style={styles.buttonText}>{active ? "Active package" : entry.compatibility === "INCOMPATIBLE" ? "Incompatible package" : "Activate package"}</Text></Pressable>
     <Text style={styles.note}>Activation selects the package for future exercise setup. It does not start or modify the current exercise.</Text>

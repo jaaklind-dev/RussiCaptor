@@ -2,6 +2,7 @@ import type { ExerciseLifecycleState } from "@/models/exercise/CanonicalExercise
 import type { ExerciseTimelineCategory, ExerciseTimelineEvent } from "@/models/exercise/ExerciseTimelineEvent";
 import type { RuntimeProcessProjection } from "@/services/RuntimeSnapshotService";
 import type { ClockMigrationStatus, ExerciseClockDiagnostic } from "@/services/runtime/exercise/ExerciseClockDiagnostics";
+import type { ProtocolProvenance } from "@/models/protocol/ClinicalProtocolConfiguration";
 
 export type PatientOutcome = "ALIVE" | "DECEASED" | "TRANSFERRED" | "STILL_ACTIVE" | "COMPLETED_SCENARIO";
 
@@ -44,6 +45,7 @@ export type DebriefReport = Readonly<{
   generatedAtSimulationTime: number;
   clockMigrationStatus: ClockMigrationStatus;
   clockDiagnostics: readonly ExerciseClockDiagnostic[];
+  protocolProvenance?: ProtocolProvenance;
 }>;
 
 export type PlaybackCursor = Readonly<{

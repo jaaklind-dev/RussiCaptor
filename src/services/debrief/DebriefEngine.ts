@@ -7,6 +7,7 @@ import { sha256Text } from "@/utils/sha256";
 import { stableJson } from "@/utils/stableJson";
 import type { DebriefPatientRecord, DebriefReport, PatientDebriefSummary, PatientOutcome } from "./DebriefModel";
 import { validateExerciseClock } from "@/services/runtime/exercise/ExerciseClockIntegrityValidator";
+import type { ProtocolProvenance } from "@/models/protocol/ClinicalProtocolConfiguration";
 
 export type DebriefPatientSource = Readonly<{
   patient: Pick<Patient, "id" | "name" | "location" | "status">;
@@ -18,6 +19,7 @@ export type DebriefSource = Readonly<{
   patients: readonly DebriefPatientSource[];
   timeline: readonly ExerciseTimelineEvent[];
   replayEvents?: readonly unknown[];
+  protocolProvenance?: ProtocolProvenance;
 }>;
 
 function immutable<T>(value: T): T {
@@ -85,5 +87,6 @@ export function reconstructDebrief(source: DebriefSource): DebriefReport {
     timelineLength: timeline.length, patients: immutable(patients), timeline: immutable(timeline),
     generatedAtSimulationTime: source.exercise.simulationTimeSec,
     clockMigrationStatus: clockIntegrity.migrationStatus, clockDiagnostics: clockIntegrity.diagnostics,
+    ...(source.protocolProvenance ? { protocolProvenance: structuredClone(source.protocolProvenance) } : {}),
   });
 }

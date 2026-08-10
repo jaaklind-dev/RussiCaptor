@@ -179,3 +179,21 @@ export const ALS_EXERCISE_PACKAGE = createExercisePackage({
     tags: ["als", "canonical", "clinical-module", "reference"],
   },
 });
+
+export const ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.als-protocol-reference",
+  packageVersion: "1.0.0",
+  definition: Object.freeze({ ...structuredClone(alsDefinition), exerciseTypeId: "RUSSICAPTOR_ALS_PROTOCOL_REFERENCE",
+    name: "ALS Generic Protocol Reference Exercise", description: "Reference package binding canonical ALS capabilities to ALS_GENERIC_V1 configuration." }),
+  patientDatasetId: "patients.als-protocol-reference.v1",
+  enabledPatientProcesses: alsDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: alsDefinition.enabledAnalyticsProviders,
+  enabledMetricProviders: alsDefinition.enabledMetricProviders,
+  requiredClinicalModules: Object.freeze([{ moduleId: ALS_MODULE_ID, version: ALS_MODULE_VERSION }]),
+  protocolConfiguration: Object.freeze({ protocolId: "ALS_GENERIC_V1", version: "1.0.0" }),
+  metadata: {
+    name: "ALS Generic Protocol Reference Package", description: "Deterministic protocol configuration reference; not ERC or AHA guidance.",
+    author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "CUSTOM",
+    tags: ["als", "canonical", "protocol", "reference"],
+  },
+});

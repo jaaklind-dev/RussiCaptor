@@ -13,6 +13,13 @@ export function ExerciseInformationCard({ definition }: { definition: ExerciseDe
     <Row title="Analytics providers" values={definition.enabledAnalyticsProviders} />
     <Row title="Metric providers" values={definition.enabledMetricProviders} />
     <Row title="Clinical Modules" values={(definition.clinicalModuleComposition?.modules ?? []).map(module => `${module.moduleId}@${module.version}`)} />
+    {definition.protocolProvenance && <>
+      <Row title="Protocol" values={[`${definition.protocolProvenance.name} · ${definition.protocolProvenance.protocolId}@${definition.protocolProvenance.version}`]} />
+      <Row title="Protocol status" values={[definition.protocolProvenance.status]} />
+      <Row title="Protocol authority" values={[definition.protocolProvenance.authority]} />
+      <Row title="Protocol hash" values={[definition.protocolProvenance.protocolHash]} />
+      <Row title="Required capabilities" values={definition.protocolProvenance.requiredCapabilities} />
+    </>}
   </View>;
 }
 function Row({ title, values }: { title: string; values: readonly string[] }) { return <View style={styles.row}><Text style={styles.label}>{title}</Text><Text style={styles.value}>{values.join(" · ") || "None"}</Text></View>; }
