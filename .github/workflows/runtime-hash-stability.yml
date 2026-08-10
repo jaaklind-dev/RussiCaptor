@@ -21,3 +21,4 @@ jobs:
       - run: npx jest src/services/golden/__tests__/RuntimeHardening-test.ts --runInBand
       - run: npx jest src/services/analytics/__tests__/AnalyticsHashStability-test.ts --runInBand
       - run: npx jest src/services/protocol/__tests__/ProtocolConfigurationFramework-test.ts --runInBand
+      - run: npx jest src/services/assessment/__tests__/AssessmentHashStability-test.ts --runInBand

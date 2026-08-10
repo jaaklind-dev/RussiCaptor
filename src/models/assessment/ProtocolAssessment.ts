@@ -1,0 +1,7 @@
+export type ProtocolAssessmentStatus = "MET" | "NOT_MET" | "NOT_APPLICABLE" | "UNAVAILABLE";
+export type AssessmentEvidenceSource = "TIMELINE_EVENT" | "INTERVENTION" | "MEDICATION" | "PATIENT_PROCESS" | "DEBRIEF_FIELD";
+export type AssessmentDiagnosticCode = "MISSING_TRIGGER_EVIDENCE" | "MISSING_ACTION_EVIDENCE" | "AMBIGUOUS_EVIDENCE" | "UNKNOWN_EVENT_TYPE" | "UNKNOWN_INTERVENTION" | "INVALID_TEMPORAL_CONSTRAINT" | "LEGACY_CLOCK" | "INCOMPLETE_DEBRIEF" | "INVALID_EXPECTATION";
+export type AssessmentEvidenceReference = Readonly<{ sourceType: AssessmentEvidenceSource; sourceId?: string; patientId?: string; simulationTimeSec?: number; fieldPath?: string }>;
+export type AssessmentDiagnostic = Readonly<{ code: AssessmentDiagnosticCode; message: string; expectationId?: string; patientId?: string }>;
+export type ProtocolAssessmentResult = Readonly<{ assessmentId: string; expectationId: string; protocolId: string; protocolVersion: string; subjectId?: string; patientId?: string; status: ProtocolAssessmentStatus; evidence: readonly AssessmentEvidenceReference[]; diagnostics: readonly AssessmentDiagnostic[] }>;
+export type ProtocolAssessmentReport = Readonly<{ assessmentVersion: 1; exerciseId: string; protocolId: string; protocolVersion: string; protocolHash: string; sourceDebriefHash: string; results: readonly ProtocolAssessmentResult[]; diagnostics: readonly AssessmentDiagnostic[]; assessmentHash: string }>;
