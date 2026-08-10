@@ -21,15 +21,9 @@ import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatient
 import type { MedicationAdministration, MedicationDefinition, MedicationInstance } from "@/models/MedicationRuntime";
 import type { ResourceRuntimeEvent, RuntimeResource, ResourceType, SchedulableIntervention } from "@/models/ResourceRuntime";
 import {
-  applyHvTimedTransition,
-  bootstrapHvPatientProcess,
-  tickHvPatientProcess,
   type HvAction,
   type HvTimedTransition,
 } from "@/services/runtime/HvPatientProcess";
-import { markOxygenMaskingWarning } from "@/services/runtime/HvPatientProcess";
-import { bootstrapHypoxiaPatientProcess, tickHypoxiaPatientProcess } from "@/services/runtime/HypoxiaPatientProcess";
-import { bootstrapBotulismRoot, tickBotulismRoot } from "@/services/runtime/BotulismRootPatientProcess";
 import { InterventionEngine } from "@/services/runtime/InterventionEngine";
 import { ResourcePool } from "@/services/runtime/ResourcePool";
 import { publishResourceRuntimeDebugSnapshot } from "@/services/ResourceRuntimeDebugService";
@@ -45,7 +39,6 @@ import { AirwayManagementFramework } from "@/services/runtime/clinical/AirwayMan
 import { ClinicalAssessmentEngine } from "@/services/runtime/assessment/ClinicalAssessmentEngine";
 import { circulationInterventionDefinitions } from "@/services/runtime/clinical/CirculationInterventionDefinitions";
 import { CirculationManagementFramework } from "@/services/runtime/clinical/CirculationManagementFramework";
-import { bootstrapHemorrhagePatientProcess, setHemorrhageEffects, tickHemorrhagePatientProcess } from "@/services/runtime/HemorrhagePatientProcess";
 import { MedicationEngine } from "@/services/runtime/medication/MedicationEngine";
 import { publishAssessmentDebugSnapshot } from "@/services/AssessmentRuntimeDebugService";
 import { hvClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HvClinicalProcessHandler";
@@ -55,6 +48,8 @@ import { stableJson } from "@/utils/stableJson";
 import { defaultVitalSignConfiguration, VitalSignEngine } from "@/services/runtime/vitals/VitalSignEngine";
 import { projectVitalSignState } from "@/services/runtime/vitals/VitalSignProjection";
 import type { VitalSignConfiguration, VitalSignEvent, VitalSignKey } from "@/models/VitalSign";
+import type { CanonicalLifecycleProcess, PatientProcessEvidence, PatientProcessPhaseContext } from "@/models/PatientProcessLifecycle";
+import { createProductionPatientProcessLifecyclePlan } from "@/services/runtime/lifecycle/ProductionPatientProcessLifecycle";
 
 export function runScenarioEvents(
 
@@ -204,9 +199,8 @@ function fixtureResources(value: unknown): RuntimeResource[] {
 }
 
 export class ClinicalScenarioEngine {
-  private process?: PatientProcessRuntime;
-  private botulismRoot?: BotulismRootPatientProcessRuntime;
-  private hypoxiaProcesses = new Map<string, HypoxiaPatientProcessRuntime>();
+  private readonly lifecyclePlan = createProductionPatientProcessLifecyclePlan();
+  private readonly lifecycleProcessStore = new Map<string, CanonicalLifecycleProcess>();
   private runtimeState?: RuntimeState;
   private simulationTimeSec = 0;
   private sequence = 0;
@@ -228,45 +222,20 @@ export class ClinicalScenarioEngine {
   private readonly assessmentEngine = new ClinicalAssessmentEngine();
   private readonly circulationManagement = new CirculationManagementFramework();
   private assessmentRules: AssessmentRule[] = [];
-  private hemorrhageProcess?: HemorrhagePatientProcessRuntime;
   private readonly medicationEngine = new MedicationEngine();
   private vitalSignEvents: VitalSignEvent[] = [];
 
   reset(fixture: GoldenFixture): void {
-    const initial = eventPayload({ payload: fixture.initialState } as GoldenInputEvent);
-    const isBotulism = Array.isArray(initial.processAssignments) || Array.isArray(initial.botulismProcesses);
-    this.botulismRoot = isBotulism ? bootstrapBotulismRoot(fixture) : undefined;
-    const respiratory = this.botulismRoot?.children.find(child => child.processType === "BOT_RESPIRATORY_MUSCLE_FAILURE");
-    const explicitHv = initial.hv && typeof initial.hv === "object" ? initial.hv as Record<string, unknown> : undefined;
-    const botulismHv = isBotulism ? {
-      processType: "HYPOVENTILATION_HYPERCAPNIA",
-      processId: `${respiratory?.processId ?? this.botulismRoot!.processId}:HV_NM_SEV`,
-      instanceKey: `${respiratory?.instanceKey ?? "root"}:hv`, templateId: "HV_NM_SEV",
-      ventilationReserve: Number(explicitHv?.ventilationReserve ?? respiratory?.initialReserve ?? 50),
-      reserveLossPerMin: 0, co2Burden: Number(explicitHv?.co2Burden ?? 42), co2GainPerMin: 0,
-    } : undefined;
-    const hvInitial = botulismHv ?? (initial.hv && typeof initial.hv === "object"
-      ? { processType: "HYPOVENTILATION_HYPERCAPNIA", reserveLossPerMin: 3.8, co2GainPerMin: 4, ...(initial.hv as object) }
-      : fixture.initialState);
-    this.process = bootstrapHvPatientProcess({ ...fixture, initialState: hvInitial });
-    if (respiratory) {
-      this.process.parentProcessId = respiratory.processId;
-      this.process.parentProcessType = respiratory.processType;
+    this.lifecycleProcessStore.clear();
+    const bootstrapped: CanonicalLifecycleProcess[] = [];
+    for (const descriptor of this.lifecyclePlan.forPhase("BOOTSTRAP")) {
+      const result = descriptor.bootstrap!({ fixture, existingProcesses: structuredClone(bootstrapped) });
+      for (const created of result.processes) {
+        bootstrapped.push(created);
+        this.replaceLifecycleProcess(created);
+      }
     }
-    this.hypoxiaProcesses.clear();
-    this.hemorrhageProcess = initial.hemorrhage && typeof initial.hemorrhage === "object"
-      ? bootstrapHemorrhagePatientProcess(this.process.encounterId, initial.hemorrhage as Record<string, unknown>) : undefined;
-    if (initial.hypoxia && typeof initial.hypoxia === "object") {
-      const child = bootstrapHypoxiaPatientProcess(fixture, initial.hypoxia as Record<string, unknown>, this.parentRef());
-      this.hypoxiaProcesses.set(child.processId, child);
-    }
-    if (isBotulism && respiratory && respiratory.initialReserve <= 20) {
-      const child = bootstrapHypoxiaPatientProcess(fixture, {
-        templateId: "HYP_HYPOVENT_MOD", processId: `${this.process.processId}:HYP_HYPOVENT_MOD`,
-      }, this.parentRef());
-      this.hypoxiaProcesses.set(child.processId, child);
-    }
-    this.runtimeState = initialRuntimeState(fixture, this.process);
+    this.runtimeState = initialRuntimeState(fixture, this.requireProcess());
     this.simulationTimeSec = 0;
     this.sequence = 0;
     this.eventLog = [];
@@ -282,12 +251,12 @@ export class ClinicalScenarioEngine {
     this.circulationManagement.reset();
     this.medicationEngine.reset();
     this.vitalSignEvents = [];
-    publishRuntimeSnapshot(this.runtimeState, [this.requireProcess(), ...this.sortedHypoxia(), ...(this.hemorrhageProcess ? [this.hemorrhageProcess] : [])].map(process => process.outputs).map(output => ({
+    publishRuntimeSnapshot(this.runtimeState, this.orderedLifecycleLeaves("SERIALIZATION").map(process => process.outputs).map(output => ({
       processId: output.processId, moduleId: output.moduleId, status: output.status,
     })));
     this.publishResourceDebugSnapshot();
     this.publishAssessmentSnapshot(true);
-    if (this.botulismRoot) this.aggregateProcesses(this.runtimeState);
+    if (this.rootProcess()) this.aggregateProcesses(this.runtimeState);
   }
 
   advanceTo(simulationTimeSec: number): void {
@@ -296,7 +265,13 @@ export class ClinicalScenarioEngine {
     }
     const targetTime = simulationTimeSec;
     for (const medicationEvent of this.medicationEngine.advanceTo(targetTime)) this.logEvent(medicationEvent.eventType, medicationEvent, medicationEvent.patientId);
-    if (this.botulismRoot) this.botulismRoot = tickBotulismRoot(this.botulismRoot, targetTime);
+    const root = this.rootProcess();
+    if (root) {
+      const descriptor = this.lifecyclePlan.descriptor(root.processType);
+      const context = this.lifecyclePhaseContext(targetTime, 0, []);
+      const result = descriptor.advance!(root, context);
+      result.processes.forEach(process => this.replaceLifecycleProcess(process));
+    }
     const due = this.pendingTransitions.filter((item) => item.dueSec <= simulationTimeSec)
       .sort((left, right) => left.dueSec - right.dueSec || left.transition.localeCompare(right.transition));
     this.pendingTransitions = this.pendingTransitions.filter((item) => item.dueSec > simulationTimeSec);
@@ -304,8 +279,13 @@ export class ClinicalScenarioEngine {
       this.simulationTimeSec = item.dueSec;
       if (item.transition === "HYPOVENTILATION_HYPOXIA_TRIGGERED") this.activateHypoxiaChild();
       else {
-        this.process = applyHvTimedTransition(this.requireProcess(), item.transition);
-        this.aggregateProcesses();
+        const descriptor = this.lifecyclePlan.forPhase("ADVANCE").find(item => item.order.advanceOrder === 200);
+        if (!descriptor) throw new Error("HV lifecycle advance handler puudub.");
+        const result = descriptor.advance!(this.requireProcess(), this.lifecyclePhaseContext(
+          this.simulationTimeSec, 0, [], undefined, item.transition
+        ));
+        result.processes.forEach(process => this.replaceLifecycleProcess(process));
+        if (result.aggregationRequested) this.aggregateProcesses();
         this.logEvent(item.transition);
       }
     }
@@ -316,44 +296,18 @@ export class ClinicalScenarioEngine {
     const process = this.requireProcess();
     const runtimeState = this.requireRuntimeState();
     if (this.appliedEventIds.has(event.eventId)) return;
-    if (this.botulismRoot && event.eventType === "ENCOUNTER_ACTIVATE") {
-      this.appliedEventIds.add(event.eventId);
-      this.logEvent("ENCOUNTER_ACTIVATED", { parentProcessId: this.botulismRoot.processId }, event.target);
-      return;
-    }
-    if (this.botulismRoot && event.eventType === "PROGRESSION_CHECK") {
-      if (process.clinicalState.co2Burden >= 76 && !process.clinicalState.mentalStatusSourceModule) {
-        this.process = applyHvTimedTransition(process, "CO2_NARCOSIS_TRIGGERED");
-        this.aggregateProcesses();
+    const inputContext = { event: structuredClone(event), simulationTimeSec: this.simulationTimeSec,
+      runtimeState: structuredClone(runtimeState), existingProcesses: structuredClone([...this.lifecycleProcessStore.values()]) };
+    for (const descriptor of this.lifecyclePlan.forPhase("HANDLE_INPUT")) {
+      for (const current of this.lifecycleProcesses(descriptor.processType)) {
+        const result = descriptor.handleInput!(current, inputContext);
+        if (!result) continue;
+        result.processes.forEach(item => this.replaceLifecycleProcess(item));
+        if (result.aggregationRequested) this.aggregateProcesses();
+        this.appliedEventIds.add(event.eventId);
+        result.events.forEach(item => this.recordLifecycleEvidence(item));
+        return;
       }
-      this.appliedEventIds.add(event.eventId);
-      this.logEvent("PROGRESSION_CHECKED", { parentProcessId: this.botulismRoot.processId }, event.target);
-      return;
-    }
-    if (this.botulismRoot && event.eventType === "ASPIRATION_EVENT") {
-      const cranial = this.botulismRoot.children.find(child => child.processType === "BOT_CRANIAL_BULBAR");
-      if (!cranial) throw new Error("Botulism cranial child puudub aspiratsiooni käivitamiseks.");
-      const child = bootstrapHypoxiaPatientProcess({
-        fixtureId: this.botulismRoot.encounterId, fixtureType: "Runtime", patientId: this.botulismRoot.encounterId,
-        seed: Number(runtimeState.randomSeed), clockState: "Running", ownershipVersion: 1,
-        initialState: {}, activeResources: {}, loadedModules: ["BOTULISM_V1", "HYPOXIA_V1"],
-      }, { templateId: "HYP_ASP_MOD", processId: `${cranial.processId}:HYP_ASP_MOD`, instanceKey: `${this.botulismRoot.encounterId}:asp` }, {
-        processId: cranial.processId, processType: cranial.processType, instanceKey: cranial.instanceKey,
-      });
-      this.hypoxiaProcesses.set(child.processId, child);
-      this.aggregateProcesses();
-      this.appliedEventIds.add(event.eventId);
-      this.logEvent("ASPIRATION_RISK_TRIGGERED", { parentProcessId: cranial.processId }, event.target, child);
-      return;
-    }
-    if (this.botulismRoot && event.eventType === "SNAPSHOT") {
-      this.appliedEventIds.add(event.eventId);
-      return;
-    }
-    if (this.botulismRoot && event.eventType === "ACTION" && event.actionId === "ORAL_FLUID_GIVEN") {
-      this.appliedEventIds.add(event.eventId);
-      this.logEvent("ACTION_APPLIED", { actionId: event.actionId, parentProcessId: this.botulismRoot.processId }, event.target);
-      return;
     }
     if (event.eventType === "ACTION") {
       const allowed = new Set<HvAction>([
@@ -384,7 +338,7 @@ export class ClinicalScenarioEngine {
         throw new Error(`NOT_IMPLEMENTED: HV threshold ${field}.`);
       }
       if (transition !== "HYPOVENTILATION_HYPOXIA_TRIGGERED" ||
-        (!this.hypoxiaProcesses.size && !this.pendingTransitions.some(item => item.transition === transition))) {
+        (!this.sortedHypoxia().length && !this.pendingTransitions.some(item => item.transition === transition))) {
         this.pendingTransitions.push({ dueSec: this.simulationTimeSec + durationSec, transition });
       }
       this.appliedEventIds.add(event.eventId);
@@ -437,7 +391,12 @@ export class ClinicalScenarioEngine {
     }
     const activeEffects = [...this.interventionRuntime.effectsAt(this.simulationTimeSec), ...this.medicationEngine.activeEffects()]
       .sort((a,b) => a.effectType.localeCompare(b.effectType) || a.effectId.localeCompare(b.effectId));
-    if (this.hemorrhageProcess) this.hemorrhageProcess = setHemorrhageEffects(this.hemorrhageProcess, activeEffects);
+    for (const descriptor of this.lifecyclePlan.forPhase("PREPARE")) {
+      for (const current of this.lifecycleProcesses(descriptor.processType)) {
+        const result = descriptor.prepare!(current, this.lifecyclePhaseContext(this.simulationTimeSec, 0, activeEffects, event));
+        result.processes.forEach(process => this.replaceLifecycleProcess(process));
+      }
+    }
     for (const effect of activeEffects) {
       if (["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED"].includes(effect.effectType)) continue;
       this.applyClinicalEffect(effect, true);
@@ -447,32 +406,36 @@ export class ClinicalScenarioEngine {
     if (!Number.isFinite(tickMinutes) || tickMinutes <= 0) {
       throw new Error("ENGINE_TICK payload.tickMin peab olema positiivne arv.");
     }
-    this.process = tickHvPatientProcess(process, tickMinutes * 60);
-    for (const [id, child] of [...this.hypoxiaProcesses.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      this.hypoxiaProcesses.set(id, tickHypoxiaPatientProcess(child, tickMinutes * 60));
-    }
-    if (this.hemorrhageProcess) {
-      const result = tickHemorrhagePatientProcess(this.hemorrhageProcess, tickMinutes * 60);
-      this.hemorrhageProcess = result.process;
-      for (const generated of result.events) this.logEvent(generated.eventType, generated.details, event.target, this.requireProcess());
+    const tickContext = this.lifecyclePhaseContext(this.simulationTimeSec, tickMinutes * 60, activeEffects, event);
+    for (const descriptor of this.lifecyclePlan.forPhase("TICK")) {
+      const phaseProcesses = descriptor.order.tickOrder === 100 ? [process] : this.lifecycleProcesses(descriptor.processType);
+      for (const current of phaseProcesses) {
+        const result = descriptor.tick!(current, tickContext);
+        result.processes.forEach(process => this.replaceLifecycleProcess(process));
+        result.events.filter(item => item.recordPhase === "BEFORE_AGGREGATION").forEach(item => this.recordLifecycleEvidence(item));
+      }
     }
     this.aggregateProcesses(runtimeState);
     this.appliedEventIds.add(event.eventId);
-    for (const child of this.sortedHypoxia()) {
-      this.logEvent("PROCESS_TICK_APPLIED", {
-        inputEventId: event.eventId, tickSeconds: tickMinutes * 60,
-      }, child.processId, child);
+    for (const descriptor of this.lifecyclePlan.forPhase("POST_AGGREGATE")) {
+      for (const current of this.lifecycleProcesses(descriptor.processType)) {
+        descriptor.postAggregate!(current, tickContext).forEach(item => this.recordLifecycleEvidence(item));
+      }
     }
-    this.logEvent("ENGINE_TICK_APPLIED", {
-      sourceProcessId: this.process.processId,
-      inputEventId: event.eventId,
-      tickSeconds: tickMinutes * 60,
-    });
     if (this.processControlledEventPending) {
       this.logEvent("PROCESS_CONTROLLED", {}, event.target);
       this.processControlledEventPending = false;
     }
-    this.emitOxygenMaskingWarning(event.target);
+    for (const descriptor of this.lifecyclePlan.forPhase("FINALIZE")) {
+      for (const current of this.lifecycleProcesses(descriptor.processType)) {
+        const result = descriptor.finalize!(current, this.lifecyclePhaseContext(
+          this.simulationTimeSec, tickMinutes * 60, activeEffects, event
+        ));
+        result.processes.forEach(process => this.replaceLifecycleProcess(process));
+        if (result.aggregationRequested) this.aggregateProcesses();
+        result.events.forEach(item => this.recordLifecycleEvidence(item));
+      }
+    }
     this.publishResourceDebugSnapshot();
   }
 
@@ -481,11 +444,13 @@ export class ClinicalScenarioEngine {
   }
 
   getPatientProcesses(): (PatientProcessRuntime | HypoxiaPatientProcessRuntime | HemorrhagePatientProcessRuntime)[] {
-    return [this.requireProcess(), ...this.sortedHypoxia(), ...(this.hemorrhageProcess ? [this.hemorrhageProcess] : [])].map(item => structuredClone(item));
+    return this.orderedLifecycleLeaves("SERIALIZATION").map(item => structuredClone(item)) as
+      (PatientProcessRuntime | HypoxiaPatientProcessRuntime | HemorrhagePatientProcessRuntime)[];
   }
 
   getBotulismRoot(): BotulismRootPatientProcessRuntime | undefined {
-    return this.botulismRoot ? structuredClone(this.botulismRoot) : undefined;
+    const root = this.rootProcess();
+    return root ? structuredClone(root) : undefined;
   }
 
   getRuntimeState(): RuntimeState {
@@ -507,7 +472,12 @@ export class ClinicalScenarioEngine {
     if (simulationTimeSec !== this.simulationTimeSec) return { ok: false, reason: "Command simulation time does not match the runtime" };
     const runtimeEventId = `INSTRUCTOR:${commandId}:RESPIRATORY_DETERIORATION`;
     if (this.appliedEventIds.has(runtimeEventId)) return { ok: true, runtimeEventId };
-    this.process = applyHvTimedTransition(process, "CO2_NARCOSIS_TRIGGERED");
+    const descriptor = this.lifecyclePlan.forPhase("ADVANCE").find(item => item.order.advanceOrder === 200);
+    if (!descriptor) return { ok: false, reason: "HV lifecycle advance handler is not available" };
+    const result = descriptor.advance!(process, this.lifecyclePhaseContext(
+      simulationTimeSec, 0, [], undefined, "CO2_NARCOSIS_TRIGGERED"
+    ));
+    result.processes.forEach(item => this.replaceLifecycleProcess(item));
     this.aggregateProcesses();
     this.appliedEventIds.add(runtimeEventId);
     this.logEvent("INSTRUCTOR_EVENT_APPLIED", { commandId, eventType: "RESPIRATORY_DETERIORATION", sourceProcessId: process.processId }, patientId);
@@ -577,7 +547,7 @@ export class ClinicalScenarioEngine {
   getHashes(): { stateHash: string; eventLogHash: string; processTreeHash: string; resourcePoolHash: string; replayHash: string } {
     const stateHash = sha256Text(stableJson(this.requireRuntimeState()));
     const eventLogHash = sha256Text(stableJson(this.eventLog));
-    const processTreeHash = sha256Text(stableJson({ root: this.botulismRoot, processes: this.getPatientProcesses() }));
+    const processTreeHash = sha256Text(stableJson({ root: this.rootProcess(), processes: this.getPatientProcesses() }));
     const resourcePoolHash = this.resourcePool.hash();
     const interventionHash = sha256Text(stableJson(this.interventionEngine.snapshot()));
     const clinicalIntegrationHash = sha256Text(stableJson({
@@ -600,8 +570,11 @@ export class ClinicalScenarioEngine {
   }
 
   private requireProcess(): PatientProcessRuntime {
-    if (!this.process) throw new Error("ClinicalScenarioEngine fixture pole laaditud.");
-    return this.process;
+    const process = this.orderedLifecycleLeaves("SERIALIZATION").find(item =>
+      this.lifecyclePlan.descriptor(item.processType).order.serializationSlot === 100
+    );
+    if (!process) throw new Error("ClinicalScenarioEngine fixture pole laaditud.");
+    return process as PatientProcessRuntime;
   }
 
   private requireRuntimeState(): RuntimeState {
@@ -610,13 +583,13 @@ export class ClinicalScenarioEngine {
   }
 
   private aggregateProcesses(previous = this.requireRuntimeState()): void {
-    const processes = [this.requireProcess(), ...this.sortedHypoxia(), ...(this.hemorrhageProcess ? [this.hemorrhageProcess] : [])];
+    const processes = this.orderedLifecycleLeaves("AGGREGATION");
     const aggregated = aggregateRuntimeState({
       previous,
       expectedStateVersion: previous.stateVersion,
       exerciseTimeSec: this.simulationTimeSec,
       processOutputs: processes.map(process => process.outputs),
-      aggregationConfigVersion: this.hypoxiaProcesses.size ? "WP-7/HV-HYPOXIA" : "WP-6/HV-P0",
+      aggregationConfigVersion: this.sortedHypoxia().length ? "WP-7/HV-HYPOXIA" : "WP-6/HV-P0",
     }, this.resolver);
     if (aggregated.rejectedProcessIds.length > 0 ||
       aggregated.events.some((event) => event.eventType === "PROCESS_OUTPUT_REJECTED")) {
@@ -694,7 +667,7 @@ export class ClinicalScenarioEngine {
       clinicalInterventions: this.interventionRuntime.snapshot(),
       airwayStates: this.airwayManagement.snapshot().states,
       circulationStates: this.circulationManagement.snapshot().states,
-      hemorrhageProcesses: this.hemorrhageProcess ? [this.hemorrhageProcess] : [],
+      hemorrhageProcesses: this.hemorrhageProcesses(),
       medicationState: this.medicationEngine.snapshot(),
       vitalSignStates: this.runtimeState?.vitalSignState ? [{ patientId: this.requireProcess().encounterId, state: this.runtimeState.vitalSignState }] : [],
       recentEvents: this.resourceEventLog,
@@ -704,7 +677,58 @@ export class ClinicalScenarioEngine {
   }
 
   private sortedHypoxia(): HypoxiaPatientProcessRuntime[] {
-    return [...this.hypoxiaProcesses.values()].sort((a, b) => a.processId.localeCompare(b.processId));
+    const descriptor = this.lifecyclePlan.descriptor("HYPOXIA");
+    return this.lifecyclePlan.processesForDescriptor(descriptor, [...this.lifecycleProcessStore.values()]) as HypoxiaPatientProcessRuntime[];
+  }
+
+  private orderedLifecycleLeaves(domain: "AGGREGATION" | "SERIALIZATION"): CanonicalLifecycleProcess[] {
+    return this.lifecyclePlan.orderProcesses([...this.lifecycleProcessStore.values()], domain);
+  }
+
+  private lifecycleProcesses(processType: string): CanonicalLifecycleProcess[] {
+    const descriptor = this.lifecyclePlan.descriptor(processType);
+    return this.lifecyclePlan.processesForDescriptor(descriptor, [...this.lifecycleProcessStore.values()]);
+  }
+
+  private replaceLifecycleProcess(process: CanonicalLifecycleProcess): void {
+    this.lifecyclePlan.descriptor(process.processType);
+    const existing = this.lifecycleProcessStore.get(process.processId);
+    if (existing && (existing.processType !== process.processType || existing.instanceKey !== process.instanceKey ||
+      existing.encounterId !== process.encounterId)) {
+      throw new Error(`Lifecycle process identity conflict: ${process.processId}.`);
+    }
+    this.lifecycleProcessStore.set(process.processId, process);
+  }
+
+  private rootProcess(): BotulismRootPatientProcessRuntime | undefined {
+    return [...this.lifecycleProcessStore.values()].find(process =>
+      this.lifecyclePlan.descriptor(process.processType).kind === "ROOT"
+    ) as BotulismRootPatientProcessRuntime | undefined;
+  }
+
+  private hemorrhageProcesses(): HemorrhagePatientProcessRuntime[] {
+    return this.orderedLifecycleLeaves("SERIALIZATION").filter(process =>
+      this.lifecyclePlan.descriptor(process.processType).order.serializationSlot === 300
+    ) as HemorrhagePatientProcessRuntime[];
+  }
+
+  private lifecyclePhaseContext(
+    simulationTimeSec: number,
+    tickSeconds: number,
+    activeEffects: readonly ClinicalEffect[],
+    inputEvent?: GoldenInputEvent,
+    transition?: string
+  ): PatientProcessPhaseContext {
+    return { simulationTimeSec, tickSeconds, activeEffects: structuredClone(activeEffects),
+      runtimeState: structuredClone(this.requireRuntimeState()), inputEvent: inputEvent ? structuredClone(inputEvent) : undefined,
+      existingProcesses: structuredClone([...this.lifecycleProcessStore.values()]), transition };
+  }
+
+  private recordLifecycleEvidence(evidence: PatientProcessEvidence): void {
+    const source = evidence.sourceProcessId
+      ? [this.requireProcess(), ...this.sortedHypoxia()].find(item => item.processId === evidence.sourceProcessId)
+      : undefined;
+    this.logEvent(evidence.eventType, structuredClone(evidence.details), evidence.target, source ?? this.requireProcess());
   }
 
   private parentRef(): { processId: string; processType: string; instanceKey: string } {
@@ -713,7 +737,7 @@ export class ClinicalScenarioEngine {
   }
 
   private activateHypoxiaChild(): void {
-    if (this.hypoxiaProcesses.size) return;
+    if (this.sortedHypoxia().length) return;
     const fixture: GoldenFixture = {
       fixtureId: this.requireProcess().encounterId,
       fixtureType: "Runtime",
@@ -725,22 +749,13 @@ export class ClinicalScenarioEngine {
       activeResources: [],
       loadedModules: ["HYPOVENTILATION_HYPERCAPNIA_V1", "HYPOXIA_V1"],
     };
-    const child = bootstrapHypoxiaPatientProcess(fixture, {
-      templateId: "HYP_HYPOVENT_MOD", processId: `${this.requireProcess().processId}:HYP_HYPOVENT_MOD`,
-    }, this.parentRef());
-    this.hypoxiaProcesses.set(child.processId, child);
+    const descriptor = this.lifecyclePlan.descriptor("HYPOXIA");
+    const result = descriptor.bootstrap!({ fixture, existingProcesses: [...this.lifecycleProcessStore.values()],
+      requestedConfig: { templateId: "HYP_HYPOVENT_MOD", processId: `${this.requireProcess().processId}:HYP_HYPOVENT_MOD` },
+      parent: this.parentRef() });
+    result.processes.forEach(process => this.replaceLifecycleProcess(process));
     this.aggregateProcesses();
     this.logEvent("HYPOVENTILATION_HYPOXIA_TRIGGERED", {}, this.requireProcess().processId);
-  }
-
-  private emitOxygenMaskingWarning(target?: string): void {
-    const hv = this.requireProcess();
-    if (!hv.clinicalState.oxygenTherapyActive || hv.clinicalState.co2Trend !== "WORSENING" ||
-      hv.clinicalState.oxygenMaskingWarningEmitted ||
-      !this.sortedHypoxia().some(child => child.clinicalState.spo2Trend === "IMPROVING")) return;
-    this.process = markOxygenMaskingWarning(hv);
-    this.aggregateProcesses();
-    this.logEvent("OXYGEN_MASKING_WARNING", {}, target);
   }
 
   private effectForAction(eventId: string, action: HvAction): ClinicalEffect {
@@ -799,10 +814,10 @@ export class ClinicalScenarioEngine {
   private replaceClinicalProcesses(processes: ClinicalProcessRuntime[]): void {
     const hv = processes.find(item => item.processType === "HYPOVENTILATION_HYPERCAPNIA");
     if (!hv) throw new Error("Clinical integration tulemusest puudub HV PatientProcess.");
-    this.process = hv as PatientProcessRuntime;
-    this.hypoxiaProcesses.clear();
+    this.replaceLifecycleProcess(hv as PatientProcessRuntime);
+    for (const process of this.sortedHypoxia()) this.lifecycleProcessStore.delete(process.processId);
     for (const process of processes.filter(item => item.processType === "HYPOXIA")) {
-      this.hypoxiaProcesses.set(process.processId, process as HypoxiaPatientProcessRuntime);
+      this.replaceLifecycleProcess(process as HypoxiaPatientProcessRuntime);
     }
   }
 
@@ -816,7 +831,7 @@ export class ClinicalScenarioEngine {
   }
 
   private publishAssessmentSnapshot(force = false): void {
-    if (!this.process || !this.runtimeState) return;
+    if (!this.lifecycleProcessStore.size || !this.runtimeState) return;
     // An empty rule set has no changing assessment result. Avoid cloning the
     // ever-growing timeline on every tick in long deterministic simulations.
     if (!force && this.assessmentRules.length === 0) return;

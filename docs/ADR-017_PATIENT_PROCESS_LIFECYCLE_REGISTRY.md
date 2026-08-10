@@ -12,6 +12,11 @@
 
 **Review evidence:** [`ADR-017_ARCHITECTURE_REVIEW.md`](./ADR-017_ARCHITECTURE_REVIEW.md)
 
+**Implementation status:** WP-36A migration implemented locally with immutable
+parity baselines and a passing physical-device smoke test; architecture freeze
+remains pending commit and green Node 20/22/24/26 CI. WP-36 remains blocked. See
+[`WP36A_PATIENT_PROCESS_LIFECYCLE_REGISTRY_MIGRATION.md`](./WP36A_PATIENT_PROCESS_LIFECYCLE_REGISTRY_MIGRATION.md).
+
 ## Decision history
 
 The original proposal described a registry with only `bootstrap` and `tick` and
