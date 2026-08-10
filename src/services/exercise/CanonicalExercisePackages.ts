@@ -7,6 +7,7 @@ import { AIRWAY_MODULE_ID, AIRWAY_MODULE_VERSION } from "@/modules/airway/Airway
 import { RESPIRATORY_FAILURE_MODULE_ID, RESPIRATORY_FAILURE_MODULE_VERSION } from "@/modules/respiratoryFailure/RespiratoryFailureManifest";
 import { MEDICATION_CORE_MODULE_ID, MEDICATION_CORE_MODULE_VERSION } from "@/modules/medicationCore/MedicationCoreManifest";
 import { ALS_MODULE_ID, ALS_MODULE_VERSION } from "@/modules/als/AlsManifest";
+import { CARDIAC_ARREST_MODULE_ID, CARDIAC_ARREST_MODULE_VERSION } from "@/modules/cardiacArrest/CardiacArrestManifest";
 
 const capabilities: readonly ExerciseCapability[] = ["EXERCISE_CONTROLS", "TIMELINE", "DEBRIEF", "ANALYTICS", "METRICS", "RESOURCES", "PATIENT_PLAYBACK"];
 const processes: Record<ExerciseProfile, readonly string[]> = {
@@ -123,11 +124,36 @@ export const MEDICATION_CORE_EXERCISE_PACKAGE = createExercisePackage({
   },
 });
 
+const cardiacArrestDefinition: ExerciseDefinition = Object.freeze({
+  ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
+  exerciseTypeId: "RUSSICAPTOR_CARDIAC_ARREST_REFERENCE",
+  name: "Cardiac Arrest Reference Exercise",
+  description: "Protocol-independent deterministic cardiac arrest, CPR, defibrillation, rhythm and ROSC reference",
+  profile: "CUSTOM",
+});
+
+export const CARDIAC_ARREST_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.cardiac-arrest-reference",
+  packageVersion: "1.0.0",
+  definition: cardiacArrestDefinition,
+  patientDatasetId: "patients.cardiac-arrest-reference.v1",
+  enabledPatientProcesses: cardiacArrestDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: cardiacArrestDefinition.enabledAnalyticsProviders,
+  enabledMetricProviders: cardiacArrestDefinition.enabledMetricProviders,
+  requiredClinicalModules: Object.freeze([{ moduleId: CARDIAC_ARREST_MODULE_ID, version: CARDIAC_ARREST_MODULE_VERSION }]),
+  metadata: {
+    name: "Cardiac Arrest Reference Package",
+    description: "Deterministic capability and replay reference; not a treatment protocol",
+    author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "CUSTOM",
+    tags: ["canonical", "cardiac-arrest", "clinical-module", "reference"],
+  },
+});
+
 const alsDefinition: ExerciseDefinition = Object.freeze({
   ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
   exerciseTypeId: "RUSSICAPTOR_ALS_REFERENCE",
   name: "ALS Clinical Module Reference Exercise",
-  description: "Reduced-capability ALS reference composed from Airway and Medication Core; cardiac arrest, rhythm, CPR physiology, defibrillation and ROSC are unavailable.",
+  description: "ALS reference composed from Airway, Cardiac Arrest and Medication Core clinical modules.",
   profile: "ALS",
   enabledPatientProcesses: Object.freeze(DEFAULT_EXERCISE_DEFINITION.enabledPatientProcesses.filter(id => id !== "MEDICATION")),
   enabledAnalyticsProviders: Object.freeze(EXERCISE_DEFINITION_CATALOG.analyticsProviders.filter(id => id !== "core.interventions")),
@@ -145,11 +171,11 @@ export const ALS_EXERCISE_PACKAGE = createExercisePackage({
   requiredClinicalModules: Object.freeze([{ moduleId: ALS_MODULE_ID, version: ALS_MODULE_VERSION }]),
   metadata: {
     name: "ALS Clinical Module Reference Package",
-    description: "Reduced-capability ALS composition: Airway and Medication Core available; cardiac arrest, rhythm, CPR physiology, defibrillation and ROSC unavailable.",
+    description: "Canonical ALS composition with Airway, Cardiac Arrest and Medication Core foundations.",
     author: "RussiCaptor",
     organization: "RussiCaptor",
     createdVersion: "0.7.0",
     exerciseType: "ALS",
-    tags: ["als", "canonical", "clinical-module", "reduced-capability", "reference"],
+    tags: ["als", "canonical", "clinical-module", "reference"],
   },
 });

@@ -1,4 +1,5 @@
 import { InspectorClinicalState } from "@/components/instructor/InspectorClinicalState";
+import { InspectorCardiacState } from "@/components/instructor/InspectorCardiacState";
 import { InspectorClinicalTabs } from "@/components/instructor/InspectorClinicalTabs";
 import { InspectorHeader } from "@/components/instructor/InspectorHeader";
 import { InspectorListPanel } from "@/components/instructor/InspectorListPanel";
@@ -9,6 +10,7 @@ import {
   getInstructorPatientInspector, getInstructorPatientInspectorVersion, subscribeToInstructorPatientInspector,
 } from "@/services/InstructorPatientInspectorService";
 import { router, useLocalSearchParams } from "expo-router";
+import { getCurrentExercise } from "@/repositories/ExerciseRepository";
 import { useState, useSyncExternalStore } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
@@ -45,6 +47,7 @@ export default function PatientInspectorScreen() {
       <InspectorHeader header={model.header} />
       <View style={[styles.columns, !desktop && styles.stacked]}>
         <View style={styles.leftColumn}>
+          {model.cardiac && <InspectorCardiacState exerciseId={getCurrentExercise().id} patientId={model.header.patientId} cardiac={model.cardiac} />}
           <InspectorClinicalState state={model.clinicalState} />
           <InspectorListPanel title="Active Patient Processes" items={model.processes} emptyText="No active patient processes" />
           <InspectorListPanel title="Active Clinical Effects" items={model.effects} emptyText="No active clinical effects" />

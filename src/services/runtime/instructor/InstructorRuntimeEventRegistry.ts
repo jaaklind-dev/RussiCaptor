@@ -1,6 +1,7 @@
 import type { InstructorEventType, InstructorPatientCommand } from "@/models/InstructorCommand";
+import type { CardiacInterventionAction } from "@/models/CardiacInterventionCommand";
 export type InstructorRuntimeEventResult = { readonly ok: true; readonly runtimeEventId: string } | { readonly ok: false; readonly reason: string };
-export type InstructorRuntimeOwner = { readonly exerciseId: string; readonly patientId: string; readonly supportedEvents: readonly InstructorEventType[]; execute(command: InstructorPatientCommand): InstructorRuntimeEventResult };
+export type InstructorRuntimeOwner = { readonly exerciseId: string; readonly patientId: string; readonly supportedEvents: readonly InstructorEventType[]; execute(command: InstructorPatientCommand): InstructorRuntimeEventResult; executeClinicalIntervention?(commandId: string, action: CardiacInterventionAction): InstructorRuntimeEventResult };
 const owners = new Map<string, InstructorRuntimeOwner>();
 const key = (exerciseId: string, patientId: string) => `${exerciseId}\u0000${patientId}`;
 export function registerInstructorRuntimeOwner(owner: InstructorRuntimeOwner): () => void { const ownerKey = key(owner.exerciseId, owner.patientId); owners.set(ownerKey, owner); return () => { if (owners.get(ownerKey) === owner) owners.delete(ownerKey); }; }

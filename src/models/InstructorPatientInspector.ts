@@ -1,5 +1,6 @@
 import type { Avpu } from "@/models/VitalSign";
 import type { InstructorPatientStatus } from "@/models/InstructorDashboard";
+import type { CardiacRhythm, CardiacRhythmClassification, CardiacState } from "@/models/PatientProcessRuntime";
 
 export type InspectorHeaderModel = {
   readonly patientId: string;
@@ -48,6 +49,15 @@ export type InstructorPatientInspectorModel = {
   readonly imaging: readonly InspectorListItem[];
   readonly orders: readonly InspectorListItem[];
   readonly notes: readonly InspectorListItem[];
+  readonly cardiac?: Readonly<{
+    cardiacState: CardiacState;
+    rhythm: CardiacRhythm;
+    rhythmClassification: CardiacRhythmClassification;
+    cprActive: boolean;
+    shockAttemptCount: number;
+    lastEvent?: string;
+    lastEventTimeSec?: number;
+  }>;
 };
 
 export type InspectorTab = "Interventions" | "Medications" | "Labs" | "Imaging" | "Orders" | "Notes";

@@ -10,7 +10,7 @@ import { executeScenarioEvent } from "@/services/WorkflowExecutor";
 
 import type { GoldenActualEvent, GoldenFixture, GoldenInputEvent } from "@/models/GoldenTest";
 import type { OwnershipRule } from "@/models/ModuleImport";
-import type { BotulismRootPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime } from "@/models/PatientProcessRuntime";
+import type { BotulismRootPatientProcessRuntime, CardiacArrestPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime, RespiratoryFailurePatientProcessRuntime } from "@/models/PatientProcessRuntime";
 import type { RuntimeState } from "@/models/RuntimeAggregation";
 import type { ClinicalEffect, ClinicalProcessRuntime } from "@/models/ClinicalIntegration";
 import type { InterventionInstance } from "@/models/InterventionInstance";
@@ -43,13 +43,15 @@ import { MedicationEngine } from "@/services/runtime/medication/MedicationEngine
 import { publishAssessmentDebugSnapshot } from "@/services/AssessmentRuntimeDebugService";
 import { hvClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HvClinicalProcessHandler";
 import { hypoxiaClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HypoxiaClinicalProcessHandler";
+import { cardiacArrestClinicalProcessHandler } from "@/services/runtime/clinical/handlers/CardiacArrestClinicalProcessHandler";
+import { cardiacArrestInterventionDefinitions } from "@/services/runtime/clinical/CardiacArrestInterventionDefinitions";
 import { sha256Text } from "@/utils/sha256";
 import { stableJson } from "@/utils/stableJson";
 import { defaultVitalSignConfiguration, VitalSignEngine } from "@/services/runtime/vitals/VitalSignEngine";
 import { projectVitalSignState } from "@/services/runtime/vitals/VitalSignProjection";
 import type { VitalSignConfiguration, VitalSignEvent, VitalSignKey } from "@/models/VitalSign";
 import type { CanonicalLifecycleProcess, PatientProcessEvidence, PatientProcessPhaseContext } from "@/models/PatientProcessLifecycle";
-import { createProductionPatientProcessLifecyclePlan } from "@/services/runtime/lifecycle/ProductionPatientProcessLifecycle";
+import { createProductionPatientProcessLifecyclePlan, isClinicalProcess } from "@/services/runtime/lifecycle/ProductionPatientProcessLifecycle";
 
 export function runScenarioEvents(
 
@@ -213,10 +215,10 @@ export class ClinicalScenarioEngine {
   private resourcePool = new ResourcePool();
   private interventionEngine = new InterventionEngine();
   private readonly clinicalIntegration = new ClinicalIntegrationFramework(
-    new ClinicalProcessRegistry([hvClinicalProcessHandler, hypoxiaClinicalProcessHandler])
+    new ClinicalProcessRegistry([hvClinicalProcessHandler, hypoxiaClinicalProcessHandler, cardiacArrestClinicalProcessHandler])
   );
   private readonly interventionRuntime = new InterventionRuntime(
-    new InterventionDefinitionRegistry([...airwayInterventionDefinitions, ...circulationInterventionDefinitions])
+    new InterventionDefinitionRegistry([...airwayInterventionDefinitions, ...circulationInterventionDefinitions, ...cardiacArrestInterventionDefinitions])
   );
   private readonly airwayManagement = new AirwayManagementFramework();
   private readonly assessmentEngine = new ClinicalAssessmentEngine();
@@ -251,8 +253,9 @@ export class ClinicalScenarioEngine {
     this.circulationManagement.reset();
     this.medicationEngine.reset();
     this.vitalSignEvents = [];
-    publishRuntimeSnapshot(this.runtimeState, this.orderedLifecycleLeaves("SERIALIZATION").map(process => process.outputs).map(output => ({
-      processId: output.processId, moduleId: output.moduleId, status: output.status,
+    publishRuntimeSnapshot(this.runtimeState, this.orderedLifecycleLeaves("SERIALIZATION").map(process => ({
+      processId: process.outputs.processId, moduleId: process.outputs.moduleId, status: process.outputs.status,
+      ...(process.processType === "CARDIAC_ARREST" ? { clinicalState: structuredClone(process.clinicalState) } : {}),
     })));
     this.publishResourceDebugSnapshot();
     this.publishAssessmentSnapshot(true);
@@ -443,9 +446,22 @@ export class ClinicalScenarioEngine {
     return structuredClone(this.requireProcess());
   }
 
-  getPatientProcesses(): (PatientProcessRuntime | HypoxiaPatientProcessRuntime | HemorrhagePatientProcessRuntime)[] {
+  getPatientProcesses(): (PatientProcessRuntime | HypoxiaPatientProcessRuntime | RespiratoryFailurePatientProcessRuntime | CardiacArrestPatientProcessRuntime | HemorrhagePatientProcessRuntime)[] {
     return this.orderedLifecycleLeaves("SERIALIZATION").map(item => structuredClone(item)) as
-      (PatientProcessRuntime | HypoxiaPatientProcessRuntime | HemorrhagePatientProcessRuntime)[];
+      (PatientProcessRuntime | HypoxiaPatientProcessRuntime | RespiratoryFailurePatientProcessRuntime | CardiacArrestPatientProcessRuntime | HemorrhagePatientProcessRuntime)[];
+  }
+
+  /** Generic canonical intervention entry point for resource-free clinical actions. */
+  startClinicalIntervention(input: {
+    sourceInterventionId: string; definitionId: string; patientId: string;
+    parameters?: Record<string, import("@/models/ClinicalIntegration").ClinicalParameterValue>;
+  }): InterventionInstance {
+    return this.interventionRuntime.startAllocated({ ...input, encounterId: this.requireProcess().encounterId,
+      startedAt: this.simulationTimeSec, resourceIds: [], clinicalContext: this.airwayClinicalContext() });
+  }
+
+  stopClinicalIntervention(sourceInterventionId: string): InterventionInstance | undefined {
+    return this.interventionRuntime.finishBySource(sourceInterventionId, "CANCELLED", this.simulationTimeSec);
   }
 
   getBotulismRoot(): BotulismRootPatientProcessRuntime | undefined {
@@ -598,6 +614,13 @@ export class ClinicalScenarioEngine {
     this.runtimeState = aggregated.state;
     publishRuntimeSnapshot(this.runtimeState, processes.map(process => ({
       processId: process.outputs.processId, moduleId: process.outputs.moduleId, status: process.outputs.status,
+      ...(process.processType === "CARDIAC_ARREST" ? {
+        clinicalState: structuredClone(process.clinicalState),
+        lastEvent: this.eventLog.filter(event => event.target === process.processId).at(-1)
+          ? { type: this.eventLog.filter(event => event.target === process.processId).at(-1)!.eventType,
+            simulationTimeSec: this.eventLog.filter(event => event.target === process.processId).at(-1)!.simulationTime ?? this.simulationTimeSec }
+          : undefined,
+      } : {}),
     })));
     for (const event of aggregated.events.filter(item => ["VitalSignChanged", "TrendChanged", "MonitorStateChanged"].includes(item.eventType))) {
       this.vitalSignEvents.push({
@@ -617,11 +640,7 @@ export class ClinicalScenarioEngine {
     this.sequence += 1;
     this.eventLog.push({
       eventType,
-      sourceModule: source.processType === "HYPOXIA"
-        ? "HYPOXIA_V1"
-        : source.processType === "RESPIRATORY_FAILURE"
-          ? "RESPIRATORY_FAILURE_V1"
-          : "HYPOVENTILATION_HYPERCAPNIA_V1",
+      sourceModule: source.outputs.moduleId,
       target: target ?? source.processId,
       simulationTime: this.simulationTimeSec,
       enginePhase: 2,
@@ -726,7 +745,7 @@ export class ClinicalScenarioEngine {
 
   private recordLifecycleEvidence(evidence: PatientProcessEvidence): void {
     const source = evidence.sourceProcessId
-      ? [this.requireProcess(), ...this.sortedHypoxia()].find(item => item.processId === evidence.sourceProcessId)
+      ? this.orderedLifecycleLeaves("SERIALIZATION").filter(isClinicalProcess).find(item => item.processId === evidence.sourceProcessId)
       : undefined;
     this.logEvent(evidence.eventType, structuredClone(evidence.details), evidence.target, source ?? this.requireProcess());
   }
@@ -787,7 +806,7 @@ export class ClinicalScenarioEngine {
       inputType: "CLINICAL_EFFECT",
       source: { kind: "INTERVENTION", sourceId: effect.sourceInterventionInstanceId },
       payload: effect,
-    }, [this.requireProcess(), ...this.sortedHypoxia()]);
+    }, this.orderedLifecycleLeaves("SERIALIZATION").filter(isClinicalProcess));
     if (result.status === "REJECTED") {
       if (logEvents) {
         const event = result.events[0];
@@ -812,13 +831,7 @@ export class ClinicalScenarioEngine {
   }
 
   private replaceClinicalProcesses(processes: ClinicalProcessRuntime[]): void {
-    const hv = processes.find(item => item.processType === "HYPOVENTILATION_HYPERCAPNIA");
-    if (!hv) throw new Error("Clinical integration tulemusest puudub HV PatientProcess.");
-    this.replaceLifecycleProcess(hv as PatientProcessRuntime);
-    for (const process of this.sortedHypoxia()) this.lifecycleProcessStore.delete(process.processId);
-    for (const process of processes.filter(item => item.processType === "HYPOXIA")) {
-      this.replaceLifecycleProcess(process as HypoxiaPatientProcessRuntime);
-    }
+    processes.forEach(process => this.replaceLifecycleProcess(process));
   }
 
   private airwayClinicalContext(): Record<string, boolean> {

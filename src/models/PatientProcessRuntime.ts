@@ -159,3 +159,70 @@ export type RespiratoryFailurePatientProcessRuntime = {
   parentProcessId?: string;
   parentProcessType?: string;
 };
+
+export type CardiacState = "PERFUSING" | "ARREST" | "ROSC";
+export type CardiacRhythm = "VF" | "PULSELESS_VT" | "PEA" | "ASYSTOLE" | "PERFUSING";
+export type CardiacRhythmClassification = "SHOCKABLE" | "NON_SHOCKABLE" | "PERFUSING";
+
+export type CardiacVitalTargets = Readonly<{
+  heartRate: number;
+  systolicBp: number;
+  diastolicBp: number;
+  respiratoryRate: number;
+  gcs: number;
+}>;
+
+export type CardiacRhythmTransition = Readonly<{
+  transitionId: string;
+  trigger: "TIME" | "SHOCK" | "EXPLICIT";
+  fromRhythm: CardiacRhythm;
+  toRhythm: CardiacRhythm;
+  atSec?: number;
+  shockAttempt?: number;
+  priority: number;
+}>;
+
+export type CardiacArrestConfiguration = Readonly<{
+  version: string;
+  initialState: CardiacState;
+  initialRhythm: CardiacRhythm;
+  initialCprActive: boolean;
+  vitalTargets: Readonly<{
+    arrestWithoutCpr: CardiacVitalTargets;
+    arrestWithCpr: CardiacVitalTargets;
+    perfusing: CardiacVitalTargets;
+    rosc: CardiacVitalTargets;
+  }>;
+  transitions: readonly CardiacRhythmTransition[];
+}>;
+
+export type CardiacProcessEvidence = Readonly<{
+  eventType: "CPR_STARTED" | "CPR_STOPPED" | "DEFIBRILLATION_ATTEMPTED" | "CARDIAC_RHYTHM_TRANSITION" | "ROSC_ACHIEVED" | "CARDIAC_REARREST";
+  details: Readonly<Record<string, unknown>>;
+}>;
+
+export type CardiacArrestPatientProcessRuntime = {
+  processId: string;
+  encounterId: string;
+  instanceKey: string;
+  processType: "CARDIAC_ARREST";
+  templateId: string;
+  state: "Active" | "Controlled" | "Resolved";
+  elapsedTime: number;
+  clinicalState: {
+    cardiacState: CardiacState;
+    rhythm: CardiacRhythm;
+    rhythmClassification: CardiacRhythmClassification;
+    cprActive: boolean;
+    /** Compatibility discriminator shared by existing clinical process consumers; cardiac process never owns oxygen therapy. */
+    oxygenTherapyActive: false;
+      shockAttemptCount: number;
+    appliedEffectIds: string[];
+  };
+  configuration: CardiacArrestConfiguration;
+  outputs: ProcessOutput;
+  nextTick: number;
+  pendingEvidence: CardiacProcessEvidence[];
+  parentProcessId?: string;
+  parentProcessType?: string;
+};

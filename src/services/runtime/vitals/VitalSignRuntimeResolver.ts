@@ -8,7 +8,7 @@ const overrideVital: Record<string, VitalSignKey> = { hrTarget:"heartRate", sbpT
   rrTarget:"respiratoryRate", spo2Target:"spo2", temperatureTarget:"temperature", crtSec:"crt" };
 
 function explicitContributors(outputs: ProcessOutput[]): PatientVitalContributor[] {
-  return [...outputs].sort((a,b)=>a.processId.localeCompare(b.processId)).flatMap(output =>
+  return [...outputs].sort((a,b)=>(a.vitalPriority ?? 0) - (b.vitalPriority ?? 0) || a.processId.localeCompare(b.processId)).flatMap(output =>
     (output.vitalContributions ?? []).map((item, index) => ({ contributorId:`${output.processId}:${index}`,
       sourceType:"PATIENT_PROCESS" as const, sourceId:output.processId, layer:"PROCESS" as const, ...item }))
   );

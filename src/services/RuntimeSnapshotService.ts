@@ -7,6 +7,8 @@ export type RuntimeProcessProjection = {
   readonly processId: string;
   readonly moduleId: string;
   readonly status: "Active" | "Controlled" | "Resolved" | "Cancelled";
+  readonly clinicalState?: Readonly<Record<string, unknown>>;
+  readonly lastEvent?: Readonly<{ type: string; simulationTimeSec: number }>;
 };
 
 export type CanonicalPatientRuntimeSnapshot = {

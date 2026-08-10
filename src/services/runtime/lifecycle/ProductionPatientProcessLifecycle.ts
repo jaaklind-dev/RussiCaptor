@@ -1,6 +1,6 @@
 import type { ClinicalProcessRuntime } from "@/models/ClinicalIntegration";
 import type { CanonicalLifecycleProcess, PatientProcessLifecycleDescriptor, PatientProcessLifecycleResult } from "@/models/PatientProcessLifecycle";
-import type { BotulismRootPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime } from "@/models/PatientProcessRuntime";
+import type { BotulismRootPatientProcessRuntime, CardiacArrestConfiguration, CardiacArrestPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime } from "@/models/PatientProcessRuntime";
 import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatientProcess";
 import { bootstrapBotulismRoot, tickBotulismRoot } from "@/services/runtime/BotulismRootPatientProcess";
 import { bootstrapHemorrhagePatientProcess, setHemorrhageEffects, tickHemorrhagePatientProcess } from "@/services/runtime/HemorrhagePatientProcess";
@@ -8,6 +8,7 @@ import { applyHvTimedTransition, bootstrapHvPatientProcess, markOxygenMaskingWar
   type HvTimedTransition } from "@/services/runtime/HvPatientProcess";
 import { bootstrapHypoxiaPatientProcess, tickHypoxiaPatientProcess } from "@/services/runtime/HypoxiaPatientProcess";
 import { PatientProcessLifecycleRegistry } from "./PatientProcessLifecycleRegistry";
+import { bootstrapCardiacArrestPatientProcess, drainCardiacEvidence, tickCardiacArrestPatientProcess } from "@/services/runtime/CardiacArrestPatientProcess";
 
 const unchanged = (process: CanonicalLifecycleProcess): PatientProcessLifecycleResult => ({ processes: [process], events: [], aggregationRequested: false });
 const initial = (fixture: { initialState: unknown }) => fixture.initialState as Record<string, unknown>;
@@ -142,7 +143,28 @@ const hypoxia: PatientProcessLifecycleDescriptor = {
   }, target: process.processId, recordPhase: "AFTER_AGGREGATION", sourceProcessId: process.processId }] : []; },
 };
 
-export const productionPatientProcessDescriptors = Object.freeze([botulism, hv, hemorrhage, hypoxia]);
+const cardiacArrest: PatientProcessLifecycleDescriptor = {
+  processType: "CARDIAC_ARREST", kind: "LEAF", requiredPhases: ["BOOTSTRAP", "TICK"],
+  order: { bootstrapOrder: 500, tickOrder: 400, aggregationSlot: 400, serializationSlot: 400, siblingOrder: "SINGLETON" },
+  bootstrap({ fixture }) {
+    const source = initial(fixture); const cardiac = source.cardiacArrest;
+    if (!cardiac || typeof cardiac !== "object" || Array.isArray(cardiac)) return { processes: [], events: [], aggregationRequested: false };
+    const value = cardiac as Record<string, unknown>;
+    const configuration = value.configuration && typeof value.configuration === "object" && !Array.isArray(value.configuration)
+      ? value.configuration as Partial<CardiacArrestConfiguration> : value as Partial<CardiacArrestConfiguration>;
+    return { processes: [bootstrapCardiacArrestPatientProcess(fixture, value, configuration)], events: [], aggregationRequested: true };
+  },
+  tick(process, context) {
+    const ticked = tickCardiacArrestPatientProcess(process as CardiacArrestPatientProcessRuntime, context.tickSeconds);
+    const drained = drainCardiacEvidence(ticked);
+    return { processes: [drained.process], aggregationRequested: true, events: drained.evidence.map(event => ({
+      eventType: event.eventType, details: event.details, target: process.encounterId,
+      recordPhase: "BEFORE_AGGREGATION" as const, sourceProcessId: process.processId,
+    })) };
+  },
+};
+
+export const productionPatientProcessDescriptors = Object.freeze([botulism, hv, hemorrhage, hypoxia, cardiacArrest]);
 
 export function createProductionPatientProcessLifecyclePlan() {
   const registry = new PatientProcessLifecycleRegistry(); productionPatientProcessDescriptors.forEach(descriptor => registry.register(descriptor));
@@ -150,7 +172,7 @@ export function createProductionPatientProcessLifecyclePlan() {
 }
 
 export function isClinicalProcess(process: CanonicalLifecycleProcess): process is ClinicalProcessRuntime {
-  return process.processType === "HYPOVENTILATION_HYPERCAPNIA" || process.processType === "HYPOXIA";
+  return process.processType === "HYPOVENTILATION_HYPERCAPNIA" || process.processType === "HYPOXIA" || process.processType === "CARDIAC_ARREST";
 }
 
 export function unchangedLifecycleResult(process: CanonicalLifecycleProcess) { return unchanged(process); }

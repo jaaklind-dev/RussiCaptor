@@ -68,4 +68,15 @@ describe("IC-2 Instructor Patient Inspector projection", () => {
     expect(result.timeline.map(item => item.id)).toEqual(["T2", "T3", "T1"]);
     expect(result.ownershipHistory.map(item => item.id)).toEqual(["T2", "T1"]);
   });
+
+  test("projects cardiac state only from the canonical process projection", () => {
+    const result = projectInstructorPatientInspector({ patient, ...empty, runtime: { state: runtime(), processes: [{
+      processId: "CA-1", moduleId: "CARDIAC_ARREST_V1", status: "Active",
+      clinicalState: { cardiacState: "ARREST", rhythm: "VF", rhythmClassification: "SHOCKABLE", cprActive: true, shockAttemptCount: 2 },
+      lastEvent: { type: "CPR_STARTED", simulationTimeSec: 44 },
+    }] } });
+    expect(result.cardiac).toEqual({ cardiacState: "ARREST", rhythm: "VF", rhythmClassification: "SHOCKABLE",
+      cprActive: true, shockAttemptCount: 2, lastEvent: "CPR_STARTED", lastEventTimeSec: 44 });
+    expect(projectInstructorPatientInspector({ patient, ...empty, runtime: { state: runtime(), processes: [] } }).cardiac).toBeUndefined();
+  });
 });

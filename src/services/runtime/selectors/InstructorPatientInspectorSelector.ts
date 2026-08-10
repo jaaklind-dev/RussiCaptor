@@ -51,6 +51,8 @@ export function projectInstructorPatientInspector(input: InstructorPatientInspec
   const timeline = [...input.timeline].sort(newestFirst).map<InspectorListItem>(event => ({
     id: event.id, title: event.title, detail: event.description, time: event.timestamp, status: event.type,
   }));
+  const cardiacProcess = input.runtime?.processes.find(process => process.moduleId === "CARDIAC_ARREST_V1");
+  const cardiac = cardiacProcess?.clinicalState;
   return {
     header: {
       patientId: input.patient.id, name: input.patient.name, nationalId: input.patient.isikukood,
@@ -90,5 +92,15 @@ export function projectInstructorPatientInspector(input: InstructorPatientInspec
       id: item.id, title: item.title, detail: item.description, time: item.completedAt ?? item.createdAt, status: item.status,
     })),
     notes: input.notes.map(item => ({ id: item.id, title: item.author, detail: item.text, time: item.createdAt })),
+    cardiac: cardiac && typeof cardiac.cardiacState === "string" && typeof cardiac.rhythm === "string"
+      ? {
+        cardiacState: cardiac.cardiacState as NonNullable<InstructorPatientInspectorModel["cardiac"]>["cardiacState"],
+        rhythm: cardiac.rhythm as NonNullable<InstructorPatientInspectorModel["cardiac"]>["rhythm"],
+        rhythmClassification: cardiac.rhythmClassification as NonNullable<InstructorPatientInspectorModel["cardiac"]>["rhythmClassification"],
+        cprActive: cardiac.cprActive === true,
+        shockAttemptCount: Number(cardiac.shockAttemptCount ?? 0),
+        lastEvent: cardiacProcess.lastEvent?.type,
+        lastEventTimeSec: cardiacProcess.lastEvent?.simulationTimeSec,
+      } : undefined,
   };
 }
