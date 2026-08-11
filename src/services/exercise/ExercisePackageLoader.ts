@@ -6,10 +6,11 @@ import { exerciseDefinitionRegistry } from "./ExerciseDefinitionService";
 import type { ClinicalModuleComposer } from "@/services/clinical/ClinicalModuleComposer";
 import { createExercisePackage } from "./ExercisePackageHash";
 import type { ProtocolCompositionService } from "@/services/protocol/ProtocolCompositionService";
+import type { ExerciseEvaluationCompositionService } from "@/services/evaluation/ExerciseEvaluationCompositionService";
 
 export class ExercisePackageLoader {
   private readonly bindings = new Map<string, string>();
-  constructor(private readonly validator: ExercisePackageValidator, private readonly registry: ExercisePackageRegistry, private readonly moduleComposer?: ClinicalModuleComposer, private readonly protocolComposer?: ProtocolCompositionService) {}
+  constructor(private readonly validator: ExercisePackageValidator, private readonly registry: ExercisePackageRegistry, private readonly moduleComposer?: ClinicalModuleComposer, private readonly protocolComposer?: ProtocolCompositionService, private readonly evaluationComposer?: ExerciseEvaluationCompositionService) {}
   private compose(pkg: ExercisePackage): ExercisePackage {
     let definition = pkg.definition;
     if (pkg.requiredClinicalModules?.length && !definition.clinicalModuleComposition) {
@@ -24,6 +25,10 @@ export class ExercisePackageLoader {
       if (!result.ok) throw new Error(`PROTOCOL_COMPOSITION_FAILED:${result.diagnostics.map(item => item.code).join(",")}`);
       definition = result.definition;
     }
+    if (pkg.evaluationProfile && !definition.evaluationProfileProvenance) {
+      if (!this.evaluationComposer) throw new Error("EVALUATION_PROFILE_COMPOSER_REQUIRED");
+      definition = this.evaluationComposer.compose(definition, pkg.evaluationProfile);
+    }
     if (definition === pkg.definition) return pkg;
     return createExercisePackage({
       packageId: pkg.packageId, packageVersion: pkg.packageVersion, definition,
@@ -31,6 +36,7 @@ export class ExercisePackageLoader {
       enabledAnalyticsProviders: definition.enabledAnalyticsProviders, enabledMetricProviders: definition.enabledMetricProviders,
       metadata: pkg.metadata, requiredClinicalModules: pkg.requiredClinicalModules,
       protocolConfiguration: pkg.protocolConfiguration,
+      evaluationProfile: pkg.evaluationProfile,
       compatibilityVersion: pkg.manifest.compatibilityVersion,
     });
   }

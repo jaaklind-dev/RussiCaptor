@@ -3,6 +3,8 @@ import { AssessmentResultDetail } from "@/components/excon/assessment/Assessment
 import { AssessmentResultList } from "@/components/excon/assessment/AssessmentResultList";
 import type { ProtocolAssessmentStatus } from "@/models/assessment/ProtocolAssessment";
 import { getAnalyticsReport } from "@/services/AnalyticsService";
+import { getExerciseEvaluationResult } from "@/services/ExerciseEvaluationService";
+import { ExerciseEvaluationSummary } from "@/components/excon/evaluation/ExerciseEvaluationSummary";
 import { getProtocolAssessmentReport, getProtocolAssessmentVersion, subscribeToProtocolAssessment } from "@/services/ProtocolAssessmentService";
 import { filterProtocolAssessment } from "@/services/assessment/ProtocolAssessmentSelectors";
 import { router, useLocalSearchParams } from "expo-router";
@@ -22,6 +24,7 @@ export default function ProtocolAssessmentScreen() {
   const [selectedId, setSelectedId] = useState<string | undefined>(assessmentId);
   if (!report) return <View style={styles.container}><Text style={styles.title}>Protocol Assessment</Text><Text style={styles.empty}>No protocol is bound to this exercise.</Text><Pressable onPress={() => router.back()}><Text style={styles.back}>Back</Text></Pressable></View>;
   const analytics = getAnalyticsReport();
+  const evaluation = getExerciseEvaluationResult();
   const results = filterProtocolAssessment(report, { status, patientId, expectationId, search });
   const selected = report.results.find(item => item.assessmentId === selectedId);
   const patients = [...new Set(report.results.flatMap(item => item.patientId ? [item.patientId] : []))];
@@ -30,6 +33,7 @@ export default function ProtocolAssessmentScreen() {
     <View style={styles.top}><View><Text style={styles.title}>Protocol Assessment</Text><Text style={styles.subtitle}>{report.protocolId}@{report.protocolVersion} · read-only factual evaluation</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Back</Text></Pressable></View>
     <View style={styles.hash}><Text style={styles.hashText}>Assessment · {report.assessmentHash.slice(0, 16)}…</Text><Text style={styles.hashText}>Debrief · {report.sourceDebriefHash.slice(0, 16)}…</Text></View>
     <AssessmentMetricsSummary metrics={analytics.metrics} patientId={patientId} />
+    {evaluation && <><ExerciseEvaluationSummary result={evaluation} compact /><Pressable style={styles.evaluationButton} onPress={() => router.push("/excon/evaluation" as never)}><Text style={styles.evaluationButtonText}>Open Exercise Evaluation</Text></Pressable></>}
     <TextInput value={search} onChangeText={setSearch} placeholder="Search expectations" style={styles.input} />
     <ScrollView horizontal contentContainerStyle={styles.filters}>{statuses.map(value => <Chip key={value} label={value.replaceAll("_", " ")} active={status === value} onPress={() => setStatus(current => current === value ? undefined : value)} />)}{patients.map(value => <Chip key={value} label={value} active={patientId === value} onPress={() => setPatientId(current => current === value ? undefined : value)} />)}{expectations.map(value => <Chip key={value} label={value} active={expectationId === value} onPress={() => setExpectationId(current => current === value ? undefined : value)} />)}</ScrollView>
     <AssessmentResultDetail result={selected} />
@@ -38,4 +42,4 @@ export default function ProtocolAssessmentScreen() {
 }
 
 function Chip({ label, active, onPress }: { label: string; active: boolean; onPress(): void }) { return <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}><Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text></Pressable>; }
-const styles = StyleSheet.create({ container: { padding: 18, paddingBottom: 40, backgroundColor: "#fff", flexGrow: 1 }, top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }, title: { fontSize: 28, fontWeight: "900", color: "#172b4d" }, subtitle: { color: "#5e6c84", marginTop: 3 }, back: { color: "#005bbb", fontWeight: "800" }, empty: { color: "#6b778c", marginVertical: 20 }, hash: { backgroundColor: "#f4f5f7", borderRadius: 9, padding: 10, marginBottom: 10 }, hashText: { fontFamily: "monospace", fontSize: 11, color: "#42526e" }, input: { borderWidth: 1, borderColor: "#c1c7d0", borderRadius: 9, padding: 10, marginBottom: 8 }, filters: { gap: 6, paddingBottom: 12 }, chip: { borderWidth: 1, borderColor: "#c1c7d0", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 }, chipActive: { backgroundColor: "#172b4d" }, chipText: { color: "#42526e", fontSize: 11, fontWeight: "800" }, chipTextActive: { color: "#fff" } });
+const styles = StyleSheet.create({ container: { padding: 18, paddingBottom: 40, backgroundColor: "#fff", flexGrow: 1 }, top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }, title: { fontSize: 28, fontWeight: "900", color: "#172b4d" }, subtitle: { color: "#5e6c84", marginTop: 3 }, back: { color: "#005bbb", fontWeight: "800" }, empty: { color: "#6b778c", marginVertical: 20 }, hash: { backgroundColor: "#f4f5f7", borderRadius: 9, padding: 10, marginBottom: 10 }, hashText: { fontFamily: "monospace", fontSize: 11, color: "#42526e" }, evaluationButton: { backgroundColor: "#6554c0", borderRadius: 9, padding: 11, alignItems: "center", marginBottom: 12 }, evaluationButtonText: { color: "#fff", fontWeight: "900" }, input: { borderWidth: 1, borderColor: "#c1c7d0", borderRadius: 9, padding: 10, marginBottom: 8 }, filters: { gap: 6, paddingBottom: 12 }, chip: { borderWidth: 1, borderColor: "#c1c7d0", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 }, chipActive: { backgroundColor: "#172b4d" }, chipText: { color: "#42526e", fontSize: 11, fontWeight: "800" }, chipTextActive: { color: "#fff" } });

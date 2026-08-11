@@ -13,6 +13,8 @@ import { alsClinicalModule } from "@/modules/als/AlsClinicalModule";
 import { cardiacArrestClinicalModule } from "@/modules/cardiacArrest/CardiacArrestClinicalModule";
 import { protocolConfigurationRegistry } from "@/services/protocol/ProtocolConfigurationService";
 import { ProtocolCompositionService } from "@/services/protocol/ProtocolCompositionService";
+import { ExerciseEvaluationCompositionService } from "@/services/evaluation/ExerciseEvaluationCompositionService";
+import { exerciseEvaluationProfileRegistry } from "@/services/evaluation/ExerciseEvaluationProfileService";
 
 export const exercisePackageValidator = new ExercisePackageValidator(EXERCISE_DEFINITION_CATALOG);
 export const exercisePackageRegistry = new ExercisePackageRegistry(exercisePackageValidator);
@@ -23,7 +25,7 @@ clinicalModuleRegistry.register(medicationCoreClinicalModule);
 clinicalModuleRegistry.register(cardiacArrestClinicalModule);
 clinicalModuleRegistry.register(alsClinicalModule);
 export const clinicalModuleComposer = new ClinicalModuleComposer(clinicalModuleRegistry);
-export const exercisePackageLoader = new ExercisePackageLoader(exercisePackageValidator, exercisePackageRegistry, clinicalModuleComposer, new ProtocolCompositionService(protocolConfigurationRegistry));
+export const exercisePackageLoader = new ExercisePackageLoader(exercisePackageValidator, exercisePackageRegistry, clinicalModuleComposer, new ProtocolCompositionService(protocolConfigurationRegistry), new ExerciseEvaluationCompositionService(exerciseEvaluationProfileRegistry, protocolConfigurationRegistry));
 CANONICAL_EXERCISE_PACKAGES.forEach(pkg => exercisePackageLoader.load(pkg));
 exercisePackageLoader.load(AIRWAY_EXERCISE_PACKAGE);
 exercisePackageLoader.load(RESPIRATORY_FAILURE_EXERCISE_PACKAGE);

@@ -3,6 +3,7 @@ import type { ExercisePackageManifest } from "./ExercisePackageManifest";
 import type { PackageMetadata } from "./PackageMetadata";
 import type { ClinicalModuleDependency } from "@/models/clinical/ClinicalModuleDependency";
 import type { ProtocolReference } from "@/models/protocol/ClinicalProtocolConfiguration";
+import type { EvaluationProfileReference } from "@/models/evaluation/ExerciseEvaluation";
 
 export type ExercisePackage = Readonly<{
   packageId: string;
@@ -17,4 +18,5 @@ export type ExercisePackage = Readonly<{
   manifest: ExercisePackageManifest;
   requiredClinicalModules?: readonly ClinicalModuleDependency[];
   protocolConfiguration?: ProtocolReference;
+  evaluationProfile?: EvaluationProfileReference;
 }>;

@@ -191,6 +191,7 @@ export const ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE = createExercisePackage({
   enabledMetricProviders: alsDefinition.enabledMetricProviders,
   requiredClinicalModules: Object.freeze([{ moduleId: ALS_MODULE_ID, version: ALS_MODULE_VERSION }]),
   protocolConfiguration: Object.freeze({ protocolId: "ALS_GENERIC_V1", version: "1.0.0" }),
+  evaluationProfile: Object.freeze({ profileId: "ALS_GENERIC_EVALUATION_V1", version: "1.0.0" }),
   metadata: {
     name: "ALS Generic Protocol Reference Package", description: "Deterministic protocol configuration reference; not ERC or AHA guidance.",
     author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "CUSTOM",
