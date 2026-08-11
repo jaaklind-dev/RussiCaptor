@@ -36,4 +36,11 @@ describe("WP-29A Architecture Freeze Readiness", () => {
     expect(snapshot.lifecycleState).not.toBe("COMPLETED");
     expect(getCanonicalExerciseSnapshot().lifecycleState).not.toBe("COMPLETED");
   });
+
+  test("Runtime has no dependency on WP-39 assessment metrics or its presentation", () => {
+    const runtimeRoot = path.join(process.cwd(), "src", "services", "runtime");
+    const runtimeSource = sourceFiles(runtimeRoot).filter(file => !file.includes(`${path.sep}__tests__${path.sep}`)).map(file => fs.readFileSync(file, "utf8")).join("\n");
+    expect(runtimeSource).not.toContain("ProtocolAssessmentMetricsProvider");
+    expect(runtimeSource).not.toContain("AssessmentMetricsSummary");
+  });
 });

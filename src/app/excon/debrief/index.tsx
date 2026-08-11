@@ -14,6 +14,8 @@ import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fr
 import { ExerciseInformationCard } from "@/components/excon/ExerciseInformationCard";
 import { ExercisePackageInformationCard } from "@/components/excon/ExercisePackageInformationCard";
 import { exercisePackageValidator, getExercisePackage } from "@/services/exercise/ExercisePackageService";
+import { AssessmentMetricsSummary } from "@/components/excon/assessment/AssessmentMetricsSummary";
+import { getAnalyticsReport } from "@/services/AnalyticsService";
 
 const categories: readonly ExerciseTimelineCategory[] = ["EXERCISE", "PATIENT", "COMMAND", "AUDIT"];
 const outcomes: readonly PatientOutcome[] = ["ALIVE", "DECEASED", "TRANSFERRED", "STILL_ACTIVE", "COMPLETED_SCENARIO"];
@@ -21,6 +23,7 @@ const outcomes: readonly PatientOutcome[] = ["ALIVE", "DECEASED", "TRANSFERRED",
 export default function DebriefScreen() {
   useSyncExternalStore(subscribeToDebrief, getDebriefVersion, getDebriefVersion);
   const report = getDebriefReport();
+  const analytics = getAnalyticsReport();
   const exercisePackage = getExercisePackage(report.exerciseId);
   const definition = exercisePackage.definition;
   const [cursor, setCursor] = useState<PlaybackCursor>(() => createPlaybackCursor());
@@ -45,6 +48,7 @@ export default function DebriefScreen() {
   return <FlatList data={visibleTimeline} keyExtractor={event => event.id} contentContainerStyle={styles.container}
     ListHeaderComponent={<View><View style={styles.top}><View><Text style={styles.title}>Debrief</Text><Text style={styles.subtitle}>Canonical read-only exercise reconstruction</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Back</Text></Pressable></View>
       <DebriefSummary report={report} />
+      {report.protocolProvenance && <AssessmentMetricsSummary metrics={analytics.metrics} onOpenAssessment={() => router.push("/excon/assessment")} />}
       <ExercisePackageInformationCard exercisePackage={exercisePackage} compatibility={exercisePackageValidator.compatibility(exercisePackage)} />
       <ExerciseInformationCard definition={definition} />
       <Pressable style={styles.analyticsButton} onPress={() => router.push("/excon/analytics")}><Text style={styles.analyticsButtonText}>Open Analytics</Text></Pressable>
