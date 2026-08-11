@@ -15,6 +15,7 @@ import { initializeAuthoritativeExerciseRuntime } from "@/services/runtime/exerc
 import { ExerciseInformationCard } from "@/components/excon/ExerciseInformationCard";
 import { ExercisePackageInformationCard } from "@/components/excon/ExercisePackageInformationCard";
 import { getExercisePackage, exercisePackageValidator } from "@/services/exercise/ExercisePackageService";
+import PrepareNewExerciseCard from "@/components/excon/PrepareNewExerciseCard";
 
 const initialFilters: InstructorDashboardFilters = {
   location: "All", triage: "All", caseManager: "All", status: "All",
@@ -29,6 +30,8 @@ export default function ExerciseDashboardScreen() {
   const exerciseDefinition = exercisePackage.definition;
   useEffect(() => initializeAuthoritativeExerciseRuntime(exerciseSnapshot.exerciseId), [exerciseSnapshot.exerciseId]);
   const [filters, setFilters] = useState(initialFilters);
+  const [, setPresentationVersion] = useState(0);
+  const refreshPresentation = useCallback(() => setPresentationVersion(value => value + 1), []);
   const { width } = useWindowDimensions();
   const columns = width >= 1180 ? 4 : width >= 860 ? 3 : width >= 560 ? 2 : 1;
   const visiblePatients = useMemo(() => filterInstructorPatients(snapshot.patients, filters), [snapshot.patients, filters]);
@@ -63,7 +66,8 @@ export default function ExerciseDashboardScreen() {
               </Text>
             </View>
           </View>
-          <ExerciseControlsCard snapshot={exerciseSnapshot} />
+          <ExerciseControlsCard snapshot={exerciseSnapshot} onApplied={refreshPresentation} />
+          <PrepareNewExerciseCard snapshot={exerciseSnapshot} onPrepared={refreshPresentation} />
           <ExercisePackageInformationCard exercisePackage={exercisePackage} compatibility={exercisePackageValidator.compatibility(exercisePackage)} />
           <ExerciseInformationCard definition={exerciseDefinition} />
           <Pressable style={styles.timelineButton} onPress={() => router.push("/excon/timeline")}><Text style={styles.timelineButtonText}>Open Exercise Timeline</Text></Pressable>

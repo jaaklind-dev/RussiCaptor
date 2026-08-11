@@ -15,6 +15,16 @@ import {
   setCurrentCaseManager,
 } from "@/services/CurrentUserService";
 import { notifySync, subscribeToSync } from "@/services/SyncService";
+import { installCurrentExercise } from "@/repositories/ExerciseRepository";
+import {
+  getCanonicalExerciseSnapshot,
+  restoreExerciseSession,
+} from "@/repositories/ExerciseSessionRepository";
+import {
+  ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE,
+  DEFAULT_EXERCISE_PACKAGE,
+} from "@/services/exercise/CanonicalExercisePackages";
+import { getExercisePackage } from "@/services/exercise/ExercisePackageService";
 
 const patientId = "PT-001";
 
@@ -73,5 +83,35 @@ describe("remote clinical state sync", () => {
     });
 
     stopRemoteListener();
+  });
+
+  test("restores the exact READY exercise package binding", () => {
+    installCurrentExercise(
+      "EX-PERSISTED",
+      "ALS reference",
+      ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE
+    );
+    restoreExerciseSession({
+      exerciseId: "EX-PERSISTED",
+      lifecycleState: "READY",
+      simulationTimeSec: 0,
+      speed: 1,
+      version: 8,
+      clockVersion: 2,
+      clockInitializedAtSimulationTimeSec: 0,
+    });
+    const persisted = createSharedExerciseSnapshot();
+
+    installCurrentExercise("EX-OTHER", "Other", DEFAULT_EXERCISE_PACKAGE);
+    restoreSharedExerciseState(persisted);
+
+    expect(getCanonicalExerciseSnapshot()).toMatchObject({
+      exerciseId: "EX-PERSISTED",
+      lifecycleState: "READY",
+    });
+    expect(getExercisePackage("EX-PERSISTED")).toMatchObject({
+      packageId: ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE.packageId,
+      packageVersion: ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE.packageVersion,
+    });
   });
 });

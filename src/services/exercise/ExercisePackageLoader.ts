@@ -12,13 +12,13 @@ export class ExercisePackageLoader {
   constructor(private readonly validator: ExercisePackageValidator, private readonly registry: ExercisePackageRegistry, private readonly moduleComposer?: ClinicalModuleComposer, private readonly protocolComposer?: ProtocolCompositionService) {}
   private compose(pkg: ExercisePackage): ExercisePackage {
     let definition = pkg.definition;
-    if (pkg.requiredClinicalModules?.length) {
+    if (pkg.requiredClinicalModules?.length && !definition.clinicalModuleComposition) {
       if (!this.moduleComposer) throw new Error("CLINICAL_MODULE_COMPOSER_REQUIRED");
       const result = this.moduleComposer.compose(definition, pkg.requiredClinicalModules);
       if (!result.ok) throw new Error(`CLINICAL_MODULE_COMPOSITION_FAILED:${result.diagnostics.map(item => item.code).join(",")}`);
       definition = result.definition;
     }
-    if (pkg.protocolConfiguration) {
+    if (pkg.protocolConfiguration && !definition.protocolProvenance) {
       if (!this.protocolComposer) throw new Error("PROTOCOL_COMPOSER_REQUIRED");
       const result = this.protocolComposer.compose(definition, pkg.protocolConfiguration, pkg.packageId);
       if (!result.ok) throw new Error(`PROTOCOL_COMPOSITION_FAILED:${result.diagnostics.map(item => item.code).join(",")}`);
@@ -56,4 +56,5 @@ export class ExercisePackageLoader {
     const reference = this.bindings.get(exerciseId); if (!reference) return undefined;
     const split = reference.lastIndexOf("@"); return this.registry.require(reference.slice(0, split), reference.slice(split + 1));
   }
+  unbind(exerciseId: string): void { this.bindings.delete(exerciseId); }
 }

@@ -7,7 +7,7 @@ import { AuthoritativeExerciseRuntime } from "./AuthoritativeExerciseRuntime";
 import { registerExerciseRuntimeOwner } from "./ExerciseRuntimeOwnerRegistry";
 
 export type ExerciseResetCommand = Readonly<{ commandId: string; currentExerciseId: string; newExerciseId: string; issuedBy: string; expectedVersion: number }>;
-export type ExerciseResetAudit = Readonly<{ commandId: string; priorExerciseId: string; newExerciseId: string; simulationTimeSec: number; outcome: "ACCEPTED" | "REJECTED"; reasonCode?: "ACTIVE_EXERCISE" | "UNAUTHORIZED" | "VERSION_CONFLICT" | "INVALID_EXERCISE_ID" }>;
+export type ExerciseResetAudit = Readonly<{ commandId: string; priorExerciseId: string; newExerciseId: string; simulationTimeSec: number; outcome: "ACCEPTED" | "REJECTED"; reasonCode?: "ACTIVE_EXERCISE" | "INVALID_EXERCISE_STATE" | "UNAUTHORIZED" | "VERSION_CONFLICT" | "INVALID_EXERCISE_ID" }>;
 export type ExerciseResetResult = Readonly<{ ok: true; snapshot: CanonicalExerciseSnapshot; archivedSnapshot?: CanonicalExerciseSnapshot; audit: ExerciseResetAudit } | { ok: false; snapshot: CanonicalExerciseSnapshot; audit: ExerciseResetAudit }>;
 
 const resetResults = new Map<string, ExerciseResetResult>();
@@ -15,7 +15,7 @@ const archived = new Map<string, CanonicalExerciseSnapshot>();
 const resetAudit: ExerciseResetAudit[] = [];
 
 /** Explicit canonical reset for preparing a new exercise; never used by replay. */
-export function executeExerciseReset(command: ExerciseResetCommand): ExerciseResetResult {
+export function executeExerciseReset(command: ExerciseResetCommand, options: Readonly<{ notify?: boolean }> = {}): ExerciseResetResult {
   const priorResult = resetResults.get(command.commandId); if (priorResult) return structuredClone(priorResult);
   const current = getCanonicalExerciseSnapshot();
   const reject = (reasonCode: NonNullable<ExerciseResetAudit["reasonCode"]>): ExerciseResetResult => ({ ok: false, snapshot: current, audit: Object.freeze({ commandId: command.commandId, priorExerciseId: current.exerciseId, newExerciseId: command.newExerciseId, simulationTimeSec: current.simulationTimeSec, outcome: "REJECTED", reasonCode }) });
@@ -24,6 +24,7 @@ export function executeExerciseReset(command: ExerciseResetCommand): ExerciseRes
   else if (command.expectedVersion !== current.version || command.currentExerciseId !== current.exerciseId) result = reject("VERSION_CONFLICT");
   else if (!command.newExerciseId.trim() || command.newExerciseId === current.exerciseId) result = reject("INVALID_EXERCISE_ID");
   else if (current.lifecycleState === "RUNNING" || current.lifecycleState === "PAUSED") result = reject("ACTIVE_EXERCISE");
+  else if (current.lifecycleState !== "COMPLETED") result = reject("INVALID_EXERCISE_STATE");
   else {
     stopClockRunner();
     const archivedSnapshot = current.lifecycleState === "COMPLETED" ? structuredClone(current) : undefined;
@@ -32,7 +33,7 @@ export function executeExerciseReset(command: ExerciseResetCommand): ExerciseRes
     installCurrentExercise(command.newExerciseId, command.newExerciseId);
     replaceCanonicalExerciseSnapshot(snapshot);
     registerExerciseRuntimeOwner(new AuthoritativeExerciseRuntime(command.newExerciseId));
-    notifySync("local");
+    if (options.notify !== false) notifySync("local");
     result = { ok: true, snapshot: getCanonicalExerciseSnapshot(), archivedSnapshot, audit: Object.freeze({ commandId: command.commandId, priorExerciseId: current.exerciseId, newExerciseId: command.newExerciseId, simulationTimeSec: current.simulationTimeSec, outcome: "ACCEPTED" }) };
   }
   resetResults.set(command.commandId, structuredClone(result)); resetAudit.push(structuredClone(result.audit)); return structuredClone(result);
@@ -40,4 +41,7 @@ export function executeExerciseReset(command: ExerciseResetCommand): ExerciseRes
 
 export function getArchivedExerciseSnapshot(exerciseId: string): CanonicalExerciseSnapshot | undefined { const value = archived.get(exerciseId); return value ? structuredClone(value) : undefined; }
 export function getExerciseResetAudit(): readonly ExerciseResetAudit[] { return Object.freeze(structuredClone(resetAudit)); }
+export function restoreExerciseResetAudit(values: readonly ExerciseResetAudit[]): void {
+  resetAudit.splice(0, resetAudit.length, ...structuredClone(values));
+}
 export function resetExerciseResetService(): void { resetResults.clear(); archived.clear(); resetAudit.length = 0; }

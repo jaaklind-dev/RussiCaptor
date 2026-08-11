@@ -36,6 +36,18 @@ import {
 } from "@/services/CurrentLocationService";
 import { getExerciseControlAudit, restoreExerciseControlAudit } from "@/services/runtime/exercise/ExerciseControlCommandHandler";
 import { getInstructorCommandAudit, restoreInstructorCommandAudit } from "@/features/instructor/commands/InstructorPatientCommandHandler";
+import type { ExerciseResetAudit } from "@/services/runtime/exercise/ExerciseResetService";
+import {
+  getExerciseResetAudit,
+  restoreExerciseResetAudit,
+} from "@/services/runtime/exercise/ExerciseResetService";
+import type { CompletedExerciseArchive } from "@/services/exercise/CompletedExerciseArchiveService";
+import { getCompletedExerciseArchives, restoreCompletedExerciseArchives } from "@/services/exercise/CompletedExerciseArchiveService";
+import {
+  exercisePackageRegistry,
+  getExercisePackage,
+} from "@/services/exercise/ExercisePackageService";
+import { installCurrentExercise } from "@/repositories/ExerciseRepository";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
@@ -59,6 +71,9 @@ export type SharedExerciseState = {
   installedWorkbook?: InstalledWorkbook;
   exerciseControlAudit?: ExerciseControlAuditEntry[];
   instructorCommandAudit?: InstructorCommandAuditEntry[];
+  exerciseResetAudit?: ExerciseResetAudit[];
+  exercisePackageReference?: { packageId: string; packageVersion: string };
+  completedExerciseArchives?: CompletedExerciseArchive[];
 };
 
 type PersistedState = SharedExerciseState & {
@@ -145,7 +160,24 @@ function createSnapshot(): PersistedState {
     installedWorkbook: getInstalledWorkbook(),
     exerciseControlAudit: [...getExerciseControlAudit()],
     instructorCommandAudit: [...getInstructorCommandAudit()],
+    exerciseResetAudit: [...getExerciseResetAudit()],
+    exercisePackageReference: packageReference(),
+    completedExerciseArchives: [...getCompletedExerciseArchives()],
   };
+}
+
+function packageReference(): { packageId: string; packageVersion: string } {
+  const pkg = getExercisePackage(getCanonicalExerciseSnapshot().exerciseId);
+  return { packageId: pkg.packageId, packageVersion: pkg.packageVersion };
+}
+
+function restoreExerciseIdentity(restored: SharedExerciseState): void {
+  const session = restored.exerciseSession; const exerciseId = session.exerciseId;
+  const reference = restored.exercisePackageReference;
+  const pkg = reference ? exercisePackageRegistry.get(reference.packageId, reference.packageVersion) : undefined;
+  installCurrentExercise(exerciseId, pkg?.metadata.name ?? exerciseId, pkg);
+  restoreExerciseSession(session);
+  restoreCompletedExerciseArchives(restored.completedExerciseArchives ?? []);
 }
 
 export function createSharedExerciseSnapshot(): SharedExerciseState {
@@ -157,9 +189,10 @@ export function createSharedExerciseSnapshot(): SharedExerciseState {
 export function restoreSharedExerciseState(restored: SharedExerciseState): void {
   stopClockRunner();
   restoreInstalledWorkbook(restored.installedWorkbook);
-  restoreExerciseSession(restored.exerciseSession);
+  restoreExerciseIdentity(restored);
   restoreExerciseControlAudit(restored.exerciseControlAudit ?? []);
   restoreInstructorCommandAudit(restored.instructorCommandAudit ?? []);
+  restoreExerciseResetAudit(restored.exerciseResetAudit ?? []);
   replaceItems(dataProvider.getPatients(), restored.patients);
   restoreAssignmentState(restored);
   restoreCaseManagerLocationState(restored.caseManagerZoneIds ?? {});
@@ -211,9 +244,10 @@ export async function loadPersistedState(): Promise<void> {
 
     restoreInstalledWorkbook(restored.installedWorkbook);
     restoreCurrentCaseManager(restored.currentCaseManager);
-    restoreExerciseSession(restored.exerciseSession);
+    restoreExerciseIdentity(restored);
     restoreExerciseControlAudit(restored.exerciseControlAudit ?? []);
     restoreInstructorCommandAudit(restored.instructorCommandAudit ?? []);
+    restoreExerciseResetAudit(restored.exerciseResetAudit ?? []);
     replaceItems(dataProvider.getPatients(), restored.patients);
     restoreAssignmentState(restored);
     restoreCaseManagerLocationState(restored.caseManagerZoneIds ?? {});

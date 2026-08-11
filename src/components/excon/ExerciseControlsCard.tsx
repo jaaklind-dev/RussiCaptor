@@ -2,6 +2,7 @@ import { createExerciseControlCommand } from "@/features/exercise/ExerciseContro
 import type { ExerciseControlCommandType } from "@/models/exercise/ExerciseControlCommand";
 import type { CanonicalExerciseSnapshot, CanonicalExerciseSpeed } from "@/models/exercise/CanonicalExerciseSnapshot";
 import { handleExerciseControlCommand } from "@/services/runtime/exercise/ExerciseControlCommandHandler";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 const SPEEDS: readonly CanonicalExerciseSpeed[] = [1, 2, 4];
@@ -10,11 +11,13 @@ export function getExerciseControlAvailability(state: CanonicalExerciseSnapshot[
     complete: state === "RUNNING" || state === "PAUSED", speed: state !== "COMPLETED" };
 }
 
-export default function ExerciseControlsCard({ snapshot }: { snapshot: CanonicalExerciseSnapshot }) {
+export default function ExerciseControlsCard({ snapshot, onApplied }: { snapshot: CanonicalExerciseSnapshot; onApplied?: () => void }) {
   const enabled = getExerciseControlAvailability(snapshot.lifecycleState);
   const issue = (commandType: ExerciseControlCommandType, speed?: CanonicalExerciseSpeed) => {
-    const result = handleExerciseControlCommand(createExerciseControlCommand({ exerciseId: snapshot.exerciseId, commandType, expectedVersion: snapshot.version, speed }));
+    const current = getCanonicalExerciseSnapshot();
+    const result = handleExerciseControlCommand(createExerciseControlCommand({ exerciseId: current.exerciseId, commandType, expectedVersion: current.version, speed }));
     if (!result.ok) Alert.alert("Command rejected", result.message);
+    else onApplied?.();
   };
   const confirmComplete = () => Alert.alert("Complete exercise?", "This is final and does not reset exercise state.", [
     { text: "Cancel", style: "cancel" }, { text: "Complete", style: "destructive", onPress: () => issue("COMPLETE_EXERCISE") },

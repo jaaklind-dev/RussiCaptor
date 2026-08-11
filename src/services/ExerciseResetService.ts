@@ -15,6 +15,11 @@ import { clearAssignments } from "@/services/AssignmentRepository";
 import { stopClockRunner } from "@/services/ClockRunner";
 import { notifySync } from "@/services/SyncService";
 import { resetCurrentCaseManager } from "@/services/CurrentUserService";
+import { clearRuntimeSnapshots } from "@/services/RuntimeSnapshotService";
+import { clearInstructorRuntimeOwners } from "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
+import { clearActiveClinicalReferenceRuntime } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
+import { resetExerciseControlCommandHandler } from "@/services/runtime/exercise/ExerciseControlCommandHandler";
+import { resetInstructorCommandHandler } from "@/features/instructor/commands/InstructorPatientCommandHandler";
 
 /** @deprecated Test/reset compatibility helper. Production exercise preparation uses runtime/exercise/ExerciseResetService. */
 export function resetExercise(): void {
@@ -35,4 +40,13 @@ export function resetExercise(): void {
   resetCurrentCaseManager();
   resetCaseManagerLocations();
   notifySync();
+}
+
+/** Clears mutable per-exercise working data after canonical preparation archived the completed exercise. */
+export function clearPreparedExerciseWorkingData(): void {
+  stopClockRunner();
+  resetImagingStudies(); resetLabResults(); resetOrders(); resetQuestions(); resetNotes();
+  resetInterventions(); resetMedicationAdministrations(); resetVitalSigns(); clearScenarioEvents(); clearTimelineEvents();
+  resetPatients(); clearAssignments(); resetCurrentCaseManager(); resetCaseManagerLocations(); clearRuntimeSnapshots();
+  clearInstructorRuntimeOwners(); clearActiveClinicalReferenceRuntime(); resetExerciseControlCommandHandler(); resetInstructorCommandHandler();
 }

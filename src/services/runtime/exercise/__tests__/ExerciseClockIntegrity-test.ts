@@ -27,6 +27,8 @@ describe("WP-24A canonical Exercise Clock integrity", () => {
   });
 
   it("rejects active reset and preserves a completed historical snapshot", () => {
+    const ready = executeExerciseReset({ commandId: "RESET-READY", currentExerciseId: "EX-1", newExerciseId: "EX-READY", issuedBy: "Exercise Controller", expectedVersion: 4 });
+    expect(ready).toMatchObject({ ok: false, audit: { reasonCode: "INVALID_EXERCISE_STATE" } });
     replaceCanonicalExerciseSnapshot(canonical({ lifecycleState: "RUNNING", simulationTimeSec: 20 }));
     const active = executeExerciseReset({ commandId: "RESET-A", currentExerciseId: "EX-1", newExerciseId: "EX-2", issuedBy: "Exercise Controller", expectedVersion: 4 });
     expect(active).toMatchObject({ ok: false, audit: { reasonCode: "ACTIVE_EXERCISE" } }); expect(getCanonicalExerciseSnapshot().exerciseId).toBe("EX-1");
@@ -35,7 +37,7 @@ describe("WP-24A canonical Exercise Clock integrity", () => {
     expect(reset).toMatchObject({ ok: true, snapshot: { exerciseId: "EX-2", lifecycleState: "READY", simulationTimeSec: 0, speed: 1, clockVersion: 2 } });
     expect(getArchivedExerciseSnapshot("EX-1")).toEqual(canonical({ lifecycleState: "COMPLETED", simulationTimeSec: 50 }));
     expect(executeExerciseReset({ commandId: "RESET-B", currentExerciseId: "EX-1", newExerciseId: "EX-2", issuedBy: "Exercise Controller", expectedVersion: 4 })).toEqual(reset);
-    expect(getExerciseResetAudit()).toHaveLength(2);
+    expect(getExerciseResetAudit()).toHaveLength(3);
   });
 
   it("keeps legacy and canonical clock metadata outside existing replay hashes", () => {
