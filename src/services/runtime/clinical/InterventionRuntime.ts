@@ -4,7 +4,7 @@ import type { InterventionInstance, InterventionFailureReason } from "@/models/I
 import type { ResourceRuntimeEvent, RuntimeResource } from "@/models/ResourceRuntime";
 import { InterventionDefinitionRegistry } from "@/services/runtime/clinical/InterventionDefinitionRegistry";
 
-function inferredDefinition(resource: RuntimeResource | undefined): string | undefined {
+export function inferredInterventionDefinitionId(resource: RuntimeResource | undefined): string | undefined {
   return ({
     oxygenMask: "OXYGEN_THERAPY", simpleMask: "OXYGEN_THERAPY", nonRebreatherMask: "OXYGEN_THERAPY",
     nasalCannula: "OXYGEN_THERAPY", oropharyngealAirway: "OROPHARYNGEAL_AIRWAY",
@@ -88,7 +88,7 @@ export class InterventionRuntime {
     if (event.eventType === "InterventionRemoved") return this.cancelForResource(event);
     if (event.eventType !== "InterventionApplied") return undefined;
     const resource = resources.find(item => item.resourceId === event.resourceId);
-    const definitionId = event.definitionId ?? inferredDefinition(resource);
+    const definitionId = event.definitionId ?? inferredInterventionDefinitionId(resource);
     if (!definitionId) return undefined;
     const definition = this.definitions.get(definitionId);
     if (!definition) return this.failed(event, encounterId, definitionId, "DEFINITION_NOT_FOUND");

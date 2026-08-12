@@ -48,6 +48,8 @@ import {
   getExercisePackage,
 } from "@/services/exercise/ExercisePackageService";
 import { installCurrentExercise } from "@/repositories/ExerciseRepository";
+import type { MaterializedPatientDataset } from "@/models/exercise/PackagePatientDataset";
+import { getPatientMaterialization, restorePatientMaterialization } from "@/services/exercise/PackagePatientMaterializationService";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
@@ -74,6 +76,7 @@ export type SharedExerciseState = {
   exerciseResetAudit?: ExerciseResetAudit[];
   exercisePackageReference?: { packageId: string; packageVersion: string };
   completedExerciseArchives?: CompletedExerciseArchive[];
+  patientMaterialization?: MaterializedPatientDataset;
 };
 
 type PersistedState = SharedExerciseState & {
@@ -163,6 +166,7 @@ function createSnapshot(): PersistedState {
     exerciseResetAudit: [...getExerciseResetAudit()],
     exercisePackageReference: packageReference(),
     completedExerciseArchives: [...getCompletedExerciseArchives()],
+    patientMaterialization: getPatientMaterialization(getCanonicalExerciseSnapshot().exerciseId),
   };
 }
 
@@ -178,6 +182,7 @@ function restoreExerciseIdentity(restored: SharedExerciseState): void {
   installCurrentExercise(exerciseId, pkg?.metadata.name ?? exerciseId, pkg);
   restoreExerciseSession(session);
   restoreCompletedExerciseArchives(restored.completedExerciseArchives ?? []);
+  restorePatientMaterialization(restored.patientMaterialization);
 }
 
 export function createSharedExerciseSnapshot(): SharedExerciseState {

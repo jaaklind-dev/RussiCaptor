@@ -5,6 +5,7 @@ import { InspectorHeader } from "@/components/instructor/InspectorHeader";
 import { InspectorListPanel } from "@/components/instructor/InspectorListPanel";
 import { InspectorTimeline } from "@/components/instructor/InspectorTimeline";
 import { InstructorEventInjectionModal } from "@/components/instructor/InstructorEventInjectionModal";
+import { InspectorResourceInterventions } from "@/components/instructor/InspectorResourceInterventions";
 import type { InspectorTab } from "@/models/InstructorPatientInspector";
 import {
   getInstructorPatientInspector, getInstructorPatientInspectorVersion, subscribeToInstructorPatientInspector,
@@ -48,6 +49,7 @@ export default function PatientInspectorScreen() {
       <View style={[styles.columns, !desktop && styles.stacked]}>
         <View style={styles.leftColumn}>
           {model.cardiac && <InspectorCardiacState exerciseId={getCurrentExercise().id} patientId={model.header.patientId} cardiac={model.cardiac} />}
+          <InspectorResourceInterventions exerciseId={getCurrentExercise().id} patientId={model.header.patientId} />
           <InspectorClinicalState state={model.clinicalState} />
           <InspectorListPanel title="Active Patient Processes" items={model.processes} emptyText="No active patient processes" />
           <InspectorListPanel title="Active Clinical Effects" items={model.effects} emptyText="No active clinical effects" />

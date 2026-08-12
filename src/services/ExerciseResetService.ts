@@ -17,9 +17,11 @@ import { notifySync } from "@/services/SyncService";
 import { resetCurrentCaseManager } from "@/services/CurrentUserService";
 import { clearRuntimeSnapshots } from "@/services/RuntimeSnapshotService";
 import { clearInstructorRuntimeOwners } from "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
+import { resetResourceInterventionCommands } from "@/services/runtime/instructor/ResourceInterventionCommandService";
 import { clearActiveClinicalReferenceRuntime } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
 import { resetExerciseControlCommandHandler } from "@/services/runtime/exercise/ExerciseControlCommandHandler";
 import { resetInstructorCommandHandler } from "@/features/instructor/commands/InstructorPatientCommandHandler";
+import { restorePatientMaterialization } from "@/services/exercise/PackagePatientMaterializationService";
 
 /** @deprecated Test/reset compatibility helper. Production exercise preparation uses runtime/exercise/ExerciseResetService. */
 export function resetExercise(): void {
@@ -48,5 +50,6 @@ export function clearPreparedExerciseWorkingData(): void {
   resetImagingStudies(); resetLabResults(); resetOrders(); resetQuestions(); resetNotes();
   resetInterventions(); resetMedicationAdministrations(); resetVitalSigns(); clearScenarioEvents(); clearTimelineEvents();
   resetPatients(); clearAssignments(); resetCurrentCaseManager(); resetCaseManagerLocations(); clearRuntimeSnapshots();
-  clearInstructorRuntimeOwners(); clearActiveClinicalReferenceRuntime(); resetExerciseControlCommandHandler(); resetInstructorCommandHandler();
+  clearInstructorRuntimeOwners(); clearActiveClinicalReferenceRuntime(); resetExerciseControlCommandHandler(); resetInstructorCommandHandler(); resetResourceInterventionCommands();
+  restorePatientMaterialization();
 }

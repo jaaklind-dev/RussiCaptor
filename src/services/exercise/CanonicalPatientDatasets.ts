@@ -1,0 +1,24 @@
+import type { GoldenFixture } from "@/models/GoldenTest";
+import type { Patient } from "@/models/Patient";
+import type { PackagePatientDataset } from "@/models/exercise/PackagePatientDataset";
+import { patients as demoPatients } from "@/data/patients";
+import { PELVIC_INJURY_REFERENCE_PATIENT } from "@/modules/pelvicInjury/PelvicInjuryReference";
+import { CARDIAC_ARREST_REFERENCE_FIXTURE } from "@/services/golden/CardiacArrestReferenceFixture";
+import { PackagePatientDatasetRegistry } from "./PackagePatientMaterializationService";
+
+const clone = (patient: Patient): Patient => ({ ...patient, mist: { ...patient.mist } });
+const dataset = (datasetId: string, records: PackagePatientDataset["patients"]): PackagePatientDataset => Object.freeze({ datasetId, version: datasetId.split(".v").at(-1)!, patients: Object.freeze(records) });
+const normal = (datasetId: string) => dataset(datasetId, demoPatients.map(patient => Object.freeze({ patient: Object.freeze(clone(patient)) })));
+const cardiacFixture = (patientId: string): GoldenFixture => Object.freeze({ ...structuredClone(CARDIAC_ARREST_REFERENCE_FIXTURE), patientId });
+
+const pelvicPatient: Patient = Object.freeze({ id: PELVIC_INJURY_REFERENCE_PATIENT.patientId, isikukood: "39011230056", name: "Pelvic Injury Reference", triage: "P1", status: "Active", location: "Resus", lastSeen: "T+0", mist: Object.freeze({ mechanism: "Fall from height", injuries: "Open-book pelvic injury", signs: "Progressive hemorrhagic deterioration", treatment: "No treatment yet" }) });
+const pelvicFixture: GoldenFixture = Object.freeze({ fixtureId: "FX-PELVIC-REFERENCE", fixtureType: "PROCESS", patientId: pelvicPatient.id, seed: 43, clockState: "RUNNING", ownershipVersion: 1, loadedModules: Object.freeze(["PELVIC_INJURY_V1", "HYPOXIA_V1"]), activeResources: Object.freeze({ resources: Object.freeze([{ resourceId: "PB-1", type: "pelvicBinder", status: "AVAILABLE", metadata: Object.freeze({}) }]) }), initialState: Object.freeze({ processType: "HYPOVENTILATION_HYPERCAPNIA", templateId: "HV-NEUTRAL", ventilationReserve: 70, reserveLossPerMin: 0, co2Burden: 30, co2GainPerMin: 0, hypoxia: Object.freeze({ templateId: "HYP-CONTROL", oxygenationReserve: 75, spo2: 94, reserveLossPerMin: 0 }), hemorrhageSources: PELVIC_INJURY_REFERENCE_PATIENT.hemorrhageSources }) });
+
+export const packagePatientDatasetRegistry = new PackagePatientDatasetRegistry();
+[
+  normal("patients.als.v1"), normal("patients.trauma.v1"), normal("patients.mascal.v1"), normal("patients.botulism.v1"),
+  normal("patients.emergency_department.v1"), normal("patients.custom.v1"),
+  dataset("patients.cardiac-arrest-reference.v1", [{ patient: Object.freeze(clone(demoPatients[0])), runtimeFixture: cardiacFixture(demoPatients[0].id) }]),
+  dataset("patients.als-protocol-reference.v1", [{ patient: Object.freeze(clone(demoPatients[0])), runtimeFixture: cardiacFixture(demoPatients[0].id) }]),
+  dataset("patients.pelvic-injury-reference.v1", [{ patient: pelvicPatient, runtimeFixture: pelvicFixture }]),
+].forEach(value => packagePatientDatasetRegistry.register(value));

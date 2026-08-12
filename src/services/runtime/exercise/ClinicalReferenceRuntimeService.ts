@@ -7,21 +7,26 @@ import { CARDIAC_ARREST_REFERENCE_FIXTURE } from "@/services/golden/CardiacArres
 import { registerInstructorRuntimeOwner } from "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
 import { createScenarioEngineInstructorRuntimeOwner } from "@/services/runtime/instructor/ScenarioEngineInstructorRuntimeOwner";
 import { addTimelineEvent } from "@/repositories/TimelineRepository";
+import { getPatientMaterialization } from "@/services/exercise/PackagePatientMaterializationService";
 
-let active: Readonly<{ exerciseId: string; patientId: string; engine: ClinicalScenarioEngine; dispose: () => void }> | undefined;
+let active: Readonly<{ exerciseId: string; patientId: string; engine: ClinicalScenarioEngine; dispose: () => void }>[] = [];
 
 /** Connects the selected reference package to the existing authoritative runtime when the exercise starts. */
 export function prepareActiveClinicalReferenceRuntime(exerciseId: string): void {
   const pkg = activeExercisePackageService.getActive();
-  if (pkg?.packageId !== CARDIAC_ARREST_EXERCISE_PACKAGE.packageId && pkg?.packageId !== ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE.packageId) return;
-  const patient = getAllPatients().find(item => item.status === "Active" || item.status === "Incoming");
-  if (!patient) return;
-  if (active?.exerciseId === exerciseId && active.patientId === patient.id) return;
-  active?.dispose();
+  const materialized = getPatientMaterialization(exerciseId);
+  const configured = materialized?.patients.filter(record => record.runtimeFixture) ?? [];
+  const legacyReference = pkg?.packageId === CARDIAC_ARREST_EXERCISE_PACKAGE.packageId || pkg?.packageId === ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE.packageId;
+  const fallback = legacyReference ? getAllPatients().find(item => item.status === "Active" || item.status === "Incoming") : undefined;
+  const records = configured.length ? configured : fallback ? [{ patient: fallback, runtimeFixture: { ...structuredClone(CARDIAC_ARREST_REFERENCE_FIXTURE), patientId: fallback.id } }] : [];
+  if (!pkg || !records.length) return;
+  if (active.length && active.every(item => item.exerciseId === exerciseId) && active.length === records.length) return;
+  active.forEach(item => item.dispose()); active = [];
   exercisePackageLoader.bind(exerciseId, pkg);
-  const engine = new ClinicalScenarioEngine();
-  engine.reset({ ...structuredClone(CARDIAC_ARREST_REFERENCE_FIXTURE), patientId: patient.id });
-  addTimelineEvent({
+  for (const record of records) {
+    const patient = record.patient; const fixture = record.runtimeFixture!; const engine = new ClinicalScenarioEngine(); engine.reset(structuredClone(fixture));
+    if (fixture.initialState && typeof fixture.initialState === "object" && "cardiacArrest" in fixture.initialState) {
+      addTimelineEvent({
     id: `TL-CARDIAC-ARREST-${exerciseId}-${patient.id}`,
     exerciseId,
     patientId: patient.id,
@@ -32,8 +37,8 @@ export function prepareActiveClinicalReferenceRuntime(exerciseId: string): void 
     description: "Canonical cardiac state ARREST",
     author: "Scenario Runtime",
     visibility: "revealed",
-  });
-  addTimelineEvent({
+      });
+      addTimelineEvent({
     id: `TL-CARDIAC-RHYTHM-${exerciseId}-${patient.id}`,
     exerciseId,
     patientId: patient.id,
@@ -44,9 +49,11 @@ export function prepareActiveClinicalReferenceRuntime(exerciseId: string): void 
     description: "PEA · NON_SHOCKABLE",
     author: "Scenario Runtime",
     visibility: "revealed",
-  });
-  const dispose = registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(engine, exerciseId, patient.id));
-  active = Object.freeze({ exerciseId, patientId: patient.id, engine, dispose });
+      });
+    }
+    const dispose = registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(engine, exerciseId, patient.id));
+    active.push(Object.freeze({ exerciseId, patientId: patient.id, engine, dispose }));
+  }
 }
 
-export function clearActiveClinicalReferenceRuntime(): void { active?.dispose(); active = undefined; }
+export function clearActiveClinicalReferenceRuntime(): void { active.forEach(item => item.dispose()); active = []; }
