@@ -9,6 +9,7 @@ import { MEDICATION_CORE_MODULE_ID, MEDICATION_CORE_MODULE_VERSION } from "@/mod
 import { ALS_MODULE_ID, ALS_MODULE_VERSION } from "@/modules/als/AlsManifest";
 import { CARDIAC_ARREST_MODULE_ID, CARDIAC_ARREST_MODULE_VERSION } from "@/modules/cardiacArrest/CardiacArrestManifest";
 import { TRAUMA_CORE_MODULE_ID, TRAUMA_CORE_MODULE_VERSION } from "@/modules/traumaCore/TraumaCoreManifest";
+import { PELVIC_INJURY_MODULE_ID, PELVIC_INJURY_MODULE_VERSION } from "@/modules/pelvicInjury/PelvicInjuryManifest";
 
 const capabilities: readonly ExerciseCapability[] = ["EXERCISE_CONTROLS", "TIMELINE", "DEBRIEF", "ANALYTICS", "METRICS", "RESOURCES", "PATIENT_PLAYBACK"];
 const processes: Record<ExerciseProfile, readonly string[]> = {
@@ -222,5 +223,30 @@ export const TRAUMA_CORE_EXERCISE_PACKAGE = createExercisePackage({
     description: "Foundation-only reference proving deterministic TRAUMA_CORE_V1 composition; not a clinical trauma scenario.",
     author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "TRAUMA",
     tags: ["canonical", "clinical-module", "foundation", "reference", "trauma"],
+  },
+});
+
+const pelvicInjuryDefinition: ExerciseDefinition = Object.freeze({
+  ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
+  exerciseTypeId: "RUSSICAPTOR_PELVIC_INJURY_REFERENCE",
+  name: "Pelvic Injury Reference Exercise",
+  description: "Single-patient deterministic open-book pelvic injury and hemorrhage validation reference.",
+  profile: "TRAUMA",
+});
+
+export const PELVIC_INJURY_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.pelvic-injury-reference",
+  packageVersion: "1.0.0",
+  definition: pelvicInjuryDefinition,
+  patientDatasetId: "patients.pelvic-injury-reference.v1",
+  enabledPatientProcesses: pelvicInjuryDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: pelvicInjuryDefinition.enabledAnalyticsProviders,
+  enabledMetricProviders: pelvicInjuryDefinition.enabledMetricProviders,
+  requiredClinicalModules: Object.freeze([{ moduleId: PELVIC_INJURY_MODULE_ID, version: PELVIC_INJURY_MODULE_VERSION }]),
+  metadata: {
+    name: "Pelvic Injury Reference Package",
+    description: "Reference scenario configuration for open-book pelvic injury and canonical hemorrhage response; not a guideline.",
+    author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "TRAUMA",
+    tags: ["canonical", "clinical-module", "open-book", "pelvic-injury", "reference", "trauma"],
   },
 });

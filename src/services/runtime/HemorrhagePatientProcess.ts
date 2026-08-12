@@ -12,9 +12,15 @@ function validConfig(value: unknown): value is HemorrhageConfiguration {
     c.compensationThresholdsMl?.length === 2 && Boolean(c.trendThresholdsMlMin);
 }
 function output(p: Omit<HemorrhagePatientProcessRuntime, "outputs">): ProcessOutput {
+  const response = p.configuration.vitalResponsePer1000Ml;
+  const lossFactor = p.clinicalState.cumulativeLossMl / 1000;
+  const vitalContributions = response ? [
+    ["heartRate", response.heartRateDelta], ["systolicBp", response.systolicBpDelta],
+    ["diastolicBp", response.diastolicBpDelta], ["crt", response.crtDelta],
+  ].flatMap(([vital, delta]) => typeof delta === "number" ? [{ vital: vital as "heartRate" | "systolicBp" | "diastolicBp" | "crt", operation: "DELTA" as const, value: precise(delta * lossFactor) }] : []) : [];
   return { processId: p.processId, encounterId: p.encounterId, moduleId, status: p.state,
     globalSeverityScore: Math.min(1, p.clinicalState.cumulativeLossMl / p.configuration.severityThresholdsMl[3]),
-    vitalContributions: [],
+    vitalContributions,
     runtimeContributions: { estimatedBloodLossMl: p.clinicalState.estimatedBloodLossMl,
       cumulativeBloodLossMl: p.clinicalState.cumulativeLossMl, bleedingRateMlMin: p.clinicalState.bleedingRateMlMin,
       hemorrhageSeverity: p.clinicalState.severity, perfusionState: p.clinicalState.perfusion,
@@ -24,25 +30,34 @@ function output(p: Omit<HemorrhagePatientProcessRuntime, "outputs">): ProcessOut
 }
 export function bootstrapHemorrhagePatientProcess(encounterId: string, initial: Record<string, unknown>): HemorrhagePatientProcessRuntime {
   if (!validConfig(initial.configuration)) throw new Error("Hemorrhage configuration on puudulik.");
-  const base: Omit<HemorrhagePatientProcessRuntime, "outputs"> = { processId: String(initial.processId ?? `${encounterId}:HEMORRHAGE`),
-    encounterId, instanceKey: String(initial.instanceKey ?? `${encounterId}:hemorrhage`), processType: "HEMORRHAGE",
+  const sourceId = initial.sourceId ? String(initial.sourceId) : undefined;
+  const sourceType = initial.sourceType ? String(initial.sourceType) : undefined;
+  const base: Omit<HemorrhagePatientProcessRuntime, "outputs"> = { processId: String(initial.processId ?? (sourceId ? `${encounterId}:HEMORRHAGE:${sourceId}` : `${encounterId}:HEMORRHAGE`)),
+    encounterId, instanceKey: String(initial.instanceKey ?? (sourceId ? `${encounterId}:hemorrhage:${sourceId}` : `${encounterId}:hemorrhage`)), processType: "HEMORRHAGE",
     templateId: String(initial.templateId ?? "HEMORRHAGE_CONFIG"), state: "Active", elapsedTime: 0,
     configuration: structuredClone(initial.configuration), nextTick: 60, clinicalState: {
       estimatedBloodLossMl: Number(initial.estimatedBloodLossMl ?? 0), cumulativeLossMl: Number(initial.estimatedBloodLossMl ?? 0),
       bleedingRateMlMin: initial.configuration.baselineBleedingRateMlMin, activeHemorrhage: true, severity: "NONE",
       perfusion: "NORMAL", compensation: "COMPENSATED", heartRateTrend: "STABLE", bloodPressureTrend: "STABLE",
       perfusionTrend: "STABLE", activeEffects: [], resolvedEffectIds: [],
-    } };
+    }, ...(sourceId ? { sourceId } : {}), ...(sourceType ? { sourceType } : {}) };
   return { ...base, outputs: output(base) };
 }
 export function setHemorrhageEffects(previous: HemorrhagePatientProcessRuntime, effects: ClinicalEffect[]): HemorrhagePatientProcessRuntime {
-  const activeEffects = effects.filter(e => ["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED"].includes(e.effectType))
+  const applicableEffects = effects.filter(e => ["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED"].includes(e.effectType))
+    .filter(e => {
+      const targetSourceId = typeof e.parameters.sourceId === "string" ? e.parameters.sourceId : undefined;
+      if (targetSourceId && targetSourceId !== previous.sourceId) return false;
+      if (e.effectType === "PELVIC_STABILIZATION" && previous.sourceType && previous.sourceType !== "PELVIC") return false;
+      return true;
+    });
+  const activeEffects = [...new Map(applicableEffects.map(effect => [effect.effectId, effect])).values()]
     .sort((a, b) => a.effectType.localeCompare(b.effectType) || a.sourceInterventionInstanceId.localeCompare(b.sourceInterventionInstanceId));
   const resolvedEffectIds = activeEffects.map(e => e.effectId).sort();
   const base = { ...structuredClone(previous), clinicalState: { ...structuredClone(previous.clinicalState), activeEffects, resolvedEffectIds } };
   return { ...base, outputs: output(base) };
 }
-function band(value: number, t: number[]): number { return t.filter(x => value >= x).length; }
+function band(value: number, t: readonly number[]): number { return t.filter(x => value >= x).length; }
 function precise(value: number): number { return Math.round(value * 1_000_000) / 1_000_000; }
 export function tickHemorrhagePatientProcess(previous: HemorrhagePatientProcessRuntime, seconds: number): { process: HemorrhagePatientProcessRuntime; events: HemorrhageProcessEvent[] } {
   const c = previous.configuration; const effects = previous.clinicalState.activeEffects;

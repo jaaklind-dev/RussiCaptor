@@ -635,7 +635,7 @@ export class ClinicalScenarioEngine {
     eventType: string,
     details: Record<string, unknown> = {},
     target?: string,
-    source: ClinicalProcessRuntime = this.requireProcess()
+    source: CanonicalLifecycleProcess = this.requireProcess()
   ): void {
     this.sequence += 1;
     this.eventLog.push({
@@ -648,7 +648,7 @@ export class ClinicalScenarioEngine {
       payload: {
         sourceProcessId: source.processId,
         instanceKey: source.instanceKey,
-        ...(source.parentProcessId ? { parentProcessId: source.parentProcessId } : {}),
+        ...("parentProcessId" in source && source.parentProcessId ? { parentProcessId: source.parentProcessId } : {}),
         ...details,
       },
     });
@@ -745,7 +745,7 @@ export class ClinicalScenarioEngine {
 
   private recordLifecycleEvidence(evidence: PatientProcessEvidence): void {
     const source = evidence.sourceProcessId
-      ? this.orderedLifecycleLeaves("SERIALIZATION").filter(isClinicalProcess).find(item => item.processId === evidence.sourceProcessId)
+      ? this.orderedLifecycleLeaves("SERIALIZATION").find(item => item.processId === evidence.sourceProcessId)
       : undefined;
     this.logEvent(evidence.eventType, structuredClone(evidence.details), evidence.target, source ?? this.requireProcess());
   }

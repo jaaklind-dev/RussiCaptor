@@ -7,10 +7,12 @@ export type TraumaAnatomicRegion = typeof TRAUMA_ANATOMIC_REGIONS[number];
 
 export type TraumaticInjuryDescriptor = Readonly<{
   injuryId: string;
+  injuryType?: string;
   mechanism: TraumaMechanism;
   anatomicRegion: TraumaAnatomicRegion;
   laterality?: "LEFT" | "RIGHT" | "BILATERAL" | "MIDLINE";
   woundClassification?: "OPEN" | "CLOSED";
+  provenance?: Readonly<{ moduleId: string; version: string }>;
 }>;
 
 export function createTraumaticInjuryDescriptor(input: TraumaticInjuryDescriptor): TraumaticInjuryDescriptor {

@@ -102,11 +102,20 @@ const hv: PatientProcessLifecycleDescriptor = {
 
 const hemorrhage: PatientProcessLifecycleDescriptor = {
   processType: "HEMORRHAGE", kind: "LEAF", requiredPhases: ["BOOTSTRAP", "PREPARE", "TICK"],
-  order: { bootstrapOrder: 300, prepareOrder: 100, tickOrder: 300, aggregationSlot: 300, serializationSlot: 300, siblingOrder: "SINGLETON" },
+  order: { bootstrapOrder: 300, prepareOrder: 100, tickOrder: 300, aggregationSlot: 300, serializationSlot: 300, siblingOrder: "PROCESS_ID" },
   bootstrap({ fixture, existingProcesses }) {
     const source = initial(fixture); const config = source.hemorrhage;
-    if (!config || typeof config !== "object") return { processes: [], events: [], aggregationRequested: false };
+    const configuredSources = Array.isArray(source.hemorrhageSources)
+      ? source.hemorrhageSources.filter(item => item && typeof item === "object" && !Array.isArray(item)) as Record<string, unknown>[]
+      : [];
+    if ((!config || typeof config !== "object") && configuredSources.length === 0) return { processes: [], events: [], aggregationRequested: false };
     const primary = existingProcesses.find(item => item.processType === "HYPOVENTILATION_HYPERCAPNIA");
+    if (configuredSources.length > 0) {
+      const encounterId = fixture.patientId ?? primary?.encounterId ?? `GOLDEN-${fixture.fixtureId}`;
+      const processes = configuredSources.map(item => bootstrapHemorrhagePatientProcess(encounterId, item))
+        .sort((left, right) => left.processId.localeCompare(right.processId));
+      return { processes, events: [], aggregationRequested: false };
+    }
     if (!primary) throw new Error("Hemorrhage bootstrap requires the existing primary process.");
     return { processes: [bootstrapHemorrhagePatientProcess(primary.encounterId, config as Record<string, unknown>)], events: [], aggregationRequested: false };
   },
@@ -116,6 +125,7 @@ const hemorrhage: PatientProcessLifecycleDescriptor = {
     return { processes: [result.process], aggregationRequested: true, events: result.events.map(event => ({
       eventType: event.eventType, details: event.details, target: context.inputEvent?.target,
       recordPhase: "BEFORE_AGGREGATION" as const,
+      ...((process as HemorrhagePatientProcessRuntime).sourceId ? { sourceProcessId: process.processId } : {}),
     })) };
   },
 };

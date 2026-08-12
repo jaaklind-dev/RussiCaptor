@@ -10,10 +10,16 @@ export type HemorrhageConfiguration = {
   binderEfficiency: number;
   infusionOffsetMlMin: number;
   bloodProductOffsetMlMin: number;
-  severityThresholdsMl: [number, number, number, number];
-  perfusionThresholdsMl: [number, number, number];
-  compensationThresholdsMl: [number, number];
-  trendThresholdsMlMin: { worsening: number; improving: number };
+  severityThresholdsMl: readonly [number, number, number, number];
+  perfusionThresholdsMl: readonly [number, number, number];
+  compensationThresholdsMl: readonly [number, number];
+  trendThresholdsMlMin: Readonly<{ worsening: number; improving: number }>;
+  vitalResponsePer1000Ml?: Readonly<{
+    heartRateDelta?: number;
+    systolicBpDelta?: number;
+    diastolicBpDelta?: number;
+    crtDelta?: number;
+  }>;
 };
 export type HemorrhageClinicalState = {
   estimatedBloodLossMl: number;
@@ -34,5 +40,7 @@ export type HemorrhagePatientProcessRuntime = {
   templateId: string; state: "Active" | "Controlled" | "Resolved"; elapsedTime: number;
   clinicalState: HemorrhageClinicalState; configuration: HemorrhageConfiguration;
   outputs: ProcessOutput; nextTick: number; parentProcessId?: string; parentProcessType?: string;
+  sourceId?: string;
+  sourceType?: string;
 };
 export type HemorrhageProcessEvent = { eventType: "HemorrhageStarted" | "HemorrhageReduced" | "HemorrhageStopped" | "PerfusionChanged" | "CompensationChanged"; details: Record<string, unknown> };
