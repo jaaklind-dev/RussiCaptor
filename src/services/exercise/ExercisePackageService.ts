@@ -1,5 +1,5 @@
 import type { ExercisePackage } from "@/models/exercise/ExercisePackage";
-import { AIRWAY_EXERCISE_PACKAGE, ALS_EXERCISE_PACKAGE, ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE, CANONICAL_EXERCISE_PACKAGES, CARDIAC_ARREST_EXERCISE_PACKAGE, DEFAULT_EXERCISE_PACKAGE, MEDICATION_CORE_EXERCISE_PACKAGE, PELVIC_INJURY_EXERCISE_PACKAGE, PLEURAL_INJURY_EXERCISE_PACKAGE, RESPIRATORY_FAILURE_EXERCISE_PACKAGE, TRAUMA_CORE_EXERCISE_PACKAGE } from "./CanonicalExercisePackages";
+import { AIRWAY_EXERCISE_PACKAGE, ALS_EXERCISE_PACKAGE, ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE, CANONICAL_EXERCISE_PACKAGES, CARDIAC_ARREST_EXERCISE_PACKAGE, DEFAULT_EXERCISE_PACKAGE, MEDICATION_CORE_EXERCISE_PACKAGE, PELVIC_INJURY_EXERCISE_PACKAGE, PLEURAL_INJURY_EXERCISE_PACKAGE, RESPIRATORY_FAILURE_EXERCISE_PACKAGE, RUNTIME_CONTINUITY_EXERCISE_PACKAGE, TRAUMA_CORE_EXERCISE_PACKAGE } from "./CanonicalExercisePackages";
 import { EXERCISE_DEFINITION_CATALOG } from "./ExerciseDefinitionService";
 import { ExercisePackageLoader } from "./ExercisePackageLoader";
 import { ExercisePackageRegistry } from "./ExercisePackageRegistry";
@@ -42,6 +42,7 @@ exercisePackageLoader.load(ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE);
 exercisePackageLoader.load(TRAUMA_CORE_EXERCISE_PACKAGE);
 exercisePackageLoader.load(PELVIC_INJURY_EXERCISE_PACKAGE);
 exercisePackageLoader.load(PLEURAL_INJURY_EXERCISE_PACKAGE);
+exercisePackageLoader.load(RUNTIME_CONTINUITY_EXERCISE_PACKAGE);
 exercisePackageLoader.bind("demo", DEFAULT_EXERCISE_PACKAGE);
 export function getExercisePackage(exerciseId: string): ExercisePackage { return exercisePackageLoader.getBound(exerciseId) ?? DEFAULT_EXERCISE_PACKAGE; }
 export function getExerciseDefinition(exerciseId: string): ExercisePackage["definition"] { return getExercisePackage(exerciseId).definition; }

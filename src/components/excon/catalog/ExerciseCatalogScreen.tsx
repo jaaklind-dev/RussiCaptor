@@ -12,6 +12,10 @@ import { PackageList } from "./PackageList";
 
 const keyOf = (entry?: ExerciseCatalogEntry) => entry ? `${entry.exercisePackage.packageId}@${entry.exercisePackage.packageVersion}` : undefined;
 
+export function resolveCatalogSelection(entries: readonly ExerciseCatalogEntry[], selectedKey?: string): ExerciseCatalogEntry | undefined {
+  return entries.find(entry => keyOf(entry) === selectedKey) ?? entries[0];
+}
+
 export function ExerciseCatalogScreen() {
   useSyncExternalStore(listener => activeExercisePackageService.subscribe(listener), () => activeExercisePackageService.getVersion(), () => activeExercisePackageService.getVersion());
   const entries = useMemo(() => exercisePackageRegistry.packages.map(exercisePackage => Object.freeze({ exercisePackage, compatibility: exercisePackageValidator.compatibility(exercisePackage) })), []);
@@ -21,8 +25,9 @@ export function ExerciseCatalogScreen() {
   const [profile, setProfile] = useState<ExerciseProfile>();
   const [compatibility, setCompatibility] = useState<ExercisePackageCompatibility>();
   const [tag, setTag] = useState<string>();
-  const [selected, setSelected] = useState<ExerciseCatalogEntry | undefined>(entries[0]);
+  const [selectedKey, setSelectedKey] = useState<string | undefined>(keyOf(entries[0]));
   const filtered = useMemo(() => filterExerciseCatalog(entries, { search, profile, compatibility, tag }), [entries, search, profile, compatibility, tag]);
+  const selected = useMemo(() => resolveCatalogSelection(filtered, selectedKey), [filtered, selectedKey]);
   const active = activeExercisePackageService.getActive();
   const activeKey = active ? `${active.packageId}@${active.packageVersion}` : undefined;
   const { width } = useWindowDimensions();
@@ -33,7 +38,7 @@ export function ExerciseCatalogScreen() {
     <PackageFilters search={search} profile={profile} compatibility={compatibility} tag={tag} profiles={profiles} tags={tags} onSearch={setSearch} onProfile={setProfile} onCompatibility={setCompatibility} onTag={setTag} />
     <Text style={styles.count}>{filtered.length} / {entries.length} packages</Text>
     <View style={[styles.layout, desktop && styles.desktop]}>
-      <View style={styles.list}><PackageList entries={filtered} activeKey={activeKey} selectedKey={keyOf(selected)} onSelect={setSelected} /></View>
+      <View style={styles.list}><PackageList entries={filtered} activeKey={activeKey} selectedKey={keyOf(selected)} onSelect={entry => setSelectedKey(keyOf(entry))} /></View>
       <View style={styles.detail}><PackageDetail entry={selected} active={keyOf(selected) === activeKey} onActivate={() => { if (selected) activeExercisePackageService.activate(selected.exercisePackage.packageId, selected.exercisePackage.packageVersion); }} /></View>
     </View>
   </ScrollView>;

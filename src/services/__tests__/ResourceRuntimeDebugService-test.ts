@@ -47,3 +47,17 @@ test("dashboard resource monitor aggregates total, free and in-use counts by typ
     { type: "monitor", label: "Monitors", total: 1, free: 1, inUse: 0 },
   ]);
 });
+
+test("multi-patient debug projections retain each patient's exact resource pool", () => {
+  publishResourceRuntimeDebugSnapshot({
+    resources: [{ resourceId: "PB-1", type: "pelvicBinder", status: "AVAILABLE", metadata: {} }],
+    activeInterventions: [], recentEvents: [], updatedAt: 10,
+  }, "PT-PELVIC");
+  publishResourceRuntimeDebugSnapshot({
+    resources: [{ resourceId: "CD-1", type: "chestDrain", status: "AVAILABLE", metadata: {} }],
+    activeInterventions: [], recentEvents: [], updatedAt: 10,
+  }, "PT-PLEURAL");
+
+  expect(getPatientResourceDebugSnapshot("PT-PELVIC").resources.map(item => item.type)).toEqual(["pelvicBinder"]);
+  expect(getPatientResourceDebugSnapshot("PT-PLEURAL").resources.map(item => item.type)).toEqual(["chestDrain"]);
+});

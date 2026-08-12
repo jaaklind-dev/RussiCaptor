@@ -264,3 +264,19 @@ export const PLEURAL_INJURY_EXERCISE_PACKAGE = createExercisePackage({
     author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "TRAUMA",
     tags: ["canonical", "clinical-module", "hemopneumothorax", "pleural-injury", "reference", "trauma"] },
 });
+
+const runtimeContinuityDefinition: ExerciseDefinition = Object.freeze({ ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
+  exerciseTypeId: "RUSSICAPTOR_RUNTIME_CONTINUITY_REFERENCE", name: "Runtime Continuity Reference Exercise",
+  description: "Technical two-patient reference for canonical persistence and rehydration acceptance only.", profile: "TRAUMA" });
+export const RUNTIME_CONTINUITY_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.runtime-continuity-reference", packageVersion: "1.0.0", definition: runtimeContinuityDefinition,
+  patientDatasetId: "patients.runtime-continuity-reference.v1", enabledPatientProcesses: runtimeContinuityDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: runtimeContinuityDefinition.enabledAnalyticsProviders, enabledMetricProviders: runtimeContinuityDefinition.enabledMetricProviders,
+  requiredClinicalModules: Object.freeze([
+    { moduleId: PELVIC_INJURY_MODULE_ID, version: PELVIC_INJURY_MODULE_VERSION },
+    { moduleId: PLEURAL_INJURY_MODULE_ID, version: PLEURAL_INJURY_MODULE_VERSION },
+  ]),
+  metadata: { name: "Runtime Continuity Reference Package", description: "Technical reference package for two-patient process-kill persistence acceptance; not a clinical scenario or protocol.",
+    author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "TRAUMA",
+    tags: ["canonical", "persistence", "reference", "runtime-continuity", "technical", "trauma"] },
+});

@@ -1,6 +1,6 @@
 import type { Patient } from "@/models/Patient";
 import type { PackagePatientDataset } from "@/models/exercise/PackagePatientDataset";
-import { PELVIC_INJURY_EXERCISE_PACKAGE } from "../CanonicalExercisePackages";
+import { PELVIC_INJURY_EXERCISE_PACKAGE, RUNTIME_CONTINUITY_EXERCISE_PACKAGE } from "../CanonicalExercisePackages";
 import { packagePatientDatasetRegistry } from "../CanonicalPatientDatasets";
 import { createPatientMaterializationPlan, getPatientMaterialization, installPatientMaterialization, PackagePatientDatasetRegistry, PatientDatasetError, restorePatientMaterialization } from "../PackagePatientMaterializationService";
 import { dataProvider } from "@/providers/ProviderFactory";
@@ -22,6 +22,22 @@ describe("WP-43A Package Patient Materialization", () => {
     expect(getPatientMaterialization("EX-PELVIC")).toEqual(plan);
     expect(Object.isFrozen(plan)).toBe(true); expect(Object.isFrozen(plan.patients)).toBe(true);
     expect(Object.isFrozen(plan.patients[0].runtimeFixture?.initialState)).toBe(true);
+  });
+
+  test("materializes the technical runtime continuity reference through the canonical two-patient path", () => {
+    const plan = createPatientMaterializationPlan("EX-RUNTIME-CONTINUITY", RUNTIME_CONTINUITY_EXERCISE_PACKAGE, packagePatientDatasetRegistry);
+    expect(plan).toMatchObject({
+      exerciseId: "EX-RUNTIME-CONTINUITY",
+      packageId: "russicaptor.runtime-continuity-reference",
+      datasetId: "patients.runtime-continuity-reference.v1",
+      patients: [
+        { patient: { id: "PT-PELVIC-001" }, runtimeFixture: { patientId: "PT-PELVIC-001", loadedModules: expect.arrayContaining(["PELVIC_INJURY_V1"]) } },
+        { patient: { id: "PT-PLEURAL-001" }, runtimeFixture: { patientId: "PT-PLEURAL-001", loadedModules: expect.arrayContaining(["PLEURAL_INJURY_V1", "RESPIRATORY_FAILURE_V1", "HYPOXIA_V1"]) } },
+      ],
+    });
+    installPatientMaterialization(plan);
+    expect(dataProvider.getPatients().map(item => item.id)).toEqual(["PT-PELVIC-001", "PT-PLEURAL-001"]);
+    expect(getPatientMaterialization("EX-RUNTIME-CONTINUITY")).toEqual(plan);
   });
 
   test("supports N patients with input-order invariant identity, hash and process configuration", () => {

@@ -55,6 +55,8 @@ import { projectVitalSignState } from "@/services/runtime/vitals/VitalSignProjec
 import type { VitalSignConfiguration, VitalSignEvent, VitalSignKey } from "@/models/VitalSign";
 import type { CanonicalLifecycleProcess, PatientProcessEvidence, PatientProcessPhaseContext } from "@/models/PatientProcessLifecycle";
 import { createProductionPatientProcessLifecyclePlan, isClinicalProcess } from "@/services/runtime/lifecycle/ProductionPatientProcessLifecycle";
+import type { PersistedRuntimePayload } from "@/models/PersistedRuntimeState";
+import { RuntimePersistenceError } from "@/models/PersistedRuntimeState";
 
 export function runScenarioEvents(
 
@@ -494,6 +496,70 @@ export class ClinicalScenarioEngine {
     return structuredClone(this.eventLog);
   }
 
+  /** Canonical serialization boundary. The result contains data only and no live runtime references. */
+  captureRuntimePayload(): PersistedRuntimePayload {
+    return structuredClone({
+      simulationTimeSec: this.simulationTimeSec,
+      sequence: this.sequence,
+      processes: this.lifecyclePlan.orderProcesses([...this.lifecycleProcessStore.values()], "SERIALIZATION")
+        .concat(this.rootProcess() ? [this.rootProcess()!] : []),
+      runtimeState: this.requireRuntimeState(),
+      eventLog: this.eventLog,
+      resourceEventLog: this.resourceEventLog,
+      pendingTransitions: this.pendingTransitions,
+      processControlledEventPending: this.processControlledEventPending,
+      appliedEventIds: [...this.appliedEventIds].sort(),
+      resources: this.resourcePool.snapshot(),
+      interventionEngine: this.interventionEngine.snapshot(),
+      clinicalIntegration: this.clinicalIntegration.snapshot(),
+      interventionInstances: this.interventionRuntime.snapshot(),
+      airway: this.airwayManagement.snapshot(),
+      circulation: this.circulationManagement.snapshot(),
+      medication: this.medicationEngine.snapshot(),
+      assessmentRules: this.assessmentRules,
+      vitalSignEvents: this.vitalSignEvents,
+    }) as PersistedRuntimePayload;
+  }
+
+  /** Atomic fail-closed rehydration boundary. Validation completes before any live state is published. */
+  rehydrateRuntimePayload(payload: PersistedRuntimePayload): void {
+    const candidate = structuredClone(payload);
+    if (!Number.isFinite(candidate.simulationTimeSec) || candidate.simulationTimeSec < 0 ||
+      !Number.isInteger(candidate.sequence) || candidate.sequence < 0 || !candidate.processes.length) {
+      throw new RuntimePersistenceError("RUNTIME_INVARIANT_VIOLATION", "Persisted runtime clock, sequence or process set is invalid.");
+    }
+    const identities = new Set<string>();
+    for (const process of candidate.processes) {
+      try { this.lifecyclePlan.descriptor(process.processType); } catch {
+        throw new RuntimePersistenceError("UNKNOWN_PROCESS_TYPE", `Persisted process type ${process.processType} is not registered.`);
+      }
+      if (identities.has(process.processId)) throw new RuntimePersistenceError("RUNTIME_INVARIANT_VIOLATION", `Duplicate process ${process.processId}.`);
+      identities.add(process.processId);
+    }
+    const encounterIds = new Set(candidate.processes.map(process => process.encounterId));
+    if (encounterIds.size !== 1 || !encounterIds.has(candidate.runtimeState.encounterId) ||
+      candidate.sequence < candidate.eventLog.reduce((max, event) => Math.max(max, event.sequence ?? 0), 0)) {
+      throw new RuntimePersistenceError("RUNTIME_INVARIANT_VIOLATION", "Persisted process, RuntimeState or event sequence identity is inconsistent.");
+    }
+
+    this.lifecycleProcessStore.clear(); candidate.processes.forEach(process => this.replaceLifecycleProcess(process));
+    this.runtimeState = candidate.runtimeState;
+    this.simulationTimeSec = candidate.simulationTimeSec; this.sequence = candidate.sequence;
+    this.eventLog = [...candidate.eventLog]; this.resourceEventLog = [...candidate.resourceEventLog];
+    this.pendingTransitions = candidate.pendingTransitions.map(item => ({ dueSec: item.dueSec, transition: item.transition as HvTimedTransition }));
+    this.processControlledEventPending = candidate.processControlledEventPending;
+    this.appliedEventIds.clear(); candidate.appliedEventIds.forEach(id => this.appliedEventIds.add(id));
+    this.resourcePool = new ResourcePool([...candidate.resources]);
+    this.interventionEngine = new InterventionEngine(); this.interventionEngine.restore(candidate.interventionEngine);
+    this.clinicalIntegration.restore(candidate.clinicalIntegration);
+    this.interventionRuntime.restore(candidate.interventionInstances);
+    this.airwayManagement.restore(candidate.airway); this.circulationManagement.restore(candidate.circulation);
+    this.medicationEngine.restore(candidate.medication);
+    this.assessmentRules = structuredClone(candidate.assessmentRules) as AssessmentRule[];
+    this.vitalSignEvents = [...candidate.vitalSignEvents];
+    this.publishCanonicalState();
+  }
+
   /** Instructor command boundary: process transition first, canonical aggregation second. */
   injectRespiratoryDeterioration(commandId: string, patientId: string, simulationTimeSec: number): { ok: true; runtimeEventId: string } | { ok: false; reason: string } {
     const process = this.requireProcess();
@@ -644,6 +710,24 @@ export class ClinicalScenarioEngine {
     }
   }
 
+  private publishCanonicalState(): void {
+    const processes = this.orderedLifecycleLeaves("SERIALIZATION");
+    publishRuntimeSnapshot(this.requireRuntimeState(), processes.map(process => ({
+      processId: process.outputs.processId,
+      moduleId: process.outputs.moduleId,
+      status: process.outputs.status,
+      ...(process.processType === "CARDIAC_ARREST" ? {
+        clinicalState: structuredClone(process.clinicalState),
+        lastEvent: this.eventLog.filter(event => event.target === process.processId).at(-1)
+          ? { type: this.eventLog.filter(event => event.target === process.processId).at(-1)!.eventType,
+            simulationTimeSec: this.eventLog.filter(event => event.target === process.processId).at(-1)!.simulationTime ?? this.simulationTimeSec }
+          : undefined,
+      } : {}),
+    })));
+    this.publishResourceDebugSnapshot();
+    this.publishAssessmentSnapshot(true);
+  }
+
   private logEvent(
     eventType: string,
     details: Record<string, unknown> = {},
@@ -704,7 +788,7 @@ export class ClinicalScenarioEngine {
       vitalSignStates: this.runtimeState?.vitalSignState ? [{ patientId: this.requireProcess().encounterId, state: this.runtimeState.vitalSignState }] : [],
       recentEvents: this.resourceEventLog,
       updatedAt: this.simulationTimeSec,
-    });
+    }, this.requireProcess().encounterId);
     this.publishAssessmentSnapshot();
   }
 

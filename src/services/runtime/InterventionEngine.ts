@@ -74,6 +74,13 @@ export class InterventionEngine {
     };
   }
 
+  restore(snapshot: Readonly<{ pending: readonly RuntimeIntervention[]; active: readonly RuntimeIntervention[]; completed: readonly string[] }>): void {
+    this.pending.clear(); this.active.clear(); this.completed.clear();
+    for (const item of snapshot.pending) this.pending.set(item.interventionId, structuredClone(item));
+    for (const item of snapshot.active) this.active.set(`${item.patientId}\u0000${item.resourceId}`, structuredClone(item));
+    for (const id of snapshot.completed) this.completed.add(id);
+  }
+
   private preflight(due: RuntimeIntervention[], pool: ResourcePool): Map<string, Rejection> {
     const rejected = new Map<string, Rejection>();
     const groups = new Map<string, RuntimeIntervention[]>();

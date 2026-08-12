@@ -163,6 +163,11 @@ export class InterventionRuntime {
     return [...this.instances.values()].sort(instanceOrder).map(item => structuredClone(item));
   }
 
+  restore(instances: readonly InterventionInstance[]): void {
+    this.instances.clear();
+    for (const instance of instances) this.instances.set(instance.instanceId, structuredClone(instance));
+  }
+
   forPatient(patientId: string): InterventionInstance[] {
     return this.snapshot().filter(item => item.patientId === patientId);
   }

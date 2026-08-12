@@ -2,6 +2,8 @@ import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { getCanonicalPatientRuntimeSnapshot } from "@/services/RuntimeSnapshotService";
 import { getInstructorRuntimeOwner } from "./InstructorRuntimeEventRegistry";
 import { getPatientResourceDebugSnapshot } from "@/services/ResourceRuntimeDebugService";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { advanceExerciseMinutes } from "@/services/ClockService";
 
 export type ResourceInterventionCommandResult =
   | Readonly<{ ok: true; commandId: string; runtimeEventId: string }>
@@ -14,7 +16,11 @@ export function handleResourceInterventionCommand(command: Readonly<{ commandId:
   const previous = results.get(command.commandId);
   if (previous) return structuredClone(previous);
   const owner = getInstructorRuntimeOwner(command.exerciseId, command.patientId);
-  const applied = owner?.executeResourceIntervention?.(command.commandId, command.resourceId);
+  const exercise = getCanonicalExerciseSnapshot();
+  const canonicalSimulationTimeSec = owner?.executeResourceIntervention && exercise.exerciseId === command.exerciseId && exercise.lifecycleState === "RUNNING"
+    ? exercise.simulationTimeSec + 60 : undefined;
+  const applied = owner?.executeResourceIntervention?.(command.commandId, command.resourceId, canonicalSimulationTimeSec);
+  if (applied?.ok && canonicalSimulationTimeSec !== undefined) advanceExerciseMinutes(1);
   const result: ResourceInterventionCommandResult = !applied
     ? { ok: false, commandId: command.commandId, errorCode: "UNAVAILABLE", message: "Resource runtime is not available" }
     : applied.ok

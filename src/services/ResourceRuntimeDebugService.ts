@@ -26,11 +26,13 @@ type Listener = () => void;
 let snapshot: ResourceRuntimeDebugSnapshot = {
   resources: [], activeInterventions: [], recentEvents: [], updatedAt: 0,
 };
+const patientSnapshots = new Map<string, ResourceRuntimeDebugSnapshot>();
 let version = 0;
 const listeners = new Set<Listener>();
 
-export function publishResourceRuntimeDebugSnapshot(next: ResourceRuntimeDebugSnapshot): void {
+export function publishResourceRuntimeDebugSnapshot(next: ResourceRuntimeDebugSnapshot, patientId?: string): void {
   snapshot = structuredClone(next);
+  if (patientId) patientSnapshots.set(patientId, structuredClone(next));
   version += 1;
   listeners.forEach(listener => listener());
 }
@@ -40,34 +42,35 @@ export function getResourceRuntimeDebugVersion(): number {
 }
 
 export function getPatientResourceDebugSnapshot(patientId: string): ResourceRuntimeDebugSnapshot {
+  const patientSnapshot = patientSnapshots.get(patientId) ?? snapshot;
   return {
-    resources: snapshot.resources.map(resource => structuredClone(resource)),
-    allocationState: snapshot.allocationState ? structuredClone(snapshot.allocationState) : undefined,
-    activeInterventions: snapshot.activeInterventions
+    resources: patientSnapshot.resources.map(resource => structuredClone(resource)),
+    allocationState: patientSnapshot.allocationState ? structuredClone(patientSnapshot.allocationState) : undefined,
+    activeInterventions: patientSnapshot.activeInterventions
       .filter(intervention => intervention.patientId === patientId)
       .map(intervention => structuredClone(intervention)),
-    clinicalInterventions: (snapshot.clinicalInterventions ?? [])
+    clinicalInterventions: (patientSnapshot.clinicalInterventions ?? [])
       .filter(intervention => intervention.patientId === patientId)
       .map(intervention => structuredClone(intervention)),
-    airwayStates: (snapshot.airwayStates ?? [])
+    airwayStates: (patientSnapshot.airwayStates ?? [])
       .filter(state => state.patientId === patientId)
       .map(state => structuredClone(state)),
-    circulationStates: (snapshot.circulationStates ?? [])
+    circulationStates: (patientSnapshot.circulationStates ?? [])
       .filter(state => state.patientId === patientId).map(state => structuredClone(state)),
-    hemorrhageProcesses: (snapshot.hemorrhageProcesses ?? [])
+    hemorrhageProcesses: (patientSnapshot.hemorrhageProcesses ?? [])
       .filter(process => process.encounterId === patientId).map(process => structuredClone(process)),
-    medicationState: snapshot.medicationState ? {
-      instances: snapshot.medicationState.instances.filter(x => x.patientId === patientId).map(x=>structuredClone(x)),
-      events: snapshot.medicationState.events.filter(x => x.patientId === patientId).map(x=>structuredClone(x)),
-      effects: snapshot.medicationState.effects.filter(x => x.patientId === patientId).map(x=>structuredClone(x)),
+    medicationState: patientSnapshot.medicationState ? {
+      instances: patientSnapshot.medicationState.instances.filter(x => x.patientId === patientId).map(x=>structuredClone(x)),
+      events: patientSnapshot.medicationState.events.filter(x => x.patientId === patientId).map(x=>structuredClone(x)),
+      effects: patientSnapshot.medicationState.effects.filter(x => x.patientId === patientId).map(x=>structuredClone(x)),
     } : undefined,
-    vitalSignStates: (snapshot.vitalSignStates ?? []).filter(item => item.patientId === patientId).map(item => structuredClone(item)),
-    recentEvents: snapshot.recentEvents
+    vitalSignStates: (patientSnapshot.vitalSignStates ?? []).filter(item => item.patientId === patientId).map(item => structuredClone(item)),
+    recentEvents: patientSnapshot.recentEvents
       .filter(event => event.patientId === patientId)
       .slice(-10)
       .reverse()
       .map(event => structuredClone(event)),
-    updatedAt: snapshot.updatedAt,
+    updatedAt: patientSnapshot.updatedAt,
   };
 }
 

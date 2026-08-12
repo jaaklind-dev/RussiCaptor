@@ -55,6 +55,11 @@ export class ClinicalIntegrationFramework {
     return { completedInputIds: [...this.completedInputIds].sort(), events: structuredClone(this.eventLog) };
   }
 
+  restore(snapshot: Readonly<{ completedInputIds: readonly string[]; events: readonly ClinicalIntegrationEvent[] }>): void {
+    this.completedInputIds.clear(); snapshot.completedInputIds.forEach(id => this.completedInputIds.add(id));
+    this.eventLog.splice(0, this.eventLog.length, ...structuredClone(snapshot.events));
+  }
+
   private validate(input: ClinicalIntegrationInput, current: ClinicalProcessRuntime[]): { code: ClinicalIntegrationRejectionCode; detail: string } | undefined {
     if (!input.inputId || !input.encounterId || !input.patientId || !Number.isFinite(input.timestamp) || input.timestamp < 0 || !input.payload?.effectId) {
       return { code: "INVALID_INPUT", detail: "Clinical input identity, timestamp või effect on vigane." };

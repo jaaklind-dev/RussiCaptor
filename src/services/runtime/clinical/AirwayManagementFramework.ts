@@ -63,4 +63,9 @@ export class AirwayManagementFramework {
       events: structuredClone(this.eventLog),
     };
   }
+
+  restore(snapshot: Readonly<{ states: readonly AirwayState[]; events: readonly AirwayRuntimeEvent[] }>): void {
+    this.states.clear(); snapshot.states.forEach(state => this.states.set(state.patientId, structuredClone(state)));
+    this.eventLog.splice(0, this.eventLog.length, ...structuredClone(snapshot.events));
+  }
 }

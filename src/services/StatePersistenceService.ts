@@ -18,7 +18,7 @@ import { clinicalDataProvider, dataProvider } from "@/providers/ProviderFactory"
 import { getCanonicalExerciseSnapshot, restoreExerciseSession } from "@/repositories/ExerciseSessionRepository";
 import { getAllTimelineEvents, restoreTimelineEvents } from "@/repositories/TimelineRepository";
 import { getAssignmentState, restoreAssignmentState } from "@/services/AssignmentRepository";
-import { stopClockRunner } from "@/services/ClockRunner";
+import { startClockRunner, stopClockRunner } from "@/services/ClockRunner";
 import { getCurrentCaseManager, restoreCurrentCaseManager } from "@/services/CurrentUserService";
 import { subscribeToSync } from "@/services/SyncService";
 import type { CaseManager } from "@/models/CaseManager";
@@ -50,9 +50,12 @@ import {
 import { installCurrentExercise } from "@/repositories/ExerciseRepository";
 import type { MaterializedPatientDataset } from "@/models/exercise/PackagePatientDataset";
 import { getPatientMaterialization, restorePatientMaterialization } from "@/services/exercise/PackagePatientMaterializationService";
+import type { PersistedRuntimeState } from "@/models/PersistedRuntimeState";
+import { captureActiveClinicalReferenceRuntimes, prepareActiveClinicalReferenceRuntime } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
+const stateTempFileUri = `${FileSystem.documentDirectory}russicaptor-state.tmp.json`;
 
 export type SharedExerciseState = {
   exerciseSession: ExerciseSession | CanonicalExerciseSnapshot;
@@ -77,6 +80,7 @@ export type SharedExerciseState = {
   exercisePackageReference?: { packageId: string; packageVersion: string };
   completedExerciseArchives?: CompletedExerciseArchive[];
   patientMaterialization?: MaterializedPatientDataset;
+  persistedRuntimeStates?: readonly PersistedRuntimeState[];
 };
 
 type PersistedState = SharedExerciseState & {
@@ -126,6 +130,7 @@ function replaceItems<T>(target: T[], restored: T[]): void {
 }
 
 function createSnapshot(): PersistedState {
+  const exerciseSession = getCanonicalExerciseSnapshot();
   const assignmentState = getAssignmentState();
   const patients = dataProvider.getPatients();
   const questions = clinicalDataProvider.getQuestions();
@@ -138,12 +143,13 @@ function createSnapshot(): PersistedState {
   const medicationAdministrations =
     clinicalDataProvider.getMedicationAdministrations();
   const vitalSigns = clinicalDataProvider.getVitalSigns();
+  const persistedRuntimeStates = captureActiveClinicalReferenceRuntimes(exerciseSession.simulationTimeSec);
 
   return {
     version: STATE_VERSION,
     savedAt: new Date().toISOString(),
     currentCaseManager: { ...getCurrentCaseManager() },
-    exerciseSession: getCanonicalExerciseSnapshot(),
+    exerciseSession,
     patients: patients.map((patient) => ({ ...patient, mist: { ...patient.mist } })),
     assignments: assignmentState.assignments,
     transfers: assignmentState.transfers,
@@ -167,6 +173,7 @@ function createSnapshot(): PersistedState {
     exercisePackageReference: packageReference(),
     completedExerciseArchives: [...getCompletedExerciseArchives()],
     patientMaterialization: getPatientMaterialization(getCanonicalExerciseSnapshot().exerciseId),
+    persistedRuntimeStates,
   };
 }
 
@@ -226,6 +233,8 @@ export function restoreSharedExerciseState(restored: SharedExerciseState): void 
   if (restored.vitalSigns) {
     replaceItems(clinicalDataProvider.getVitalSigns(), restored.vitalSigns);
   }
+
+  restoreCanonicalRuntime(restored);
 
 }
 
@@ -289,8 +298,25 @@ export async function loadPersistedState(): Promise<void> {
       replaceItems(clinicalDataProvider.getVitalSigns(), restored.vitalSigns);
     }
 
+    restoreCanonicalRuntime(restored);
+
   } catch (error) {
     console.warn("Saved exercise state could not be loaded.", error);
+  }
+}
+
+function restoreCanonicalRuntime(restored: SharedExerciseState): void {
+  const session = restored.exerciseSession;
+  const lifecycleState = "lifecycleState" in session ? session.lifecycleState
+    : session.state === "running" ? "RUNNING" : session.state === "paused" ? "PAUSED" : "READY";
+  if (lifecycleState === "RUNNING" || lifecycleState === "PAUSED") {
+    if (!restored.persistedRuntimeStates?.length) throw new Error("ACTIVE_RUNTIME_PERSISTENCE_MISSING");
+    const simulationTimeSec = "simulationTimeSec" in session ? session.simulationTimeSec : session.currentMinute * 60;
+    if (restored.persistedRuntimeStates.some(item => item.capturedAtSimulationTimeSec !== simulationTimeSec)) {
+      throw new Error("RUNTIME_CHECKPOINT_CLOCK_MISMATCH");
+    }
+    prepareActiveClinicalReferenceRuntime(session.exerciseId, restored.persistedRuntimeStates);
+    if (lifecycleState === "RUNNING") startClockRunner();
   }
 }
 
@@ -305,9 +331,10 @@ export function startStatePersistence(): () => void {
     });
 
     saveChain = saveChain
-      .then(() =>
-        FileSystem.writeAsStringAsync(stateFileUri, JSON.stringify(snapshot))
-      )
+      .then(async () => {
+        await FileSystem.writeAsStringAsync(stateTempFileUri, JSON.stringify(snapshot));
+        await FileSystem.moveAsync({ from: stateTempFileUri, to: stateFileUri });
+      })
       .then(() => {
         pendingSaveCount -= 1;
 

@@ -54,4 +54,8 @@ export class CirculationManagementFramework {
   snapshot(): { states: CirculationState[]; events: CirculationRuntimeEvent[] } {
     return { states: [...this.states.values()].sort((a, b) => a.patientId.localeCompare(b.patientId)).map(x => structuredClone(x)), events: structuredClone(this.events) };
   }
+  restore(snapshot: Readonly<{ states: readonly CirculationState[]; events: readonly CirculationRuntimeEvent[] }>): void {
+    this.states.clear(); snapshot.states.forEach(state => this.states.set(state.patientId, structuredClone(state)));
+    this.events.splice(0, this.events.length, ...structuredClone(snapshot.events));
+  }
 }

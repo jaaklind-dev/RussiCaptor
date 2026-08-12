@@ -55,6 +55,17 @@ export class MedicationEngine {
       instances: [...this.instances.values()].sort((a,b)=>a.timestamp-b.timestamp || a.administrationId.localeCompare(b.administrationId)).map(x=>structuredClone(x)), events: structuredClone(this.events),
       effects: [...this.effects.values()].flat().sort((a,b)=>a.effectId.localeCompare(b.effectId)).map(x=>structuredClone(x)) };
   }
+  restore(snapshot: Readonly<{ definitions: readonly MedicationDefinition[]; instances: readonly MedicationInstance[]; events: readonly MedicationRuntimeEvent[]; effects: readonly ClinicalEffect[] }>): void {
+    this.definitions.clear(); snapshot.definitions.forEach(item => this.definitions.set(item.medicationId, structuredClone(item)));
+    this.instances.clear(); snapshot.instances.forEach(item => this.instances.set(item.administrationId, structuredClone(item)));
+    this.seen.clear(); snapshot.instances.forEach(item => this.seen.add(item.administrationId));
+    this.events.splice(0, this.events.length, ...structuredClone(snapshot.events));
+    this.effects.clear();
+    for (const effect of snapshot.effects) {
+      const id = effect.sourceInterventionInstanceId;
+      this.effects.set(id, [...(this.effects.get(id) ?? []), structuredClone(effect)]);
+    }
+  }
   private validAccess(a: MedicationAdministration, c: CirculationState): boolean { if (!a.vascularAccessId) return false;
     return c.vascularAccess.some(x => x.interventionInstanceId === a.vascularAccessId && (a.route === "IO" ? x.type === "IO" : x.type !== "IO")); }
   private reject(a: MedicationAdministration, reasonCode: MedicationRejectionReason): MedicationOperationResult { const event = this.event("MedicationRejected", a, a.timestamp, reasonCode); this.events.push(event); return { effects: [], events: [event] }; }

@@ -28,17 +28,19 @@ export function createScenarioEngineInstructorRuntimeOwner(
         return { ok: false, reason: error instanceof Error ? error.message : "Clinical intervention failed" };
       }
     },
-    executeResourceIntervention(commandId, resourceId) {
+    executeResourceIntervention(commandId, resourceId, canonicalSimulationTimeSec) {
       const sourceInterventionId = `EXCON:${commandId}`;
       try {
         const resource = engine.getResourcePoolSnapshot().find(item => item.resourceId === resourceId);
         const definitionId = inferredInterventionDefinitionId(resource);
         if (!resource || !definitionId) return { ok: false, reason: "Resource intervention is not supported" };
         const before = engine.getRuntimeState().exerciseTimeSec;
-        const interventionTime = before + 60;
-        engine.advanceTo(interventionTime);
+        const interventionTime = canonicalSimulationTimeSec ?? before + 60;
+        if (interventionTime < before) return { ok: false, reason: "Canonical exercise clock is behind patient runtime" };
         engine.scheduleIntervention({ interventionId: sourceInterventionId, patientId, resourceId,
           action: "APPLY", timestamp: interventionTime, definitionId });
+        if (canonicalSimulationTimeSec !== undefined) return { ok: true, runtimeEventId: `INTERVENTION:${sourceInterventionId}` };
+        if (interventionTime > before) engine.advanceTo(interventionTime);
         engine.dispatch({ sequenceId: `SEQ:${commandId}`, step: 1, offsetSec: interventionTime,
           eventType: "ENGINE_TICK", actor: "EXCON", target: patientId, eventId: `TICK:${commandId}`,
           result: "SUCCESS", payload: { tickMin: 1 } });

@@ -5,6 +5,7 @@ import type { ExerciseClockTarget } from "./ExerciseClockTargetRegistry";
 export function createScenarioEngineExerciseClockTarget(engine: ClinicalScenarioEngine, patientId: string): ExerciseClockTarget {
   return { targetId: patientId, advance(fromSimulationTimeSec, toSimulationTimeSec) {
     if (toSimulationTimeSec <= fromSimulationTimeSec) return;
+    if (engine.getRuntimeState().exerciseTimeSec >= toSimulationTimeSec) return;
     engine.advanceTo(toSimulationTimeSec);
     engine.dispatch({ sequenceId: "EXERCISE_CLOCK", step: toSimulationTimeSec, offsetSec: toSimulationTimeSec,
       eventType: "ENGINE_TICK", actor: "ScenarioEngine", target: patientId,
