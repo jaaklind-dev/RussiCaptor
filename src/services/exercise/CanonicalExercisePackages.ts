@@ -8,6 +8,7 @@ import { RESPIRATORY_FAILURE_MODULE_ID, RESPIRATORY_FAILURE_MODULE_VERSION } fro
 import { MEDICATION_CORE_MODULE_ID, MEDICATION_CORE_MODULE_VERSION } from "@/modules/medicationCore/MedicationCoreManifest";
 import { ALS_MODULE_ID, ALS_MODULE_VERSION } from "@/modules/als/AlsManifest";
 import { CARDIAC_ARREST_MODULE_ID, CARDIAC_ARREST_MODULE_VERSION } from "@/modules/cardiacArrest/CardiacArrestManifest";
+import { TRAUMA_CORE_MODULE_ID, TRAUMA_CORE_MODULE_VERSION } from "@/modules/traumaCore/TraumaCoreManifest";
 
 const capabilities: readonly ExerciseCapability[] = ["EXERCISE_CONTROLS", "TIMELINE", "DEBRIEF", "ANALYTICS", "METRICS", "RESOURCES", "PATIENT_PLAYBACK"];
 const processes: Record<ExerciseProfile, readonly string[]> = {
@@ -196,5 +197,30 @@ export const ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE = createExercisePackage({
     name: "ALS Generic Protocol Reference Package", description: "Deterministic protocol configuration reference; not ERC or AHA guidance.",
     author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "CUSTOM",
     tags: ["als", "canonical", "protocol", "reference"],
+  },
+});
+
+const traumaCoreDefinition: ExerciseDefinition = Object.freeze({
+  ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
+  exerciseTypeId: "RUSSICAPTOR_TRAUMA_CORE_REFERENCE",
+  name: "Trauma Core Reference Exercise",
+  description: "Neutral composition reference for trauma context infrastructure; no pelvic or pleural injury physiology.",
+  profile: "TRAUMA",
+});
+
+export const TRAUMA_CORE_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.trauma-core-reference",
+  packageVersion: "1.0.0",
+  definition: traumaCoreDefinition,
+  patientDatasetId: "patients.custom.v1",
+  enabledPatientProcesses: traumaCoreDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: traumaCoreDefinition.enabledAnalyticsProviders,
+  enabledMetricProviders: traumaCoreDefinition.enabledMetricProviders,
+  requiredClinicalModules: Object.freeze([{ moduleId: TRAUMA_CORE_MODULE_ID, version: TRAUMA_CORE_MODULE_VERSION }]),
+  metadata: {
+    name: "Trauma Core Reference Package",
+    description: "Foundation-only reference proving deterministic TRAUMA_CORE_V1 composition; not a clinical trauma scenario.",
+    author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "TRAUMA",
+    tags: ["canonical", "clinical-module", "foundation", "reference", "trauma"],
   },
 });

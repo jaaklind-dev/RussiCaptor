@@ -1,5 +1,5 @@
 import type { ExercisePackage } from "@/models/exercise/ExercisePackage";
-import { AIRWAY_EXERCISE_PACKAGE, ALS_EXERCISE_PACKAGE, ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE, CANONICAL_EXERCISE_PACKAGES, CARDIAC_ARREST_EXERCISE_PACKAGE, DEFAULT_EXERCISE_PACKAGE, MEDICATION_CORE_EXERCISE_PACKAGE, RESPIRATORY_FAILURE_EXERCISE_PACKAGE } from "./CanonicalExercisePackages";
+import { AIRWAY_EXERCISE_PACKAGE, ALS_EXERCISE_PACKAGE, ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE, CANONICAL_EXERCISE_PACKAGES, CARDIAC_ARREST_EXERCISE_PACKAGE, DEFAULT_EXERCISE_PACKAGE, MEDICATION_CORE_EXERCISE_PACKAGE, RESPIRATORY_FAILURE_EXERCISE_PACKAGE, TRAUMA_CORE_EXERCISE_PACKAGE } from "./CanonicalExercisePackages";
 import { EXERCISE_DEFINITION_CATALOG } from "./ExerciseDefinitionService";
 import { ExercisePackageLoader } from "./ExercisePackageLoader";
 import { ExercisePackageRegistry } from "./ExercisePackageRegistry";
@@ -11,6 +11,7 @@ import { respiratoryFailureClinicalModule } from "@/modules/respiratoryFailure/R
 import { medicationCoreClinicalModule } from "@/modules/medicationCore/MedicationCoreClinicalModule";
 import { alsClinicalModule } from "@/modules/als/AlsClinicalModule";
 import { cardiacArrestClinicalModule } from "@/modules/cardiacArrest/CardiacArrestClinicalModule";
+import { traumaCoreClinicalModule } from "@/modules/traumaCore/TraumaCoreClinicalModule";
 import { protocolConfigurationRegistry } from "@/services/protocol/ProtocolConfigurationService";
 import { ProtocolCompositionService } from "@/services/protocol/ProtocolCompositionService";
 import { ExerciseEvaluationCompositionService } from "@/services/evaluation/ExerciseEvaluationCompositionService";
@@ -24,6 +25,7 @@ clinicalModuleRegistry.register(respiratoryFailureClinicalModule);
 clinicalModuleRegistry.register(medicationCoreClinicalModule);
 clinicalModuleRegistry.register(cardiacArrestClinicalModule);
 clinicalModuleRegistry.register(alsClinicalModule);
+clinicalModuleRegistry.register(traumaCoreClinicalModule);
 export const clinicalModuleComposer = new ClinicalModuleComposer(clinicalModuleRegistry);
 export const exercisePackageLoader = new ExercisePackageLoader(exercisePackageValidator, exercisePackageRegistry, clinicalModuleComposer, new ProtocolCompositionService(protocolConfigurationRegistry), new ExerciseEvaluationCompositionService(exerciseEvaluationProfileRegistry, protocolConfigurationRegistry));
 CANONICAL_EXERCISE_PACKAGES.forEach(pkg => exercisePackageLoader.load(pkg));
@@ -33,6 +35,7 @@ exercisePackageLoader.load(MEDICATION_CORE_EXERCISE_PACKAGE);
 exercisePackageLoader.load(CARDIAC_ARREST_EXERCISE_PACKAGE);
 exercisePackageLoader.load(ALS_EXERCISE_PACKAGE);
 exercisePackageLoader.load(ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE);
+exercisePackageLoader.load(TRAUMA_CORE_EXERCISE_PACKAGE);
 exercisePackageLoader.bind("demo", DEFAULT_EXERCISE_PACKAGE);
 export function getExercisePackage(exerciseId: string): ExercisePackage { return exercisePackageLoader.getBound(exerciseId) ?? DEFAULT_EXERCISE_PACKAGE; }
 export function getExerciseDefinition(exerciseId: string): ExercisePackage["definition"] { return getExercisePackage(exerciseId).definition; }
