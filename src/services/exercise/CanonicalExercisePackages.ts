@@ -10,6 +10,7 @@ import { ALS_MODULE_ID, ALS_MODULE_VERSION } from "@/modules/als/AlsManifest";
 import { CARDIAC_ARREST_MODULE_ID, CARDIAC_ARREST_MODULE_VERSION } from "@/modules/cardiacArrest/CardiacArrestManifest";
 import { TRAUMA_CORE_MODULE_ID, TRAUMA_CORE_MODULE_VERSION } from "@/modules/traumaCore/TraumaCoreManifest";
 import { PELVIC_INJURY_MODULE_ID, PELVIC_INJURY_MODULE_VERSION } from "@/modules/pelvicInjury/PelvicInjuryManifest";
+import { PLEURAL_INJURY_MODULE_ID, PLEURAL_INJURY_MODULE_VERSION } from "@/modules/pleuralInjury/PleuralInjuryManifest";
 
 const capabilities: readonly ExerciseCapability[] = ["EXERCISE_CONTROLS", "TIMELINE", "DEBRIEF", "ANALYTICS", "METRICS", "RESOURCES", "PATIENT_PLAYBACK"];
 const processes: Record<ExerciseProfile, readonly string[]> = {
@@ -249,4 +250,17 @@ export const PELVIC_INJURY_EXERCISE_PACKAGE = createExercisePackage({
     author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "TRAUMA",
     tags: ["canonical", "clinical-module", "open-book", "pelvic-injury", "reference", "trauma"],
   },
+});
+
+const pleuralInjuryDefinition: ExerciseDefinition = Object.freeze({ ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
+  exerciseTypeId: "RUSSICAPTOR_PLEURAL_INJURY_REFERENCE", name: "Massive Hemopneumothorax Reference Exercise",
+  description: "Single-patient deterministic pleural air, pleural blood, respiratory impairment and thoracic hemorrhage validation reference.", profile: "TRAUMA" });
+export const PLEURAL_INJURY_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.pleural-injury-reference", packageVersion: "1.0.0", definition: pleuralInjuryDefinition,
+  patientDatasetId: "patients.pleural-injury-reference.v1", enabledPatientProcesses: pleuralInjuryDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: pleuralInjuryDefinition.enabledAnalyticsProviders, enabledMetricProviders: pleuralInjuryDefinition.enabledMetricProviders,
+  requiredClinicalModules: Object.freeze([{ moduleId: PLEURAL_INJURY_MODULE_ID, version: PLEURAL_INJURY_MODULE_VERSION }]),
+  metadata: { name: "Massive Hemopneumothorax Reference Package", description: "Deterministic pleural injury and chest drain capability reference; not a treatment protocol.",
+    author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "TRAUMA",
+    tags: ["canonical", "clinical-module", "hemopneumothorax", "pleural-injury", "reference", "trauma"] },
 });

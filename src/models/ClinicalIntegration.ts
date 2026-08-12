@@ -1,4 +1,4 @@
-import type { CardiacArrestPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime, RespiratoryFailurePatientProcessRuntime } from "@/models/PatientProcessRuntime";
+import type { CardiacArrestPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime, PleuralInjuryPatientProcessRuntime, RespiratoryFailurePatientProcessRuntime } from "@/models/PatientProcessRuntime";
 import type { ProcessOutput } from "@/models/RuntimeAggregation";
 
 export type ClinicalParameterValue = string | number | boolean | null;
@@ -34,7 +34,8 @@ export type ClinicalEffectType =
   | "SUPPORT_OXYGENATION"
   | "CPR_STARTED"
   | "CPR_STOPPED"
-  | "DEFIBRILLATION_ATTEMPT";
+  | "DEFIBRILLATION_ATTEMPT"
+  | "PLEURAL_DRAINAGE";
 
 export type ClinicalEffect = {
   effectId: string;
@@ -47,7 +48,7 @@ export type ClinicalEffect = {
   duration?: number;
 };
 
-export type ClinicalProcessRuntime = PatientProcessRuntime | HypoxiaPatientProcessRuntime | RespiratoryFailurePatientProcessRuntime | CardiacArrestPatientProcessRuntime;
+export type ClinicalProcessRuntime = PatientProcessRuntime | HypoxiaPatientProcessRuntime | RespiratoryFailurePatientProcessRuntime | CardiacArrestPatientProcessRuntime | PleuralInjuryPatientProcessRuntime;
 
 export type ClinicalIntegrationRejectionCode =
   | "INVALID_INPUT"

@@ -26,6 +26,7 @@ export type ResourceType =
   | "rapidInfuser"
   | "tourniquet"
   | "pelvicBinder"
+  | "chestDrain"
   | "monitor";
 
 export type ResourceStatus = "AVAILABLE" | "RESERVED";

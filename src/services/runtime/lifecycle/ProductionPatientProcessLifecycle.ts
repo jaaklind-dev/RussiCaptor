@@ -1,6 +1,6 @@
 import type { ClinicalProcessRuntime } from "@/models/ClinicalIntegration";
 import type { CanonicalLifecycleProcess, PatientProcessLifecycleDescriptor, PatientProcessLifecycleResult } from "@/models/PatientProcessLifecycle";
-import type { BotulismRootPatientProcessRuntime, CardiacArrestConfiguration, CardiacArrestPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime } from "@/models/PatientProcessRuntime";
+import type { BotulismRootPatientProcessRuntime, CardiacArrestConfiguration, CardiacArrestPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime, PleuralInjuryPatientProcessRuntime, RespiratoryFailurePatientProcessRuntime } from "@/models/PatientProcessRuntime";
 import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatientProcess";
 import { bootstrapBotulismRoot, tickBotulismRoot } from "@/services/runtime/BotulismRootPatientProcess";
 import { bootstrapHemorrhagePatientProcess, setHemorrhageEffects, tickHemorrhagePatientProcess } from "@/services/runtime/HemorrhagePatientProcess";
@@ -9,6 +9,10 @@ import { applyHvTimedTransition, bootstrapHvPatientProcess, markOxygenMaskingWar
 import { bootstrapHypoxiaPatientProcess, tickHypoxiaPatientProcess } from "@/services/runtime/HypoxiaPatientProcess";
 import { PatientProcessLifecycleRegistry } from "./PatientProcessLifecycleRegistry";
 import { bootstrapCardiacArrestPatientProcess, drainCardiacEvidence, tickCardiacArrestPatientProcess } from "@/services/runtime/CardiacArrestPatientProcess";
+import { bootstrapPleuralInjuryPatientProcess, tickPleuralInjuryPatientProcess } from "@/services/runtime/PleuralInjuryPatientProcess";
+import { bootstrapRespiratoryFailurePatientProcess, tickRespiratoryFailurePatientProcess } from "@/services/runtime/RespiratoryFailurePatientProcess";
+
+const respiratoryImpairment = (processes: readonly CanonicalLifecycleProcess[]) => Math.max(1, ...processes.map(process => Number(process.outputs.runtimeContributions?.respiratoryImpairmentMultiplier ?? 1)));
 
 const unchanged = (process: CanonicalLifecycleProcess): PatientProcessLifecycleResult => ({ processes: [process], events: [], aggregationRequested: false });
 const initial = (fixture: { initialState: unknown }) => fixture.initialState as Record<string, unknown>;
@@ -130,24 +134,60 @@ const hemorrhage: PatientProcessLifecycleDescriptor = {
   },
 };
 
+const pleuralInjury: PatientProcessLifecycleDescriptor = {
+  processType: "PLEURAL_INJURY", kind: "LEAF", requiredPhases: ["BOOTSTRAP", "TICK"],
+  order: { bootstrapOrder: 250, tickOrder: 150, aggregationSlot: 150, serializationSlot: 150, siblingOrder: "PROCESS_ID" },
+  bootstrap({ fixture }) {
+    const source = initial(fixture); const configured = source.pleuralInjury;
+    if (!configured || typeof configured !== "object" || Array.isArray(configured)) return { processes: [], events: [], aggregationRequested: false };
+    return { processes: [bootstrapPleuralInjuryPatientProcess(fixture.patientId ?? `GOLDEN-${fixture.fixtureId}`, configured as Record<string, unknown>)], events: [], aggregationRequested: false };
+  },
+  tick(process, context) {
+    const previous = process as PleuralInjuryPatientProcessRuntime;
+    const next = tickPleuralInjuryPatientProcess(previous, context.tickSeconds);
+    return { processes: [next], aggregationRequested: true, events: [{ eventType: "PLEURAL_STATE_UPDATED", target: next.encounterId,
+      details: { airBurden: next.clinicalState.airBurden, bloodBurdenMl: next.clinicalState.bloodBurdenMl, drainageActive: next.clinicalState.drainageActive },
+      recordPhase: "BEFORE_AGGREGATION", sourceProcessId: next.processId }] };
+  },
+};
+
+const respiratoryFailure: PatientProcessLifecycleDescriptor = {
+  processType: "RESPIRATORY_FAILURE", kind: "LEAF", requiredPhases: ["BOOTSTRAP", "TICK"],
+  order: { bootstrapOrder: 275, tickOrder: 175, aggregationSlot: 175, serializationSlot: 175, siblingOrder: "PROCESS_ID" },
+  bootstrap({ fixture, existingProcesses }) {
+    const source = initial(fixture); const configured = source.respiratoryFailure;
+    if (!configured || typeof configured !== "object" || Array.isArray(configured)) return { processes: [], events: [], aggregationRequested: false };
+    const parent = existingProcesses.find(item => item.processType === "PLEURAL_INJURY");
+    const input = configured as Record<string, unknown>;
+    const process = bootstrapRespiratoryFailurePatientProcess(fixture, input,
+      input.configuration && typeof input.configuration === "object" ? input.configuration as Partial<import("@/models/PatientProcessRuntime").RespiratoryFailureConfiguration> : undefined);
+    if (parent) { process.parentProcessId = parent.processId; process.parentProcessType = parent.processType; }
+    return { processes: [process], events: [], aggregationRequested: false };
+  },
+  tick(process, context) { return { processes: [tickRespiratoryFailurePatientProcess(process as RespiratoryFailurePatientProcessRuntime, context.tickSeconds, respiratoryImpairment(context.existingProcesses))], events: [], aggregationRequested: true }; },
+};
+
 const hypoxia: PatientProcessLifecycleDescriptor = {
   processType: "HYPOXIA", kind: "LEAF", requiredPhases: ["BOOTSTRAP", "TICK", "POST_AGGREGATE"],
   order: { bootstrapOrder: 400, tickOrder: 200, postAggregateOrder: 100, aggregationSlot: 200, serializationSlot: 200, siblingOrder: "PROCESS_ID" },
   bootstrap({ fixture, existingProcesses, requestedConfig, parent: requestedParent }) {
     const source = initial(fixture); const primary = existingProcesses.find(item => item.processType === "HYPOVENTILATION_HYPERCAPNIA") as PatientProcessRuntime | undefined;
     const root = existingProcesses.find(item => item.processType === "BOTULISM_ROOT") as BotulismRootPatientProcessRuntime | undefined;
-    if (!primary) return { processes: [], events: [], aggregationRequested: false };
-    const parent = requestedParent ?? { processId: primary.processId, processType: primary.processType, instanceKey: primary.instanceKey };
+    const respiratoryParent = existingProcesses.find(item => item.processType === "RESPIRATORY_FAILURE" || item.processType === "PLEURAL_INJURY");
+    if (!primary && !respiratoryParent) return { processes: [], events: [], aggregationRequested: false };
+    const parent = requestedParent ?? (primary
+      ? { processId: primary.processId, processType: primary.processType, instanceKey: primary.instanceKey }
+      : { processId: respiratoryParent!.processId, processType: respiratoryParent!.processType, instanceKey: respiratoryParent!.instanceKey });
     const processes: HypoxiaPatientProcessRuntime[] = [];
     if (requestedConfig) processes.push(bootstrapHypoxiaPatientProcess(fixture, requestedConfig, parent));
     else if (source.hypoxia && typeof source.hypoxia === "object") processes.push(bootstrapHypoxiaPatientProcess(fixture, source.hypoxia as Record<string, unknown>, parent));
     const respiratory = root?.children.find(child => child.processType === "BOT_RESPIRATORY_MUSCLE_FAILURE");
     if (root && respiratory && respiratory.initialReserve <= 20 && processes.length === 0) processes.push(bootstrapHypoxiaPatientProcess(fixture, {
-      templateId: "HYP_HYPOVENT_MOD", processId: `${primary.processId}:HYP_HYPOVENT_MOD`,
+      templateId: "HYP_HYPOVENT_MOD", processId: `${primary!.processId}:HYP_HYPOVENT_MOD`,
     }, parent));
     return { processes, events: [], aggregationRequested: false };
   },
-  tick(process, context) { return { processes: [tickHypoxiaPatientProcess(process as HypoxiaPatientProcessRuntime, context.tickSeconds)], events: [], aggregationRequested: true }; },
+  tick(process, context) { return { processes: [tickHypoxiaPatientProcess(process as HypoxiaPatientProcessRuntime, context.tickSeconds, respiratoryImpairment(context.existingProcesses))], events: [], aggregationRequested: true }; },
   postAggregate(process, context) { return context.inputEvent ? [{ eventType: "PROCESS_TICK_APPLIED", details: {
     inputEventId: context.inputEvent.eventId, tickSeconds: context.tickSeconds,
   }, target: process.processId, recordPhase: "AFTER_AGGREGATION", sourceProcessId: process.processId }] : []; },
@@ -174,7 +214,7 @@ const cardiacArrest: PatientProcessLifecycleDescriptor = {
   },
 };
 
-export const productionPatientProcessDescriptors = Object.freeze([botulism, hv, hemorrhage, hypoxia, cardiacArrest]);
+export const productionPatientProcessDescriptors = Object.freeze([botulism, hv, pleuralInjury, respiratoryFailure, hemorrhage, hypoxia, cardiacArrest]);
 
 export function createProductionPatientProcessLifecyclePlan() {
   const registry = new PatientProcessLifecycleRegistry(); productionPatientProcessDescriptors.forEach(descriptor => registry.register(descriptor));
@@ -182,7 +222,7 @@ export function createProductionPatientProcessLifecyclePlan() {
 }
 
 export function isClinicalProcess(process: CanonicalLifecycleProcess): process is ClinicalProcessRuntime {
-  return process.processType === "HYPOVENTILATION_HYPERCAPNIA" || process.processType === "HYPOXIA" || process.processType === "CARDIAC_ARREST";
+  return process.processType === "HYPOVENTILATION_HYPERCAPNIA" || process.processType === "HYPOXIA" || process.processType === "RESPIRATORY_FAILURE" || process.processType === "CARDIAC_ARREST" || process.processType === "PLEURAL_INJURY";
 }
 
 export function unchangedLifecycleResult(process: CanonicalLifecycleProcess) { return unchanged(process); }

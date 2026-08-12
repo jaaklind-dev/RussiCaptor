@@ -102,7 +102,7 @@ function output(process: Omit<RespiratoryFailurePatientProcessRuntime, "outputs"
     oxygenationPriority: 100,
     neurologicPriority: 100,
     vitalContributions: [
-      { vital: "spo2", operation: "TARGET", value: clinical.spo2 },
+      ...(process.configuration.spo2ContributorEnabled === false ? [] : [{ vital: "spo2" as const, operation: "TARGET" as const, value: clinical.spo2 }]),
       { vital: "respiratoryRate", operation: "TARGET", value: clinical.respiratoryRate },
       { vital: "etco2", operation: "TARGET", value: clinical.etco2 },
       { vital: "gcs", operation: "TARGET", value: clinical.gcs },
@@ -112,8 +112,8 @@ function output(process: Omit<RespiratoryFailurePatientProcessRuntime, "outputs"
       workOfBreathing: clinical.workOfBreathing,
       respiratoryFatigue: clinical.fatigue,
       oxygenSupport: clinical.oxygenSupport,
-      airwayPatent: clinical.airwayPatent,
-      airwayProtected: clinical.airwayProtected,
+      respiratoryAirwayPatent: clinical.airwayPatent,
+      respiratoryAirwayProtected: clinical.airwayProtected,
       ventilationMode: clinical.ventilationMode,
       respiratoryFailureTrend: clinical.trend,
     },
@@ -179,7 +179,8 @@ export function applyRespiratoryFailureClinicalEffect(
 
 export function tickRespiratoryFailurePatientProcess(
   previous: RespiratoryFailurePatientProcessRuntime,
-  tickSeconds: number
+  tickSeconds: number,
+  impairmentMultiplier = 1
 ): RespiratoryFailurePatientProcessRuntime {
   if (!Number.isFinite(tickSeconds) || tickSeconds <= 0) throw new Error("ENGINE_TICK kestus peab olema positiivne arv sekundeid.");
   if (previous.state === "Resolved") return previous;
@@ -198,11 +199,12 @@ export function tickRespiratoryFailurePatientProcess(
     ? support.mechanicalFatigueRecoveryPerMin
     : clinical.ventilationMode === "BVM" ? support.bvmFatigueRecoveryPerMin : 0;
   const supported = clinical.oxygenSupport || clinical.ventilationMode !== "NONE";
-  const spo2 = clamp(clinical.spo2 + ((clinical.oxygenSupport ? support.oxygenSpo2RecoveryPerMin : 0) + ventilationSpo2 - (hypoxaemic ? progression.spo2DeclinePerMin : 0)) * minutes, limits.spo2);
-  const etco2 = clamp(clinical.etco2 + ((hypercapnic ? progression.etco2RisePerMin : 0) - ventilationCo2) * minutes, limits.etco2);
-  const fatigue = clamp(clinical.fatigue + (progression.fatigueRisePerMin - fatigueRecovery) * minutes, limits.fatigue);
-  const workOfBreathing = clamp(clinical.workOfBreathing + (progression.workOfBreathingRisePerMin - (clinical.airwayPatent ? support.patentAirwayWorkRecoveryPerMin : 0) - fatigueRecovery) * minutes, limits.workOfBreathing);
-  const respiratoryRateDirection = clinical.ventilationMode === "NONE" ? progression.respiratoryRateChangePerMin : -progression.respiratoryRateChangePerMin;
+  const impairment = Math.max(0, impairmentMultiplier);
+  const spo2 = clamp(clinical.spo2 + ((clinical.oxygenSupport ? support.oxygenSpo2RecoveryPerMin : 0) + ventilationSpo2 - (hypoxaemic ? progression.spo2DeclinePerMin * impairment : 0)) * minutes, limits.spo2);
+  const etco2 = clamp(clinical.etco2 + ((hypercapnic ? progression.etco2RisePerMin * impairment : 0) - ventilationCo2) * minutes, limits.etco2);
+  const fatigue = clamp(clinical.fatigue + (progression.fatigueRisePerMin * impairment - fatigueRecovery) * minutes, limits.fatigue);
+  const workOfBreathing = clamp(clinical.workOfBreathing + (progression.workOfBreathingRisePerMin * impairment - (clinical.airwayPatent ? support.patentAirwayWorkRecoveryPerMin : 0) - fatigueRecovery) * minutes, limits.workOfBreathing);
+  const respiratoryRateDirection = clinical.ventilationMode === "NONE" ? progression.respiratoryRateChangePerMin * impairment : -progression.respiratoryRateChangePerMin;
   const respiratoryRate = clamp(clinical.respiratoryRate + respiratoryRateDirection * minutes, limits.respiratoryRate);
   const deteriorating = (!supported && hypoxaemic) || (hypercapnic && ventilationCo2 === 0);
   const gcs = clamp(clinical.gcs + (deteriorating ? -progression.gcsDeclinePerMin : progression.gcsDeclinePerMin) * minutes, limits.gcs);

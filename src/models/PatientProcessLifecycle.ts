@@ -1,10 +1,10 @@
 import type { ClinicalEffect, ClinicalProcessRuntime } from "@/models/ClinicalIntegration";
 import type { GoldenFixture, GoldenInputEvent } from "@/models/GoldenTest";
 import type { HemorrhagePatientProcessRuntime, HemorrhageProcessEvent } from "@/models/HemorrhagePatientProcess";
-import type { BotulismRootPatientProcessRuntime } from "@/models/PatientProcessRuntime";
+import type { BotulismRootPatientProcessRuntime, PleuralInjuryPatientProcessRuntime } from "@/models/PatientProcessRuntime";
 import type { RuntimeState } from "@/models/RuntimeAggregation";
 
-export type CanonicalLifecycleProcess = ClinicalProcessRuntime | HemorrhagePatientProcessRuntime | BotulismRootPatientProcessRuntime;
+export type CanonicalLifecycleProcess = ClinicalProcessRuntime | HemorrhagePatientProcessRuntime | BotulismRootPatientProcessRuntime | PleuralInjuryPatientProcessRuntime;
 export type LifecyclePhase = "BOOTSTRAP" | "ADVANCE" | "HANDLE_INPUT" | "PREPARE" | "TICK" | "POST_AGGREGATE" | "FINALIZE";
 export type LifecycleSerializationSlot = number | "SEPARATE_ROOT";
 

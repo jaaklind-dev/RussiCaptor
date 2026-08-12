@@ -14,6 +14,7 @@ export function inferredInterventionDefinitionId(resource: RuntimeResource | und
     centralVenousCatheter: "CENTRAL_VENOUS_ACCESS", infusionPump: "CRYSTALLOID_INFUSION",
     bloodAdministrationSet: "BLOOD_PRODUCT_ADMINISTRATION", pressureBag: "PRESSURE_INFUSION",
     tourniquet: "TOURNIQUET_APPLICATION", pelvicBinder: "PELVIC_BINDER_APPLICATION",
+    chestDrain: "CHEST_DRAIN_INSERTION",
   } as Partial<Record<RuntimeResource["type"], string>>)[resource?.type ?? "monitor"];
 }
 

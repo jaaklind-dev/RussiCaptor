@@ -38,6 +38,9 @@ import { airwayInterventionDefinitions } from "@/services/runtime/clinical/Airwa
 import { AirwayManagementFramework } from "@/services/runtime/clinical/AirwayManagementFramework";
 import { ClinicalAssessmentEngine } from "@/services/runtime/assessment/ClinicalAssessmentEngine";
 import { circulationInterventionDefinitions } from "@/services/runtime/clinical/CirculationInterventionDefinitions";
+import { pleuralInterventionDefinitions } from "@/services/runtime/clinical/PleuralInterventionDefinitions";
+import { pleuralInjuryClinicalProcessHandler } from "@/services/runtime/clinical/handlers/PleuralInjuryClinicalProcessHandler";
+import { respiratoryFailureClinicalProcessHandler } from "@/services/runtime/clinical/handlers/RespiratoryFailureClinicalProcessHandler";
 import { CirculationManagementFramework } from "@/services/runtime/clinical/CirculationManagementFramework";
 import { MedicationEngine } from "@/services/runtime/medication/MedicationEngine";
 import { publishAssessmentDebugSnapshot } from "@/services/AssessmentRuntimeDebugService";
@@ -86,6 +89,16 @@ const firstClinicalOwnershipRules: OwnershipRule[] = [{
   contributionAllowedFrom: "BOTULISM_V1 through HV child activation",
   aggregationOrWriteRule: "LATEST attributable owner value",
   conflictAction: "REJECT_CONFLICTING_OWNER",
+}, {
+  objectType: "RuntimeField",
+  objectOrField: "pleuralAirBurden / pleuralBloodBurdenMl / pleuralDrainageActive / respiratoryImpairmentMultiplier",
+  canonicalOwner: "PLEURAL_INJURY_V1", contributionAllowedFrom: "CORE_ENGINE",
+  aggregationOrWriteRule: "LATEST attributable owner value", conflictAction: "REJECT_CONFLICTING_OWNER",
+}, {
+  objectType: "RuntimeField",
+  objectOrField: "respiratoryFailurePhenotype / workOfBreathing / respiratoryFatigue / oxygenSupport / respiratoryAirwayPatent / respiratoryAirwayProtected / ventilationMode / respiratoryFailureTrend",
+  canonicalOwner: "RESPIRATORY_FAILURE_V1", contributionAllowedFrom: "CORE_ENGINE",
+  aggregationOrWriteRule: "LATEST attributable owner value", conflictAction: "REJECT_CONFLICTING_OWNER",
 }, {
   objectType: "RuntimeField",
   objectOrField: "estimatedBloodLossMl / cumulativeBloodLossMl / bleedingRateMlMin / hemorrhageSeverity / perfusionState / compensationState / HRTrend / BPTrend / PerfusionTrend",
@@ -175,7 +188,7 @@ const resourceTypes = new Set<ResourceType>([
   "videoLaryngoscope", "directLaryngoscope", "suction", "capnography",
   "peripheralIV", "centralVenousCatheter", "intraosseousAccess", "pressureBag",
   "fluidWarmer", "infusionPump", "bloodAdministrationSet", "rapidInfuser",
-  "tourniquet", "pelvicBinder",
+  "tourniquet", "pelvicBinder", "chestDrain",
 ]);
 
 function fixtureResources(value: unknown): RuntimeResource[] {
@@ -215,10 +228,10 @@ export class ClinicalScenarioEngine {
   private resourcePool = new ResourcePool();
   private interventionEngine = new InterventionEngine();
   private readonly clinicalIntegration = new ClinicalIntegrationFramework(
-    new ClinicalProcessRegistry([hvClinicalProcessHandler, hypoxiaClinicalProcessHandler, cardiacArrestClinicalProcessHandler])
+    new ClinicalProcessRegistry([hvClinicalProcessHandler, hypoxiaClinicalProcessHandler, respiratoryFailureClinicalProcessHandler, pleuralInjuryClinicalProcessHandler, cardiacArrestClinicalProcessHandler])
   );
   private readonly interventionRuntime = new InterventionRuntime(
-    new InterventionDefinitionRegistry([...airwayInterventionDefinitions, ...circulationInterventionDefinitions, ...cardiacArrestInterventionDefinitions])
+    new InterventionDefinitionRegistry([...airwayInterventionDefinitions, ...circulationInterventionDefinitions, ...pleuralInterventionDefinitions, ...cardiacArrestInterventionDefinitions])
   );
   private readonly airwayManagement = new AirwayManagementFramework();
   private readonly assessmentEngine = new ClinicalAssessmentEngine();

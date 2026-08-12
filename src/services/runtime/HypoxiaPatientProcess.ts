@@ -69,15 +69,16 @@ export function setHypoxiaOxygenTherapy(
 
 export function tickHypoxiaPatientProcess(
   previous: HypoxiaPatientProcessRuntime,
-  tickSeconds: number
+  tickSeconds: number,
+  impairmentMultiplier = 1
 ): HypoxiaPatientProcessRuntime {
   const minutes = tickSeconds / 60;
   const supported = previous.clinicalState.oxygenTherapyActive;
   const oxygenationReserve = Math.max(0, Math.min(
     100,
-    previous.clinicalState.oxygenationReserve + (supported ? 2 : -1) * minutes
+    previous.clinicalState.oxygenationReserve + (supported ? 2 : -Math.max(0, impairmentMultiplier)) * minutes
   ));
-  const spo2 = Math.max(40, Math.min(100, previous.clinicalState.spo2 + (supported ? 2 : -1) * minutes));
+  const spo2 = Math.max(40, Math.min(100, previous.clinicalState.spo2 + (supported ? 2 : -Math.max(0, impairmentMultiplier)) * minutes));
   const clinicalState = {
     ...previous.clinicalState,
     oxygenationReserve,

@@ -1,6 +1,7 @@
 import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { getCanonicalPatientRuntimeSnapshot } from "@/services/RuntimeSnapshotService";
 import { getInstructorRuntimeOwner } from "./InstructorRuntimeEventRegistry";
+import { getPatientResourceDebugSnapshot } from "@/services/ResourceRuntimeDebugService";
 
 export type ResourceInterventionCommandResult =
   | Readonly<{ ok: true; commandId: string; runtimeEventId: string }>
@@ -21,9 +22,11 @@ export function handleResourceInterventionCommand(command: Readonly<{ commandId:
       : { ok: false, commandId: command.commandId, errorCode: "RUNTIME_FAILURE", message: applied.reason };
   if (result.ok) {
     const simulationTimeSec = getCanonicalPatientRuntimeSnapshot(command.patientId)?.state.exerciseTimeSec ?? 0;
+    const resource = getPatientResourceDebugSnapshot(command.patientId).resources.find(item => item.resourceId === command.resourceId);
+    const chestDrain = resource?.type === "chestDrain";
     addTimelineEvent({ id: `TL-RESOURCE-${command.commandId}`, exerciseId: command.exerciseId, patientId: command.patientId,
-      timestamp: `T+${simulationTimeSec}s`, simulationTimeSec, type: "intervention", title: "Resource intervention applied",
-      description: `Canonical resource ${command.resourceId} applied`, author: command.issuedBy, visibility: "revealed" });
+      timestamp: `T+${simulationTimeSec}s`, simulationTimeSec, type: "intervention", title: chestDrain ? "Chest drain inserted" : "Resource intervention applied",
+      description: chestDrain ? "Canonical pleural drainage intervention applied" : `Canonical resource ${command.resourceId} applied`, author: command.issuedBy, visibility: "revealed" });
   }
   results.set(command.commandId, structuredClone(result));
   return structuredClone(result);

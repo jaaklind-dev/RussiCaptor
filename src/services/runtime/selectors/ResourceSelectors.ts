@@ -8,7 +8,7 @@ const typeOrder: ResourceType[] = [
   "directLaryngoscope", "ventilator", "suction", "capnography", "monitor",
   "peripheralIV", "centralVenousCatheter", "intraosseousAccess", "pressureBag",
   "fluidWarmer", "infusionPump", "bloodAdministrationSet", "rapidInfuser",
-  "tourniquet", "pelvicBinder",
+  "tourniquet", "pelvicBinder", "chestDrain",
 ];
 
 const labels: Record<ResourceType, string> = {
@@ -39,6 +39,7 @@ const labels: Record<ResourceType, string> = {
   rapidInfuser: "Rapid infusers",
   tourniquet: "Tourniquets",
   pelvicBinder: "Pelvic binders",
+  chestDrain: "Chest drains",
   monitor: "Monitors",
 };
 

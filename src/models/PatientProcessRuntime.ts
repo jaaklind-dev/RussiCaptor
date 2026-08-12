@@ -91,6 +91,7 @@ export type RespiratoryFailurePhenotype = "HYPOXAEMIC" | "HYPERCAPNIC" | "MIXED"
 
 export type RespiratoryFailureConfiguration = {
   version: string;
+  spo2ContributorEnabled?: boolean;
   initial: {
     spo2: number;
     respiratoryRate: number;
@@ -158,6 +159,41 @@ export type RespiratoryFailurePatientProcessRuntime = {
   nextTick: number;
   parentProcessId?: string;
   parentProcessType?: string;
+};
+
+export type PleuralInjuryConfiguration = Readonly<{
+  version: string;
+  initialAirBurden: number;
+  initialBloodBurdenMl: number;
+  airAccumulationPerMin: number;
+  bloodAccumulationPerMin: number;
+  drainedAirReduction: number;
+  drainedBloodReductionMl: number;
+  drainageAirAccumulationMultiplier: number;
+  maximumBloodBurdenMl: number;
+}>;
+
+export type PleuralInjuryPatientProcessRuntime = {
+  processId: string;
+  encounterId: string;
+  instanceKey: string;
+  processType: "PLEURAL_INJURY";
+  templateId: string;
+  state: "Active" | "Controlled" | "Resolved";
+  elapsedTime: number;
+  clinicalState: {
+    airBurden: number;
+    bloodBurdenMl: number;
+    drainageActive: boolean;
+    drainedAir: number;
+    drainedBloodMl: number;
+    appliedEffectIds: string[];
+    /** Compatibility discriminator for the existing clinical process registry. Pleural injury never owns oxygen therapy. */
+    oxygenTherapyActive: false;
+  };
+  configuration: PleuralInjuryConfiguration;
+  outputs: ProcessOutput;
+  nextTick: number;
 };
 
 export type CardiacState = "PERFUSING" | "ARREST" | "ROSC";
