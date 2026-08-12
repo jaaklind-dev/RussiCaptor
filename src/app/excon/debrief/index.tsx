@@ -18,6 +18,7 @@ import { AssessmentMetricsSummary } from "@/components/excon/assessment/Assessme
 import { getAnalyticsReport } from "@/services/AnalyticsService";
 import { getExerciseEvaluationResult } from "@/services/ExerciseEvaluationService";
 import { ExerciseEvaluationSummary } from "@/components/excon/evaluation/ExerciseEvaluationSummary";
+import { InstructorEvaluationPanel } from "@/components/excon/evaluation/InstructorEvaluationPanel";
 
 const categories: readonly ExerciseTimelineCategory[] = ["EXERCISE", "PATIENT", "COMMAND", "AUDIT"];
 const outcomes: readonly PatientOutcome[] = ["ALIVE", "DECEASED", "TRANSFERRED", "STILL_ACTIVE", "COMPLETED_SCENARIO"];
@@ -52,7 +53,7 @@ export default function DebriefScreen() {
     ListHeaderComponent={<View><View style={styles.top}><View><Text style={styles.title}>Debrief</Text><Text style={styles.subtitle}>Canonical read-only exercise reconstruction</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Back</Text></Pressable></View>
       <DebriefSummary report={report} />
       {report.protocolProvenance && <AssessmentMetricsSummary metrics={analytics.metrics} onOpenAssessment={() => router.push("/excon/assessment")} />}
-      {evaluation && <><ExerciseEvaluationSummary result={evaluation} compact /><Pressable style={styles.evaluationButton} onPress={() => router.push("/excon/evaluation" as never)}><Text style={styles.analyticsButtonText}>Open Exercise Evaluation</Text></Pressable></>}
+      {evaluation && <><ExerciseEvaluationSummary result={evaluation} compact /><InstructorEvaluationPanel source={evaluation} readOnly /><Pressable style={styles.evaluationButton} onPress={() => router.push("/excon/evaluation" as never)}><Text style={styles.analyticsButtonText}>Open Exercise Evaluation</Text></Pressable></>}
       <ExercisePackageInformationCard exercisePackage={exercisePackage} compatibility={exercisePackageValidator.compatibility(exercisePackage)} />
       <ExerciseInformationCard definition={definition} />
       <Pressable style={styles.analyticsButton} onPress={() => router.push("/excon/analytics")}><Text style={styles.analyticsButtonText}>Open Analytics</Text></Pressable>
