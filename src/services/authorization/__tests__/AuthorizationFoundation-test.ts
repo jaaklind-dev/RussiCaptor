@@ -20,7 +20,7 @@ describe("WP-41A authorization foundation", () => {
     const exercise: RoleAssignment = { ...globalAssignment({ assignmentId: "A-2" }), scope: { scopeType: "EXERCISE", scopeId: "EX-1" } };
     const first = resolvePermissions([exercise, globalAssignment()], { exerciseId: "EX-1" });
     const second = resolvePermissions([globalAssignment(), exercise], { exerciseId: "EX-1" });
-    expect(first).toEqual(["INSTRUCTOR_EVALUATION_READ", "INSTRUCTOR_EVALUATION_WRITE"]); expect(first).toEqual(second);
+    expect(first).toEqual(["EXERCISE_RUNTIME_RECOVERY", "INSTRUCTOR_EVALUATION_READ", "INSTRUCTOR_EVALUATION_WRITE"]); expect(first).toEqual(second);
     expect(Object.isFrozen(first)).toBe(true); expect(permissionsForRole("EXCON")).toEqual(first);
   });
   it("authorizes authenticated online EXCON for independent read and write permissions", async () => {

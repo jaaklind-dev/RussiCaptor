@@ -8,6 +8,7 @@ import { revealQuestion } from "@/services/RevealService";
 import { resetExercise } from "@/services/ExerciseResetService";
 import {
   createSharedExerciseSnapshot,
+  restoreRemoteExerciseIdentity,
   restoreSharedExerciseState,
 } from "@/services/StatePersistenceService";
 import {
@@ -25,11 +26,36 @@ import {
   DEFAULT_EXERCISE_PACKAGE,
 } from "@/services/exercise/CanonicalExercisePackages";
 import { getExercisePackage } from "@/services/exercise/ExercisePackageService";
+import { shouldIgnoreActiveSharedProjection } from "@/services/CloudSyncService";
+import { startClockRunner, stopClockRunner } from "@/services/ClockRunner";
+import { setRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 
 const patientId = "PT-001";
 
 describe("remote clinical state sync", () => {
   beforeEach(() => resetExercise());
+  afterEach(() => { stopClockRunner(); setRuntimeWriterAuthorityState("UNRESOLVED"); jest.useRealTimers(); });
+
+  test("a writer self-echo preserves RUNNING clock progression", () => {
+    jest.useFakeTimers();
+    restoreExerciseSession({ exerciseId: "demo", lifecycleState: "RUNNING", simulationTimeSec: 10,
+      speed: 1, version: 1, clockVersion: 1, clockInitializedAtSimulationTimeSec: 0 });
+    const projection = createSharedExerciseSnapshot();
+    setRuntimeWriterAuthorityState("WRITER");
+    startClockRunner();
+
+    restoreRemoteExerciseIdentity(projection);
+    jest.advanceTimersByTime(1_000);
+
+    expect(getCanonicalExerciseSnapshot().simulationTimeSec).toBe(11);
+  });
+
+  test("an active shared projection cannot roll back its own writer or a completed exercise", () => {
+    expect(shouldIgnoreActiveSharedProjection("EX-1", "RUNNING", "EX-1", "WRITER")).toBe(true);
+    expect(shouldIgnoreActiveSharedProjection("EX-1", "COMPLETED", "EX-1", "READER")).toBe(true);
+    expect(shouldIgnoreActiveSharedProjection("EX-1", "RUNNING", "EX-1", "READER")).toBe(false);
+    expect(shouldIgnoreActiveSharedProjection("EX-1", "COMPLETED", "EX-2", "READER")).toBe(false);
+  });
 
   test("a second CM refreshes questions, imaging studies and orders", () => {
     assignPatientToMe(patientId);

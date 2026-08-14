@@ -27,6 +27,14 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-dev-client",
+        {
+          "toolsButton": false,
+          "showMenuAtLaunch": false,
+          "skipOnboarding": true
+        }
+      ],
       "expo-camera",
       [
         "expo-splash-screen",

@@ -1,11 +1,18 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
   getCloudSyncStatus,
   subscribeToCloudSyncStatus,
   type CloudSyncStatus,
 } from "@/services/CloudSyncService";
+import { getRuntimeCheckpointSyncStatus, subscribeToRuntimeCheckpointSync, takeOverRuntimeWriter } from "@/services/RuntimeCheckpointSyncService";
+
+export async function resumeRuntime(
+  resume: typeof takeOverRuntimeWriter = takeOverRuntimeWriter,
+) {
+  return resume();
+}
 
 function statusText(status: CloudSyncStatus): string {
   switch (status.state) {
@@ -32,17 +39,19 @@ function statusText(status: CloudSyncStatus): string {
 
 export default function CloudSyncStatusCard() {
   const [status, setStatus] = useState(getCloudSyncStatus);
+  const [runtimeStatus, setRuntimeStatus] = useState(getRuntimeCheckpointSyncStatus);
 
   useEffect(
     () => subscribeToCloudSyncStatus((next) => setStatus({ ...next })),
     []
   );
+  useEffect(() => subscribeToRuntimeCheckpointSync((next) => setRuntimeStatus({ ...next })), []);
 
   const hasProblem = status.state === "error" || status.state === "offline";
   const isBusy = status.state === "connecting" || status.state === "saving";
 
   return (
-    <View style={[styles.card, hasProblem && styles.problemCard]}>
+      <View style={[styles.card, hasProblem && styles.problemCard]}>
       <View
         style={[
           styles.indicator,
@@ -59,6 +68,24 @@ export default function CloudSyncStatusCard() {
             ? status.message ?? "Sünkroniseerimine jätkub ühenduse taastumisel."
             : "Muudatused jõuavad teiste õppuse seadmeteni reaalajas."}
         </Text>
+        <Text style={styles.caption}>
+          {runtimeStatus.state === "WRITER" ? `Runtime writer · rev ${runtimeStatus.revision ?? 0}`
+            : runtimeStatus.state === "READER" ? "Runtime active on another device · read-only"
+            : runtimeStatus.state === "CONFLICT" ? `Runtime authority conflict: ${runtimeStatus.code ?? "unknown"}`
+            : runtimeStatus.state === "OFFLINE" ? "Runtime checkpoint backend unavailable"
+            : runtimeStatus.state === "FAILED" ? `Runtime authority startup failed: ${runtimeStatus.code ?? "unknown"}`
+            : "Runtime checkpoint authority connecting"}
+        </Text>
+        {runtimeStatus.state === "READER" && (
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={8}
+            style={styles.takeoverButton}
+            onPress={() => void resumeRuntime()}
+          >
+            <Text style={styles.takeoverText}>Resume Runtime</Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -111,4 +138,16 @@ const styles = StyleSheet.create({
   problemText: {
     color: "#B93815",
   },
+  takeoverButton: {
+    alignSelf: "stretch",
+    minHeight: 48,
+    marginTop: 8,
+    backgroundColor: "#175CD3",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  takeoverText: { color: "#FFFFFF", fontSize: 12, fontWeight: "700" },
 });

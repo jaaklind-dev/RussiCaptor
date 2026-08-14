@@ -12,6 +12,7 @@ import type { PersistedRuntimeState, RuntimeProvenance } from "@/models/Persiste
 import { canonicalRuntimePersistenceService, moduleCompositionHash } from "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
 import { registerExerciseClockTarget } from "@/services/runtime/exercise/ExerciseClockTargetRegistry";
 import { createScenarioEngineExerciseClockTarget } from "@/services/runtime/exercise/ScenarioEngineExerciseClockTarget";
+import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 
 let active: Readonly<{ exerciseId: string; patientId: string; engine: ClinicalScenarioEngine; dispose: () => void }>[] = [];
 
@@ -33,11 +34,10 @@ export function prepareActiveClinicalReferenceRuntime(exerciseId: string, persis
   const fallback = legacyReference ? getAllPatients().find(item => item.status === "Active" || item.status === "Incoming") : undefined;
   const records = configured.length ? configured : fallback ? [{ patient: fallback, runtimeFixture: { ...structuredClone(CARDIAC_ARREST_REFERENCE_FIXTURE), patientId: fallback.id } }] : [];
   if (!pkg || !records.length) return;
-  if (active.length && active.every(item => item.exerciseId === exerciseId) && active.length === records.length) return;
-  active.forEach(item => item.dispose()); active = [];
+  if (!persisted.length && active.length && active.every(item => item.exerciseId === exerciseId) && active.length === records.length) return;
   exercisePackageLoader.bind(exerciseId, pkg);
   if (persisted.length && persisted.length !== records.length) throw new Error("RUNTIME_PERSISTENCE_PATIENT_SET_MISMATCH");
-  const prepared: typeof active = [];
+  const candidates: { exerciseId: string; patientId: string; engine: ClinicalScenarioEngine }[] = [];
   try { for (const record of records) {
     const patient = record.patient; const fixture = record.runtimeFixture!; const engine = new ClinicalScenarioEngine();
     const artifact = persisted.find(item => item.provenance.patientId === patient.id);
@@ -70,12 +70,23 @@ export function prepareActiveClinicalReferenceRuntime(exerciseId: string, persis
     visibility: "revealed",
       });
     }
-    const disposeOwner = registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(engine, exerciseId, patient.id));
-    const disposeClock = registerExerciseClockTarget(createScenarioEngineExerciseClockTarget(engine, patient.id));
-    const dispose = () => { disposeClock(); disposeOwner(); };
-    prepared.push(Object.freeze({ exerciseId, patientId: patient.id, engine, dispose }));
-  } } catch (error) { prepared.forEach(item => item.dispose()); throw error; }
-  active = prepared;
+    candidates.push({ exerciseId, patientId: patient.id, engine });
+  } } catch (error) { throw error; }
+
+  // A newer authoritative checkpoint is built and validated before the stale
+  // local runtime is replaced. Runtime registrations are swapped synchronously,
+  // so local and remote revisions are never live at the same time.
+  active.forEach(item => item.dispose());
+  active = candidates.map(({ patientId, engine }) => {
+    const disposeOwner = registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(engine, exerciseId, patientId));
+    const disposeClock = registerExerciseClockTarget(createScenarioEngineExerciseClockTarget(engine, patientId));
+    return Object.freeze({
+      exerciseId,
+      patientId,
+      engine,
+      dispose: () => { disposeClock(); disposeOwner(); },
+    });
+  });
 }
 
 export function clearActiveClinicalReferenceRuntime(): void { active.forEach(item => item.dispose()); active = []; }
@@ -87,6 +98,32 @@ export function captureActiveClinicalReferenceRuntimes(expectedSimulationTimeSec
   );
   if (expectedSimulationTimeSec !== undefined && captured.some(item => item.capturedAtSimulationTimeSec !== expectedSimulationTimeSec)) {
     throw new Error("RUNTIME_CHECKPOINT_CLOCK_MISMATCH");
+  }
+  return captured;
+}
+
+export async function captureActiveClinicalReferenceRuntimesAsync(
+  expectedSimulationTimeSec: number | undefined,
+  yieldControl: PipelineYield,
+): Promise<readonly PersistedRuntimeState[]> {
+  if (!active.length) return [];
+  // Detach every patient payload before yielding. This preserves one logical
+  // clock boundary while expensive canonicalization proceeds cooperatively.
+  const detached = active.slice().sort((a, b) => a.patientId.localeCompare(b.patientId)).map(item => ({
+    payload: item.engine.captureRuntimePayload(),
+    provenance: provenance(item.exerciseId, item.patientId, getExercisePackage(item.exerciseId)),
+  }));
+  if (expectedSimulationTimeSec !== undefined && detached.some(item => item.payload.simulationTimeSec !== expectedSimulationTimeSec)) {
+    throw new Error("RUNTIME_CHECKPOINT_CLOCK_MISMATCH");
+  }
+  const captured: PersistedRuntimeState[] = [];
+  for (const item of detached) {
+    captured.push(await canonicalRuntimePersistenceService.capturePayloadAsync(
+      item.payload,
+      item.provenance,
+      yieldControl,
+    ));
+    await yieldControl();
   }
   return captured;
 }

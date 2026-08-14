@@ -5,6 +5,7 @@ import { validateExerciseControlCommand } from "./ExerciseControlValidator";
 import { stableJson } from "@/utils/stableJson";
 import { sha256Text } from "@/utils/sha256";
 import { notifySync } from "@/services/SyncService";
+import { runtimeWritesAllowed } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 
 const results = new Map<string, ExerciseControlResult>();
 const audit: ExerciseControlAuditEntry[] = [];
@@ -13,6 +14,11 @@ export function handleExerciseControlCommand(command: ExerciseControlCommand): E
   const prior = results.get(command?.commandId);
   if (prior) return prior;
   const snapshot = getCanonicalExerciseSnapshot();
+  if (!runtimeWritesAllowed()) {
+    const result: ExerciseControlResult = { ok: false, commandId: command.commandId, errorCode: "NO_AUTHORITATIVE_OWNER", message: "Runtime active on another device" };
+    results.set(command.commandId, result);
+    return result;
+  }
   const owner = getExerciseRuntimeOwner();
   const rejected = validateExerciseControlCommand(command, snapshot, snapshot.exerciseId);
   if (rejected && !rejected.ok) {

@@ -1,19 +1,5 @@
 import * as FileSystem from "expo-file-system/legacy";
 
-import type { ExerciseSession } from "@/models/ExerciseSession";
-import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
-import type { ExerciseControlAuditEntry } from "@/models/exercise/ExerciseControlCommand";
-import type { InstructorCommandAuditEntry } from "@/models/InstructorCommand";
-import type { ImagingStudy } from "@/models/ImagingStudy";
-import type { LabResult } from "@/models/LabResult";
-import type { Note } from "@/models/Note";
-import type { Order } from "@/models/Order";
-import type { Patient } from "@/models/Patient";
-import type { PatientAssignment } from "@/models/PatientAssignment";
-import type { PatientTransfer } from "@/models/PatientTransfer";
-import type { Question } from "@/models/Question";
-import type { ScenarioEvent } from "@/models/ScenarioEvent";
-import type { TimelineEvent } from "@/models/TimelineEvent";
 import { clinicalDataProvider, dataProvider } from "@/providers/ProviderFactory";
 import { getCanonicalExerciseSnapshot, restoreExerciseSession } from "@/repositories/ExerciseSessionRepository";
 import { getAllTimelineEvents, restoreTimelineEvents } from "@/repositories/TimelineRepository";
@@ -22,10 +8,6 @@ import { startClockRunner, stopClockRunner } from "@/services/ClockRunner";
 import { getCurrentCaseManager, restoreCurrentCaseManager } from "@/services/CurrentUserService";
 import { subscribeToSync } from "@/services/SyncService";
 import type { CaseManager } from "@/models/CaseManager";
-import type { Intervention } from "@/models/Intervention";
-import type { MedicationAdministration } from "@/models/Medication";
-import type { InstalledWorkbook } from "@/services/WorkbookImportService";
-import type { VitalSigns } from "@/models/VitalSigns";
 import {
   getInstalledWorkbook,
   restoreInstalledWorkbook,
@@ -36,61 +18,41 @@ import {
 } from "@/services/CurrentLocationService";
 import { getExerciseControlAudit, restoreExerciseControlAudit } from "@/services/runtime/exercise/ExerciseControlCommandHandler";
 import { getInstructorCommandAudit, restoreInstructorCommandAudit } from "@/features/instructor/commands/InstructorPatientCommandHandler";
-import type { ExerciseResetAudit } from "@/services/runtime/exercise/ExerciseResetService";
 import {
   getExerciseResetAudit,
   restoreExerciseResetAudit,
 } from "@/services/runtime/exercise/ExerciseResetService";
-import type { CompletedExerciseArchive } from "@/services/exercise/CompletedExerciseArchiveService";
 import { getCompletedExerciseArchives, restoreCompletedExerciseArchives } from "@/services/exercise/CompletedExerciseArchiveService";
 import {
   exercisePackageRegistry,
   getExercisePackage,
 } from "@/services/exercise/ExercisePackageService";
 import { installCurrentExercise } from "@/repositories/ExerciseRepository";
-import type { MaterializedPatientDataset } from "@/models/exercise/PackagePatientDataset";
 import { getPatientMaterialization, restorePatientMaterialization } from "@/services/exercise/PackagePatientMaterializationService";
-import type { PersistedRuntimeState } from "@/models/PersistedRuntimeState";
-import { captureActiveClinicalReferenceRuntimes, prepareActiveClinicalReferenceRuntime } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
+import { captureActiveClinicalReferenceRuntimes, captureActiveClinicalReferenceRuntimesAsync, clearActiveClinicalReferenceRuntime, prepareActiveClinicalReferenceRuntime } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
+import type { RuntimeCheckpointEnvelope } from "@/models/RuntimeCheckpointAuthority";
+import { localRuntimeCheckpointStore } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
+import type { SharedExerciseState } from "@/models/SharedExerciseState";
+import { getRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
+import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
+import { BoundedObsoleteGenerationGate, LatestGenerationPipeline } from "@/services/runtime/persistence/LatestGenerationPipeline";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
 const stateTempFileUri = `${FileSystem.documentDirectory}russicaptor-state.tmp.json`;
 
-export type SharedExerciseState = {
-  exerciseSession: ExerciseSession | CanonicalExerciseSnapshot;
-  patients: Patient[];
-  assignments: PatientAssignment[];
-  transfers: PatientTransfer[];
-  questions: Question[];
-  labs: LabResult[];
-  imagingStudies: ImagingStudy[];
-  orders: Order[];
-  notes: Note[];
-  scenarioEvents: ScenarioEvent[];
-  timelineEvents: TimelineEvent[];
-  interventions?: Intervention[];
-  medicationAdministrations?: MedicationAdministration[];
-  vitalSigns?: VitalSigns[];
-  caseManagerZoneIds?: Record<string, string>;
-  installedWorkbook?: InstalledWorkbook;
-  exerciseControlAudit?: ExerciseControlAuditEntry[];
-  instructorCommandAudit?: InstructorCommandAuditEntry[];
-  exerciseResetAudit?: ExerciseResetAudit[];
-  exercisePackageReference?: { packageId: string; packageVersion: string };
-  completedExerciseArchives?: CompletedExerciseArchive[];
-  patientMaterialization?: MaterializedPatientDataset;
-  persistedRuntimeStates?: readonly PersistedRuntimeState[];
-};
+export type { SharedExerciseState } from "@/models/SharedExerciseState";
 
 type PersistedState = SharedExerciseState & {
   version: typeof STATE_VERSION;
   savedAt: string;
   currentCaseManager: CaseManager;
+  runtimeCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>;
 };
 
-let saveChain = Promise.resolve();
-let pendingSaveCount = 0;
+let saveInFlight = false;
+let pendingSnapshot: PersistedState | undefined;
+const checkpointPreparedListeners = new Set<() => void>();
 
 export type LocalSaveStatus = {
   state: "ready" | "saving" | "saved" | "error";
@@ -129,7 +91,7 @@ function replaceItems<T>(target: T[], restored: T[]): void {
   target.splice(0, target.length, ...restored.map((item) => ({ ...item })));
 }
 
-function createSnapshot(): PersistedState {
+function collectSharedExerciseProjection(): SharedExerciseState {
   const exerciseSession = getCanonicalExerciseSnapshot();
   const assignmentState = getAssignmentState();
   const patients = dataProvider.getPatients();
@@ -143,12 +105,7 @@ function createSnapshot(): PersistedState {
   const medicationAdministrations =
     clinicalDataProvider.getMedicationAdministrations();
   const vitalSigns = clinicalDataProvider.getVitalSigns();
-  const persistedRuntimeStates = captureActiveClinicalReferenceRuntimes(exerciseSession.simulationTimeSec);
-
   return {
-    version: STATE_VERSION,
-    savedAt: new Date().toISOString(),
-    currentCaseManager: { ...getCurrentCaseManager() },
     exerciseSession,
     patients: patients.map((patient) => ({ ...patient, mist: { ...patient.mist } })),
     assignments: assignmentState.assignments,
@@ -173,8 +130,25 @@ function createSnapshot(): PersistedState {
     exercisePackageReference: packageReference(),
     completedExerciseArchives: [...getCompletedExerciseArchives()],
     patientMaterialization: getPatientMaterialization(getCanonicalExerciseSnapshot().exerciseId),
-    persistedRuntimeStates,
   };
+}
+
+function collectSharedExerciseState(): SharedExerciseState {
+  const shared = collectSharedExerciseProjection();
+  const simulationTimeSec = "simulationTimeSec" in shared.exerciseSession
+    ? shared.exerciseSession.simulationTimeSec : shared.exerciseSession.currentMinute * 60;
+  return { ...shared, persistedRuntimeStates: captureActiveClinicalReferenceRuntimes(simulationTimeSec) };
+}
+
+async function collectSharedExerciseStateAsync(yieldControl: () => Promise<void>): Promise<SharedExerciseState> {
+  const shared = collectSharedExerciseProjection();
+  const simulationTimeSec = "simulationTimeSec" in shared.exerciseSession
+    ? shared.exerciseSession.simulationTimeSec : shared.exerciseSession.currentMinute * 60;
+  const persistedRuntimeStates = await captureActiveClinicalReferenceRuntimesAsync(
+    simulationTimeSec,
+    yieldControl,
+  );
+  return { ...shared, persistedRuntimeStates };
 }
 
 function packageReference(): { packageId: string; packageVersion: string } {
@@ -193,12 +167,68 @@ function restoreExerciseIdentity(restored: SharedExerciseState): void {
 }
 
 export function createSharedExerciseSnapshot(): SharedExerciseState {
-  const { version: _version, savedAt: _savedAt, currentCaseManager: _currentCaseManager, ...shared } =
-    createSnapshot();
-  return shared;
+  return collectSharedExerciseState();
 }
 
-export function restoreSharedExerciseState(restored: SharedExerciseState): void {
+/** Discovery/UI projection. Active canonical Runtime is checkpoint-owned. */
+export function createSharedExerciseProjection(): SharedExerciseState {
+  return collectSharedExerciseProjection();
+}
+
+export function subscribeToLocalRuntimeCheckpointPrepared(listener: () => void): () => void {
+  checkpointPreparedListeners.add(listener);
+  return () => checkpointPreparedListeners.delete(listener);
+}
+
+/** Active shared rows expose discovery identity only; canonical Runtime is restored from WP-44B checkpoint. */
+export function restoreRemoteExerciseIdentity(restored: SharedExerciseState): void {
+  // During clean startup the shared exercise row is discovery identity only.
+  // Until checkpoint authority is resolved, no previously restored live Runtime
+  // may be combined with that projection, even when the exercise ID matches.
+  // A confirmed writer keeps its canonical Runtime when receiving its own cloud
+  // projection echo.
+  if (getRuntimeWriterAuthorityState() !== "WRITER") {
+    stopClockRunner();
+    clearActiveClinicalReferenceRuntime();
+  }
+  restoreExerciseIdentity(restored);
+}
+
+export function getLocalRuntimeCheckpoint(): RuntimeCheckpointEnvelope<SharedExerciseState> | undefined {
+  return localRuntimeCheckpointStore.get();
+}
+
+export function ensureLocalRuntimeCheckpoint(): RuntimeCheckpointEnvelope<SharedExerciseState> {
+  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  const current = localRuntimeCheckpointStore.get();
+  return current?.exerciseId === exerciseId
+    ? current
+    : localRuntimeCheckpointStore.capture(collectSharedExerciseState());
+}
+
+export function acceptAuthoritativeRuntimeCheckpoint(checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, startRuntime = false): void {
+  assertRuntimeCheckpointClockConsistency(checkpoint.payload);
+  restoreSharedExerciseState(checkpoint.payload, startRuntime);
+  // The resolver has already selected this valid remote envelope as canonical.
+  // Replace a checkpoint from another exercise only after rehydration succeeds.
+  localRuntimeCheckpointStore.restore(checkpoint);
+  setRuntimePersistenceFailure(undefined);
+}
+
+export function assertRuntimeCheckpointClockConsistency(restored: SharedExerciseState): void {
+  const session = restored.exerciseSession;
+  const lifecycleState = "lifecycleState" in session ? session.lifecycleState
+    : session.state === "running" ? "RUNNING" : session.state === "paused" ? "PAUSED" : "READY";
+  if (lifecycleState !== "RUNNING" && lifecycleState !== "PAUSED") return;
+  if (!restored.persistedRuntimeStates?.length) throw new Error("ACTIVE_RUNTIME_PERSISTENCE_MISSING");
+  const simulationTimeSec = "simulationTimeSec" in session ? session.simulationTimeSec : session.currentMinute * 60;
+  if (restored.persistedRuntimeStates.some(item =>
+    item.capturedAtSimulationTimeSec !== simulationTimeSec ||
+    item.payload.simulationTimeSec !== item.capturedAtSimulationTimeSec
+  )) throw new Error("RUNTIME_CHECKPOINT_CLOCK_MISMATCH");
+}
+
+export function restoreSharedExerciseState(restored: SharedExerciseState, startRuntime = true): void {
   stopClockRunner();
   restoreInstalledWorkbook(restored.installedWorkbook);
   restoreExerciseIdentity(restored);
@@ -234,7 +264,7 @@ export function restoreSharedExerciseState(restored: SharedExerciseState): void 
     replaceItems(clinicalDataProvider.getVitalSigns(), restored.vitalSigns);
   }
 
-  restoreCanonicalRuntime(restored);
+  restoreCanonicalRuntime(restored, startRuntime);
 
 }
 
@@ -253,6 +283,8 @@ export async function loadPersistedState(): Promise<void> {
     if (restored.version !== STATE_VERSION) {
       return;
     }
+
+    localRuntimeCheckpointStore.restore(restored.runtimeCheckpoint);
 
     setLocalSaveStatus({ state: "saved", savedAt: restored.savedAt });
 
@@ -298,57 +330,88 @@ export async function loadPersistedState(): Promise<void> {
       replaceItems(clinicalDataProvider.getVitalSigns(), restored.vitalSigns);
     }
 
-    restoreCanonicalRuntime(restored);
+    restoreCanonicalRuntime(restored, true);
+    setRuntimePersistenceFailure(undefined);
 
   } catch (error) {
+    if (error instanceof Error && error.message === "ACTIVE_RUNTIME_PERSISTENCE_MISSING") {
+      setRuntimePersistenceFailure({ code: "ACTIVE_RUNTIME_PERSISTENCE_MISSING", exerciseId: getCanonicalExerciseSnapshot().exerciseId });
+    }
     console.warn("Saved exercise state could not be loaded.", error);
   }
 }
 
-function restoreCanonicalRuntime(restored: SharedExerciseState): void {
+function restoreCanonicalRuntime(restored: SharedExerciseState, startRuntime: boolean): void {
   const session = restored.exerciseSession;
   const lifecycleState = "lifecycleState" in session ? session.lifecycleState
     : session.state === "running" ? "RUNNING" : session.state === "paused" ? "PAUSED" : "READY";
   if (lifecycleState === "RUNNING" || lifecycleState === "PAUSED") {
-    if (!restored.persistedRuntimeStates?.length) throw new Error("ACTIVE_RUNTIME_PERSISTENCE_MISSING");
-    const simulationTimeSec = "simulationTimeSec" in session ? session.simulationTimeSec : session.currentMinute * 60;
-    if (restored.persistedRuntimeStates.some(item => item.capturedAtSimulationTimeSec !== simulationTimeSec)) {
-      throw new Error("RUNTIME_CHECKPOINT_CLOCK_MISMATCH");
-    }
+    assertRuntimeCheckpointClockConsistency(restored);
     prepareActiveClinicalReferenceRuntime(session.exerciseId, restored.persistedRuntimeStates);
-    if (lifecycleState === "RUNNING") startClockRunner();
+    if (lifecycleState === "RUNNING" && startRuntime) startClockRunner();
   }
 }
 
 export function startStatePersistence(): () => void {
-  return subscribeToSync(() => {
-    const snapshot = createSnapshot();
-    pendingSaveCount += 1;
-
-    setLocalSaveStatus({
-      state: "saving",
-      savedAt: localSaveStatus.savedAt,
-    });
-
-    saveChain = saveChain
-      .then(async () => {
-        await FileSystem.writeAsStringAsync(stateTempFileUri, JSON.stringify(snapshot));
-        await FileSystem.moveAsync({ from: stateTempFileUri, to: stateFileUri });
-      })
-      .then(() => {
-        pendingSaveCount -= 1;
-
-        if (pendingSaveCount === 0) {
-          setLocalSaveStatus({ state: "saved", savedAt: snapshot.savedAt });
-        }
-      })
-      .catch((error) => {
-        pendingSaveCount = Math.max(0, pendingSaveCount - 1);
-        setLocalSaveStatus({
-          state: "error",
-          savedAt: localSaveStatus.savedAt,
-        });
-        console.warn("Exercise state could not be saved.", error);
-      });
+  let stopped = false;
+  const obsoleteGate = new BoundedObsoleteGenerationGate();
+  const pipeline = new LatestGenerationPipeline(async (generation, yieldControl) => {
+    try {
+      const shared = await collectSharedExerciseStateAsync(yieldControl);
+      if (stopped) return;
+      await yieldControl();
+      const hasCanonicalRuntime = (shared.persistedRuntimeStates?.length ?? 0) > 0;
+      const preparedCheckpoint = hasCanonicalRuntime
+        ? await localRuntimeCheckpointStore.prepareCaptureAsync(shared, yieldControl)
+        : undefined;
+      // Drop one obsolete preparation, but force the next one through CAS so a
+      // continuously ticking Runtime cannot starve checkpoint publication.
+      if (stopped || obsoleteGate.shouldDrop(pipeline.isCurrent(generation))) return;
+      if (preparedCheckpoint && !localRuntimeCheckpointStore.commitPrepared(preparedCheckpoint)) {
+        pipeline.request();
+        return;
+      }
+      // Commit and publication notification form one synchronous boundary so
+      // a newer generation cannot make the committed checkpoint obsolete.
+      const snapshot: PersistedState = {
+        ...shared,
+        version: STATE_VERSION,
+        savedAt: new Date().toISOString(),
+        currentCaseManager: { ...getCurrentCaseManager() },
+        ...(preparedCheckpoint ? { runtimeCheckpoint: preparedCheckpoint } : {}),
+      };
+      pendingSnapshot = snapshot;
+      setLocalSaveStatus({ state: "saving", savedAt: localSaveStatus.savedAt });
+      checkpointPreparedListeners.forEach(listener => listener());
+      await yieldControl();
+      void flushLatestSnapshot();
+    } catch (error) {
+      // A partially restored active Runtime must never be persisted. The
+      // authority resolver may still replace it with a valid remote checkpoint.
+      setLocalSaveStatus({ state: "error", savedAt: localSaveStatus.savedAt });
+      console.warn("Exercise state snapshot was rejected.", error);
+    }
   });
+  const unsubscribe = subscribeToSync(() => pipeline.request());
+  return () => { stopped = true; unsubscribe(); };
+}
+
+async function flushLatestSnapshot(): Promise<void> {
+  if (saveInFlight) return;
+  saveInFlight = true;
+  try {
+    while (pendingSnapshot) {
+      const snapshot = pendingSnapshot;
+      pendingSnapshot = undefined;
+      await FileSystem.writeAsStringAsync(stateTempFileUri, JSON.stringify(snapshot));
+      await FileSystem.moveAsync({ from: stateTempFileUri, to: stateFileUri });
+      if (!pendingSnapshot) setLocalSaveStatus({ state: "saved", savedAt: snapshot.savedAt });
+    }
+  } catch (error) {
+    setLocalSaveStatus({ state: "error", savedAt: localSaveStatus.savedAt });
+    console.warn("Exercise state could not be saved.", error);
+  } finally {
+    saveInFlight = false;
+    if (pendingSnapshot) void flushLatestSnapshot();
+  }
 }

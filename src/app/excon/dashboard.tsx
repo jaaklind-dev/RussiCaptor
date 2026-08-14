@@ -16,6 +16,11 @@ import { ExerciseInformationCard } from "@/components/excon/ExerciseInformationC
 import { ExercisePackageInformationCard } from "@/components/excon/ExercisePackageInformationCard";
 import { getExercisePackage, exercisePackageValidator } from "@/services/exercise/ExercisePackageService";
 import PrepareNewExerciseCard from "@/components/excon/PrepareNewExerciseCard";
+import RuntimeRecoveryCard, { runtimeRecoveryAvailable } from "@/components/excon/RuntimeRecoveryCard";
+import {
+  getRuntimePersistenceFailureVersion,
+  subscribeToRuntimePersistenceFailure,
+} from "@/services/runtime/persistence/RuntimePersistenceFailureState";
 
 const initialFilters: InstructorDashboardFilters = {
   location: "All", triage: "All", caseManager: "All", status: "All",
@@ -24,10 +29,12 @@ const unique = (values: string[]) => ["All", ...new Set(values.filter(Boolean).s
 
 export default function ExerciseDashboardScreen() {
   useSyncExternalStore(subscribeToInstructorDashboard, getInstructorDashboardVersion, getInstructorDashboardVersion);
+  useSyncExternalStore(subscribeToRuntimePersistenceFailure, getRuntimePersistenceFailureVersion, getRuntimePersistenceFailureVersion);
   const snapshot = getInstructorDashboardSnapshot();
   const exerciseSnapshot = getCanonicalExerciseSnapshot();
   const exercisePackage = getExercisePackage(exerciseSnapshot.exerciseId);
   const exerciseDefinition = exercisePackage.definition;
+  const recoveryRequired = runtimeRecoveryAvailable(exerciseSnapshot);
   useEffect(() => initializeAuthoritativeExerciseRuntime(exerciseSnapshot.exerciseId), [exerciseSnapshot.exerciseId]);
   const [filters, setFilters] = useState(initialFilters);
   const [, setPresentationVersion] = useState(0);
@@ -66,7 +73,8 @@ export default function ExerciseDashboardScreen() {
               </Text>
             </View>
           </View>
-          <ExerciseControlsCard snapshot={exerciseSnapshot} onApplied={refreshPresentation} />
+          <RuntimeRecoveryCard snapshot={exerciseSnapshot} onRecovered={refreshPresentation} />
+          {!recoveryRequired && <ExerciseControlsCard snapshot={exerciseSnapshot} onApplied={refreshPresentation} />}
           <PrepareNewExerciseCard snapshot={exerciseSnapshot} onPrepared={refreshPresentation} />
           <ExercisePackageInformationCard exercisePackage={exercisePackage} compatibility={exercisePackageValidator.compatibility(exercisePackage)} />
           <ExerciseInformationCard definition={exerciseDefinition} />

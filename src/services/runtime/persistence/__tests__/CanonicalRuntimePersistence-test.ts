@@ -5,7 +5,7 @@ import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
 import { PELVIC_INJURY_EXERCISE_PACKAGE, PLEURAL_INJURY_EXERCISE_PACKAGE } from "@/services/exercise/CanonicalExercisePackages";
 import { packagePatientDatasetRegistry } from "@/services/exercise/CanonicalPatientDatasets";
 import { CARDIAC_ARREST_REFERENCE_FIXTURE } from "@/services/golden/CardiacArrestReferenceFixture";
-import { canonicalRuntimePersistenceService, moduleCompositionHash } from "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
+import { canonicalRuntimePersistenceService, isCapturedCanonicalRuntimeArtifact, moduleCompositionHash } from "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
 
 const tick = (patientId: string, step: number): GoldenInputEvent => ({
   sequenceId: "WP44A", step, offsetSec: step * 60, eventType: "ENGINE_TICK", actor: "ENGINE",
@@ -36,6 +36,21 @@ function equivalence(pkg: ExercisePackage): void {
 }
 
 describe("WP-44A canonical runtime persistence", () => {
+  test.each([
+    ["Pelvic", PELVIC_INJURY_EXERCISE_PACKAGE, undefined],
+    ["Pleural", PLEURAL_INJURY_EXERCISE_PACKAGE, undefined],
+    ["Cardiac", PLEURAL_INJURY_EXERCISE_PACKAGE, CARDIAC_ARREST_REFERENCE_FIXTURE],
+  ] as const)("%s synchronous and yielding artifacts are byte/hash equivalent", async (_name, pkg, suppliedFixture) => {
+    const sourceFixture = structuredClone(suppliedFixture ?? fixture(pkg));
+    const patientId = sourceFixture.patientId!;
+    const identity = provenance(pkg, patientId);
+    const source = new ClinicalScenarioEngine(); source.reset(sourceFixture); source.advanceTo(60);
+    const synchronous = canonicalRuntimePersistenceService.capture(source, identity);
+    const yielding = await canonicalRuntimePersistenceService.captureAsync(source, identity, async () => Promise.resolve());
+    expect(yielding).toEqual(synchronous);
+    expect(yielding.payloadHash).toBe(synchronous.payloadHash);
+  });
+
   test("pelvic continuous and rehydrated execution are bit-identical", () => equivalence(PELVIC_INJURY_EXERCISE_PACKAGE));
   test("pleural continuous and rehydrated execution are bit-identical", () => equivalence(PLEURAL_INJURY_EXERCISE_PACKAGE));
 
@@ -65,10 +80,44 @@ describe("WP-44A canonical runtime persistence", () => {
       .toThrow(expect.objectContaining<Partial<RuntimePersistenceError>>({ code: "EXERCISE_IDENTITY_MISMATCH" }));
   });
 
+  test("fails closed when capture metadata and canonical payload clocks disagree", () => {
+    const pkg = PELVIC_INJURY_EXERCISE_PACKAGE; const sourceFixture = fixture(pkg); const identity = provenance(pkg, sourceFixture.patientId!);
+    const source = new ClinicalScenarioEngine(); source.reset(sourceFixture); source.advanceTo(60);
+    const artifact = canonicalRuntimePersistenceService.capture(source, identity);
+    const target = new ClinicalScenarioEngine();
+    expect(() => canonicalRuntimePersistenceService.rehydrate(target, {
+      ...artifact,
+      capturedAtSimulationTimeSec: artifact.capturedAtSimulationTimeSec + 1,
+    }, identity)).toThrow(expect.objectContaining<Partial<RuntimePersistenceError>>({ code: "RUNTIME_INVARIANT_VIOLATION" }));
+    expect(() => target.getRuntimeState()).toThrow();
+  });
+
+  test.each([
+    [PELVIC_INJURY_EXERCISE_PACKAGE, "PB-CONTINUITY", "PB-1", "PELVIC_BINDER_APPLICATION", "PelvicBinderApplied"],
+    [PLEURAL_INJURY_EXERCISE_PACKAGE, "CD-CONTINUITY", "CD-1", "CHEST_DRAIN_INSERTION", "ClinicalEffectApplied"],
+  ] as const)("preserves %s Clinical Effect and intervention idempotency", (pkg, interventionId, resourceId, definitionId, effectEventType) => {
+    const sourceFixture = fixture(pkg); const patientId = sourceFixture.patientId!; const identity = provenance(pkg, patientId);
+    const source = new ClinicalScenarioEngine(); source.reset(sourceFixture);
+    source.scheduleIntervention({ interventionId, patientId, resourceId, action: "APPLY", timestamp: 60, definitionId, parameters: {} });
+    source.advanceTo(60); source.dispatch(tick(patientId, 1));
+    const artifact = canonicalRuntimePersistenceService.capture(source, identity);
+    const resumed = new ClinicalScenarioEngine(); canonicalRuntimePersistenceService.rehydrate(resumed, artifact, identity);
+    const before = resumed.captureRuntimePayload();
+    expect(before.eventLog.filter(event => event.eventType === effectEventType)).toHaveLength(1);
+    expect(() => resumed.scheduleIntervention({ interventionId, patientId, resourceId, action: "APPLY", timestamp: 60, definitionId, parameters: {} }))
+      .toThrow(`Intervention ${interventionId} esineb mitu korda.`);
+    const after = resumed.captureRuntimePayload();
+    expect(after.eventLog.filter(event => event.eventType === effectEventType)).toHaveLength(1);
+    expect(after.eventLog).toEqual(before.eventLog);
+  });
+
   test("capture is deterministic and rehydration is idempotent", () => {
     const pkg = PLEURAL_INJURY_EXERCISE_PACKAGE; const sourceFixture = fixture(pkg); const identity = provenance(pkg, sourceFixture.patientId!);
     const source = new ClinicalScenarioEngine(); source.reset(sourceFixture);
     const first = canonicalRuntimePersistenceService.capture(source, identity);
+    expect(isCapturedCanonicalRuntimeArtifact(first)).toBe(true);
+    expect(Object.isFrozen(first.payload)).toBe(true);
+    expect(Object.isFrozen(first.payload.eventLog)).toBe(true);
     expect(canonicalRuntimePersistenceService.capture(source, identity)).toEqual(first);
     const target = new ClinicalScenarioEngine(); canonicalRuntimePersistenceService.rehydrate(target, first, identity);
     const before = target.getHashes(); canonicalRuntimePersistenceService.rehydrate(target, first, identity);

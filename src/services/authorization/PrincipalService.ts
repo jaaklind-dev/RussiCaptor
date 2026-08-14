@@ -2,7 +2,7 @@ import type { Principal, PrincipalState } from "@/models/authorization/Authoriza
 import { deepFreeze } from "@/utils/immutable";
 import type { AuthorizationCache } from "./AuthorizationCache";
 import type { SupabaseAuthenticationAdapter } from "./SupabaseAuthenticationAdapter";
-import { resolvePermissions } from "./PermissionResolver";
+import { resolvePrincipalPermissions } from "./PermissionResolver";
 import type { SupabaseRoleAuthority } from "./SupabaseRoleAuthority";
 
 export class PrincipalService {
@@ -13,7 +13,7 @@ export class PrincipalService {
     const result = await this.roles.assignmentsFor(auth.identity.userId);
     if (result.state === "VERIFIED") {
       const currentAssignments = result.assignments.filter(item => !item.expiresAt || item.expiresAt > result.verifiedAt);
-      const principal: Principal = deepFreeze({ userId: auth.identity.userId, authenticationState: "AUTHENTICATED", roleAssignments: result.assignments, permissions: resolvePermissions(currentAssignments), authorizationFreshness: "VERIFIED_ONLINE", authorizationProvenance: { authority: "SUPABASE_ROLE_ASSIGNMENTS", verifiedAt: result.verifiedAt, expiresAt: result.expiresAt } });
+      const principal: Principal = deepFreeze({ userId: auth.identity.userId, authenticationState: "AUTHENTICATED", roleAssignments: result.assignments, permissions: resolvePrincipalPermissions(currentAssignments), authorizationFreshness: "VERIFIED_ONLINE", authorizationProvenance: { authority: "SUPABASE_ROLE_ASSIGNMENTS", verifiedAt: result.verifiedAt, expiresAt: result.expiresAt } });
       await this.cache?.store(principal); return Object.freeze({ state: "AUTHENTICATED", principal });
     }
     const cached = await this.cache?.load(auth.identity.userId);

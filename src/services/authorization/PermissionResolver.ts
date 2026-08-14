@@ -1,7 +1,7 @@
 import type { AuthorizationContext, AuthorizationPermission, RoleAssignment } from "@/models/authorization/Authorization";
 
 const rolePermissions = Object.freeze({
-  EXCON: Object.freeze(["INSTRUCTOR_EVALUATION_READ", "INSTRUCTOR_EVALUATION_WRITE"] as const),
+  EXCON: Object.freeze(["EXERCISE_RUNTIME_RECOVERY", "INSTRUCTOR_EVALUATION_READ", "INSTRUCTOR_EVALUATION_WRITE"] as const),
 }) satisfies Readonly<Record<RoleAssignment["role"], readonly AuthorizationPermission[]>>;
 
 export function assignmentMatchesContext(assignment: RoleAssignment, context: AuthorizationContext): boolean {
@@ -18,6 +18,12 @@ export function resolvePermissions(assignments: readonly RoleAssignment[], conte
     .filter(item => assignmentIsEffective(item) && assignmentMatchesContext(item, context))
     .sort((a, b) => `${a.role}:${a.scope.scopeType}:${a.scope.scopeType === "EXERCISE" ? a.scope.scopeId : ""}:${a.assignmentId}`
       .localeCompare(`${b.role}:${b.scope.scopeType}:${b.scope.scopeType === "EXERCISE" ? b.scope.scopeId : ""}:${b.assignmentId}`));
+  return Object.freeze([...new Set(active.flatMap(item => rolePermissions[item.role] ?? []))].sort());
+}
+
+/** Principal capabilities are scope-independent; AuthorizationService applies target scope per operation. */
+export function resolvePrincipalPermissions(assignments: readonly RoleAssignment[]): readonly AuthorizationPermission[] {
+  const active = assignments.filter(item => assignmentIsEffective(item));
   return Object.freeze([...new Set(active.flatMap(item => rolePermissions[item.role] ?? []))].sort());
 }
 

@@ -6,6 +6,7 @@ import { AuthoritativeExerciseRuntime } from "../AuthoritativeExerciseRuntime";
 import { clearExerciseClockTargets } from "../ExerciseClockTargetRegistry";
 import { getExerciseControlAudit, getExerciseControlReplayHash, handleExerciseControlCommand, resetExerciseControlCommandHandler, restoreExerciseControlAudit } from "../ExerciseControlCommandHandler";
 import { clearExerciseRuntimeOwner, registerExerciseRuntimeOwner } from "../ExerciseRuntimeOwnerRegistry";
+import { setRuntimeWriterAuthorityState } from "../../persistence/RuntimeWriterAuthorityState";
 
 let sequence = 0;
 const command = (commandType: ExerciseControlCommandType, extras: Partial<ExerciseControlCommand> = {}): ExerciseControlCommand => ({
@@ -17,7 +18,7 @@ describe("WP-22 authoritative exercise controls", () => {
   beforeEach(() => { stopClockRunner(); clearExerciseRuntimeOwner(); clearExerciseClockTargets(); resetExerciseControlCommandHandler();
     replaceCanonicalExerciseSnapshot({ exerciseId: "demo", lifecycleState: "READY", simulationTimeSec: 0, speed: 1, version: 0 });
     registerExerciseRuntimeOwner(new AuthoritativeExerciseRuntime("demo")); });
-  afterEach(stopClockRunner);
+  afterEach(() => { stopClockRunner(); setRuntimeWriterAuthorityState("UNRESOLVED"); });
 
   it("enforces the lifecycle and freezes the canonical clock while paused and completed", () => {
     expect(handleExerciseControlCommand(command("START_EXERCISE")).ok).toBe(true);
@@ -57,5 +58,20 @@ describe("WP-22 authoritative exercise controls", () => {
     resetExerciseControlCommandHandler(); replaceCanonicalExerciseSnapshot(savedSnapshot); restoreExerciseControlAudit(savedAudit);
     expect(handleExerciseControlCommand(start)).toEqual(first);
     expect(getExerciseControlAudit()).toHaveLength(1);
+  });
+
+  it("uses canonical writer authority consistently for Complete authorization", () => {
+    expect(handleExerciseControlCommand(command("START_EXERCISE", { commandId: "AUTH-START" })).ok).toBe(true);
+    setRuntimeWriterAuthorityState("READER");
+    expect(handleExerciseControlCommand(command("COMPLETE_EXERCISE", { commandId: "READER-COMPLETE" }))).toMatchObject({
+      ok: false,
+      errorCode: "NO_AUTHORITATIVE_OWNER",
+      message: "Runtime active on another device",
+    });
+    setRuntimeWriterAuthorityState("WRITER");
+    expect(handleExerciseControlCommand(command("COMPLETE_EXERCISE", { commandId: "WRITER-COMPLETE" }))).toMatchObject({
+      ok: true,
+      snapshot: { lifecycleState: "COMPLETED" },
+    });
   });
 });

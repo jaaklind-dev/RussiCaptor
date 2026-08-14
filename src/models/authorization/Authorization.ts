@@ -4,6 +4,7 @@ export type AuthorizationRole = (typeof authorizationRoles)[number];
 export const authorizationPermissions = [
   "INSTRUCTOR_EVALUATION_READ",
   "INSTRUCTOR_EVALUATION_WRITE",
+  "EXERCISE_RUNTIME_RECOVERY",
 ] as const;
 export type AuthorizationPermission = (typeof authorizationPermissions)[number];
 export type AuthorizationScope = Readonly<

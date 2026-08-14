@@ -2,12 +2,15 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { getCurrentExercise } from "@/repositories/ExerciseRepository";
 import {
-  createSharedExerciseSnapshot,
+  createSharedExerciseProjection,
+  restoreRemoteExerciseIdentity,
   restoreSharedExerciseState,
   type SharedExerciseState,
 } from "@/services/StatePersistenceService";
 import { isSupabaseConfigured, supabase } from "@/services/SupabaseService";
 import { notifySync, subscribeToSync } from "@/services/SyncService";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { getRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 
 export type CloudSyncStatus = {
   state: "disabled" | "connecting" | "synced" | "saving" | "offline" | "error";
@@ -35,6 +38,23 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let latestRevision = 0;
 let latestUpdatedAt = "";
 let applyingRemoteState = false;
+let latestRemoteExercise: Readonly<{ exerciseId: string; lifecycleState: string }> | undefined;
+
+export function isRemoteRuntimeLifecycleActive(exerciseId: string): boolean | undefined {
+  if (!latestRemoteExercise || latestRemoteExercise.exerciseId !== exerciseId) return undefined;
+  return latestRemoteExercise.lifecycleState === "RUNNING" || latestRemoteExercise.lifecycleState === "PAUSED";
+}
+
+export function shouldIgnoreActiveSharedProjection(
+  localExerciseId: string,
+  localLifecycle: string,
+  remoteExerciseId: string,
+  authorityState: string,
+): boolean {
+  return localExerciseId === remoteExerciseId && (
+    authorityState === "WRITER" || localLifecycle === "COMPLETED"
+  );
+}
 
 function setStatus(next: CloudSyncStatus): void {
   status = next;
@@ -77,6 +97,33 @@ function applyRemoteRow(row: ExerciseStateRow): void {
 
   latestRevision = row.revision;
   latestUpdatedAt = row.updated_at;
+  const session = row.state.exerciseSession;
+  const lifecycle = "lifecycleState" in session ? session.lifecycleState : session.state === "running" ? "RUNNING" : session.state === "paused" ? "PAUSED" : "READY";
+  latestRemoteExercise = { exerciseId: session.exerciseId, lifecycleState: lifecycle };
+  // Active canonical Runtime is synchronized only through WP-44B checkpoint
+  // authority. The shared projection must never replace it directly.
+  if (lifecycle === "RUNNING" || lifecycle === "PAUSED") {
+    const localExercise = getCanonicalExerciseSnapshot();
+    const isSameExercise = localExercise.exerciseId === session.exerciseId;
+    // Shared state is discovery-only for an active Runtime. Never let an own
+    // writer echo, or a delayed active echo after Complete, roll canonical
+    // lifecycle identity backwards. Runtime checkpoints own active continuity.
+    if (isSameExercise && shouldIgnoreActiveSharedProjection(
+      localExercise.exerciseId,
+      localExercise.lifecycleState,
+      session.exerciseId,
+      getRuntimeWriterAuthorityState(),
+    )) {
+      setStatus({ state: "synced", syncedAt: row.updated_at });
+      return;
+    }
+    applyingRemoteState = true;
+    restoreRemoteExerciseIdentity(row.state);
+    notifySync("remote");
+    applyingRemoteState = false;
+    setStatus({ state: "synced", syncedAt: row.updated_at });
+    return;
+  }
   applyingRemoteState = true;
   restoreSharedExerciseState(row.state);
   notifySync("remote");
@@ -94,13 +141,14 @@ async function saveToCloud(): Promise<void> {
   const nextRevision = latestRevision + 1;
   setStatus({ state: "saving", syncedAt: status.syncedAt });
 
+  const sharedProjection = createSharedExerciseProjection();
   const { data, error } = await supabase
     .from("exercise_states")
     .upsert(
       {
         exercise_id: getCurrentExercise().id,
         revision: nextRevision,
-        state: createSharedExerciseSnapshot(),
+        state: sharedProjection,
         updated_at: new Date().toISOString(),
         updated_by: user.id,
       },
@@ -135,6 +183,10 @@ export async function startCloudSync(): Promise<() => void> {
   }
 
   setStatus({ state: "connecting" });
+
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = undefined; }
+  stopLocalSubscription?.(); stopLocalSubscription = undefined;
+  if (channel) { await supabase.removeChannel(channel); channel = undefined; }
 
   const { data: sessionData } = await supabase.auth.getSession();
   if (!sessionData.session) {
