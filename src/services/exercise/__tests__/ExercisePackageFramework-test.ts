@@ -1,5 +1,5 @@
 import type { ExercisePackage } from "@/models/exercise/ExercisePackage";
-import { CANONICAL_EXERCISE_PACKAGES, DEFAULT_EXERCISE_PACKAGE } from "../CanonicalExercisePackages";
+import { CANONICAL_EXERCISE_PACKAGES, DEFAULT_EXERCISE_PACKAGE, HISTORICAL_BOTULISM_EXERCISE_PACKAGE_V1 } from "../CanonicalExercisePackages";
 import { createExercisePackage, calculateExercisePackageHash } from "../ExercisePackageHash";
 import { ExercisePackageLoader } from "../ExercisePackageLoader";
 import { ExercisePackageRegistry } from "../ExercisePackageRegistry";
@@ -26,13 +26,16 @@ describe("WP-28 Exercise Package Framework", () => {
   });
 
   test("package hash is deterministic and excludes self-reference", () => {
-    const a = makePackage("hash"); const reordered = createExercisePackage({ ...structuredClone(DEFAULT_EXERCISE_PACKAGE), packageId: "hash", definition: { ...structuredClone(DEFAULT_EXERCISE_PACKAGE.definition), exerciseTypeId: "DEF_hash_1_0_0" }, enabledPatientProcesses: [...DEFAULT_EXERCISE_PACKAGE.enabledPatientProcesses].reverse(), metadata: { ...DEFAULT_EXERCISE_PACKAGE.metadata, tags: [...DEFAULT_EXERCISE_PACKAGE.metadata.tags].reverse() } });
+    const a = makePackage("hash"); const reordered = createExercisePackage({ ...structuredClone(DEFAULT_EXERCISE_PACKAGE), packageId: "hash", packageVersion: "1.0.0", definition: { ...structuredClone(DEFAULT_EXERCISE_PACKAGE.definition), exerciseTypeId: "DEF_hash_1_0_0" }, enabledPatientProcesses: [...DEFAULT_EXERCISE_PACKAGE.enabledPatientProcesses].reverse(), metadata: { ...DEFAULT_EXERCISE_PACKAGE.metadata, tags: [...DEFAULT_EXERCISE_PACKAGE.metadata.tags].reverse() } });
     expect(a.packageHash).toBe(reordered.packageHash); expect(a.manifest.packageHash).toBe(a.packageHash); expect(calculateExercisePackageHash(a)).toBe(a.packageHash);
   });
 
-  test("WP-28 canonical package and definition hashes remain unchanged", () => {
-    expect(DEFAULT_EXERCISE_PACKAGE.packageHash).toBe("c6ff142e1cfbdcb37757f159fbbd95128f9ee4a961972d22264c44317b6e803d");
-    expect(DEFAULT_EXERCISE_PACKAGE.manifest.definitionHash).toBe("b488182cd19a1e09dbb0dcd23de1db0c922782ceb0ae4e6903b45d533409a81b");
+  test("preserves the historical Botulism v1 hash while publishing deterministic v2 identity", () => {
+    expect(HISTORICAL_BOTULISM_EXERCISE_PACKAGE_V1.packageHash).toBe("c6ff142e1cfbdcb37757f159fbbd95128f9ee4a961972d22264c44317b6e803d");
+    expect(HISTORICAL_BOTULISM_EXERCISE_PACKAGE_V1.manifest.definitionHash).toBe("b488182cd19a1e09dbb0dcd23de1db0c922782ceb0ae4e6903b45d533409a81b");
+    expect(DEFAULT_EXERCISE_PACKAGE).toMatchObject({ packageId: "russicaptor.botulism-johvi", packageVersion: "2.0.0", patientDatasetId: "patients.botulism-johvi.v2" });
+    expect(DEFAULT_EXERCISE_PACKAGE.packageHash).toBe("a32f63f6730596a8491279213bd4ac0c7806efe96b157992beeb3183edb266ae");
+    expect(calculateExercisePackageHash(DEFAULT_EXERCISE_PACKAGE)).toBe(DEFAULT_EXERCISE_PACKAGE.packageHash);
   });
 
   test("registry resolves versions deterministically and rejects duplicates", () => {

@@ -26,7 +26,21 @@ const definitions = (profile: ExerciseProfile): ExerciseDefinition => profile ==
   enabledPatientProcesses: Object.freeze([...processes[profile]]), enabledAnalyticsProviders: Object.freeze([...EXERCISE_DEFINITION_CATALOG.analyticsProviders]), enabledMetricProviders: Object.freeze([...EXERCISE_DEFINITION_CATALOG.metricProviders]),
   objectives: Object.freeze([Object.freeze({ objectiveId: "exercise-objective", name: "Complete exercise objectives", description: "Complete the configured clinical and operational exercise objectives" })]), capabilities: Object.freeze([...capabilities]),
 });
-const template = (profile: ExerciseProfile, author = "RussiCaptor") => { const definition = definitions(profile); return createExercisePackage({ packageId: `russicaptor.${profile.toLowerCase()}`, packageVersion: "1.0.0", definition, patientDatasetId: `patients.${profile.toLowerCase()}.v1`, enabledPatientProcesses: definition.enabledPatientProcesses, enabledAnalyticsProviders: definition.enabledAnalyticsProviders, enabledMetricProviders: definition.enabledMetricProviders, metadata: { name: `${profile.replaceAll("_", " ")} Template Package`, description: `Canonical ${profile.replaceAll("_", " ").toLowerCase()} exercise configuration package`, author, organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: profile, tags: ["canonical", "template", profile.toLowerCase()] } }); };
+const template = (profile: ExerciseProfile, author = "RussiCaptor") => { const definition = definitions(profile); const botulism = profile === "BOTULISM"; return createExercisePackage({
+  packageId: botulism ? "russicaptor.botulism-johvi" : `russicaptor.${profile.toLowerCase()}`,
+  packageVersion: botulism ? "2.0.0" : "1.0.0",
+  definition,
+  patientDatasetId: botulism ? "patients.botulism-johvi.v2" : `patients.${profile.toLowerCase()}.v1`,
+  enabledPatientProcesses: definition.enabledPatientProcesses, enabledAnalyticsProviders: definition.enabledAnalyticsProviders, enabledMetricProviders: definition.enabledMetricProviders,
+  metadata: { name: botulism ? "Jõhvi restorani botulismiõppuse mallpakett" : `${profile.replaceAll("_", " ")} Template Package`, description: botulism ? "Jõhvi restorani botulismiõppuse canonical konfiguratsioonipakett" : `Canonical ${profile.replaceAll("_", " ").toLowerCase()} exercise configuration package`, author, organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: profile, tags: ["canonical", "template", profile.toLowerCase(), ...(botulism ? ["johvi", "v2"] : [])] },
+}); };
+
+/** Historical v1 identity retained for compatibility tests; it is not loaded into the production catalog. */
+export const HISTORICAL_BOTULISM_EXERCISE_PACKAGE_V1 = createExercisePackage({
+  packageId: "russicaptor.botulism", packageVersion: "1.0.0", definition: DEFAULT_EXERCISE_DEFINITION, patientDatasetId: "patients.botulism.v1",
+  enabledPatientProcesses: DEFAULT_EXERCISE_DEFINITION.enabledPatientProcesses, enabledAnalyticsProviders: DEFAULT_EXERCISE_DEFINITION.enabledAnalyticsProviders, enabledMetricProviders: DEFAULT_EXERCISE_DEFINITION.enabledMetricProviders,
+  metadata: { name: "BOTULISM Template Package", description: "Canonical botulism exercise configuration package", author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "BOTULISM", tags: ["canonical", "template", "botulism"] },
+});
 
 export const CANONICAL_EXERCISE_PACKAGES = Object.freeze((["ALS", "TRAUMA", "MASCAL", "BOTULISM", "EMERGENCY_DEPARTMENT", "CUSTOM"] as const).map(profile => template(profile)));
 export const DEFAULT_EXERCISE_PACKAGE = CANONICAL_EXERCISE_PACKAGES.find(pkg => pkg.definition.profile === "BOTULISM")!;

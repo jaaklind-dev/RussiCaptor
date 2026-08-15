@@ -108,7 +108,7 @@ changed.
 - Resource, Intervention, Airway, Circulation and Medication ordering remains
   adjacent canonical orchestration outside the PatientProcess registry.
 - Physical Android `D8TNU20630101957` loaded the current Metro bundle and the
-  existing **Mimino Botulism 12 Patients** exercise. Resume, pause and resume
+  historical v1 **Mimino Botulism 12 Patients** exercise. Resume, pause and resume
   produced the expected canonical Timeline events. P08 Patient Inspector
   rendered patient identity, assignment/state projection and Timeline; Debrief
   rendered 12 patients and 32 events. No new JavaScript Runtime warning/error or

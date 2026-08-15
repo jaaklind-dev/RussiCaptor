@@ -5,12 +5,12 @@ describe("patient lookup feedback", () => {
     expect(
       getPatientNotFoundMessage(
         " 37203140017 ",
-        "Mimino_Botulism_12_Patients.xlsx"
+        "Botulism_Johvi_12_Patients_v2.xlsx"
       )
     ).toBe(
       [
         "Otsitud kood: 37203140017",
-        "Aktiivne andmeallikas: Mimino_Botulism_12_Patients.xlsx",
+        "Aktiivne andmeallikas: Botulism_Johvi_12_Patients_v2.xlsx",
         "",
         "Kui Exceli andmeid muudeti, impordi töövihik EXCON-vaates uuesti.",
       ].join("\n")

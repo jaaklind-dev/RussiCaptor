@@ -2,6 +2,7 @@ import type { GoldenFixture } from "@/models/GoldenTest";
 import type { Patient } from "@/models/Patient";
 import type { PackagePatientDataset } from "@/models/exercise/PackagePatientDataset";
 import { patients as demoPatients } from "@/data/patients";
+import { BOTULISM_JOHVI_PATIENTS } from "@/data/botulismJohviPatients";
 import { PELVIC_INJURY_REFERENCE_PATIENT } from "@/modules/pelvicInjury/PelvicInjuryReference";
 import { PLEURAL_INJURY_REFERENCE } from "@/modules/pleuralInjury/PleuralInjuryReference";
 import { CARDIAC_ARREST_REFERENCE_FIXTURE } from "@/services/golden/CardiacArrestReferenceFixture";
@@ -10,6 +11,7 @@ import { PackagePatientDatasetRegistry } from "./PackagePatientMaterializationSe
 const clone = (patient: Patient): Patient => ({ ...patient, mist: { ...patient.mist } });
 const dataset = (datasetId: string, records: PackagePatientDataset["patients"]): PackagePatientDataset => Object.freeze({ datasetId, version: datasetId.split(".v").at(-1)!, patients: Object.freeze(records) });
 const normal = (datasetId: string) => dataset(datasetId, demoPatients.map(patient => Object.freeze({ patient: Object.freeze(clone(patient)) })));
+const botulismJohvi = dataset("patients.botulism-johvi.v2", BOTULISM_JOHVI_PATIENTS.map(patient => Object.freeze({ patient })));
 const cardiacFixture = (patientId: string): GoldenFixture => Object.freeze({ ...structuredClone(CARDIAC_ARREST_REFERENCE_FIXTURE), patientId });
 
 export const pelvicReferencePatient: Patient = Object.freeze({ id: PELVIC_INJURY_REFERENCE_PATIENT.patientId, isikukood: "39011230056", name: "Pelvic Injury Reference", triage: "P1", status: "Active", location: "Resus", lastSeen: "T+0", mist: Object.freeze({ mechanism: "Fall from height", injuries: "Open-book pelvic injury", signs: "Progressive hemorrhagic deterioration", treatment: "No treatment yet" }) });
@@ -24,7 +26,7 @@ export const pleuralReferenceFixture: GoldenFixture = Object.freeze({ fixtureId:
 
 export const packagePatientDatasetRegistry = new PackagePatientDatasetRegistry();
 [
-  normal("patients.als.v1"), normal("patients.trauma.v1"), normal("patients.mascal.v1"), normal("patients.botulism.v1"),
+  normal("patients.als.v1"), normal("patients.trauma.v1"), normal("patients.mascal.v1"), normal("patients.botulism.v1"), botulismJohvi,
   normal("patients.emergency_department.v1"), normal("patients.custom.v1"),
   dataset("patients.cardiac-arrest-reference.v1", [{ patient: Object.freeze(clone(demoPatients[0])), runtimeFixture: cardiacFixture(demoPatients[0].id) }]),
   dataset("patients.als-protocol-reference.v1", [{ patient: Object.freeze(clone(demoPatients[0])), runtimeFixture: cardiacFixture(demoPatients[0].id) }]),

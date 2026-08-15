@@ -3,7 +3,7 @@ import type { ClinicalModuleDependency } from "@/models/clinical/ClinicalModuleD
 import type { ExerciseDefinition } from "@/models/exercise/ExerciseDefinition";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getAnalyticsReport } from "@/services/AnalyticsService";
-import { CANONICAL_EXERCISE_PACKAGES, DEFAULT_EXERCISE_PACKAGE } from "@/services/exercise/CanonicalExercisePackages";
+import { CANONICAL_EXERCISE_PACKAGES, DEFAULT_EXERCISE_PACKAGE, HISTORICAL_BOTULISM_EXERCISE_PACKAGE_V1 } from "@/services/exercise/CanonicalExercisePackages";
 import { hashExerciseDefinition } from "@/services/exercise/ExerciseDefinitionRegistry";
 import { EXERCISE_DEFINITION_CATALOG } from "@/services/exercise/ExerciseDefinitionService";
 import { createExercisePackage } from "@/services/exercise/ExercisePackageHash";
@@ -118,7 +118,7 @@ describe("WP-31 Clinical Module Composition Foundation", () => {
 
   test("packages without modules preserve canonical hashes and runtime-facing state", () => {
     const snapshot = getCanonicalExerciseSnapshot(); const runtimePackage = getExercisePackage(snapshot.exerciseId);
-    expect(DEFAULT_EXERCISE_PACKAGE.packageHash).toBe("c6ff142e1cfbdcb37757f159fbbd95128f9ee4a961972d22264c44317b6e803d");
+    expect(HISTORICAL_BOTULISM_EXERCISE_PACKAGE_V1.packageHash).toBe("c6ff142e1cfbdcb37757f159fbbd95128f9ee4a961972d22264c44317b6e803d");
     expect(DEFAULT_EXERCISE_PACKAGE.manifest.definitionHash).toBe("b488182cd19a1e09dbb0dcd23de1db0c922782ceb0ae4e6903b45d533409a81b");
     expect(CANONICAL_EXERCISE_PACKAGES.every(pkg => !pkg.requiredClinicalModules && !pkg.definition.clinicalModuleComposition)).toBe(true);
     expect(getExercisePackage(snapshot.exerciseId)).toBe(runtimePackage); expect(getCanonicalExerciseSnapshot()).toEqual(snapshot);
