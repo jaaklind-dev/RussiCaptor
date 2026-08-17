@@ -44,7 +44,12 @@ export function advancePatientRuntime(command: Readonly<{ commandId: string; exe
   durationSec: number; issuedBy: string }>): ResourceInterventionCommandResult {
   const previous = results.get(command.commandId);
   if (previous) return structuredClone(previous);
-  const applied = getInstructorRuntimeOwner(command.exerciseId, command.patientId)?.advanceRuntime?.(command.commandId, command.durationSec);
+  const owner = getInstructorRuntimeOwner(command.exerciseId, command.patientId);
+  const exercise = getCanonicalExerciseSnapshot();
+  const canonicalSimulationTimeSec = owner?.advanceRuntime && exercise.exerciseId === command.exerciseId && exercise.lifecycleState === "RUNNING"
+    ? exercise.simulationTimeSec + command.durationSec : undefined;
+  const applied = owner?.advanceRuntime?.(command.commandId, command.durationSec, canonicalSimulationTimeSec);
+  if (applied?.ok && canonicalSimulationTimeSec !== undefined) advanceExerciseMinutes(command.durationSec / 60);
   const result: ResourceInterventionCommandResult = !applied
     ? { ok: false, commandId: command.commandId, errorCode: "UNAVAILABLE", message: "Clinical runtime is not available" }
     : applied.ok ? { ok: true, commandId: command.commandId, runtimeEventId: applied.runtimeEventId }

@@ -9,6 +9,8 @@ import { advancePatientRuntime, handleResourceInterventionCommand, resetResource
 import { getCanonicalExerciseSnapshot, resetExerciseSession, restoreExerciseSession } from "@/repositories/ExerciseSessionRepository";
 import { clearExerciseClockTargets, registerExerciseClockTarget } from "@/services/runtime/exercise/ExerciseClockTargetRegistry";
 import { createScenarioEngineExerciseClockTarget } from "@/services/runtime/exercise/ScenarioEngineExerciseClockTarget";
+import { assertRuntimeCheckpointClockConsistency } from "@/services/StatePersistenceService";
+import { canonicalRuntimePersistenceService } from "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
 
 describe("generic resource intervention command boundary", () => {
   const exerciseId = "EX-RESOURCE-UI"; const patientId = "PT-PELVIC-001";
@@ -43,5 +45,28 @@ describe("generic resource intervention command boundary", () => {
     expect(getCanonicalExerciseSnapshot().simulationTimeSec).toBe(60);
     expect(engine.getRuntimeState().exerciseTimeSec).toBe(60);
     expect(engine.getAssignedResources(patientId).map(item => item.resourceId)).toEqual(["PB-1"]);
+  });
+
+  test("advances every registered patient through the canonical exercise clock", () => {
+    const plan = createPatientMaterializationPlan(exerciseId, PELVIC_INJURY_EXERCISE_PACKAGE, packagePatientDatasetRegistry);
+    const pelvic = new ClinicalScenarioEngine(); pelvic.reset(structuredClone(plan.patients[0].runtimeFixture!));
+    const second = new ClinicalScenarioEngine(); second.reset(structuredClone(plan.patients[0].runtimeFixture!));
+    const secondPatientId = "PT-SECOND-001";
+    restoreExerciseSession({ exerciseId, lifecycleState: "RUNNING", simulationTimeSec: 0, speed: 1, version: 1, clockVersion: 2, clockInitializedAtSimulationTimeSec: 0 });
+    registerExerciseClockTarget(createScenarioEngineExerciseClockTarget(pelvic, patientId));
+    registerExerciseClockTarget(createScenarioEngineExerciseClockTarget(second, secondPatientId));
+    registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(pelvic, exerciseId, patientId));
+
+    const result = advancePatientRuntime({ commandId: "ADVANCE-CANONICAL", exerciseId, patientId, durationSec: 60, issuedBy: "Exercise Controller" });
+
+    expect(result.ok).toBe(true);
+    expect(getCanonicalExerciseSnapshot().simulationTimeSec).toBe(60);
+    expect(pelvic.getRuntimeState().exerciseTimeSec).toBe(60);
+    expect(second.getRuntimeState().exerciseTimeSec).toBe(60);
+    const persistedRuntimeStates = [
+      canonicalRuntimePersistenceService.capture(pelvic, { exerciseId, patientId, packageId: "TEST", packageVersion: "1", packageHash: "a", definitionHash: "b", moduleCompositionHash: "c" }),
+      canonicalRuntimePersistenceService.capture(second, { exerciseId, patientId: secondPatientId, packageId: "TEST", packageVersion: "1", packageHash: "a", definitionHash: "b", moduleCompositionHash: "c" }),
+    ];
+    expect(() => assertRuntimeCheckpointClockConsistency({ exerciseSession: getCanonicalExerciseSnapshot(), persistedRuntimeStates } as never)).not.toThrow();
   });
 });

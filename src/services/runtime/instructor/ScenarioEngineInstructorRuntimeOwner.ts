@@ -58,10 +58,17 @@ export function createScenarioEngineInstructorRuntimeOwner(
         return { ok: false, reason: error instanceof Error ? error.message : "Resource intervention failed" };
       }
     },
-    advanceRuntime(commandId, durationSec) {
+    advanceRuntime(commandId, durationSec, canonicalSimulationTimeSec) {
       if (!runtimeWritesAllowed()) return readOnly();
       try {
-        const target = engine.getRuntimeState().exerciseTimeSec + durationSec;
+        const before = engine.getRuntimeState().exerciseTimeSec;
+        const target = canonicalSimulationTimeSec ?? before + durationSec;
+        if (target < before) return { ok: false, reason: "Canonical exercise clock is behind patient runtime" };
+        // A RUNNING exercise advances through the canonical Exercise Clock so
+        // every registered patient target observes the same tick exactly once.
+        if (canonicalSimulationTimeSec !== undefined) {
+          return { ok: true, runtimeEventId: `TICK:${commandId}` };
+        }
         engine.advanceTo(target);
         engine.dispatch({ sequenceId: `SEQ:${commandId}`, step: 1, offsetSec: target, eventType: "ENGINE_TICK",
           actor: "EXCON", target: patientId, eventId: `TICK:${commandId}`, result: "SUCCESS",
