@@ -7,7 +7,7 @@ export function InspectorTimeline({ items, scrollEnabled = true }: {
 }) {
   return (
     <View style={styles.panel}>
-      <Text style={styles.title}>Timeline</Text>
+      <Text style={styles.title}>Ajajoon</Text>
       <FlatList
         data={items}
         keyExtractor={item => item.id}
@@ -16,7 +16,7 @@ export function InspectorTimeline({ items, scrollEnabled = true }: {
         initialNumToRender={20}
         maxToRenderPerBatch={20}
         windowSize={7}
-        ListEmptyComponent={<Text style={styles.empty}>No timeline events</Text>}
+        ListEmptyComponent={<Text style={styles.empty}>Ajajoone sündmusi ei ole</Text>}
       />
     </View>
   );

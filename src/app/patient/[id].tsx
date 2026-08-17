@@ -108,7 +108,7 @@ useEffect(() => {
 
         <Pressable style={styles.secondaryButton} onPress={() => router.push("/dashboard")}>
 
-          <Text style={styles.secondaryButtonText}>Back to Dashboard</Text>
+          <Text style={styles.secondaryButtonText}>Tagasi töölauale</Text>
 
         </Pressable>
 
@@ -137,7 +137,7 @@ useEffect(() => {
         </Text>
 
         <Text style={styles.cmLine}>
-          Current CM: {assignment?.caseManagerName ?? "Määramata"}
+          Praegune juhtumikorraldaja: {assignment?.caseManagerName ?? "Määramata"}
         </Text>
 
         {isCompleted && (
@@ -186,7 +186,7 @@ useEffect(() => {
                 onPress={() => {
                   Alert.alert(
                     "Nõustu ülevõtmisega?",
-                    `Patsiendi uus Case Manager on ${pendingTransfer.toCaseManagerName}.`,
+                    `Patsiendi uus juhtumikorraldaja on ${pendingTransfer.toCaseManagerName}.`,
                     [
                       { text: "Katkesta", style: "cancel" },
                       {
@@ -341,7 +341,7 @@ useEffect(() => {
 
       <Pressable style={styles.secondaryButton} onPress={() => router.push("/dashboard")}>
 
-        <Text style={styles.secondaryButtonText}>Back to Dashboard</Text>
+        <Text style={styles.secondaryButtonText}>Tagasi töölauale</Text>
 
       </Pressable>
 

@@ -17,18 +17,18 @@ export function InspectorCardiacState({ exerciseId, patientId, cardiac }: Props)
   };
   const arrest = cardiac.cardiacState === "ARREST";
   return <View style={styles.card} testID="cardiac-state-card">
-    <Text style={styles.title}>Cardiac Arrest</Text>
+    <Text style={styles.title}>Südameseiskus</Text>
     <View style={styles.grid}>
-      <Text style={styles.label}>State</Text><Text style={styles.value}>{cardiac.cardiacState}</Text>
-      <Text style={styles.label}>Rhythm</Text><Text style={styles.value}>{cardiac.rhythm}</Text>
-      <Text style={styles.label}>Shockability</Text><Text style={styles.value}>{cardiac.rhythmClassification}</Text>
+      <Text style={styles.label}>Seisund</Text><Text style={styles.value}>{cardiac.cardiacState}</Text>
+      <Text style={styles.label}>Rütm</Text><Text style={styles.value}>{cardiac.rhythm}</Text>
+      <Text style={styles.label}>Defibrilleeritavus</Text><Text style={styles.value}>{cardiac.rhythmClassification}</Text>
       <Text style={styles.label}>CPR</Text><Text style={styles.value}>{cardiac.cprActive ? "ACTIVE" : "STOPPED"}</Text>
-      <Text style={styles.label}>Shock attempts</Text><Text style={styles.value}>{cardiac.shockAttemptCount}</Text>
-      {cardiac.lastEvent && <><Text style={styles.label}>Last event</Text><Text style={styles.value}>{cardiac.lastEvent} · T+{cardiac.lastEventTimeSec ?? 0}s</Text></>}
+      <Text style={styles.label}>Defibrillatsioonikatsed</Text><Text style={styles.value}>{cardiac.shockAttemptCount}</Text>
+      {cardiac.lastEvent && <><Text style={styles.label}>Viimane sündmus</Text><Text style={styles.value}>{cardiac.lastEvent} · T+{cardiac.lastEventTimeSec ?? 0}s</Text></>}
     </View>
     <View style={styles.actions}>
       <Pressable disabled={Boolean(submitting) || !arrest} onPress={() => issue(cardiac.cprActive ? "STOP_CPR" : "START_CPR")}
-        style={[styles.button, (Boolean(submitting) || !arrest) && styles.disabled]}><Text style={styles.buttonText}>{submitting?.includes("CPR") ? "Submitting…" : cardiac.cprActive ? "Stop CPR" : "Start CPR"}</Text></Pressable>
+        style={[styles.button, (Boolean(submitting) || !arrest) && styles.disabled]}><Text style={styles.buttonText}>{submitting?.includes("CPR") ? "Saatmine…" : cardiac.cprActive ? "Lõpeta CPR" : "Alusta CPR-i"}</Text></Pressable>
       <Pressable disabled={Boolean(submitting) || !arrest} onPress={() => issue("DEFIBRILLATION")}
         style={[styles.shock, (Boolean(submitting) || !arrest) && styles.disabled]}><Text style={styles.buttonText}>{submitting === "DEFIBRILLATION" ? "Submitting…" : "Defibrillate"}</Text></Pressable>
     </View>

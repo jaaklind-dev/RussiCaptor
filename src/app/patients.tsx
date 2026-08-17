@@ -17,10 +17,10 @@ export default function PatientsScreen() {
 
       <AppHeader />
 
-      <Text style={styles.title}>My Patients</Text>
+      <Text style={styles.title}>Minu patsiendid</Text>
 
       <Text style={styles.subtitle}>
-        Case Manager: {getCurrentCaseManager().name}
+        Juhtumikorraldaja: {getCurrentCaseManager().name}
       </Text>
 
       {myPatients.length === 0 ? (
@@ -81,7 +81,7 @@ export default function PatientsScreen() {
 
       <Pressable style={styles.secondaryButton} onPress={() => router.push("/dashboard")}>
 
-        <Text style={styles.secondaryButtonText}>Back to Dashboard</Text>
+        <Text style={styles.secondaryButtonText}>Tagasi töölauale</Text>
 
       </Pressable>
 

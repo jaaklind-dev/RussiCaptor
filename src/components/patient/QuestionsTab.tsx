@@ -18,7 +18,7 @@ export default function QuestionsTab({ questions, onReveal, readOnly = false }: 
 
     <View style={styles.card}>
 
-      <Text style={styles.sectionTitle}>Questions</Text>
+      <Text style={styles.sectionTitle}>Küsimused</Text>
 
       {questions.map((question) => (
 
@@ -36,7 +36,7 @@ export default function QuestionsTab({ questions, onReveal, readOnly = false }: 
 
           >
 
-            <Text style={styles.revealButtonText}>Reveal answer</Text>
+            <Text style={styles.revealButtonText}>Näita vastust</Text>
 
           </Pressable>}
 

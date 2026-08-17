@@ -18,13 +18,13 @@ export default function RuntimeRecoveryCard({ snapshot, onRecovered }: { snapsho
     setPending(false);
     if (!result.ok) setError(result.message); else onRecovered?.();
   };
-  const confirm = () => Alert.alert("Terminate unrecoverable exercise?", "The exercise will be terminated. Missing Runtime state will not be reconstructed, the incomplete clinical simulation cannot continue, and an administrative audit record will be retained.", [
-    { text: "Cancel", style: "cancel" }, { text: "Terminate exercise", style: "destructive", onPress: () => void recover() },
+  const confirm = () => Alert.alert("Kas lõpetada taastamatu õppus?", "Simulatsiooni ei saa ohutult jätkata. Puuduvat olekut ei rekonstrueerita, õppus lõpetatakse ja auditikirje säilitatakse.", [
+    { text: "Tühista", style: "cancel" }, { text: "Lõpeta katkine õppus", style: "destructive", onPress: () => void recover() },
   ]);
   return <View style={styles.card} testID="runtime-recovery-card">
-    <Text style={styles.title}>Runtime unavailable</Text>
-    <Text style={styles.body}>Exercise cannot be resumed safely because canonical Runtime persistence is missing.</Text>
-    <Pressable testID="terminate-missing-runtime" disabled={pending} onPress={confirm} style={[styles.button, pending && styles.disabled]}><Text style={styles.buttonText}>{pending ? "Terminating…" : "Terminate exercise"}</Text></Pressable>
+    <Text style={styles.title}>Simulatsiooni olek pole saadaval</Text>
+    <Text style={styles.body}>Simulatsiooni ei saa ohutult taastada, sest canonical Runtime’i püsiandmed puuduvad.</Text>
+    <Pressable testID="terminate-missing-runtime" disabled={pending} onPress={confirm} style={[styles.button, pending && styles.disabled]}><Text style={styles.buttonText}>{pending ? "Lõpetan…" : "Lõpeta katkine õppus"}</Text></Pressable>
     {error && <Text style={styles.error}>{error}</Text>}
   </View>;
 }

@@ -29,8 +29,8 @@ export default function PatientInspectorScreen() {
   if (!model) {
     return (
       <View style={styles.notFound}>
-        <Text style={styles.title}>Patient not found</Text>
-        <Pressable style={styles.button} onPress={() => router.back()}><Text style={styles.buttonText}>Back to Exercise Dashboard</Text></Pressable>
+        <Text style={styles.title}>Patsienti ei leitud</Text>
+        <Pressable style={styles.button} onPress={() => router.back()}><Text style={styles.buttonText}>Tagasi õppuse töölauale</Text></Pressable>
       </View>
     );
   }
@@ -41,9 +41,9 @@ export default function PatientInspectorScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={[styles.topRow, !desktop && styles.topRowStacked]}>
-        <Text style={styles.title}>Patient Inspector</Text>
-        <View style={styles.actions}><Pressable style={styles.injectButton} onPress={() => setInjectionOpen(true)}><Text style={styles.injectButtonText}>Inject event</Text></Pressable>
-          <Pressable style={styles.button} onPress={() => router.back()}><Text style={styles.buttonText}>Back to Dashboard</Text></Pressable></View>
+        <Text style={styles.title}>Patsiendi inspektor</Text>
+        <View style={styles.actions}><Pressable style={styles.injectButton} onPress={() => setInjectionOpen(true)}><Text style={styles.injectButtonText}>Lisa sündmus</Text></Pressable>
+          <Pressable style={styles.button} onPress={() => router.back()}><Text style={styles.buttonText}>Tagasi töölauale</Text></Pressable></View>
       </View>
       <InspectorHeader header={model.header} />
       <View style={[styles.columns, !desktop && styles.stacked]}>
@@ -51,8 +51,8 @@ export default function PatientInspectorScreen() {
           {model.cardiac && <InspectorCardiacState exerciseId={getCurrentExercise().id} patientId={model.header.patientId} cardiac={model.cardiac} />}
           <InspectorResourceInterventions exerciseId={getCurrentExercise().id} patientId={model.header.patientId} />
           <InspectorClinicalState state={model.clinicalState} />
-          <InspectorListPanel title="Active Patient Processes" items={model.processes} emptyText="No active patient processes" />
-          <InspectorListPanel title="Active Clinical Effects" items={model.effects} emptyText="No active clinical effects" />
+          <InspectorListPanel title="Aktiivsed patsiendiprotsessid" items={model.processes} emptyText="Aktiivseid patsiendiprotsesse pole" />
+          <InspectorListPanel title="Aktiivsed kliinilised toimed" items={model.effects} emptyText="Aktiivseid kliinilisi toimeid pole" />
           <InspectorListPanel title="Ownership History" items={model.ownershipHistory} emptyText="No ownership events" />
         </View>
         <View style={styles.rightColumn}><InspectorTimeline items={model.timeline} scrollEnabled={desktop} /></View>

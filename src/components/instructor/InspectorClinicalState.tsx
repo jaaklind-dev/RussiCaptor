@@ -6,8 +6,8 @@ const show = (value: number | string | undefined, suffix = "") => value === unde
 export function InspectorClinicalState({ state }: { state: InspectorClinicalStateModel }) {
   return (
     <View style={styles.panel}>
-      <Text style={styles.title}>Current Clinical State</Text>
-      {!state.hasCanonicalRuntime ? <Text style={styles.pending}>Canonical runtime pending</Text> : (
+      <Text style={styles.title}>Praegune kliiniline seisund</Text>
+      {!state.hasCanonicalRuntime ? <Text style={styles.pending}>Canonical runtime on ootel</Text> : (
         <View style={styles.grid}>
           <Text style={styles.vital}>HR {show(state.heartRate)}</Text>
           <Text style={styles.vital}>RR {show(state.respiratoryRate)}</Text>

@@ -1,10 +1,11 @@
 import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
+import { exerciseLifecycleLabel } from "@/localization/et";
 import { StyleSheet, Text, View } from "react-native";
 
 export default function ExerciseReadOnlyStatusCard({ snapshot }: { snapshot: CanonicalExerciseSnapshot }) {
   return <View style={styles.card}>
-    <Text style={styles.label}>Exercise</Text>
-    <Text style={styles.state}>{snapshot.lifecycleState} · ×{snapshot.speed}</Text>
+    <Text style={styles.label}>Õppus</Text>
+    <Text style={styles.state}>{exerciseLifecycleLabel(snapshot.lifecycleState)} · ×{snapshot.speed}</Text>
     <Text style={styles.time}>T+{snapshot.simulationTimeSec}s</Text>
   </View>;
 }

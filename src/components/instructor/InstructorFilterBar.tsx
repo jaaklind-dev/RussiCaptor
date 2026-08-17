@@ -1,4 +1,5 @@
 import type { InstructorDashboardFilters } from "@/models/InstructorDashboard";
+import { instructorFilterOptionLabel } from "@/localization/et";
 import { ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
 
 type FilterKey = keyof InstructorDashboardFilters;
@@ -12,7 +13,7 @@ export function InstructorFilterBar({ filters, options, onChange }: {
     <View style={styles.container}>
       {(["location", "triage", "caseManager", "status"] as FilterKey[]).map(key => (
         <View key={key} style={styles.group}>
-          <Text style={styles.label}>{key === "caseManager" ? "Case Manager" : key[0].toUpperCase() + key.slice(1)}</Text>
+          <Text style={styles.label}>{key === "caseManager" ? "Juhtumikorraldaja" : key === "location" ? "Asukoht" : key === "triage" ? "Triaaž" : "Olek"}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.options}>
             {options[key].map(option => (
               <Pressable
@@ -20,7 +21,9 @@ export function InstructorFilterBar({ filters, options, onChange }: {
                 onPress={() => onChange(key, option)}
                 style={[styles.option, filters[key] === option && styles.selected]}
               >
-                <Text style={[styles.optionText, filters[key] === option && styles.selectedText]}>{option}</Text>
+                <Text style={[styles.optionText, filters[key] === option && styles.selectedText]}>
+                  {instructorFilterOptionLabel(key, option)}
+                </Text>
               </Pressable>
             ))}
           </ScrollView>

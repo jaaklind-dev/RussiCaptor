@@ -18,7 +18,7 @@ export function InspectorResourceInterventions({ exerciseId, patientId }: Readon
     setSubmitting(undefined);
   };
   return <View style={styles.card} testID="resource-intervention-card">
-    <Text style={styles.title}>Available resource interventions</Text>
+    <Text style={styles.title}>Saadaval ressursipõhised sekkumised</Text>
     <Text style={styles.help}>Canonical resource path · advances the clinical reference by 60 seconds.</Text>
     {available.map(resource => <Pressable key={resource.resourceId} disabled={Boolean(submitting)}
       onPress={() => apply(resource.resourceId)} style={styles.button}>
@@ -27,7 +27,7 @@ export function InspectorResourceInterventions({ exerciseId, patientId }: Readon
     <Pressable disabled={Boolean(submitting)} onPress={() => {
       const commandId = `RUNTIME-${patientId}-${snapshot.updatedAt + 60}`;
       setResult(advancePatientRuntime({ commandId, exerciseId, patientId, durationSec: 60, issuedBy: "Exercise Controller" }));
-    }} style={styles.advance}><Text style={styles.buttonText}>Advance clinical runtime 60s</Text></Pressable>
+    }} style={styles.advance}><Text style={styles.buttonText}>Keri kliinilist simulatsiooni 60 s edasi</Text></Pressable>
     {result?.ok && <Text style={styles.success}>Intervention applied to canonical runtime.</Text>}
     {result && !result.ok && <Text style={styles.error}>{result.errorCode}: {result.message}</Text>}
   </View>;

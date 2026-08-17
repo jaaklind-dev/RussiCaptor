@@ -42,7 +42,7 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Resources</Text>
+        <Text style={styles.title}>Ressursid</Text>
         <Text style={styles.badge}>DEV</Text>
       </View>
 
@@ -64,7 +64,7 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
         );
       })}
 
-      <Text style={styles.sectionTitle}>Active interventions</Text>
+      <Text style={styles.sectionTitle}>Aktiivsed sekkumised</Text>
       {snapshot.activeInterventions.length === 0 ? (
         <Text style={styles.empty}>Aktiivseid resource intervention’e pole.</Text>
       ) : snapshot.activeInterventions.map(intervention => (
@@ -73,7 +73,7 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
         </Text>
       ))}
 
-      <Text style={styles.sectionTitle}>Airway runtime</Text>
+      <Text style={styles.sectionTitle}>Hingamistee runtime</Text>
       <Text style={styles.itemText}>Active airway: {airway?.activeAirway ?? "NONE"}</Text>
       <Text style={styles.itemText}>Current ventilation: {airway?.currentVentilation ?? "NONE"}</Text>
       <Text style={styles.itemText}>Active oxygen delivery: {airway?.activeOxygenDelivery ?? "NONE"}</Text>
@@ -86,7 +86,7 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
         ).map(resource => resource.resourceId).join(", ") || "NONE"}
       </Text>
 
-      <Text style={styles.sectionTitle}>Circulation runtime</Text>
+      <Text style={styles.sectionTitle}>Vereringe runtime</Text>
       <Text style={styles.itemText}>Active vascular access: {circulation?.vascularAccess.map(item => `${item.type}${item.location ? ` (${item.location})` : ""}`).join(", ") || "NONE"}</Text>
       <Text style={styles.itemText}>Active hemorrhage control: {circulation?.hemorrhageControl.join(", ") || "NONE"}</Text>
       <Text style={styles.itemText}>Running circulation interventions: {circulation?.runningInfusions.length ?? 0}</Text>
@@ -95,20 +95,20 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
           "pressureBag", "fluidWarmer", "infusionPump", "bloodAdministrationSet", "rapidInfuser", "tourniquet", "pelvicBinder"].includes(resource.type)
       ).map(resource => resource.resourceId).join(", ") || "NONE"}</Text>
 
-      <Text style={styles.sectionTitle}>Hemorrhage</Text>
+      <Text style={styles.sectionTitle}>Verejooks</Text>
       <Text style={styles.itemText}>Current hemorrhage: {hemorrhage?.clinicalState.severity ?? "NONE"}</Text>
       <Text style={styles.itemText}>Estimated blood loss: {hemorrhage ? `${hemorrhage.clinicalState.estimatedBloodLossMl.toFixed(0)} ml` : "NONE"}</Text>
       <Text style={styles.itemText}>Perfusion state: {hemorrhage?.clinicalState.perfusion ?? "NONE"}</Text>
       <Text style={styles.itemText}>Compensation state: {hemorrhage?.clinicalState.compensation ?? "NONE"}</Text>
       <Text style={styles.itemText}>Resolved clinical effects: {hemorrhage?.clinicalState.resolvedEffectIds.join(", ") || "NONE"}</Text>
 
-      <Text style={styles.sectionTitle}>Medication runtime</Text>
+      <Text style={styles.sectionTitle}>Ravimite runtime</Text>
       <Text style={styles.itemText}>Active medications: {medications?.instances.filter(x => x.status === "ACTIVE").map(x => x.medicationName).join(", ") || "NONE"}</Text>
       <Text style={styles.itemText}>Completed medications: {medications?.instances.filter(x => x.status === "COMPLETED").map(x => x.medicationName).join(", ") || "NONE"}</Text>
       <Text style={styles.itemText}>Medication effects: {medications?.effects.map(x => x.effectType).join(", ") || "NONE"}</Text>
       <Text style={styles.itemText}>Administration history: {medications?.events.length ?? 0}</Text>
 
-      <Text style={styles.sectionTitle}>Vital Sign Engine</Text>
+      <Text style={styles.sectionTitle}>Eluliste näitajate mootor</Text>
       <Text style={styles.itemText}>Monitor: {vitals?.quality ?? "NO SNAPSHOT"}</Text>
       <Text style={styles.itemText}>Current: {vitals ? `HR ${vitals.readings.heartRate.current} · BP ${vitals.readings.systolicBp.current}/${vitals.readings.diastolicBp.current} · RR ${vitals.readings.respiratoryRate.current} · SpO₂ ${vitals.readings.spo2.current}% · EtCO₂ ${vitals.readings.etco2.current}` : "NONE"}</Text>
       <Text style={styles.itemText}>Baseline: {vitals ? `HR ${vitals.baseline.heartRate} · BP ${vitals.baseline.systolicBp}/${vitals.baseline.diastolicBp} · RR ${vitals.baseline.respiratoryRate} · SpO₂ ${vitals.baseline.spo2}%` : "NONE"}</Text>
@@ -116,7 +116,7 @@ export default function ResourceDeveloperCard({ patientId }: { patientId: string
       <Text style={styles.itemText}>Active modifiers: {vitals?.activeContributors.map(item => `${item.sourceId}:${item.vital} ${item.operation} ${item.value}`).join(", ") || "NONE"}</Text>
       <Text style={styles.itemText}>Derived: {vitals ? `MAP ${vitals.derived.meanArterialPressure} · Shock index ${vitals.derived.shockIndex} · Pulse pressure ${vitals.derived.pulsePressure}` : "NONE"}</Text>
 
-      <Text style={styles.sectionTitle}>Recent resource events</Text>
+      <Text style={styles.sectionTitle}>Viimased ressursisündmused</Text>
       {snapshot.recentEvents.length === 0 ? (
         <Text style={styles.empty}>Ressursisündmusi pole.</Text>
       ) : snapshot.recentEvents.map((event, index) => (

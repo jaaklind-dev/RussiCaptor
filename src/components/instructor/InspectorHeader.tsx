@@ -1,5 +1,6 @@
 import type { InspectorHeaderModel } from "@/models/InstructorPatientInspector";
 import { StyleSheet, Text, View } from "react-native";
+import { patientStatusLabel } from "@/localization/et";
 
 const statusColor = {
   Stable: "#1b5e20", "Requires attention": "#7a5700", Critical: "#9a4300",
@@ -12,14 +13,14 @@ export function InspectorHeader({ header }: { header: InspectorHeaderModel }) {
       <View style={styles.identity}>
         <Text style={styles.patientId}>{header.patientId}</Text>
         <Text style={styles.name}>{header.name}</Text>
-        <Text style={styles.nationalId}>National ID: {header.nationalId || "—"}</Text>
+        <Text style={styles.nationalId}>Isikukood: {header.nationalId || "—"}</Text>
       </View>
       <View style={styles.metadata}>
-        <Text style={[styles.status, { color: statusColor[header.status] }]}>{header.status}</Text>
+        <Text style={[styles.status, { color: statusColor[header.status] }]}>{patientStatusLabel(header.status)}</Text>
         <Text style={styles.line}>{header.location} · {header.triage}</Text>
-        <Text style={styles.line}>Case Manager: {header.caseManagerName ?? "—"}</Text>
-        <Text style={styles.line}>Simulation: {header.simulationTimeSec === undefined ? "—" : `T+${header.simulationTimeSec}s`}</Text>
-        <Text style={styles.line}>Snapshot: {header.lastSnapshotTimestamp ?? "Canonical runtime pending"}</Text>
+        <Text style={styles.line}>Juhtumikorraldaja: {header.caseManagerName ?? "—"}</Text>
+        <Text style={styles.line}>Simulatsioon: {header.simulationTimeSec === undefined ? "—" : `T+${header.simulationTimeSec}s`}</Text>
+        <Text style={styles.line}>Hetktõmmis: {header.lastSnapshotTimestamp ?? "Canonical runtime on ootel"}</Text>
       </View>
     </View>
   );

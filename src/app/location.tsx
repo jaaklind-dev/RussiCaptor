@@ -38,10 +38,10 @@ export default function LocationScanScreen() {
   return (
     <View style={styles.container}>
       <AppHeader />
-      <Text style={styles.title}>Scan Location</Text>
+      <Text style={styles.title}>Skaneeri asukoht</Text>
       <Text style={styles.subtitle}>Skaneeri või sisesta asukohatsooni kood</Text>
       <QrScanner
-        buttonLabel="Scan Location QR"
+        buttonLabel="Skaneeri asukoha QR-kood"
         onScanned={(data) => {
           const result = readQrCode(data, "location");
 
@@ -67,10 +67,10 @@ export default function LocationScanScreen() {
         placeholder="Tsooni kood"
       />
       <Pressable style={styles.button} onPress={() => applyLocation()}>
-        <Text style={styles.buttonText}>Set CM Location</Text>
+        <Text style={styles.buttonText}>Määra juhtumikorraldaja asukoht</Text>
       </Pressable>
       <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
-        <Text style={styles.secondaryButtonText}>Back</Text>
+        <Text style={styles.secondaryButtonText}>Tagasi</Text>
       </Pressable>
     </View>
   );

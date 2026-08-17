@@ -62,7 +62,7 @@ if (assignmentResult.status === "unavailable") {
   Alert.alert(
     "Patsienti ei saa määrata",
     patient.status === "Completed"
-      ? "Patsiendi käsitlus on lõpetatud. Säilinud andmed leiad History vaatest."
+      ? "Patsiendi käsitlus on lõpetatud. Säilinud andmed leiad ajaloo vaatest."
       : "Patsient on üle antud ja teda ei saa aktiivnimekirja lisada."
   );
   return;
@@ -74,14 +74,14 @@ if (assignmentResult.status === "assigned-to-other") {
   if (pendingTransfer?.toCaseManagerId === getCurrentCaseManager().id) {
     Alert.alert(
       "Ülevõtmistaotlus on saadetud",
-      `Ootab Case Manageri ${pendingTransfer.fromCaseManagerName} otsust.`
+      `Ootab juhtumikorraldaja ${pendingTransfer.fromCaseManagerName} otsust.`
     );
     return;
   }
 
   Alert.alert(
     "Taotle patsiendi ülevõtmist?",
-    `Praegune Case Manager: ${assignmentResult.assignment.caseManagerName}.`,
+    `Praegune juhtumikorraldaja: ${assignmentResult.assignment.caseManagerName}.`,
     [
       { text: "Katkesta", style: "cancel" },
       {
@@ -108,12 +108,12 @@ router.push(`/patient/${patient.id}`);
 
       <AppHeader />
 
-      <Text style={styles.title}>Scan Patient</Text>
+      <Text style={styles.title}>Skaneeri patsient</Text>
 
       <Text style={styles.subtitle}>Sisesta või skaneeri patsiendi isikukood</Text>
 
       <QrScanner
-        buttonLabel="Scan Patient QR"
+        buttonLabel="Skaneeri patsiendi QR-kood"
         onScanned={(data) => {
           const result = readQrCode(data, "patient");
 
@@ -150,13 +150,13 @@ router.push(`/patient/${patient.id}`);
 
       <Pressable style={styles.button} onPress={() => handleFindPatient()}>
 
-        <Text style={styles.buttonText}>Find Patient</Text>
+        <Text style={styles.buttonText}>Otsi patsienti</Text>
 
       </Pressable>
 
       <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
 
-        <Text style={styles.secondaryButtonText}>Back</Text>
+        <Text style={styles.secondaryButtonText}>Tagasi</Text>
 
       </Pressable>
 

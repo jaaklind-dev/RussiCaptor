@@ -8,10 +8,10 @@ type Props = {
 export default function TimelineTab({ events }: Props) {
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>Timeline</Text>
+      <Text style={styles.title}>Ajajoon</Text>
 
       {events.length === 0 ? (
-        <Text style={styles.empty}>No events yet.</Text>
+        <Text style={styles.empty}>Sündmusi veel ei ole.</Text>
       ) : (
         events.map((event) => (
           <View key={event.id} style={styles.event}>

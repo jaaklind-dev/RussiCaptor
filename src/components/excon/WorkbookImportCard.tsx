@@ -134,7 +134,7 @@ export default function WorkbookImportCard({ onImported }: Props) {
         onPress={chooseWorkbook}
       >
         <Text style={styles.buttonText}>
-          {isLoading ? "Exceli kontrollimine…" : "Import Excel"}
+          {isLoading ? "Exceli kontrollimine…" : "Impordi Excel"}
         </Text>
       </Pressable>
       <View style={styles.moduleDivider} />
@@ -149,7 +149,7 @@ export default function WorkbookImportCard({ onImported }: Props) {
         onPress={chooseModulePackage}
       >
         <Text style={styles.secondaryButtonText}>
-          {isModuleLoading ? "Paketi kontrollimine…" : "Import module package"}
+          {isModuleLoading ? "Paketi kontrollimine…" : "Impordi moodulipakett"}
         </Text>
       </Pressable>
     </View>

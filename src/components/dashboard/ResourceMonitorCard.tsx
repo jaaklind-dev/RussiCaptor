@@ -25,14 +25,14 @@ export default function ResourceMonitorCard() {
   return (
     <View style={styles.card}>
       <View style={styles.titleRow}>
-        <Text style={styles.title}>Resource Monitor</Text>
+        <Text style={styles.title}>Ressursimonitor</Text>
         <Text style={styles.badge}>DEV</Text>
       </View>
       <View style={styles.tableHeader}>
-        <Text style={[styles.headerText, styles.resourceColumn]}>Resource</Text>
-        <Text style={styles.numberHeader}>Total</Text>
-        <Text style={styles.numberHeader}>Free</Text>
-        <Text style={styles.numberHeader}>In use</Text>
+        <Text style={[styles.headerText, styles.resourceColumn]}>Ressurss</Text>
+        <Text style={styles.numberHeader}>Kokku</Text>
+        <Text style={styles.numberHeader}>Vaba</Text>
+        <Text style={styles.numberHeader}>Kasutusel</Text>
       </View>
       {rows.length === 0 ? (
         <Text style={styles.empty}>Resource runtime pole veel snapshot’i avaldanud.</Text>
@@ -50,23 +50,23 @@ export default function ResourceMonitorCard() {
           <Text style={styles.clinicalText}>Perfusion: {hemorrhage.clinicalState.perfusion}</Text>
           <Text style={styles.clinicalText}>Blood loss: {hemorrhage.clinicalState.estimatedBloodLossMl.toFixed(0)} ml</Text>
           <Text style={styles.clinicalText}>Compensation: {hemorrhage.clinicalState.compensation}</Text>
-          <Text style={styles.clinicalText}>Active effects: {hemorrhage.clinicalState.activeEffects.length}</Text>
+          <Text style={styles.clinicalText}>Aktiivsed toimed: {hemorrhage.clinicalState.activeEffects.length}</Text>
         </View>
       )}
       {medications && (
         <View style={styles.clinicalBlock}>
-          <Text style={styles.clinicalTitle}>Running medications: {medications.instances.filter(x => x.status === "ACTIVE").length}</Text>
+          <Text style={styles.clinicalTitle}>Aktiivsed ravimid: {medications.instances.filter(x => x.status === "ACTIVE").length}</Text>
           <Text style={styles.clinicalText}>Medication history: {medications.events.length}</Text>
           <Text style={styles.clinicalText}>Medication effects: {medications.effects.length}</Text>
         </View>
       )}
       {vitals && (
         <View style={styles.clinicalBlock}>
-          <Text style={styles.clinicalTitle}>Current vitals · {vitals.quality}</Text>
+          <Text style={styles.clinicalTitle}>Praegused elulised näitajad · {vitals.quality}</Text>
           <Text style={styles.clinicalText}>HR {vitals.readings.heartRate.current} · BP {vitals.readings.systolicBp.current}/{vitals.readings.diastolicBp.current}</Text>
           <Text style={styles.clinicalText}>RR {vitals.readings.respiratoryRate.current} · SpO₂ {vitals.readings.spo2.current}% · EtCO₂ {vitals.readings.etco2.current}</Text>
           <Text style={styles.clinicalText}>MAP {vitals.derived.meanArterialPressure} · SI {vitals.derived.shockIndex} · PP {vitals.derived.pulsePressure}</Text>
-          <Text style={styles.clinicalText}>Active contributors: {vitals.activeContributors.length}</Text>
+          <Text style={styles.clinicalText}>Aktiivsed mõjutegurid: {vitals.activeContributors.length}</Text>
         </View>
       )}
       <Text style={styles.caption}>

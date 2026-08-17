@@ -23,9 +23,9 @@ export default function ActiveInterventionsCard({ patientId }: { patientId: stri
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>Active interventions</Text>
+      <Text style={styles.title}>Aktiivsed sekkumised</Text>
       {active.length === 0 ? (
-        <Text style={styles.empty}>No active interventions</Text>
+        <Text style={styles.empty}>Aktiivseid sekkumisi ei ole</Text>
       ) : active.map(item => (
         <View key={item.instanceId} style={styles.row}>
           <Text style={styles.check}>✓</Text>

@@ -49,16 +49,16 @@ function refreshSession(): void {
 
     <ScrollView contentContainerStyle={styles.container}>
 
-      <Text style={styles.title}>Exercise Controller</Text>
+      <Text style={styles.title}>Õppuse juhtimine</Text>
 
       <Text style={styles.subtitle}>EXCON · Õppuse juhtimiskeskus</Text>
 
       <Pressable style={styles.instructorButton} onPress={() => router.push("/excon/dashboard")}>
-        <Text style={styles.instructorButtonText}>Open Exercise Dashboard</Text>
+        <Text style={styles.instructorButtonText}>Ava õppuse töölaud</Text>
       </Pressable>
 
       <Pressable style={styles.catalogButton} onPress={() => router.push("/excon/catalog")}>
-        <Text style={styles.instructorButtonText}>Open Exercise Catalog</Text>
+        <Text style={styles.instructorButtonText}>Ava õppuste kataloog</Text>
       </Pressable>
 
       <ExerciseStatusCard session={session} />
@@ -75,7 +75,7 @@ function refreshSession(): void {
         style={styles.backButton}
         onPress={() => router.replace("/dashboard")}
       >
-        <Text style={styles.backButtonText}>Back to Dashboard</Text>
+        <Text style={styles.backButtonText}>Tagasi töölauale</Text>
       </Pressable>
 
     </ScrollView>

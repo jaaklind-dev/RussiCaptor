@@ -14,15 +14,15 @@ export default function LoginScreen() {
 
       <Text style={styles.title}>RussiCaptor</Text>
 
-      <Text style={styles.subtitle}>Botulism Exercise</Text>
+      <Text style={styles.subtitle}>Botulismiõppus</Text>
 
-      <Text style={styles.version}>Version 0.2</Text>
+      <Text style={styles.version}>Versioon 0.2</Text>
 
       <Link href="/dashboard" asChild>
 
         <Pressable style={styles.button}>
 
-          <Text style={styles.buttonText}>Login</Text>
+          <Text style={styles.buttonText}>Logi sisse</Text>
 
         </Pressable>
 

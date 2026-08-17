@@ -8,7 +8,7 @@ type Props = {
 };
 
 export default function QrScanner({
-  buttonLabel = "Scan QR code",
+  buttonLabel = "Skaneeri QR-kood",
   onScanned,
 }: Props) {
   const [permission, requestPermission] = useCameraPermissions();

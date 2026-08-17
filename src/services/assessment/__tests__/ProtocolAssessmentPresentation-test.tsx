@@ -13,6 +13,6 @@ const result: ProtocolAssessmentResult = Object.freeze({ assessmentId: "ALS:EXPE
 
 test("WP-38 presentation shows neutral status and evidence without scoring", () => {
   const list = text(AssessmentResultList({ results: [result], onSelect: jest.fn() })); const detail = text(AssessmentResultDetail({ result }));
-  expect(list).toContain("EXPECT-CPR"); expect(list).toContain("MET"); expect(detail).toContain("ARREST"); expect(detail).toContain("CPR");
+  expect(list).toContain("EXPECT-CPR"); expect(list).toContain("Täidetud"); expect(detail).toContain("ARREST"); expect(detail).toContain("CPR");
   expect(`${list} ${detail}`).not.toMatch(/score|grade|correct|incorrect|pass|fail/i);
 });

@@ -34,9 +34,9 @@ export function ExerciseCatalogScreen() {
   const desktop = width >= 900;
 
   return <ScrollView contentContainerStyle={styles.container}>
-    <View style={styles.top}><View><Text style={styles.title}>Exercise Catalog</Text><Text style={styles.subtitle}>Canonical packages from ExercisePackageRegistry</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Back</Text></Pressable></View>
+    <View style={styles.top}><View><Text style={styles.title}>Õppuste kataloog</Text><Text style={styles.subtitle}>ExercisePackageRegistry kanoonilised paketid</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Tagasi</Text></Pressable></View>
     <PackageFilters search={search} profile={profile} compatibility={compatibility} tag={tag} profiles={profiles} tags={tags} onSearch={setSearch} onProfile={setProfile} onCompatibility={setCompatibility} onTag={setTag} />
-    <Text style={styles.count}>{filtered.length} / {entries.length} packages</Text>
+    <Text style={styles.count}>{filtered.length} / {entries.length} paketti</Text>
     <View style={[styles.layout, desktop && styles.desktop]}>
       <View style={styles.list}><PackageList entries={filtered} activeKey={activeKey} selectedKey={keyOf(selected)} onSelect={entry => setSelectedKey(keyOf(entry))} /></View>
       <View style={styles.detail}><PackageDetail entry={selected} active={keyOf(selected) === activeKey} onActivate={() => { if (selected) activeExercisePackageService.activate(selected.exercisePackage.packageId, selected.exercisePackage.packageVersion); }} /></View>

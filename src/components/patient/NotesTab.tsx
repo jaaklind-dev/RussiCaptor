@@ -20,8 +20,8 @@ export default function NotesTab({ notes, readOnly = false, onAddNote }: Props) 
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>CM Notes</Text>
-      <Text style={styles.description}>Case Manageri märkmed patsiendi käsitluse kohta.</Text>
+      <Text style={styles.title}>Juhtumikorraldaja märkmed</Text>
+      <Text style={styles.description}>Juhtumikorraldaja märkmed patsiendi käsitluse kohta.</Text>
 
       {!readOnly && (
         <View style={styles.composer}>

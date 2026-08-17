@@ -10,7 +10,7 @@ const patient = [value("patient.assessment.total", 3, "P001"), value("patient.as
 test("assessment summary presents neutral exercise and patient metrics without scoring language", () => {
   const exerciseText = text(AssessmentMetricsSummary({ metrics: exercise })).replace(/\s+/gu, " ");
   const patientText = text(AssessmentMetricsSummary({ metrics: patient, patientId: "P001" })).replace(/\s+/gu, " ");
-  expect(exerciseText).toContain("Assessable 8 / 10 applicable"); expect(exerciseText).toContain("Expectation satisfaction 75%");
-  expect(patientText).toContain("Assessment Metrics · P001"); expect(patientText).toContain("Expectation satisfaction 50%");
+  expect(exerciseText).toContain("Hinnatavaid 8 / kohalduvaid 10"); expect(exerciseText).toContain("Ootuste täitmine 75%");
+  expect(patientText).toContain("Hindamise mõõdikud · P001"); expect(patientText).toContain("Ootuste täitmine 50%");
   expect(`${exerciseText} ${patientText}`).not.toMatch(/Score:|Grade:|Performance:|pass|fail/i);
 });

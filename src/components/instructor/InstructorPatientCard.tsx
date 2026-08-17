@@ -1,6 +1,7 @@
 import type { InstructorPatientCardModel } from "@/models/InstructorDashboard";
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { patientStatusLabel } from "@/localization/et";
 
 const statusColors = {
   Stable: { border: "#2e7d32", background: "#e8f5e9", text: "#1b5e20" },
@@ -20,13 +21,13 @@ function InstructorPatientCardComponent({ patient, onPress }: {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open ${patient.patientId}`}
+      accessibilityLabel={`Ava patsient ${patient.patientId}`}
       onPress={() => onPress(patient.patientId)}
       style={({ pressed }) => [styles.card, { borderColor: colors.border, backgroundColor: colors.background }, pressed && styles.pressed]}
     >
       <View style={styles.heading}>
         <Text style={styles.patientId}>{patient.patientId}</Text>
-        <Text style={[styles.status, { color: colors.text }]}>{patient.status}</Text>
+        <Text style={[styles.status, { color: colors.text }]}>{patientStatusLabel(patient.status)}</Text>
       </View>
       <Text numberOfLines={1} style={styles.name}>{patient.name}</Text>
       <Text style={styles.meta}>{patient.location} · {patient.triage}</Text>
@@ -38,9 +39,9 @@ function InstructorPatientCardComponent({ patient, onPress }: {
         <Text style={styles.vital}>HR {value(patient.heartRate)}</Text>
         <Text style={styles.vital}>SBP {value(patient.systolicBp)}</Text>
       </View>
-      <Text style={styles.time}>Simulation: {value(patient.simulationTimeSec, "s")}</Text>
-      <Text style={styles.updated}>Updated: {patient.lastUpdate ?? "—"}</Text>
-      {!patient.hasCanonicalRuntime && <Text style={styles.missing}>Canonical runtime pending</Text>}
+      <Text style={styles.time}>Simulatsioon: {value(patient.simulationTimeSec, "s")}</Text>
+      <Text style={styles.updated}>Uuendatud: {patient.lastUpdate ?? "—"}</Text>
+      {!patient.hasCanonicalRuntime && <Text style={styles.missing}>Canonical runtime on ootel</Text>}
     </Pressable>
   );
 }

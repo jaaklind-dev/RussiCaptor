@@ -1,16 +1,17 @@
 import type { ExerciseCatalogEntry } from "@/services/exercise/ExerciseCatalogSelectors";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ActivePackageBadge } from "./ActivePackageBadge";
+import { compatibilityLabel, exercisePackageNameLabel, exercisePackageTagLabel, exerciseProfileLabel } from "@/localization/et";
 
 export function PackageCard({ entry, active, selected, onPress }: Readonly<{ entry: ExerciseCatalogEntry; active: boolean; selected: boolean; onPress: () => void }>) {
   const pkg = entry.exercisePackage;
   return (
     <Pressable testID={`catalog-package-${pkg.packageId}-${pkg.packageVersion}`} onPress={onPress} style={[styles.card, selected && styles.selected]}>
-      <View style={styles.heading}><Text style={styles.name}>{pkg.metadata.name}</Text>{active && <ActivePackageBadge />}</View>
-      <Text style={styles.meta}>{pkg.definition.profile} · v{pkg.packageVersion}</Text>
-      <Text style={[styles.compatibility, entry.compatibility === "INCOMPATIBLE" && styles.incompatible]}>{entry.compatibility}</Text>
+      <View style={styles.heading}><Text style={styles.name}>{exercisePackageNameLabel(pkg.metadata.name)}</Text>{active && <ActivePackageBadge />}</View>
+      <Text style={styles.meta}>{exerciseProfileLabel(pkg.definition.profile)} · v{pkg.packageVersion}</Text>
+      <Text style={[styles.compatibility, entry.compatibility === "INCOMPATIBLE" && styles.incompatible]}>{compatibilityLabel(entry.compatibility)}</Text>
       <Text style={styles.byline}>{pkg.metadata.author} · {pkg.metadata.organization}</Text>
-      <Text style={styles.tags}>{pkg.metadata.tags.join(" · ")}</Text>
+      <Text style={styles.tags}>{pkg.metadata.tags.map(exercisePackageTagLabel).join(" · ")}</Text>
     </Pressable>
   );
 }

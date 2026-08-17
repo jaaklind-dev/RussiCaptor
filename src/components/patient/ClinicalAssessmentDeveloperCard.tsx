@@ -16,7 +16,7 @@ export default function ClinicalAssessmentDeveloperCard() {
   return (
     <View style={styles.card}>
       <View style={styles.header}>
-        <Text style={styles.title}>Clinical Assessment</Text><Text style={styles.badge}>DEV</Text>
+        <Text style={styles.title}>Kliiniline hindamine</Text><Text style={styles.badge}>DEV</Text>
       </View>
       <View style={styles.row}>
         <Text style={styles.pass}>PASS {count("PASS")}</Text>

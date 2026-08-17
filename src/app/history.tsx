@@ -39,14 +39,14 @@ export default function HistoryScreen() {
     <View style={styles.container}>
       <AppHeader />
 
-      <Text style={styles.title}>History</Text>
-      <Text style={styles.subtitle}>Case Manageri tööajalugu</Text>
+      <Text style={styles.title}>Ajalugu</Text>
+      <Text style={styles.subtitle}>Juhtumikorraldaja tööajalugu</Text>
 
       {entries.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>Ajalugu on tühi.</Text>
           <Text style={styles.emptyText}>
-            Lõpetatud ja teisele Case Managerile üle antud patsiendid ilmuvad siia.
+            Lõpetatud ja teisele juhtumikorraldajale üle antud patsiendid ilmuvad siia.
           </Text>
         </View>
       ) : (
@@ -61,7 +61,7 @@ export default function HistoryScreen() {
       )}
 
       <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
-        <Text style={styles.secondaryButtonText}>Back</Text>
+        <Text style={styles.secondaryButtonText}>Tagasi</Text>
       </Pressable>
     </View>
   );
@@ -88,7 +88,7 @@ function HistorySection({ title, entries }: { title: string; entries: HistoryEnt
                   isTransferred ? styles.transferredBadge : styles.completedBadge,
                 ]}
               >
-                {isTransferred ? "Transferred" : "Completed"}
+                {isTransferred ? "Üle antud" : "Lõpetatud"}
               </Text>
             </View>
             <Text style={styles.patientName}>{patient.name}</Text>

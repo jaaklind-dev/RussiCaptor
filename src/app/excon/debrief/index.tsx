@@ -19,6 +19,8 @@ import { getAnalyticsReport } from "@/services/AnalyticsService";
 import { getExerciseEvaluationResult } from "@/services/ExerciseEvaluationService";
 import { ExerciseEvaluationSummary } from "@/components/excon/evaluation/ExerciseEvaluationSummary";
 import { InstructorEvaluationPanel } from "@/components/excon/evaluation/InstructorEvaluationPanel";
+import { patientOutcomeLabel, timelineCategoryLabel, timelineEventTitleLabel } from "@/localization/dataDrivenEt";
+import { exerciseLifecycleLabel } from "@/localization/et";
 
 const categories: readonly ExerciseTimelineCategory[] = ["EXERCISE", "PATIENT", "COMMAND", "AUDIT"];
 const outcomes: readonly PatientOutcome[] = ["ALIVE", "DECEASED", "TRANSFERRED", "STILL_ACTIVE", "COMPLETED_SCENARIO"];
@@ -50,26 +52,26 @@ export default function DebriefScreen() {
     return () => clearInterval(timer);
   }, [cursor.playing, report.simulationDurationSec]);
   return <FlatList data={visibleTimeline} keyExtractor={event => event.id} contentContainerStyle={styles.container}
-    ListHeaderComponent={<View><View style={styles.top}><View><Text style={styles.title}>Debrief</Text><Text style={styles.subtitle}>Canonical read-only exercise reconstruction</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Back</Text></Pressable></View>
+    ListHeaderComponent={<View><View style={styles.top}><View><Text style={styles.title}>Debriif</Text><Text style={styles.subtitle}>Kanoonilise õppuse kirjutuskaitstud rekonstruktsioon</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Tagasi</Text></Pressable></View>
       <DebriefSummary report={report} />
       {report.protocolProvenance && <AssessmentMetricsSummary metrics={analytics.metrics} onOpenAssessment={() => router.push("/excon/assessment")} />}
-      {evaluation && <><ExerciseEvaluationSummary result={evaluation} compact /><InstructorEvaluationPanel source={evaluation} readOnly /><Pressable style={styles.evaluationButton} onPress={() => router.push("/excon/evaluation" as never)}><Text style={styles.analyticsButtonText}>Open Exercise Evaluation</Text></Pressable></>}
+      {evaluation && <><ExerciseEvaluationSummary result={evaluation} compact /><InstructorEvaluationPanel source={evaluation} readOnly /><Pressable style={styles.evaluationButton} onPress={() => router.push("/excon/evaluation" as never)}><Text style={styles.analyticsButtonText}>Ava õppuse hinnang</Text></Pressable></>}
       <ExercisePackageInformationCard exercisePackage={exercisePackage} compatibility={exercisePackageValidator.compatibility(exercisePackage)} />
       <ExerciseInformationCard definition={definition} />
-      <Pressable style={styles.analyticsButton} onPress={() => router.push("/excon/analytics")}><Text style={styles.analyticsButtonText}>Open Analytics</Text></Pressable>
-      {report.protocolProvenance && <Pressable style={styles.assessmentButton} onPress={() => router.push("/excon/assessment")}><Text style={styles.analyticsButtonText}>Open Protocol Assessment</Text></Pressable>}
+      <Pressable style={styles.analyticsButton} onPress={() => router.push("/excon/analytics")}><Text style={styles.analyticsButtonText}>Ava analüütika</Text></Pressable>
+      {report.protocolProvenance && <Pressable style={styles.assessmentButton} onPress={() => router.push("/excon/assessment")}><Text style={styles.analyticsButtonText}>Ava protokollipõhine hindamine</Text></Pressable>}
       <TimelinePlaybackControls cursor={cursor} durationSec={report.simulationDurationSec} previous={previous} next={next} onToggle={() => setCursor(current => current.playing ? pause(current) : play(current))} onSeek={(seconds, event) => setCursor(current => event ? jumpToEvent(current, event) : seek(current, seconds, report.simulationDurationSec))} />
-      <TextInput value={search} onChangeText={setSearch} placeholder="Search patients" style={styles.input} />
+      <TextInput value={search} onChangeText={setSearch} placeholder="Otsi patsiente" style={styles.input} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-        <FilterChip label={`Phase: ${report.exerciseState}`} active={phaseOnly} onPress={() => setPhaseOnly(value => !value)} />
-        {categories.map(value => <FilterChip key={value} label={value} active={category === value} onPress={() => setCategory(current => current === value ? undefined : value)} />)}
-        {outcomes.map(value => <FilterChip key={value} label={value.replaceAll("_", " ")} active={outcome === value} onPress={() => setOutcome(current => current === value ? undefined : value)} />)}
+        <FilterChip label={`Etapp: ${exerciseLifecycleLabel(report.exerciseState)}`} active={phaseOnly} onPress={() => setPhaseOnly(value => !value)} />
+        {categories.map(value => <FilterChip key={value} label={timelineCategoryLabel(value)} active={category === value} onPress={() => setCategory(current => current === value ? undefined : value)} />)}
+        {outcomes.map(value => <FilterChip key={value} label={patientOutcomeLabel(value)} active={outcome === value} onPress={() => setOutcome(current => current === value ? undefined : value)} />)}
         {caseManagers.map(value => <FilterChip key={value} label={`CM: ${value}`} active={caseManager === value} onPress={() => setCaseManager(current => current === value ? undefined : value)} />)}
       </ScrollView>
       <View style={styles.chips}>{visiblePatients.map(item => <Pressable key={item.patientId} style={[styles.chip, cursor.selectedPatientId === item.patientId && styles.chipActive]} onPress={() => setCursor(current => jumpToPatient(current, item.patientId))}><Text style={styles.chipText}>{item.patientId}</Text></Pressable>)}</View>
-      <PatientPlayback view={patient} /><Text style={styles.section}>Events visible at playback cursor · {visibleTimeline.length}</Text></View>}
-    renderItem={({ item }) => <Pressable style={[styles.event, item.id === cursor.selectedEventId && styles.selected]} onPress={() => setCursor(current => jumpToEvent(current, item))}><Text style={styles.eventTime}>T+{item.simulationTimeSec}s · {item.category}</Text><Text style={styles.eventTitle}>{item.title}</Text><Text style={styles.eventMeta}>{item.patientId ?? "Exercise"}</Text></Pressable>}
-    ListEmptyComponent={<Text style={styles.empty}>No events at this playback position.</Text>} />;
+      <PatientPlayback view={patient} /><Text style={styles.section}>Taasesituse hetkel nähtavad sündmused · {visibleTimeline.length}</Text></View>}
+    renderItem={({ item }) => <Pressable style={[styles.event, item.id === cursor.selectedEventId && styles.selected]} onPress={() => setCursor(current => jumpToEvent(current, item))}><Text style={styles.eventTime}>T+{item.simulationTimeSec}s · {timelineCategoryLabel(item.category)}</Text><Text style={styles.eventTitle}>{timelineEventTitleLabel(item)}</Text><Text style={styles.eventMeta}>{item.patientId ?? "Õppus"}</Text></Pressable>}
+    ListEmptyComponent={<Text style={styles.empty}>Selles taasesituse asukohas sündmusi ei ole.</Text>} />;
 }
 function FilterChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return <Pressable style={[styles.filterChip, active && styles.filterChipActive]} onPress={onPress}><Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{label}</Text></Pressable>;

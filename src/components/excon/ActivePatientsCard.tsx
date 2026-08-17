@@ -51,7 +51,7 @@ export default function ActivePatientsCard() {
               style={styles.finishButton}
               onPress={() => confirmFinish(patient.id, patient.name)}
             >
-              <Text style={styles.actionButtonText}>Finish</Text>
+              <Text style={styles.actionButtonText}>Lõpeta</Text>
             </Pressable>
           </View>
         ))

@@ -21,6 +21,7 @@ import {
   getRuntimePersistenceFailureVersion,
   subscribeToRuntimePersistenceFailure,
 } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
+import { exerciseLifecycleLabel, exercisePackageNameLabel } from "@/localization/et";
 
 const initialFilters: InstructorDashboardFilters = {
   location: "All", triage: "All", caseManager: "All", status: "All",
@@ -63,13 +64,13 @@ export default function ExerciseDashboardScreen() {
         <View>
           <View style={styles.topBar}>
             <View>
-              <Text style={styles.title}>Exercise Dashboard</Text>
-              <Text style={styles.exercise}>{snapshot.exerciseName}</Text>
+              <Text style={styles.title}>Õppuse töölaud</Text>
+              <Text style={styles.exercise}>{exercisePackageNameLabel(snapshot.exerciseName)}</Text>
             </View>
             <View style={styles.exerciseState}>
               <Text style={styles.exerciseTime}>T+{snapshot.exerciseTimeSec}s</Text>
               <Text style={[styles.state, snapshot.exerciseState === "RUNNING" ? styles.running : styles.paused]}>
-                {snapshot.exerciseState} · ×{snapshot.exerciseSpeed}
+                {exerciseLifecycleLabel(snapshot.exerciseState)} · ×{snapshot.exerciseSpeed}
               </Text>
             </View>
           </View>
@@ -78,21 +79,21 @@ export default function ExerciseDashboardScreen() {
           <PrepareNewExerciseCard snapshot={exerciseSnapshot} onPrepared={refreshPresentation} />
           <ExercisePackageInformationCard exercisePackage={exercisePackage} compatibility={exercisePackageValidator.compatibility(exercisePackage)} />
           <ExerciseInformationCard definition={exerciseDefinition} />
-          <Pressable style={styles.timelineButton} onPress={() => router.push("/excon/timeline")}><Text style={styles.timelineButtonText}>Open Exercise Timeline</Text></Pressable>
-          <Pressable style={styles.debriefButton} onPress={() => router.push("/excon/debrief")}><Text style={styles.timelineButtonText}>Open Debrief</Text></Pressable>
+          <Pressable style={styles.timelineButton} onPress={() => router.push("/excon/timeline")}><Text style={styles.timelineButtonText}>Ava õppuse ajajoon</Text></Pressable>
+          <Pressable style={styles.debriefButton} onPress={() => router.push("/excon/debrief")}><Text style={styles.timelineButtonText}>Ava debriif</Text></Pressable>
           <InstructorFilterBar
             filters={filters}
             options={options}
             onChange={(key, value) => setFilters(current => ({ ...current, [key]: value }))}
           />
           {__DEV__ && <ResourceMonitorCard />}
-          <Text style={styles.count}>{visiblePatients.length} / {snapshot.patients.length} patients</Text>
+          <Text style={styles.count}>{visiblePatients.length} / {snapshot.patients.length} patsienti</Text>
         </View>
       )}
-      ListEmptyComponent={<Text style={styles.empty}>No patients match the selected filters.</Text>}
+      ListEmptyComponent={<Text style={styles.empty}>Valitud filtritele vastavaid patsiente ei ole.</Text>}
       ListFooterComponent={(
         <Pressable style={styles.backButton} onPress={() => router.replace("/excon")}>
-          <Text style={styles.backText}>Back to Exercise Controller</Text>
+          <Text style={styles.backText}>Tagasi EXCON-i vaatesse</Text>
         </Pressable>
       )}
     />

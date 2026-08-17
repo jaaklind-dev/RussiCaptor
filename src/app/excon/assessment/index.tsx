@@ -10,6 +10,7 @@ import { filterProtocolAssessment } from "@/services/assessment/ProtocolAssessme
 import { router, useLocalSearchParams } from "expo-router";
 import { useState, useSyncExternalStore } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { assessmentStatusLabel } from "@/localization/et";
 
 const statuses: readonly ProtocolAssessmentStatus[] = ["MET", "NOT_MET", "NOT_APPLICABLE", "UNAVAILABLE"];
 
@@ -22,7 +23,7 @@ export default function ProtocolAssessmentScreen() {
   const [expectationId, setExpectationId] = useState<string>();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | undefined>(assessmentId);
-  if (!report) return <View style={styles.container}><Text style={styles.title}>Protocol Assessment</Text><Text style={styles.empty}>No protocol is bound to this exercise.</Text><Pressable onPress={() => router.back()}><Text style={styles.back}>Back</Text></Pressable></View>;
+  if (!report) return <View style={styles.container}><Text style={styles.title}>Protokollipõhine hindamine</Text><Text style={styles.empty}>Selle õppusega pole protokolli seotud.</Text><Pressable onPress={() => router.back()}><Text style={styles.back}>Tagasi</Text></Pressable></View>;
   const analytics = getAnalyticsReport();
   const evaluation = getExerciseEvaluationResult();
   const results = filterProtocolAssessment(report, { status, patientId, expectationId, search });
@@ -30,12 +31,12 @@ export default function ProtocolAssessmentScreen() {
   const patients = [...new Set(report.results.flatMap(item => item.patientId ? [item.patientId] : []))];
   const expectations = [...new Set(report.results.map(item => item.expectationId))];
   return <ScrollView contentContainerStyle={styles.container}>
-    <View style={styles.top}><View><Text style={styles.title}>Protocol Assessment</Text><Text style={styles.subtitle}>{report.protocolId}@{report.protocolVersion} · read-only factual evaluation</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Back</Text></Pressable></View>
-    <View style={styles.hash}><Text style={styles.hashText}>Assessment · {report.assessmentHash.slice(0, 16)}…</Text><Text style={styles.hashText}>Debrief · {report.sourceDebriefHash.slice(0, 16)}…</Text></View>
+    <View style={styles.top}><View><Text style={styles.title}>Protokollipõhine hindamine</Text><Text style={styles.subtitle}>{report.protocolId}@{report.protocolVersion} · ainult vaatamiseks mõeldud faktipõhine hinnang</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Tagasi</Text></Pressable></View>
+    <View style={styles.hash}><Text style={styles.hashText}>Hindamine · {report.assessmentHash.slice(0, 16)}…</Text><Text style={styles.hashText}>Debriif · {report.sourceDebriefHash.slice(0, 16)}…</Text></View>
     <AssessmentMetricsSummary metrics={analytics.metrics} patientId={patientId} />
-    {evaluation && <><ExerciseEvaluationSummary result={evaluation} compact /><Pressable style={styles.evaluationButton} onPress={() => router.push("/excon/evaluation" as never)}><Text style={styles.evaluationButtonText}>Open Exercise Evaluation</Text></Pressable></>}
-    <TextInput value={search} onChangeText={setSearch} placeholder="Search expectations" style={styles.input} />
-    <ScrollView horizontal contentContainerStyle={styles.filters}>{statuses.map(value => <Chip key={value} label={value.replaceAll("_", " ")} active={status === value} onPress={() => setStatus(current => current === value ? undefined : value)} />)}{patients.map(value => <Chip key={value} label={value} active={patientId === value} onPress={() => setPatientId(current => current === value ? undefined : value)} />)}{expectations.map(value => <Chip key={value} label={value} active={expectationId === value} onPress={() => setExpectationId(current => current === value ? undefined : value)} />)}</ScrollView>
+    {evaluation && <><ExerciseEvaluationSummary result={evaluation} compact /><Pressable style={styles.evaluationButton} onPress={() => router.push("/excon/evaluation" as never)}><Text style={styles.evaluationButtonText}>Ava õppuse hinnang</Text></Pressable></>}
+    <TextInput value={search} onChangeText={setSearch} placeholder="Otsi ootusi" style={styles.input} />
+    <ScrollView horizontal contentContainerStyle={styles.filters}>{statuses.map(value => <Chip key={value} label={assessmentStatusLabel(value)} active={status === value} onPress={() => setStatus(current => current === value ? undefined : value)} />)}{patients.map(value => <Chip key={value} label={value} active={patientId === value} onPress={() => setPatientId(current => current === value ? undefined : value)} />)}{expectations.map(value => <Chip key={value} label={value} active={expectationId === value} onPress={() => setExpectationId(current => current === value ? undefined : value)} />)}</ScrollView>
     <AssessmentResultDetail result={selected} />
     <AssessmentResultList results={results} selectedId={selectedId} onSelect={setSelectedId} />
   </ScrollView>;

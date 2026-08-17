@@ -16,22 +16,22 @@ export default function ExerciseControlsCard({ snapshot, onApplied }: { snapshot
   const issue = (commandType: ExerciseControlCommandType, speed?: CanonicalExerciseSpeed) => {
     const current = getCanonicalExerciseSnapshot();
     const result = handleExerciseControlCommand(createExerciseControlCommand({ exerciseId: current.exerciseId, commandType, expectedVersion: current.version, speed }));
-    if (!result.ok) Alert.alert("Command rejected", result.message);
+    if (!result.ok) Alert.alert("Käsk lükati tagasi", result.message);
     else onApplied?.();
   };
-  const confirmComplete = () => Alert.alert("Complete exercise?", "This is final and does not reset exercise state.", [
-    { text: "Cancel", style: "cancel" }, { text: "Complete", style: "destructive", onPress: () => issue("COMPLETE_EXERCISE") },
+  const confirmComplete = () => Alert.alert("Kas lõpetada õppus?", "See toiming on lõplik ega lähtesta õppuse olekut.", [
+    { text: "Tühista", style: "cancel" }, { text: "Lõpeta õppus", style: "destructive", onPress: () => issue("COMPLETE_EXERCISE") },
   ]);
-  const action = snapshot.lifecycleState === "READY" ? { label: "▶ Start", type: "START_EXERCISE" as const, enabled: enabled.start }
-    : snapshot.lifecycleState === "PAUSED" ? { label: "▶ Resume", type: "RESUME_EXERCISE" as const, enabled: enabled.resume }
-      : { label: "⏸ Pause", type: "PAUSE_EXERCISE" as const, enabled: enabled.pause };
+  const action = snapshot.lifecycleState === "READY" ? { label: "▶ Alusta", type: "START_EXERCISE" as const, enabled: enabled.start }
+    : snapshot.lifecycleState === "PAUSED" ? { label: "▶ Jätka", type: "RESUME_EXERCISE" as const, enabled: enabled.resume }
+      : { label: "⏸ Peata", type: "PAUSE_EXERCISE" as const, enabled: enabled.pause };
   return <View style={styles.card}>
-    <Text style={styles.title}>Exercise controls</Text>
+    <Text style={styles.title}>Õppuse juhtimine</Text>
     <View style={styles.row}>
       <Pressable disabled={!action.enabled} style={[styles.button, !action.enabled && styles.disabled]} onPress={() => issue(action.type)}><Text style={styles.buttonText}>{action.label}</Text></Pressable>
-      <Pressable disabled={!enabled.complete} style={[styles.complete, !enabled.complete && styles.disabled]} onPress={confirmComplete}><Text style={styles.buttonText}>✓ Complete</Text></Pressable>
+      <Pressable disabled={!enabled.complete} style={[styles.complete, !enabled.complete && styles.disabled]} onPress={confirmComplete}><Text style={styles.buttonText}>✓ Lõpeta õppus</Text></Pressable>
     </View>
-    <Text style={styles.label}>Simulation speed</Text>
+    <Text style={styles.label}>Simulatsiooni kiirus</Text>
     <View style={styles.row}>{SPEEDS.map(speed => <Pressable key={speed} disabled={!enabled.speed}
       style={[styles.speed, snapshot.speed === speed && styles.active, !enabled.speed && styles.disabled]}
       onPress={() => issue("SET_EXERCISE_SPEED", speed)}><Text style={styles.buttonText}>×{speed}</Text></Pressable>)}</View>

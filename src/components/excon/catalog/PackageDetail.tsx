@@ -1,37 +1,38 @@
 import type { ExerciseCatalogEntry } from "@/services/exercise/ExerciseCatalogSelectors";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ActivePackageBadge } from "./ActivePackageBadge";
+import { compatibilityLabel, exercisePackageNameLabel, exercisePackageTagLabel, exerciseProfileLabel } from "@/localization/et";
 
-const List = ({ title, values }: Readonly<{ title: string; values: readonly string[] }>) => <View style={styles.section}><Text style={styles.label}>{title}</Text>{values.length ? values.map(value => <Text key={value} style={styles.item}>• {value}</Text>) : <Text style={styles.item}>None</Text>}</View>;
+const List = ({ title, values }: Readonly<{ title: string; values: readonly string[] }>) => <View style={styles.section}><Text style={styles.label}>{title}</Text>{values.length ? values.map(value => <Text key={value} style={styles.item}>• {value}</Text>) : <Text style={styles.item}>Puudub</Text>}</View>;
 const Hash = ({ title, value }: Readonly<{ title: string; value: string }>) => <View style={styles.section}><Text style={styles.label}>{title}</Text><Text selectable style={styles.hash}>{value}</Text></View>;
 
 export function PackageDetail({ entry, active, onActivate }: Readonly<{ entry?: ExerciseCatalogEntry; active: boolean; onActivate: () => void }>) {
-  if (!entry) return <View style={styles.empty}><Text style={styles.emptyText}>Select a package to inspect its canonical metadata.</Text></View>;
+  if (!entry) return <View style={styles.empty}><Text style={styles.emptyText}>Vali pakett, et vaadata selle canonical metaandmeid.</Text></View>;
   const pkg = entry.exercisePackage;
   return <View testID="catalog-package-detail" style={styles.card}>
-    <View style={styles.heading}><Text style={styles.title}>{pkg.metadata.name}</Text>{active && <ActivePackageBadge />}</View>
+    <View style={styles.heading}><Text style={styles.title}>{exercisePackageNameLabel(pkg.metadata.name)}</Text>{active && <ActivePackageBadge />}</View>
     <Text style={styles.description}>{pkg.metadata.description}</Text>
-    <Text style={styles.meta}>{pkg.packageId} · package v{pkg.packageVersion} · definition v{pkg.definition.definitionVersion}</Text>
-    <Text style={styles.meta}>{pkg.definition.profile} · {entry.compatibility}</Text>
+    <Text style={styles.meta}>{pkg.packageId} · pakett v{pkg.packageVersion} · definitsioon v{pkg.definition.definitionVersion}</Text>
+    <Text style={styles.meta}>{exerciseProfileLabel(pkg.definition.profile)} · {compatibilityLabel(entry.compatibility)}</Text>
     <Text style={styles.meta}>{pkg.metadata.author} · {pkg.metadata.organization}</Text>
-    <Hash title="Package hash" value={pkg.packageHash} />
-    <Hash title="Definition hash" value={pkg.manifest.definitionHash} />
-    <List title="Objectives" values={pkg.definition.objectives.map(item => `${item.name}: ${item.description}`)} />
-    <List title="Capabilities" values={pkg.definition.capabilities} />
-    <List title="PatientProcesses" values={pkg.enabledPatientProcesses} />
-    <List title="Analytics providers" values={pkg.enabledAnalyticsProviders} />
-    <List title="Metric providers" values={pkg.enabledMetricProviders} />
-    <List title="Required Clinical Modules" values={(pkg.requiredClinicalModules ?? []).map(module => `${module.moduleId}@${module.version}`)} />
-    <List title="Composed Clinical Modules" values={(pkg.definition.clinicalModuleComposition?.modules ?? []).map(module => `${module.moduleId}@${module.version} · order ${module.compositionOrder}`)} />
+    <Hash title="Paketi hash" value={pkg.packageHash} />
+    <Hash title="Definitsiooni hash" value={pkg.manifest.definitionHash} />
+    <List title="Eesmärgid" values={pkg.definition.objectives.map(item => `${item.name}: ${item.description}`)} />
+    <List title="Võimekused" values={pkg.definition.capabilities} />
+    <List title="Patsiendiprotsessid" values={pkg.enabledPatientProcesses} />
+    <List title="Analüütikapakkujad" values={pkg.enabledAnalyticsProviders} />
+    <List title="Mõõdikupakkujad" values={pkg.enabledMetricProviders} />
+    <List title="Nõutavad kliinilised moodulid" values={(pkg.requiredClinicalModules ?? []).map(module => `${module.moduleId}@${module.version}`)} />
+    <List title="Komponeeritud kliinilised moodulid" values={(pkg.definition.clinicalModuleComposition?.modules ?? []).map(module => `${module.moduleId}@${module.version} · järjekord ${module.compositionOrder}`)} />
     {pkg.definition.protocolProvenance && <>
       <List title="Protocol" values={[`${pkg.definition.protocolProvenance.name} · ${pkg.definition.protocolProvenance.protocolId}@${pkg.definition.protocolProvenance.version} · ${pkg.definition.protocolProvenance.status}`]} />
-      <Hash title="Protocol hash" value={pkg.definition.protocolProvenance.protocolHash} />
-      <List title="Protocol authority" values={[pkg.definition.protocolProvenance.authority, pkg.definition.protocolProvenance.publicationReference ?? "No publication reference"]} />
-      <List title="Required protocol capabilities" values={pkg.definition.protocolProvenance.requiredCapabilities} />
+      <Hash title="Protokolli hash" value={pkg.definition.protocolProvenance.protocolHash} />
+      <List title="Protokolli autoriteet" values={[pkg.definition.protocolProvenance.authority, pkg.definition.protocolProvenance.publicationReference ?? "Publikatsiooniviide puudub"]} />
+      <List title="Nõutavad protokollivõimekused" values={pkg.definition.protocolProvenance.requiredCapabilities} />
     </>}
-    <List title="Tags" values={pkg.metadata.tags} />
-    <Pressable testID="catalog-activate" disabled={active || entry.compatibility === "INCOMPATIBLE"} onPress={onActivate} style={[styles.button, (active || entry.compatibility === "INCOMPATIBLE") && styles.disabled]}><Text style={styles.buttonText}>{active ? "Active package" : entry.compatibility === "INCOMPATIBLE" ? "Incompatible package" : "Activate package"}</Text></Pressable>
-    <Text style={styles.note}>Activation selects the package for future exercise setup. It does not start or modify the current exercise.</Text>
+    <List title="Märksõnad" values={pkg.metadata.tags.map(exercisePackageTagLabel)} />
+    <Pressable testID="catalog-activate" disabled={active || entry.compatibility === "INCOMPATIBLE"} onPress={onActivate} style={[styles.button, (active || entry.compatibility === "INCOMPATIBLE") && styles.disabled]}><Text style={styles.buttonText}>{active ? "Aktiivne pakett" : entry.compatibility === "INCOMPATIBLE" ? "Ühildumatu pakett" : "Aktiveeri pakett"}</Text></Pressable>
+    <Text style={styles.note}>Aktiveerimine valib paketi tulevase õppuse ettevalmistamiseks. See ei käivita ega muuda praegust õppust.</Text>
   </View>;
 }
 

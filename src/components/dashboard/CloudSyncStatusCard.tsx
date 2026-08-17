@@ -7,6 +7,7 @@ import {
   type CloudSyncStatus,
 } from "@/services/CloudSyncService";
 import { getRuntimeCheckpointSyncStatus, subscribeToRuntimeCheckpointSync, takeOverRuntimeWriter } from "@/services/RuntimeCheckpointSyncService";
+import { authorityStateLabel } from "@/localization/et";
 
 export async function resumeRuntime(
   resume: typeof takeOverRuntimeWriter = takeOverRuntimeWriter,
@@ -69,12 +70,12 @@ export default function CloudSyncStatusCard() {
             : "Muudatused jõuavad teiste õppuse seadmeteni reaalajas."}
         </Text>
         <Text style={styles.caption}>
-          {runtimeStatus.state === "WRITER" ? `Runtime writer · rev ${runtimeStatus.revision ?? 0}`
-            : runtimeStatus.state === "READER" ? "Runtime active on another device · read-only"
-            : runtimeStatus.state === "CONFLICT" ? `Runtime authority conflict: ${runtimeStatus.code ?? "unknown"}`
-            : runtimeStatus.state === "OFFLINE" ? "Runtime checkpoint backend unavailable"
-            : runtimeStatus.state === "FAILED" ? `Runtime authority startup failed: ${runtimeStatus.code ?? "unknown"}`
-            : "Runtime checkpoint authority connecting"}
+          {runtimeStatus.state === "WRITER" ? `${authorityStateLabel("WRITER")} · versioon ${runtimeStatus.revision ?? 0}`
+            : runtimeStatus.state === "READER" ? "Simulatsioon töötab teises seadmes · ainult vaatamine"
+            : runtimeStatus.state === "CONFLICT" ? `Juhtimisõiguse konflikt: ${runtimeStatus.code ?? "tundmatu"}`
+            : runtimeStatus.state === "OFFLINE" ? "Simulatsiooni kontrollpunkti teenus pole saadaval"
+            : runtimeStatus.state === "FAILED" ? `Juhtimisõiguse käivitamine ebaõnnestus: ${runtimeStatus.code ?? "tundmatu"}`
+            : authorityStateLabel("CONNECTING")}
         </Text>
         {runtimeStatus.state === "READER" && (
           <Pressable
@@ -83,7 +84,7 @@ export default function CloudSyncStatusCard() {
             style={styles.takeoverButton}
             onPress={() => void resumeRuntime()}
           >
-            <Text style={styles.takeoverText}>Resume Runtime</Text>
+            <Text style={styles.takeoverText}>Jätka simulatsiooni</Text>
           </Pressable>
         )}
       </View>

@@ -1,4 +1,5 @@
 import { ExerciseSession } from "@/models/ExerciseSession";
+import { exerciseLifecycleLabel } from "@/localization/et";
 import { StyleSheet, Text, View } from "react-native";
 
 type Props = {
@@ -31,7 +32,7 @@ export default function ExerciseStatusCard({
               : styles.stopped,
         ]}
       >
-        {session.state.toUpperCase()}
+        {exerciseLifecycleLabel(session.state.toUpperCase())}
       </Text>
 
       <Text style={styles.label}>Aeg</Text>

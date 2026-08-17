@@ -58,10 +58,10 @@ export default function DashboardScreen() {
 
       <AppHeader />
 
-      <Text style={styles.title}>CM Dashboard</Text>
+      <Text style={styles.title}>Juhtumikorraldaja töölaud</Text>
 
       <Text style={styles.subtitle}>
-        Case Manager: {selectedCaseManager.name}
+        Juhtumikorraldaja: {selectedCaseManager.name}
       </Text>
       <Text style={styles.locationLine}>
         Asukoht: {getCurrentLocationZone()?.name ?? "Määramata"}
@@ -113,19 +113,19 @@ export default function DashboardScreen() {
 
       <View style={styles.card}>
 
-        <Text style={styles.row}>🟢 Active: {stats.active}</Text>
+        <Text style={styles.row}>🟢 Aktiivsed: {stats.active}</Text>
 
-        <Text style={styles.row}>🔵 Incoming: {stats.incoming}</Text>
+        <Text style={styles.row}>🔵 Saabuvad: {stats.incoming}</Text>
 
-        <Text style={styles.row}>⚫ Transferred: {stats.transferred}</Text>
+        <Text style={styles.row}>⚫ Üle antud: {stats.transferred}</Text>
 
-        <Text style={styles.row}>✅ Completed: {stats.completed}</Text>
+        <Text style={styles.row}>✅ Lõpetatud: {stats.completed}</Text>
 
       </View>
 
       <Pressable style={styles.button} onPress={() => router.push("/scan")}>
 
-        <Text style={styles.buttonText}>Scan Patient</Text>
+        <Text style={styles.buttonText}>Skaneeri patsient</Text>
 
       </Pressable>
 
@@ -133,13 +133,13 @@ export default function DashboardScreen() {
         style={styles.secondaryButton}
         onPress={() => router.push("/location")}
       >
-        <Text style={styles.secondaryButtonText}>Scan Location</Text>
+        <Text style={styles.secondaryButtonText}>Skaneeri asukoht</Text>
       </Pressable>
 
       <Pressable style={styles.secondaryButton} onPress={() => router.push("/patients")}>
 
         <Text style={styles.secondaryButtonText}>
-          My Patients
+          Minu patsiendid
           {takeoverRequestCount > 0
             ? ` · ${takeoverRequestCount} taotlus(t)`
             : ""}
@@ -149,7 +149,7 @@ export default function DashboardScreen() {
 
       <Pressable style={styles.secondaryButton} onPress={() => router.push("/history")}>
 
-        <Text style={styles.secondaryButtonText}>History</Text>
+        <Text style={styles.secondaryButtonText}>Ajalugu</Text>
 
       </Pressable>
       <Pressable
@@ -173,17 +173,23 @@ const styles = StyleSheet.create({
 
     backgroundColor: "#ffffff",
 
-    justifyContent: "center",
+    justifyContent: "flex-start",
 
     alignItems: "center",
 
     padding: 24,
 
+    paddingTop: 120,
+
   },
 
   title: {
 
-    fontSize: 38,
+    fontSize: 30,
+
+    lineHeight: 36,
+
+    maxWidth: 360,
 
     fontWeight: "bold",
 

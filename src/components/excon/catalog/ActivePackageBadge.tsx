@@ -1,7 +1,7 @@
 import { StyleSheet, Text } from "react-native";
 
 export function ActivePackageBadge() {
-  return <Text style={styles.badge}>ACTIVE</Text>;
+  return <Text style={styles.badge}>AKTIIVNE</Text>;
 }
 
 const styles = StyleSheet.create({

@@ -74,7 +74,7 @@ export default function TakeoverRequestsCard() {
                 onPress={() => {
                   Alert.alert(
                     "Nõustu ülevõtmisega?",
-                    `Patsiendi uus Case Manager on ${request.toCaseManagerName}.`,
+                    `Patsiendi uus juhtumikorraldaja on ${request.toCaseManagerName}.`,
                     [
                       { text: "Katkesta", style: "cancel" },
                       {

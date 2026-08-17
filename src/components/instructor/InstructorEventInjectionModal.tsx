@@ -32,14 +32,14 @@ export function InstructorEventInjectionModal({ visible, patient, onClose }: Pro
   function close() { setSelected(undefined); setSubmission("Ready"); setResult(undefined); onClose(); }
   return <Modal visible={visible} animationType="slide" transparent onRequestClose={close}>
     <View style={styles.backdrop}><View style={styles.sheet}>
-      <View style={styles.heading}><View><Text style={styles.title}>Inject event</Text><Text style={styles.patient}>{patient.patientId} · {patient.name} · {patient.location}</Text></View>
-        <Pressable accessibilityRole="button" onPress={close}><Text style={styles.close}>Close</Text></Pressable></View>
+      <View style={styles.heading}><View><Text style={styles.title}>Lisa sündmus</Text><Text style={styles.patient}>{patient.patientId} · {patient.name} · {patient.location}</Text></View>
+        <Pressable accessibilityRole="button" onPress={close}><Text style={styles.close}>Sulge</Text></Pressable></View>
       <ScrollView contentContainerStyle={styles.list}>{definitions.map(({ definition, availability }) =>
         <Pressable key={definition.eventType} disabled={!availability.available || submission === "Submitting"}
           onPress={() => { setSelected(definition.eventType); setSubmission("Ready"); setResult(undefined); }}
           style={[styles.event, selected === definition.eventType && styles.selected, !availability.available && styles.disabled]}>
           <Text style={styles.eventTitle}>{definition.label}</Text><Text style={styles.description}>{definition.description}</Text>
-          <Text style={[styles.availability, availability.available ? styles.available : styles.unavailable]}>{availability.available ? "Available" : `Unavailable: ${availability.reason}`}</Text>
+          <Text style={[styles.availability, availability.available ? styles.available : styles.unavailable]}>{availability.available ? "Saadaval" : `Pole saadaval: ${availability.reason}`}</Text>
         </Pressable>)}</ScrollView>
       {selectedDefinition?.availability.available && <View style={styles.confirm}><Text style={styles.confirmText}>Inject “{selectedDefinition.definition.label}” into {patient.patientId}?</Text>
         <Text style={styles.description}>{patient.name} · {patient.location}</Text>
