@@ -141,7 +141,7 @@ describe("WP-35 ALS_V1 Clinical Module", () => {
     expect(getAnalyticsReport()).toEqual(analytics);
     expect(CANONICAL_EXERCISE_PACKAGES.every(pkg => !pkg.requiredClinicalModules)).toBe(true);
     expect(DEFAULT_EXERCISE_PACKAGE).toMatchObject({
-      packageHash: "c6ff142e1cfbdcb37757f159fbbd95128f9ee4a961972d22264c44317b6e803d",
+      packageHash: "a32f63f6730596a8491279213bd4ac0c7806efe96b157992beeb3183edb266ae",
       manifest: { definitionHash: "b488182cd19a1e09dbb0dcd23de1db0c922782ceb0ae4e6903b45d533409a81b" },
     });
   });

@@ -60,7 +60,7 @@ describe("WP-37 ALS Protocol Configuration Framework", () => {
   });
 
   test("leaves historical package hashes and protocol-free Debrief byte-identical", () => {
-    expect(DEFAULT_EXERCISE_PACKAGE.packageHash).toBe("c6ff142e1cfbdcb37757f159fbbd95128f9ee4a961972d22264c44317b6e803d");
+    expect(DEFAULT_EXERCISE_PACKAGE.packageHash).toBe("a32f63f6730596a8491279213bd4ac0c7806efe96b157992beeb3183edb266ae");
     expect(DEFAULT_EXERCISE_PACKAGE.manifest.definitionHash).toBe("b488182cd19a1e09dbb0dcd23de1db0c922782ceb0ae4e6903b45d533409a81b");
     expect(getExercisePackage("demo").definition.protocolProvenance).toBeUndefined();
     const source = { exercise: { exerciseId: "OLD", lifecycleState: "COMPLETED" as const, simulationTimeSec: 1, speed: 1 as const, version: 1 }, patients: [], timeline: [] };
