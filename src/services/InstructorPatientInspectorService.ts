@@ -22,8 +22,8 @@ import { projectInstructorPatientInspector } from "@/services/runtime/selectors/
 let cachedKey = "";
 let cachedModel: InstructorPatientInspectorModel | undefined;
 
-export function getInstructorPatientInspector(patientId: string): InstructorPatientInspectorModel | undefined {
-  const key = `${patientId}:${getInstructorPatientInspectorVersion()}`;
+export function getInstructorPatientInspector(patientId: string, observedVersion = getInstructorPatientInspectorVersion()): InstructorPatientInspectorModel | undefined {
+  const key = `${patientId}:${observedVersion}`;
   if (cachedModel && cachedKey === key) return cachedModel;
   const patient = findPatientById(patientId);
   if (!patient) return undefined;

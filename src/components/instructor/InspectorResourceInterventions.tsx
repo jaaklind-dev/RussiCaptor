@@ -5,18 +5,18 @@ import { useState, useSyncExternalStore } from "react";
 import {
   getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots,
 } from "@/services/RuntimeSnapshotService";
-import { handleMtpCommand, type MtpAction } from "@/services/runtime/instructor/MassiveTransfusionCommandService";
+import { createMtpCommandId, handleMtpCommand, type MtpAction } from "@/services/runtime/instructor/MassiveTransfusionCommandService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export function InspectorResourceInterventions({ patientId }: Readonly<{ patientId: string }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
-  useSyncExternalStore(subscribeToRuntimeSnapshots, getRuntimeSnapshotVersion, getRuntimeSnapshotVersion);
+  const runtimeSnapshotVersion = useSyncExternalStore(subscribeToRuntimeSnapshots, getRuntimeSnapshotVersion, getRuntimeSnapshotVersion);
   const snapshot = getPatientResourceDebugSnapshot(patientId);
   const available = snapshot.resources.filter(resource => resource.status === "AVAILABLE" && inferredInterventionDefinitionId(resource));
   const [submitting, setSubmitting] = useState<string>();
   const [result, setResult] = useState<ResourceInterventionCommandResult>();
-  const mtp = getCanonicalPatientRuntimeSnapshot(patientId)?.processes.find(process => process.moduleId === "MASSIVE_TRANSFUSION_V1");
+  const mtp = getCanonicalPatientRuntimeSnapshot(patientId, runtimeSnapshotVersion)?.processes.find(process => process.moduleId === "MASSIVE_TRANSFUSION_V1");
   const apply = (resourceId: string) => {
     if (submitting) return;
     const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
@@ -34,14 +34,16 @@ export function InspectorResourceInterventions({ patientId }: Readonly<{ patient
     </Pressable>)}
     {mtp && <View style={styles.mtp}><Text style={styles.title}>Massiivse transfusiooni protokoll</Text>
       {(["MTP_ACTIVATION", "RBC_ADMINISTRATION", "PLASMA_ADMINISTRATION", "PLATELET_ADMINISTRATION"] as MtpAction[]).map(action =>
-        <Pressable key={action} disabled={Boolean(submitting)} onPress={() => { const sequence = Array.isArray(mtp.clinicalState?.processedCommandIds) ? mtp.clinicalState.processedCommandIds.length : 0;
+        <Pressable key={action} disabled={Boolean(submitting)} onPress={() => {
           const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
-          const commandId = `MTP-${patientId}-${action}-${sequence}`; setSubmitting(action);
+          const commandId = createMtpCommandId(exerciseId, patientId, action); setSubmitting(action);
           const next = handleMtpCommand({ commandId, exerciseId, patientId, action, units: 1, issuedBy: "EXCON" });
           setResult(next.ok ? { ok: true, commandId, runtimeEventId: next.runtimeEventId } : { ok: false, commandId, errorCode: next.errorCode, message: next.message }); setSubmitting(undefined); }} style={styles.button}>
           <Text style={styles.buttonText}>{({ MTP_ACTIVATION: "Aktiveeri MTP", RBC_ADMINISTRATION: "Manusta 1 ühik erütrotsüüte", PLASMA_ADMINISTRATION: "Manusta 1 ühik plasmat", PLATELET_ADMINISTRATION: "Manusta 1 doos trombotsüüte" } as const)[action]}</Text>
         </Pressable>)}</View>}
-    <Pressable disabled={Boolean(submitting)} onPress={() => {
+    <Pressable accessibilityRole="button" accessibilityLabel="Keri kliinilist simulatsiooni 60 s edasi"
+      disabled={Boolean(submitting)}
+      onPress={() => {
       const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
       const commandId = createManualRuntimeAdvanceCommandId(exerciseId, patientId);
       setResult(advancePatientRuntime({ commandId, exerciseId, patientId, durationSec: 60, issuedBy: "Exercise Controller" }));

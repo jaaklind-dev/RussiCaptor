@@ -20,6 +20,14 @@ describe("Patient Inspector canonical exercise identity", () => {
     );
     expect(interventions.match(/getCanonicalExerciseSnapshot\(\)\.exerciseId/g)).toHaveLength(3);
     expect(interventions).not.toContain("{ exerciseId, patientId }");
+    expect(inspector).toContain("const inspectorVersion = useSyncExternalStore(");
+    expect(inspector).toContain("getInstructorPatientInspector(id, inspectorVersion)");
+    expect(interventions).toContain('accessibilityRole="button"');
+    expect(interventions).toContain('accessibilityLabel="Keri kliinilist simulatsiooni 60 s edasi"');
+    expect(interventions).toContain("const runtimeSnapshotVersion = useSyncExternalStore(");
+    expect(interventions).toContain("getCanonicalPatientRuntimeSnapshot(patientId, runtimeSnapshotVersion)");
+    expect(interventions).toContain("disabled={Boolean(submitting)}");
+    expect(interventions).not.toContain("onPressIn=");
     expect(injection).toContain('getCanonicalExerciseSnapshot()');
     expect(injection).not.toContain('getCurrentExercise()');
   });

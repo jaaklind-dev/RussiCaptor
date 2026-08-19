@@ -37,7 +37,8 @@ export function getRuntimeSnapshots(): readonly DeepReadonly<RuntimeState>[] {
     .map(snapshot => immutableClone(snapshot.state));
 }
 
-export function getCanonicalPatientRuntimeSnapshot(patientId: string): CanonicalPatientRuntimeSnapshot | undefined {
+export function getCanonicalPatientRuntimeSnapshot(patientId: string, observedVersion = version): CanonicalPatientRuntimeSnapshot | undefined {
+  void observedVersion;
   const snapshot = states.get(patientId);
   return snapshot ? immutableClone(snapshot) : undefined;
 }

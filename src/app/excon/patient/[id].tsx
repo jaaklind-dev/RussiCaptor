@@ -17,12 +17,12 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 
 export default function PatientInspectorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  useSyncExternalStore(
+  const inspectorVersion = useSyncExternalStore(
     subscribeToInstructorPatientInspector,
     getInstructorPatientInspectorVersion,
     getInstructorPatientInspectorVersion
   );
-  const model = getInstructorPatientInspector(id);
+  const model = getInstructorPatientInspector(id, inspectorVersion);
   const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
   const [injectionOpen, setInjectionOpen] = useState(false);
   const { width } = useWindowDimensions();
