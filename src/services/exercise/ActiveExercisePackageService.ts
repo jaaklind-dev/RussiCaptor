@@ -19,6 +19,10 @@ export type ActivePackageStorage = Readonly<{
   setItem(key: string, value: string): void;
 }>;
 
+export type ActivePackageActivationResult =
+  | Readonly<{ ok: true; package: ExercisePackage; changed: boolean; activePackageKey: string }>
+  | Readonly<{ ok: false; code: "PACKAGE_NOT_FOUND" | "PERSISTENCE_FAILED"; message: string }>;
+
 const defaultStorage: ActivePackageStorage = {
   getItem: key => globalThis.localStorage?.getItem(key) ?? null,
   setItem: (key, value) => globalThis.localStorage?.setItem(key, value),
@@ -73,6 +77,19 @@ export class ActiveExercisePackageService {
     }));
     this.listeners.forEach(listener => listener());
     return pkg;
+  }
+
+  activateWithResult(packageId: string, packageVersion: string): ActivePackageActivationResult {
+    const pkg = this.registry.get(packageId, packageVersion);
+    if (!pkg) return Object.freeze({ ok: false, code: "PACKAGE_NOT_FOUND", message: "Valitud õppusepaketti ei leitud." });
+    const nextKey = packageKey(pkg);
+    if (nextKey === this.activeKey) return Object.freeze({ ok: true, package: pkg, changed: false, activePackageKey: nextKey });
+    try {
+      this.activate(packageId, packageVersion);
+      return Object.freeze({ ok: true, package: pkg, changed: true, activePackageKey: nextKey });
+    } catch {
+      return Object.freeze({ ok: false, code: "PERSISTENCE_FAILED", message: "Õppusepaketi valikut ei õnnestunud salvestada." });
+    }
   }
 
   subscribe(listener: () => void): () => void {

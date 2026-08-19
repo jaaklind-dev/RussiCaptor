@@ -1,0 +1,57 @@
+import type { ProcessOutput } from "@/models/RuntimeAggregation";
+
+export type BloodProductType = "RBC" | "PLASMA" | "PLATELETS";
+export type BloodProductDefinition = Readonly<{
+  volumeMlPerUnit: number;
+  oxygenCapacityPerUnit: number;
+  coagulationContributionPerUnit: number;
+  administrationRateMlMin: number;
+}>;
+export type MassiveTransfusionConfiguration = Readonly<{
+  version: string;
+  products: Readonly<Record<BloodProductType, BloodProductDefinition>>;
+  initialInventory: Readonly<Record<BloodProductType, number>>;
+  vitalResponsePer1000Ml: Readonly<{ heartRateDelta: number; systolicBpDelta: number; diastolicBpDelta: number; crtDelta: number }>;
+}>;
+export type BloodProductAdministration = Readonly<{
+  administrationId: string;
+  product: BloodProductType;
+  units: number;
+  totalVolumeMl: number;
+  deliveredVolumeMl: number;
+  deliveredUnits: number;
+  state: "RUNNING" | "COMPLETED";
+}>;
+export type MassiveTransfusionEvidence = Readonly<{
+  eventType: "MTP_ACTIVATED" | "BLOOD_PRODUCT_ADMINISTRATION_STARTED" | "BLOOD_PRODUCT_ADMINISTRATION_COMPLETED";
+  details: Readonly<Record<string, unknown>>;
+}>;
+export type MassiveTransfusionPatientProcessRuntime = {
+  processId: string; encounterId: string; instanceKey: string; processType: "MASSIVE_TRANSFUSION";
+  templateId: string; state: "Active" | "Controlled" | "Resolved"; elapsedTime: number; nextTick: number;
+  configuration: MassiveTransfusionConfiguration;
+  clinicalState: {
+    activated: boolean;
+    activationId?: string;
+    inventory: Record<BloodProductType, number>;
+    administeredUnits: Record<BloodProductType, number>;
+    transfusedVolumeMl: number;
+    oxygenCarryingCapacity: number;
+    coagulationSupport: number;
+    administrations: BloodProductAdministration[];
+    processedCommandIds: string[];
+  };
+  pendingEvidence: MassiveTransfusionEvidence[];
+  outputs: ProcessOutput;
+};
+
+export const MTP_REFERENCE_CONFIGURATION: MassiveTransfusionConfiguration = Object.freeze({
+  version: "1.0.0",
+  products: Object.freeze({
+    RBC: Object.freeze({ volumeMlPerUnit: 300, oxygenCapacityPerUnit: 1, coagulationContributionPerUnit: 0, administrationRateMlMin: 100 }),
+    PLASMA: Object.freeze({ volumeMlPerUnit: 250, oxygenCapacityPerUnit: 0, coagulationContributionPerUnit: 1, administrationRateMlMin: 100 }),
+    PLATELETS: Object.freeze({ volumeMlPerUnit: 300, oxygenCapacityPerUnit: 0, coagulationContributionPerUnit: 1, administrationRateMlMin: 100 }),
+  }),
+  initialInventory: Object.freeze({ RBC: 6, PLASMA: 6, PLATELETS: 1 }),
+  vitalResponsePer1000Ml: Object.freeze({ heartRateDelta: -12, systolicBpDelta: 14, diastolicBpDelta: 8, crtDelta: -0.7 }),
+});

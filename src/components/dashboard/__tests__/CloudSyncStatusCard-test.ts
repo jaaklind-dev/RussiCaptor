@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { resumeRuntime } from "../CloudSyncStatusCard";
+import { getRuntimeAuthorityPresentation, resumeRuntime } from "../CloudSyncStatusCard";
 
 describe("WP-44B Runtime Resume control", () => {
   test("enabled Resume dispatch invokes the existing authority handler exactly once", async () => {
@@ -21,6 +21,36 @@ describe("WP-44B Runtime Resume control", () => {
     expect(source).toContain("hitSlop={8}");
     expect(source).toContain('alignSelf: "stretch"');
     expect(source).toContain("minHeight: 48");
-    expect(source).toContain("onPress={() => void resumeRuntime()}");
+    expect(source).toContain("void resumeRuntime().finally(() => setTakeoverPending(false))");
+    expect(source).toContain('"Võta Runtime üle"');
+    expect(source).toContain('"Võtan Runtime’i üle…"');
+  });
+
+  test("terminal exercise lifecycle suppresses stale reader authority presentation", () => {
+    expect(getRuntimeAuthorityPresentation("COMPLETED", { state: "READER", revision: 137 })).toEqual({
+      label: "Runtime peatatud",
+      takeoverVisible: false,
+    });
+    expect(getRuntimeAuthorityPresentation("READY", { state: "READER", revision: 137 })).toEqual({
+      label: "Runtime peatatud",
+      takeoverVisible: false,
+    });
+  });
+
+  test("active lifecycle continues to expose a genuine remote writer", () => {
+    expect(getRuntimeAuthorityPresentation("RUNNING", { state: "READER", revision: 138 })).toEqual({
+      label: "Simulatsioon töötab teises seadmes · ainult vaatamine",
+      takeoverVisible: true,
+    });
+  });
+
+  test("EXCON exercise dashboard exposes the shared canonical takeover control", () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/app/excon/dashboard.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain('import CloudSyncStatusCard from "@/components/dashboard/CloudSyncStatusCard"');
+    expect(source).toContain("<CloudSyncStatusCard lifecycleState={exerciseSnapshot.lifecycleState} />");
   });
 });

@@ -22,6 +22,7 @@ import {
   subscribeToRuntimePersistenceFailure,
 } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
 import { exerciseLifecycleLabel, exercisePackageNameLabel } from "@/localization/et";
+import CloudSyncStatusCard from "@/components/dashboard/CloudSyncStatusCard";
 
 const initialFilters: InstructorDashboardFilters = {
   location: "All", triage: "All", caseManager: "All", status: "All",
@@ -75,6 +76,7 @@ export default function ExerciseDashboardScreen() {
             </View>
           </View>
           <RuntimeRecoveryCard snapshot={exerciseSnapshot} onRecovered={refreshPresentation} />
+          <CloudSyncStatusCard lifecycleState={exerciseSnapshot.lifecycleState} />
           {!recoveryRequired && <ExerciseControlsCard snapshot={exerciseSnapshot} onApplied={refreshPresentation} />}
           <PrepareNewExerciseCard snapshot={exerciseSnapshot} onPrepared={refreshPresentation} />
           <ExercisePackageInformationCard exercisePackage={exercisePackage} compatibility={exercisePackageValidator.compatibility(exercisePackage)} />

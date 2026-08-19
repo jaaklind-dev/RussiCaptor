@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from "expo-router";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -15,7 +15,7 @@ import {
   getCurrentCaseManager,
   setCurrentCaseManager,
 } from "@/services/CurrentUserService";
-import { subscribeToSync } from "@/services/SyncService";
+import { getSyncVersion, subscribeToSync } from "@/services/SyncService";
 import TakeoverRequestsCard from "@/components/dashboard/TakeoverRequestsCard";
 import LocalSaveStatusCard from "@/components/dashboard/LocalSaveStatusCard";
 import CloudSyncStatusCard from "@/components/dashboard/CloudSyncStatusCard";
@@ -25,6 +25,8 @@ import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepo
 
 export default function DashboardScreen() {
 
+  useSyncExternalStore(subscribeToSync, getSyncVersion, getSyncVersion);
+
   const [stats, setStats] = useState(getDashboardStats());
   const [selectedCaseManager, setSelectedCaseManager] = useState(
     getCurrentCaseManager
@@ -32,6 +34,7 @@ export default function DashboardScreen() {
   const [takeoverRequestCount, setTakeoverRequestCount] = useState(
     () => getMyIncomingTakeoverRequests().length
   );
+  const [, setPresentationVersion] = useState(0);
 
   useEffect(() => {
     return subscribeToSync(() => {
@@ -47,6 +50,7 @@ export default function DashboardScreen() {
 
       setStats(getDashboardStats());
       setTakeoverRequestCount(getMyIncomingTakeoverRequests().length);
+      setPresentationVersion((version) => version + 1);
 
     }, [])
 
@@ -107,7 +111,7 @@ export default function DashboardScreen() {
 
       <LocalSaveStatusCard />
 
-      <CloudSyncStatusCard />
+      <CloudSyncStatusCard lifecycleState={getCanonicalExerciseSnapshot().lifecycleState} />
 
       <TakeoverRequestsCard />
 

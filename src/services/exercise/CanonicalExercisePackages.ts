@@ -11,6 +11,7 @@ import { CARDIAC_ARREST_MODULE_ID, CARDIAC_ARREST_MODULE_VERSION } from "@/modul
 import { TRAUMA_CORE_MODULE_ID, TRAUMA_CORE_MODULE_VERSION } from "@/modules/traumaCore/TraumaCoreManifest";
 import { PELVIC_INJURY_MODULE_ID, PELVIC_INJURY_MODULE_VERSION } from "@/modules/pelvicInjury/PelvicInjuryManifest";
 import { PLEURAL_INJURY_MODULE_ID, PLEURAL_INJURY_MODULE_VERSION } from "@/modules/pleuralInjury/PleuralInjuryManifest";
+import { MASSIVE_TRANSFUSION_MODULE_ID, MASSIVE_TRANSFUSION_MODULE_VERSION } from "@/modules/massiveTransfusion/MassiveTransfusionManifest";
 
 const capabilities: readonly ExerciseCapability[] = ["EXERCISE_CONTROLS", "TIMELINE", "DEBRIEF", "ANALYTICS", "METRICS", "RESOURCES", "PATIENT_PLAYBACK"];
 const processes: Record<ExerciseProfile, readonly string[]> = {
@@ -293,4 +294,20 @@ export const RUNTIME_CONTINUITY_EXERCISE_PACKAGE = createExercisePackage({
   metadata: { name: "Runtime Continuity Reference Package", description: "Technical reference package for two-patient process-kill persistence acceptance; not a clinical scenario or protocol.",
     author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "TRAUMA",
     tags: ["canonical", "persistence", "reference", "runtime-continuity", "technical", "trauma"] },
+});
+
+const mtpReferenceDefinition: ExerciseDefinition = Object.freeze({ ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
+  exerciseTypeId: "RUSSICAPTOR_MTP_REFERENCE", name: "MTP tehniline referentsõppus",
+  description: "Ühe patsiendi tehniline referents massiivse transfusiooni ja vaagnaverejooksu kompositsiooni kontrolliks.", profile: "TRAUMA" });
+export const MASSIVE_TRANSFUSION_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.massive-transfusion-reference", packageVersion: "1.0.0", definition: mtpReferenceDefinition,
+  patientDatasetId: "patients.massive-transfusion-reference.v1", enabledPatientProcesses: mtpReferenceDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: mtpReferenceDefinition.enabledAnalyticsProviders, enabledMetricProviders: mtpReferenceDefinition.enabledMetricProviders,
+  requiredClinicalModules: Object.freeze([
+    { moduleId: PELVIC_INJURY_MODULE_ID, version: PELVIC_INJURY_MODULE_VERSION },
+    { moduleId: MASSIVE_TRANSFUSION_MODULE_ID, version: MASSIVE_TRANSFUSION_MODULE_VERSION },
+  ]),
+  metadata: { name: "MTP tehniline referentspakett", description: "Tehniline kontrollpakett verekomponentide, jätkuva vaagnaverejooksu ja vaagnalahase kompositsioonile; ei ole ravijuhend.",
+    author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "TRAUMA",
+    tags: ["canonical", "massive-transfusion", "reference", "technical", "trauma"] },
 });

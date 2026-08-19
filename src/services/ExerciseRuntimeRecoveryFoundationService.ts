@@ -20,11 +20,15 @@ const service = repository ? new ExerciseRuntimeRecoveryService(repository, asyn
   (await authorizeCurrentPrincipal("EXERCISE_RUNTIME_RECOVERY", { exerciseId })).status === "AUTHORIZED" && state.state === "AUTHENTICATED"
 ) : undefined;
 
-export async function terminateCurrentExerciseWithMissingRuntime() {
+export async function terminateExerciseWithMissingRuntime(exerciseId: string, expectedVersion: number) {
   if (!service) return { ok: false as const, code: "RECOVERY_BACKEND_FAILED" as const, message: "Exercise recovery backend is unavailable." };
   const state = await refreshAuthorizationPrincipal();
+  return service.terminate(state, { exerciseId, expectedVersion, persistenceFailure: "ACTIVE_RUNTIME_PERSISTENCE_MISSING" });
+}
+
+export async function terminateCurrentExerciseWithMissingRuntime() {
   const snapshot = getCanonicalExerciseSnapshot();
-  return service.terminate(state, { exerciseId: snapshot.exerciseId, expectedVersion: snapshot.version, persistenceFailure: "ACTIVE_RUNTIME_PERSISTENCE_MISSING" });
+  return terminateExerciseWithMissingRuntime(snapshot.exerciseId, snapshot.version);
 }
 
 export function getCurrentRecoveryPrincipal() { return getAuthorizationPrincipal(); }

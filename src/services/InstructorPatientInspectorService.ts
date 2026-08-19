@@ -14,7 +14,9 @@ import {
 import {
   getResourceRuntimeDebugSnapshot, getResourceRuntimeDebugVersion, subscribeToResourceRuntimeDebug,
 } from "@/services/ResourceRuntimeDebugService";
-import { getCanonicalPatientRuntimeSnapshot } from "@/services/RuntimeSnapshotService";
+import {
+  getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots,
+} from "@/services/RuntimeSnapshotService";
 import { projectInstructorPatientInspector } from "@/services/runtime/selectors/InstructorPatientInspectorSelector";
 
 let cachedKey = "";
@@ -46,11 +48,12 @@ export function getInstructorPatientInspector(patientId: string): InstructorPati
 }
 
 export function getInstructorPatientInspectorVersion(): string {
-  return `${getInstructorDashboardVersion()}:${getResourceRuntimeDebugVersion()}`;
+  return `${getInstructorDashboardVersion()}:${getResourceRuntimeDebugVersion()}:${getRuntimeSnapshotVersion()}`;
 }
 
 export function subscribeToInstructorPatientInspector(listener: () => void): () => void {
   const stopDashboard = subscribeToInstructorDashboard(listener);
   const stopRuntimeDetails = subscribeToResourceRuntimeDebug(listener);
-  return () => { stopDashboard(); stopRuntimeDetails(); };
+  const stopCanonicalRuntime = subscribeToRuntimeSnapshots(listener);
+  return () => { stopDashboard(); stopRuntimeDetails(); stopCanonicalRuntime(); };
 }

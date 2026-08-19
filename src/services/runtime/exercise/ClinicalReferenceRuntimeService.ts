@@ -16,6 +16,15 @@ import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerat
 
 let active: Readonly<{ exerciseId: string; patientId: string; engine: ClinicalScenarioEngine; dispose: () => void }>[] = [];
 
+export function assertActiveRuntimeExerciseIdentity(
+  bindings: readonly Readonly<{ exerciseId: string }>[],
+  expectedExerciseId: string,
+): void {
+  if (bindings.some(item => item.exerciseId !== expectedExerciseId)) {
+    throw new Error("RUNTIME_CHECKPOINT_EXERCISE_MISMATCH");
+  }
+}
+
 /** Connects the selected reference package to the existing authoritative runtime when the exercise starts. */
 function provenance(exerciseId: string, patientId: string, pkg: NonNullable<ReturnType<typeof activeExercisePackageService.getActive>>): RuntimeProvenance {
   const modules = pkg.definition.clinicalModuleComposition?.modules ?? pkg.requiredClinicalModules ?? [];
@@ -91,8 +100,9 @@ export function prepareActiveClinicalReferenceRuntime(exerciseId: string, persis
 
 export function clearActiveClinicalReferenceRuntime(): void { active.forEach(item => item.dispose()); active = []; }
 
-export function captureActiveClinicalReferenceRuntimes(expectedSimulationTimeSec?: number): readonly PersistedRuntimeState[] {
+export function captureActiveClinicalReferenceRuntimes(expectedSimulationTimeSec?: number, expectedExerciseId?: string): readonly PersistedRuntimeState[] {
   if (!active.length) return [];
+  if (expectedExerciseId !== undefined) assertActiveRuntimeExerciseIdentity(active, expectedExerciseId);
   const captured = active.slice().sort((a, b) => a.patientId.localeCompare(b.patientId)).map(item =>
     canonicalRuntimePersistenceService.capture(item.engine, provenance(item.exerciseId, item.patientId, getExercisePackage(item.exerciseId)))
   );
@@ -105,8 +115,10 @@ export function captureActiveClinicalReferenceRuntimes(expectedSimulationTimeSec
 export async function captureActiveClinicalReferenceRuntimesAsync(
   expectedSimulationTimeSec: number | undefined,
   yieldControl: PipelineYield,
+  expectedExerciseId?: string,
 ): Promise<readonly PersistedRuntimeState[]> {
   if (!active.length) return [];
+  if (expectedExerciseId !== undefined) assertActiveRuntimeExerciseIdentity(active, expectedExerciseId);
   // Detach every patient payload before yielding. This preserves one logical
   // clock boundary while expensive canonicalization proceeds cooperatively.
   const detached = active.slice().sort((a, b) => a.patientId.localeCompare(b.patientId)).map(item => ({

@@ -1,12 +1,18 @@
-import { ExerciseSession } from "@/models/ExerciseSession";
+import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
 import { exerciseLifecycleLabel } from "@/localization/et";
 import { StyleSheet, Text, View } from "react-native";
 
-type Props = {
-  session: ExerciseSession;
-};
+export function getExerciseStatusPresentation(snapshot: CanonicalExerciseSnapshot) {
+  return Object.freeze({
+    exerciseId: snapshot.exerciseId,
+    lifecycleState: snapshot.lifecycleState,
+    lifecycleLabel: exerciseLifecycleLabel(snapshot.lifecycleState),
+    runtimeExecutionState: snapshot.lifecycleState === "RUNNING" ? "RUNNING" : "STOPPED",
+  });
+}
 
-function formatExerciseTime(totalMinutes: number): string {
+function formatExerciseTime(totalSeconds: number): string {
+  const totalMinutes = totalSeconds / 60;
   const hours = Math.floor(totalMinutes / 60);
   const minutes = Math.floor(totalMinutes % 60);
 
@@ -14,8 +20,9 @@ function formatExerciseTime(totalMinutes: number): string {
 }
 
 export default function ExerciseStatusCard({
-  session,
-}: Props) {
+  snapshot,
+}: { snapshot: CanonicalExerciseSnapshot }) {
+  const presentation = getExerciseStatusPresentation(snapshot);
   return (
     <View style={styles.card}>
       <Text style={styles.cardTitle}>Õppuse seis</Text>
@@ -25,20 +32,20 @@ export default function ExerciseStatusCard({
       <Text
         style={[
           styles.status,
-          session.state === "running"
+          snapshot.lifecycleState === "RUNNING"
             ? styles.running
-            : session.state === "paused"
+            : snapshot.lifecycleState === "PAUSED"
               ? styles.paused
               : styles.stopped,
         ]}
       >
-        {exerciseLifecycleLabel(session.state.toUpperCase())}
+        {presentation.lifecycleLabel}
       </Text>
 
       <Text style={styles.label}>Aeg</Text>
 
       <Text style={styles.timeValue}>
-        {formatExerciseTime(session.currentMinute)}
+        {formatExerciseTime(snapshot.simulationTimeSec)}
       </Text>
 
       <Text style={styles.timeHint}>
@@ -46,7 +53,7 @@ export default function ExerciseStatusCard({
       </Text>
 
       <Text style={styles.label}>Kiirus</Text>
-      <Text style={styles.value}>×{session.speed}</Text>
+      <Text style={styles.value}>×{snapshot.speed}</Text>
     </View>
   );
 }

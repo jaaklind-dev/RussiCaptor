@@ -8,11 +8,32 @@ import {
 } from "@/services/CloudSyncService";
 import { getRuntimeCheckpointSyncStatus, subscribeToRuntimeCheckpointSync, takeOverRuntimeWriter } from "@/services/RuntimeCheckpointSyncService";
 import { authorityStateLabel } from "@/localization/et";
+import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
+import { router } from "expo-router";
 
 export async function resumeRuntime(
   resume: typeof takeOverRuntimeWriter = takeOverRuntimeWriter,
 ) {
   return resume();
+}
+
+export function getRuntimeAuthorityPresentation(
+  lifecycleState: CanonicalExerciseSnapshot["lifecycleState"],
+  runtimeStatus: ReturnType<typeof getRuntimeCheckpointSyncStatus>,
+) {
+  const runtimeActive = lifecycleState === "RUNNING" || lifecycleState === "PAUSED";
+  if (!runtimeActive) {
+    return Object.freeze({ label: "Runtime peatatud", takeoverVisible: false });
+  }
+  return Object.freeze({
+    label: runtimeStatus.state === "WRITER" ? `${authorityStateLabel("WRITER")} · versioon ${runtimeStatus.revision ?? 0}`
+      : runtimeStatus.state === "READER" ? "Simulatsioon töötab teises seadmes · ainult vaatamine"
+      : runtimeStatus.state === "CONFLICT" ? `Juhtimisõiguse konflikt: ${runtimeStatus.code ?? "tundmatu"}`
+      : runtimeStatus.state === "OFFLINE" ? "Simulatsiooni kontrollpunkti teenus pole saadaval"
+      : runtimeStatus.state === "FAILED" ? `Juhtimisõiguse käivitamine ebaõnnestus: ${runtimeStatus.code ?? "tundmatu"}`
+      : authorityStateLabel("CONNECTING"),
+    takeoverVisible: runtimeStatus.state === "READER",
+  });
 }
 
 function statusText(status: CloudSyncStatus): string {
@@ -38,9 +59,10 @@ function statusText(status: CloudSyncStatus): string {
   }
 }
 
-export default function CloudSyncStatusCard() {
+export default function CloudSyncStatusCard({ lifecycleState }: { lifecycleState: CanonicalExerciseSnapshot["lifecycleState"] }) {
   const [status, setStatus] = useState(getCloudSyncStatus);
   const [runtimeStatus, setRuntimeStatus] = useState(getRuntimeCheckpointSyncStatus);
+  const [takeoverPending, setTakeoverPending] = useState(false);
 
   useEffect(
     () => subscribeToCloudSyncStatus((next) => setStatus({ ...next })),
@@ -50,6 +72,8 @@ export default function CloudSyncStatusCard() {
 
   const hasProblem = status.state === "error" || status.state === "offline";
   const isBusy = status.state === "connecting" || status.state === "saving";
+  const runtimePresentation = getRuntimeAuthorityPresentation(lifecycleState, runtimeStatus);
+  const multipleExerciseConflict = status.state === "error" && status.message?.startsWith("MULTIPLE_ACTIVE_EXERCISES:");
 
   return (
       <View style={[styles.card, hasProblem && styles.problemCard]}>
@@ -70,23 +94,25 @@ export default function CloudSyncStatusCard() {
             : "Muudatused jõuavad teiste õppuse seadmeteni reaalajas."}
         </Text>
         <Text style={styles.caption}>
-          {runtimeStatus.state === "WRITER" ? `${authorityStateLabel("WRITER")} · versioon ${runtimeStatus.revision ?? 0}`
-            : runtimeStatus.state === "READER" ? "Simulatsioon töötab teises seadmes · ainult vaatamine"
-            : runtimeStatus.state === "CONFLICT" ? `Juhtimisõiguse konflikt: ${runtimeStatus.code ?? "tundmatu"}`
-            : runtimeStatus.state === "OFFLINE" ? "Simulatsiooni kontrollpunkti teenus pole saadaval"
-            : runtimeStatus.state === "FAILED" ? `Juhtimisõiguse käivitamine ebaõnnestus: ${runtimeStatus.code ?? "tundmatu"}`
-            : authorityStateLabel("CONNECTING")}
+          {runtimePresentation.label}
         </Text>
-        {runtimeStatus.state === "READER" && (
+        {runtimePresentation.takeoverVisible && (
           <Pressable
             accessibilityRole="button"
             hitSlop={8}
-            style={styles.takeoverButton}
-            onPress={() => void resumeRuntime()}
+            disabled={takeoverPending}
+            style={[styles.takeoverButton, takeoverPending && styles.takeoverButtonDisabled]}
+            onPress={() => {
+              setTakeoverPending(true);
+              void resumeRuntime().finally(() => setTakeoverPending(false));
+            }}
           >
-            <Text style={styles.takeoverText}>Jätka simulatsiooni</Text>
+            <Text style={styles.takeoverText}>
+              {takeoverPending ? "Võtan Runtime’i üle…" : "Võta Runtime üle"}
+            </Text>
           </Pressable>
         )}
+        {multipleExerciseConflict && <Pressable style={styles.takeoverButton} onPress={() => router.push("/excon/active-exercise-conflict" as never)}><Text style={styles.takeoverText}>Lahenda aktiivsete õppuste konflikt</Text></Pressable>}
       </View>
     </View>
   );
@@ -151,4 +177,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   takeoverText: { color: "#FFFFFF", fontSize: 12, fontWeight: "700" },
+  takeoverButtonDisabled: { opacity: 0.65 },
 });

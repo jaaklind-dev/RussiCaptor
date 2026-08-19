@@ -1,7 +1,7 @@
 import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
 import type { PrincipalState } from "@/models/authorization/Authorization";
 
-export type ExerciseRuntimeRecoveryErrorCode = "RECOVERY_NOT_REQUIRED" | "ACTIVE_RUNTIME_WRITER_PRESENT" | "RUNTIME_CHECKPOINT_AVAILABLE" | "RECOVERY_NOT_AUTHORIZED" | "INVALID_EXERCISE_LIFECYCLE" | "RECOVERY_BACKEND_FAILED";
+export type ExerciseRuntimeRecoveryErrorCode = "RECOVERY_NOT_REQUIRED" | "ACTIVE_RUNTIME_WRITER_PRESENT" | "RUNTIME_CHECKPOINT_AVAILABLE" | "RECOVERY_NOT_AUTHORIZED" | "INVALID_EXERCISE_LIFECYCLE" | "RECOVERY_BACKEND_FAILED" | "RECOVERY_CONFIRMATION_TIMEOUT";
 export type ExerciseRuntimeRecoveryResult = Readonly<{ ok: true; snapshot: CanonicalExerciseSnapshot; auditId: string } | { ok: false; code: ExerciseRuntimeRecoveryErrorCode; message: string }>;
 export type ExerciseRuntimeRecoveryCommand = Readonly<{ exerciseId: string; expectedVersion: number; persistenceFailure: "ACTIVE_RUNTIME_PERSISTENCE_MISSING" }>;
 type Authorize = (state: PrincipalState, exerciseId: string) => Promise<boolean>;
@@ -12,6 +12,7 @@ const messages: Record<ExerciseRuntimeRecoveryErrorCode, string> = {
   RECOVERY_NOT_REQUIRED: "Runtime recovery termination is not required.", ACTIVE_RUNTIME_WRITER_PRESENT: "A healthy Runtime writer is still active.",
   RUNTIME_CHECKPOINT_AVAILABLE: "A recoverable Runtime checkpoint is available.", RECOVERY_NOT_AUTHORIZED: "EXCON Runtime recovery authorization is required.",
   INVALID_EXERCISE_LIFECYCLE: "Only a running or paused exercise can be recovery-terminated.", RECOVERY_BACKEND_FAILED: "Exercise recovery could not be completed safely.",
+  RECOVERY_CONFIRMATION_TIMEOUT: "Exercise recovery did not reach a confirmed terminal state in time.",
 };
 export class ExerciseRuntimeRecoveryService {
   constructor(private readonly repository: ExerciseRuntimeRecoveryRepository, private readonly authorize: Authorize) {}

@@ -62,12 +62,17 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
     if (error) throw new Error(code(error.message));
   }
   async publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>): Promise<CheckpointPublishResult<SharedExerciseState>> {
-    const { data, error } = await this.client.rpc("publish_runtime_checkpoint", { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_expected_revision: expectedRevision, p_checkpoint: checkpoint });
+    const { data, error } = await this.client.rpc("publish_runtime_checkpoint_metadata", { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_expected_revision: expectedRevision, p_checkpoint: checkpoint });
     if (error) {
       const diagnostic = code(error.message);
       return { status: diagnostic === "STALE_WRITER" ? "STALE_CHECKPOINT_WRITER" : diagnostic === "CHECKPOINT_REVISION_CONFLICT" ? "REVISION_CONFLICT" : "AUTHORITY_UNAVAILABLE", code: diagnostic as never };
     }
     const row = Array.isArray(data) ? data[0] : data;
-    return { status: "PUBLISHED", checkpoint: row.payload as RuntimeCheckpointEnvelope<SharedExerciseState> };
+    return { status: "PUBLISHED", checkpoint: Object.freeze({
+      ...checkpoint,
+      checkpointRevision: Number(row.checkpoint_revision),
+      payloadHash: row.payload_hash,
+      provenanceHash: row.provenance_hash,
+    }) };
   }
 }

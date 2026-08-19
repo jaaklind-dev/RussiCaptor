@@ -6,6 +6,7 @@ import { EXERCISE_DEFINITION_CATALOG } from "../ExerciseDefinitionService";
 import { ExercisePackageRegistry } from "../ExercisePackageRegistry";
 import { getExercisePackage } from "../ExercisePackageService";
 import { ExercisePackageValidator } from "../ExercisePackageValidator";
+import { activateCatalogEntry, projectCatalogActiveKey } from "@/components/excon/catalog/ExerciseCatalogScreen";
 
 const validator = new ExercisePackageValidator(EXERCISE_DEFINITION_CATALOG);
 const entries: readonly ExerciseCatalogEntry[] = CANONICAL_EXERCISE_PACKAGES.map((exercisePackage, index) => Object.freeze({
@@ -67,6 +68,27 @@ describe("WP-30 Exercise Catalog", () => {
     service.activate(pkg.packageId, pkg.packageVersion);
     expect(service.getAudit()).toEqual([{ sequenceNumber: 1, eventType: "ActiveExercisePackageSelected", activePackageKey: `${pkg.packageId}@${pkg.packageVersion}` }]);
     expect(notifications).toBe(1);
+  });
+
+  test("catalog command returns typed success, updates projection and is idempotent", () => {
+    const { registry, storage } = setup();
+    const service = new ActiveExercisePackageService(registry, storage);
+    const entry = entries.find(item => item.compatibility === "SUPPORTED")!;
+    const result = activateCatalogEntry(entry, service);
+    expect(result).toMatchObject({ ok: true, changed: true });
+    expect(service.isActive(entry.exercisePackage)).toBe(true);
+    expect(projectCatalogActiveKey(undefined, result.ok ? result.activePackageKey : undefined)).toBe(`${entry.exercisePackage.packageId}@${entry.exercisePackage.packageVersion}`);
+    expect(activateCatalogEntry(entry, service)).toMatchObject({ ok: true, changed: false });
+    expect(service.getAudit()).toHaveLength(1);
+  });
+
+  test("catalog command never silently ignores missing or failed activation", () => {
+    const { registry } = setup();
+    const failingStorage: ActivePackageStorage = { getItem: () => null, setItem: () => { throw new Error("storage unavailable"); } };
+    const service = new ActiveExercisePackageService(registry, failingStorage);
+    expect(activateCatalogEntry(undefined, service)).toMatchObject({ ok: false, code: "PACKAGE_NOT_FOUND" });
+    expect(activateCatalogEntry(entries[2], service)).toMatchObject({ ok: false, code: "PERSISTENCE_FAILED" });
+    expect(service.getActive()).toBeUndefined();
   });
 
   test("rejects unknown packages without changing persisted selection", () => {

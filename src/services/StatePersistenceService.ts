@@ -137,7 +137,7 @@ function collectSharedExerciseState(): SharedExerciseState {
   const shared = collectSharedExerciseProjection();
   const simulationTimeSec = "simulationTimeSec" in shared.exerciseSession
     ? shared.exerciseSession.simulationTimeSec : shared.exerciseSession.currentMinute * 60;
-  return { ...shared, persistedRuntimeStates: captureActiveClinicalReferenceRuntimes(simulationTimeSec) };
+  return { ...shared, persistedRuntimeStates: captureActiveClinicalReferenceRuntimes(simulationTimeSec, shared.exerciseSession.exerciseId) };
 }
 
 async function collectSharedExerciseStateAsync(yieldControl: () => Promise<void>): Promise<SharedExerciseState> {
@@ -147,6 +147,7 @@ async function collectSharedExerciseStateAsync(yieldControl: () => Promise<void>
   const persistedRuntimeStates = await captureActiveClinicalReferenceRuntimesAsync(
     simulationTimeSec,
     yieldControl,
+    shared.exerciseSession.exerciseId,
   );
   return { ...shared, persistedRuntimeStates };
 }
@@ -330,7 +331,11 @@ export async function loadPersistedState(): Promise<void> {
       replaceItems(clinicalDataProvider.getVitalSigns(), restored.vitalSigns);
     }
 
-    restoreCanonicalRuntime(restored, true);
+    // Cold-start restoration prepares canonical owners but must not advance
+    // time before remote current-exercise discovery and writer authority have
+    // resolved. The authority startup rehydrates with startRuntime=true only
+    // after that gate succeeds.
+    restoreCanonicalRuntime(restored, false);
     setRuntimePersistenceFailure(undefined);
 
   } catch (error) {

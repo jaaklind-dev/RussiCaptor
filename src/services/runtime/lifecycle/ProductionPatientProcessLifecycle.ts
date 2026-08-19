@@ -11,6 +11,8 @@ import { PatientProcessLifecycleRegistry } from "./PatientProcessLifecycleRegist
 import { bootstrapCardiacArrestPatientProcess, drainCardiacEvidence, tickCardiacArrestPatientProcess } from "@/services/runtime/CardiacArrestPatientProcess";
 import { bootstrapPleuralInjuryPatientProcess, tickPleuralInjuryPatientProcess } from "@/services/runtime/PleuralInjuryPatientProcess";
 import { bootstrapRespiratoryFailurePatientProcess, tickRespiratoryFailurePatientProcess } from "@/services/runtime/RespiratoryFailurePatientProcess";
+import type { MassiveTransfusionPatientProcessRuntime } from "@/models/MassiveTransfusion";
+import { activateMassiveTransfusion, bootstrapMassiveTransfusionPatientProcess, drainMassiveTransfusionEvidence, startBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
 
 const respiratoryImpairment = (processes: readonly CanonicalLifecycleProcess[]) => Math.max(1, ...processes.map(process => Number(process.outputs.runtimeContributions?.respiratoryImpairmentMultiplier ?? 1)));
 
@@ -214,7 +216,38 @@ const cardiacArrest: PatientProcessLifecycleDescriptor = {
   },
 };
 
-export const productionPatientProcessDescriptors = Object.freeze([botulism, hv, pleuralInjury, respiratoryFailure, hemorrhage, hypoxia, cardiacArrest]);
+const massiveTransfusion: PatientProcessLifecycleDescriptor = {
+  processType: "MASSIVE_TRANSFUSION", kind: "LEAF", requiredPhases: ["BOOTSTRAP", "HANDLE_INPUT", "TICK"],
+  order: { bootstrapOrder: 450, inputOrder: 350, tickOrder: 350, aggregationSlot: 350, serializationSlot: 350, siblingOrder: "SINGLETON" },
+  bootstrap({ fixture }) {
+    const source = initial(fixture); const configured = source.massiveTransfusion;
+    if (!configured || typeof configured !== "object" || Array.isArray(configured)) return { processes: [], events: [], aggregationRequested: false };
+    return { processes: [bootstrapMassiveTransfusionPatientProcess(fixture.patientId ?? `GOLDEN-${fixture.fixtureId}`, configured as Record<string, unknown>)], events: [], aggregationRequested: false };
+  },
+  tick(process, context) {
+    const ticked = tickMassiveTransfusionPatientProcess(process as MassiveTransfusionPatientProcessRuntime, context.tickSeconds);
+    const drained = drainMassiveTransfusionEvidence(ticked);
+    return { processes: [drained.process], aggregationRequested: true, events: drained.evidence.map(event => ({ eventType: event.eventType,
+      details: event.details, target: process.encounterId, recordPhase: "BEFORE_AGGREGATION" as const, sourceProcessId: process.processId })) };
+  },
+  handleInput(process, context) {
+    const event = context.event; if (event.eventType !== "ACTION" || !event.actionId) return undefined;
+    const current = process as MassiveTransfusionPatientProcessRuntime;
+    let next: MassiveTransfusionPatientProcessRuntime;
+    if (event.actionId === "MTP_ACTIVATION") next = activateMassiveTransfusion(current, event.eventId);
+    else {
+      const product = ({ RBC_ADMINISTRATION: "RBC", PLASMA_ADMINISTRATION: "PLASMA", PLATELET_ADMINISTRATION: "PLATELETS" } as const)[event.actionId as "RBC_ADMINISTRATION" | "PLASMA_ADMINISTRATION" | "PLATELET_ADMINISTRATION"];
+      if (!product) return undefined;
+      const payload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload) ? event.payload as Record<string, unknown> : {};
+      next = startBloodProductAdministration(current, event.eventId, product, Number(payload.units ?? 1));
+    }
+    const drained = drainMassiveTransfusionEvidence(next);
+    return { processes: [drained.process], aggregationRequested: true, events: drained.evidence.map(item => ({ eventType: item.eventType,
+      details: item.details, target: event.target, recordPhase: "FINALIZE" as const, sourceProcessId: process.processId })) };
+  },
+};
+
+export const productionPatientProcessDescriptors = Object.freeze([botulism, hv, pleuralInjury, respiratoryFailure, hemorrhage, hypoxia, massiveTransfusion, cardiacArrest]);
 
 export function createProductionPatientProcessLifecyclePlan() {
   const registry = new PatientProcessLifecycleRegistry(); productionPatientProcessDescriptors.forEach(descriptor => registry.register(descriptor));

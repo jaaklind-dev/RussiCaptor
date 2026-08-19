@@ -5,7 +5,7 @@ import ActivePatientsCard from "@/components/excon/ActivePatientsCard";
 import EventHistoryCard from "@/components/excon/EventHistoryCard";
 import WorkbookImportCard from "@/components/excon/WorkbookImportCard";
 
-import { getExerciseSession } from "@/repositories/ExerciseSessionRepository";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 
 import { subscribeToSync } from "@/services/SyncService";
 
@@ -17,16 +17,16 @@ import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
 
 export default function ExconScreen() {
 
-  const [session, setSession] = useState({
+  const [snapshot, setSnapshot] = useState({
 
-    ...getExerciseSession(),
+    ...getCanonicalExerciseSnapshot(),
 
   });
 function refreshSession(): void {
 
-  setSession({
+  setSnapshot({
 
-    ...getExerciseSession(),
+    ...getCanonicalExerciseSnapshot(),
 
   });
 
@@ -35,9 +35,9 @@ function refreshSession(): void {
 
     return subscribeToSync(() => {
 
-      setSession({
+      setSnapshot({
 
-        ...getExerciseSession(),
+        ...getCanonicalExerciseSnapshot(),
 
       });
 
@@ -61,13 +61,13 @@ function refreshSession(): void {
         <Text style={styles.instructorButtonText}>Ava õppuste kataloog</Text>
       </Pressable>
 
-      <ExerciseStatusCard session={session} />
+      <ExerciseStatusCard snapshot={snapshot} />
 
       <WorkbookImportCard onImported={refreshSession} />
 
       <ActivePatientsCard />
 
-      <UpcomingEventsCard session={session} />
+      <UpcomingEventsCard session={{ exerciseId: snapshot.exerciseId, state: snapshot.lifecycleState === "RUNNING" ? "running" : snapshot.lifecycleState === "PAUSED" ? "paused" : "stopped", currentMinute: snapshot.simulationTimeSec / 60, speed: snapshot.speed }} />
 
       <EventHistoryCard />
 

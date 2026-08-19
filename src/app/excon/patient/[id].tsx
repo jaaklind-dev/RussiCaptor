@@ -11,7 +11,7 @@ import {
   getInstructorPatientInspector, getInstructorPatientInspectorVersion, subscribeToInstructorPatientInspector,
 } from "@/services/InstructorPatientInspectorService";
 import { router, useLocalSearchParams } from "expo-router";
-import { getCurrentExercise } from "@/repositories/ExerciseRepository";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { useState, useSyncExternalStore } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
@@ -23,6 +23,7 @@ export default function PatientInspectorScreen() {
     getInstructorPatientInspectorVersion
   );
   const model = getInstructorPatientInspector(id);
+  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
   const [injectionOpen, setInjectionOpen] = useState(false);
   const { width } = useWindowDimensions();
   const desktop = width >= 900;
@@ -48,8 +49,8 @@ export default function PatientInspectorScreen() {
       <InspectorHeader header={model.header} />
       <View style={[styles.columns, !desktop && styles.stacked]}>
         <View style={styles.leftColumn}>
-          {model.cardiac && <InspectorCardiacState exerciseId={getCurrentExercise().id} patientId={model.header.patientId} cardiac={model.cardiac} />}
-          <InspectorResourceInterventions exerciseId={getCurrentExercise().id} patientId={model.header.patientId} />
+          {model.cardiac && <InspectorCardiacState exerciseId={exerciseId} patientId={model.header.patientId} cardiac={model.cardiac} />}
+          <InspectorResourceInterventions patientId={model.header.patientId} />
           <InspectorClinicalState state={model.clinicalState} />
           <InspectorListPanel title="Aktiivsed patsiendiprotsessid" items={model.processes} emptyText="Aktiivseid patsiendiprotsesse pole" />
           <InspectorListPanel title="Aktiivsed kliinilised toimed" items={model.effects} emptyText="Aktiivseid kliinilisi toimeid pole" />

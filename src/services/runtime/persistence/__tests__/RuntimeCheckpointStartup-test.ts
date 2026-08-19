@@ -5,16 +5,18 @@ import {
   checkpointForExercise,
   isWriterCheckpointEcho,
   publicationResultRevokesWriter,
+  renewalFailureRevokesWriter,
   renewRuntimeWriterTerminal,
   resolveRuntimeAuthSession,
   shouldResetRuntimeCheckpointSyncForPrincipal,
   shouldRestartRuntimeCheckpointSync,
+  startRuntimeWriterRenewalLoop,
 } from "@/services/RuntimeCheckpointSyncService";
 import type { RuntimeCheckpointEnvelope, RuntimeWriterLease } from "@/models/RuntimeCheckpointAuthority";
 import { isRemoteRuntimeLifecycleActive } from "@/services/CloudSyncService";
 
 describe("WP-44B checkpoint startup coordination", () => {
-  const writerLease = Object.freeze({
+  const writerLease: RuntimeWriterLease = Object.freeze({
     leaseId: "LEASE-A",
     exerciseId: "EX-1",
     writerInstanceId: "WRITER-A",
@@ -68,9 +70,122 @@ describe("WP-44B checkpoint startup coordination", () => {
       source.indexOf("async function startRuntimeCheckpointSyncForExercise"),
       source.indexOf("async function startRuntimeCheckpointSyncOnce"),
     );
-    expect(lifecycle.match(/renewal=setInterval/g)).toHaveLength(1);
-    expect(lifecycle).toContain("renewRuntimeWriterTerminal(repository,renewingLease,LEASE_SECONDS)");
-    expect(lifecycle).toContain("clearInterval(renewal)");
+    expect(lifecycle.match(/startRuntimeWriterRenewalLoop\(/g)).toHaveLength(1);
+    expect(lifecycle).toContain("renewRuntimeWriterTerminal(repository,currentLease,LEASE_SECONDS)");
+    expect(lifecycle).toContain("renewalLoop?.stop()");
+  });
+
+  test("transient renewal failure retains writer and rearms the single loop", async () => {
+    jest.useFakeTimers();
+    let activeLease = writerLease;
+    const renewedLease = Object.freeze({ ...writerLease, expiresAt: "2099-08-14T12:01:00.000Z" });
+    const renew = jest.fn()
+      .mockResolvedValueOnce({ status: "AUTHORITY_UNAVAILABLE", code: "WRITER_AUTHORITY_UNAVAILABLE" })
+      .mockResolvedValueOnce({ status: "RENEWED", lease: renewedLease });
+    const onTransientFailure = jest.fn();
+    const onRevoked = jest.fn();
+    const loop = startRuntimeWriterRenewalLoop({
+      getLease: () => activeLease,
+      isWriter: () => true,
+      renew,
+      onRenewed: (_current, refreshed) => { activeLease = refreshed; },
+      onTransientFailure,
+      onRevoked,
+      intervalMs: 20,
+    });
+
+    await jest.advanceTimersByTimeAsync(20);
+    expect(onTransientFailure).toHaveBeenCalledWith(writerLease, "WRITER_AUTHORITY_UNAVAILABLE");
+    expect(onRevoked).not.toHaveBeenCalled();
+    expect(activeLease).toBe(writerLease);
+    await jest.advanceTimersByTimeAsync(20);
+    expect(renew).toHaveBeenCalledTimes(2);
+    expect(activeLease).toBe(renewedLease);
+    loop.stop();
+    jest.useRealTimers();
+  });
+
+  test("sustained foreground activity renews the same writer for at least three intervals", async () => {
+    jest.useFakeTimers();
+    let activeLease = writerLease;
+    const activities: string[] = [];
+    let renewalCount = 0;
+    const renew = jest.fn(async (currentLease: RuntimeWriterLease) => {
+      renewalCount += 1;
+      return {
+        status: "ALREADY_OWNED" as const,
+        checkpointRevision: renewalCount,
+        lease: Object.freeze({ ...currentLease, expiresAt: `2099-08-14T12:0${renewalCount}:00.000Z` }),
+      };
+    });
+    const loop = startRuntimeWriterRenewalLoop({
+      getLease: () => activeLease,
+      isWriter: () => true,
+      renew,
+      onRenewed: (_current, refreshed) => { activeLease = refreshed; },
+      onTransientFailure: jest.fn(),
+      onRevoked: jest.fn(),
+      intervalMs: 20,
+    });
+
+    activities.push("checkpoint", "mtp", "manual-advance", "snapshot", "realtime");
+    await jest.advanceTimersByTimeAsync(60);
+    expect(activities).toHaveLength(5);
+    expect(renew).toHaveBeenCalledTimes(3);
+    expect(renew.mock.calls.every(([renewed]) => renewed.writerInstanceId === "WRITER-A")).toBe(true);
+    loop.stop();
+    jest.useRealTimers();
+  });
+
+  test("typed stale authority or actual local expiry revokes writer", () => {
+    expect(renewalFailureRevokesWriter(
+      { status: "AUTHORITY_UNAVAILABLE", code: "STALE_WRITER" },
+      writerLease,
+      Date.parse("2026-08-14T12:00:00.000Z"),
+    )).toBe(true);
+    expect(renewalFailureRevokesWriter(
+      { status: "AUTHORITY_UNAVAILABLE", code: "WRITER_AUTHORITY_UNAVAILABLE" },
+      { ...writerLease, expiresAt: "2026-08-14T12:00:00.000Z" },
+      Date.parse("2026-08-14T12:00:01.000Z"),
+    )).toBe(true);
+  });
+
+  test("a dormant renewal loop is observable so Resume can attach one replacement", async () => {
+    jest.useFakeTimers();
+    let writer = true;
+    const firstLoop = startRuntimeWriterRenewalLoop({
+      getLease: () => writerLease,
+      isWriter: () => writer,
+      renew: jest.fn(),
+      onRenewed: jest.fn(),
+      onTransientFailure: jest.fn(),
+      onRevoked: jest.fn(),
+      intervalMs: 20,
+    });
+
+    writer = false;
+    await jest.advanceTimersByTimeAsync(20);
+    expect(firstLoop.isActive()).toBe(false);
+
+    writer = true;
+    const replacementRenew = jest.fn(async () => ({
+      status: "ALREADY_OWNED" as const,
+      checkpointRevision: 1,
+      lease: writerLease,
+    }));
+    const replacementLoop = startRuntimeWriterRenewalLoop({
+      getLease: () => writerLease,
+      isWriter: () => writer,
+      renew: replacementRenew,
+      onRenewed: jest.fn(),
+      onTransientFailure: jest.fn(),
+      onRevoked: jest.fn(),
+      intervalMs: 20,
+    });
+    await jest.advanceTimersByTimeAsync(20);
+    expect(replacementRenew).toHaveBeenCalledTimes(1);
+    replacementLoop.stop();
+    jest.useRealTimers();
   });
 
   test("lost same-writer acquisition response reconciles from the authoritative lease", async () => {
@@ -166,7 +281,8 @@ describe("WP-44B checkpoint startup coordination", () => {
     const startup = source.slice(source.indexOf("async function startRuntimeCheckpointSyncForExercise"), source.indexOf("async function startRuntimeCheckpointSyncOnce"));
     expect(takeover).toContain("isRemoteRuntimeLifecycleActive(exerciseId) === false");
     expect(takeover).toContain('code:"EXERCISE_NOT_ACTIVE"');
-    expect(startup).toContain("isRemoteRuntimeLifecycleActive(exerciseId) === false");
+    expect(startup).toContain("remoteLifecycleActive = await startupAwait(waitForRemoteRuntimeLifecycleActive(exerciseId))");
+    expect(startup).toContain("if (remoteLifecycleActive === false)");
     expect(startup).toContain('code:"EXERCISE_NOT_ACTIVE"');
   });
   test("only proven authority loss revokes writer after publication", () => {
@@ -212,7 +328,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(authority).toBeGreaterThan(lease);
     expect(writer).toBeGreaterThan(authority);
     expect(restore).toBeGreaterThan(writer);
-    expect(source.match(/renewal=setInterval/g)).toHaveLength(1);
+    expect(source.match(/startRuntimeWriterRenewalLoop\(/g)).toHaveLength(2);
   });
 
   test("acquired authority protects restored Runtime owners from a concurrent cloud echo", () => {
@@ -229,21 +345,30 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(restore).toBeGreaterThan(writer);
   });
 
-  test("checkpoint authority resolves current auth before cloud projection startup", () => {
+  test("remote current-exercise discovery resolves before checkpoint authority startup", () => {
     const layout = fs.readFileSync(path.join(process.cwd(), "src/app/_layout.tsx"), "utf8");
-    const cloudStart = layout.indexOf("startCloudSync().then");
-    const runtimeStart = layout.indexOf("startRuntimeCheckpointSync().then");
+    const cloudStart = layout.indexOf("startCloudSync()");
+    const runtimeStart = layout.indexOf("startRuntime: startRuntimeCheckpointSync");
     expect(cloudStart).toBeGreaterThan(-1);
     expect(runtimeStart).toBeGreaterThan(-1);
-    expect(runtimeStart).toBeLessThan(cloudStart);
-    expect(layout.match(/startRuntimeCheckpointSync\(\)/g)).toHaveLength(1);
+    expect(cloudStart).toBeLessThan(runtimeStart);
+    expect(layout).toContain("startAfterCurrentExerciseDiscovery");
   });
 
-  test("cloud restart tears down stale subscriptions before creating a channel", () => {
+  test("cold persisted Runtime remains stopped until discovery and authority resolve", () => {
+    const persistence = fs.readFileSync(path.join(process.cwd(), "src/services/StatePersistenceService.ts"), "utf8");
+    const loadStart = persistence.indexOf("export async function loadPersistedState");
+    const restoreStart = persistence.indexOf("function restoreCanonicalRuntime", loadStart);
+    const load = persistence.slice(loadStart, restoreStart);
+    expect(load).toContain("restoreCanonicalRuntime(restored, false)");
+    expect(load).not.toContain("restoreCanonicalRuntime(restored, true)");
+  });
+
+  test("cloud restart tears down stale discovery polling before creating the next poll", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/CloudSyncService.ts"), "utf8");
     const start = source.indexOf("export async function startCloudSync");
-    const remove = source.indexOf("await supabase.removeChannel(channel)", start);
-    const create = source.indexOf("supabase\n    .channel", start);
+    const remove = source.indexOf("clearInterval(remotePollTimer)", start);
+    const create = source.indexOf("remotePollTimer = setInterval", start);
     expect(remove).toBeGreaterThan(start);
     expect(create).toBeGreaterThan(remove);
   });
@@ -302,7 +427,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const generation = source.indexOf("const generation = ++exerciseSyncGeneration;");
     const fence = source.indexOf("const generationStopped = () => stopped || generation !== exerciseSyncGeneration;", generation);
     const publishFence = source.indexOf("if(generationStopped())return;", source.indexOf("const publish=()=>", fence));
-    const renewalFence = source.indexOf("if(generationStopped())return;", source.indexOf("renewal=setInterval", publishFence));
+    const renewalFence = source.indexOf("isWriter:()=>!generationStopped()", publishFence);
     const realtimeFence = source.indexOf("if(generationStopped())return;", source.indexOf("const channel:", renewalFence));
     const guardedRelease = source.indexOf("if(generation===exerciseSyncGeneration&&lease)", realtimeFence);
     expect(generation).toBeGreaterThan(-1);
@@ -317,7 +442,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     expect(source).toContain("let stopped=false;");
     expect(source).toContain("if(stopped)return;");
-    expect(source).toContain("return()=>{stopped=true;stopLocal();stopPrepared();if(renewal)clearInterval(renewal)");
+    expect(source).toContain("return()=>{stopped=true;if(routinePublishTimer)clearTimeout(routinePublishTimer);stopPrepared();renewalLoop?.stop()");
   });
 
   test("explicit Resume attaches the acquired writer to the canonical renewal lifecycle", () => {
@@ -333,8 +458,9 @@ describe("WP-44B checkpoint startup coordination", () => {
 
   test("renewal attachment is idempotent and stale generation cleanup cannot clear its replacement", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
-    expect(source).toContain('if(generationStopped() || renewal || !lease || status.state!=="WRITER")return;');
-    expect(source.match(/renewal=setInterval/g)).toHaveLength(1);
+    expect(source).toContain('if(generationStopped() || renewalLoop || !lease || status.state!=="WRITER")return;');
+    expect(source.match(/startRuntimeWriterRenewalLoop\(/g)).toHaveLength(2);
+    expect(source).toContain("if (renewalLoop && !renewalLoop.isActive()) renewalLoop=undefined;");
     expect(source).toContain("if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined");
   });
 

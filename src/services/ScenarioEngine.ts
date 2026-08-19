@@ -108,6 +108,11 @@ const firstClinicalOwnershipRules: OwnershipRule[] = [{
   aggregationOrWriteRule: "LATEST attributable owner value", conflictAction: "REJECT_CONFLICTING_OWNER",
 }, {
   objectType: "RuntimeField",
+  objectOrField: "mtpActivated / transfusedVolumeMl / oxygenCarryingCapacity / coagulationSupport / bloodProductInventory / bloodProductsAdministered",
+  canonicalOwner: "MASSIVE_TRANSFUSION_V1", contributionAllowedFrom: "CORE_ENGINE",
+  aggregationOrWriteRule: "LATEST attributable owner value", conflictAction: "REJECT_CONFLICTING_OWNER",
+}, {
+  objectType: "RuntimeField",
   objectOrField: "airwayProtected / effectiveVentilationActive / directOxygenEffectOnCO2 / ventilationEffectCount / definitiveControl / causeControlled / respiratoryArrest / mentalStatusSourceModule / mentalStatusSourceProcessType / CO2Trend",
   canonicalOwner: "HYPOVENTILATION_HYPERCAPNIA_V1",
   contributionAllowedFrom: "CORE_ENGINE",

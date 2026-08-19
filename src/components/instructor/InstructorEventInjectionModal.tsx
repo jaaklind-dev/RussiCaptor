@@ -2,7 +2,7 @@ import { instructorEventCatalogue } from "@/features/instructor/commands/Instruc
 import { handleInstructorPatientCommand } from "@/features/instructor/commands/InstructorPatientCommandHandler";
 import { createInstructorPatientCommand } from "@/features/instructor/commands/InstructorCommandFactory";
 import type { InstructorCommandResult, InstructorEventType } from "@/models/InstructorCommand";
-import { getCurrentExercise } from "@/repositories/ExerciseRepository";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getInstructorEventAvailability } from "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
 import { useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -11,19 +11,19 @@ type Props = { visible: boolean; patient: { patientId: string; name: string; loc
 type Submission = "Ready" | "Submitting" | "Succeeded" | "Failed";
 
 export function InstructorEventInjectionModal({ visible, patient, onClose }: Props) {
-  const exercise = getCurrentExercise();
+  const exercise = getCanonicalExerciseSnapshot();
   const [selected, setSelected] = useState<InstructorEventType>();
   const [submission, setSubmission] = useState<Submission>("Ready");
   const [result, setResult] = useState<InstructorCommandResult>();
   const definitions = instructorEventCatalogue.map(definition => ({
-    definition, availability: getInstructorEventAvailability(exercise.id, patient.patientId, definition.eventType),
+    definition, availability: getInstructorEventAvailability(exercise.exerciseId, patient.patientId, definition.eventType),
   }));
   const selectedDefinition = definitions.find(item => item.definition.eventType === selected);
 
   function submit() {
     if (!selectedDefinition?.availability.available || submission === "Submitting") return;
     setSubmission("Submitting");
-    const next = handleInstructorPatientCommand(createInstructorPatientCommand({ exerciseId: exercise.id, patientId: patient.patientId,
+    const next = handleInstructorPatientCommand(createInstructorPatientCommand({ exerciseId: exercise.exerciseId, patientId: patient.patientId,
       eventType: selectedDefinition.definition.eventType, issuedBy: "Exercise Controller", simulationTime: patient.simulationTimeSec ?? 0 }));
     setResult(next);
     setSubmission(next.ok ? "Succeeded" : "Failed");

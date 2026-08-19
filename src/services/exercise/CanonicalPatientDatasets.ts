@@ -3,10 +3,11 @@ import type { Patient } from "@/models/Patient";
 import type { PackagePatientDataset } from "@/models/exercise/PackagePatientDataset";
 import { patients as demoPatients } from "@/data/patients";
 import { BOTULISM_JOHVI_PATIENTS } from "@/data/botulismJohviPatients";
-import { PELVIC_INJURY_REFERENCE_PATIENT } from "@/modules/pelvicInjury/PelvicInjuryReference";
+import { PELVIC_HEMORRHAGE_REFERENCE_CONFIGURATION, PELVIC_INJURY_REFERENCE_PATIENT } from "@/modules/pelvicInjury/PelvicInjuryReference";
 import { PLEURAL_INJURY_REFERENCE } from "@/modules/pleuralInjury/PleuralInjuryReference";
 import { CARDIAC_ARREST_REFERENCE_FIXTURE } from "@/services/golden/CardiacArrestReferenceFixture";
 import { PackagePatientDatasetRegistry } from "./PackagePatientMaterializationService";
+import { MTP_REFERENCE_CONFIGURATION } from "@/models/MassiveTransfusion";
 
 const clone = (patient: Patient): Patient => ({ ...patient, mist: { ...patient.mist } });
 const dataset = (datasetId: string, records: PackagePatientDataset["patients"]): PackagePatientDataset => Object.freeze({ datasetId, version: datasetId.split(".v").at(-1)!, patients: Object.freeze(records) });
@@ -16,6 +17,23 @@ const cardiacFixture = (patientId: string): GoldenFixture => Object.freeze({ ...
 
 export const pelvicReferencePatient: Patient = Object.freeze({ id: PELVIC_INJURY_REFERENCE_PATIENT.patientId, isikukood: "39011230056", name: "Pelvic Injury Reference", triage: "P1", status: "Active", location: "Resus", lastSeen: "T+0", mist: Object.freeze({ mechanism: "Fall from height", injuries: "Open-book pelvic injury", signs: "Progressive hemorrhagic deterioration", treatment: "No treatment yet" }) });
 export const pelvicReferenceFixture: GoldenFixture = Object.freeze({ fixtureId: "FX-PELVIC-REFERENCE", fixtureType: "PROCESS", patientId: pelvicReferencePatient.id, seed: 43, clockState: "RUNNING", ownershipVersion: 1, loadedModules: Object.freeze(["PELVIC_INJURY_V1", "HYPOXIA_V1"]), activeResources: Object.freeze({ resources: Object.freeze([{ resourceId: "PB-1", type: "pelvicBinder", status: "AVAILABLE", metadata: Object.freeze({}) }]) }), initialState: Object.freeze({ processType: "HYPOVENTILATION_HYPERCAPNIA", templateId: "HV-NEUTRAL", ventilationReserve: 70, reserveLossPerMin: 0, co2Burden: 30, co2GainPerMin: 0, hypoxia: Object.freeze({ templateId: "HYP-CONTROL", oxygenationReserve: 75, spo2: 94, reserveLossPerMin: 0 }), hemorrhageSources: PELVIC_INJURY_REFERENCE_PATIENT.hemorrhageSources }) });
+/**
+ * Technical composition fixture: replacement volume reverses the same
+ * per-mL circulation contribution used by this fixture's pelvic hemorrhage.
+ * Product volumes/rates and canonical MTP physiology remain unchanged.
+ */
+export const MTP_PELVIC_REFERENCE_CONFIGURATION = Object.freeze({
+  ...MTP_REFERENCE_CONFIGURATION,
+  vitalResponsePer1000Ml: Object.freeze({
+    heartRateDelta: -PELVIC_HEMORRHAGE_REFERENCE_CONFIGURATION.vitalResponsePer1000Ml!.heartRateDelta!,
+    systolicBpDelta: -PELVIC_HEMORRHAGE_REFERENCE_CONFIGURATION.vitalResponsePer1000Ml!.systolicBpDelta!,
+    diastolicBpDelta: -PELVIC_HEMORRHAGE_REFERENCE_CONFIGURATION.vitalResponsePer1000Ml!.diastolicBpDelta!,
+    crtDelta: -PELVIC_HEMORRHAGE_REFERENCE_CONFIGURATION.vitalResponsePer1000Ml!.crtDelta!,
+  }),
+});
+export const mtpReferenceFixture: GoldenFixture = Object.freeze({ ...structuredClone(pelvicReferenceFixture), fixtureId: "FX-MTP-REFERENCE",
+  loadedModules: Object.freeze(["PELVIC_INJURY_V1", "HYPOXIA_V1", "MASSIVE_TRANSFUSION_V1"]),
+  initialState: Object.freeze({ ...(structuredClone(pelvicReferenceFixture.initialState) as Record<string, unknown>), massiveTransfusion: Object.freeze({ configuration: MTP_PELVIC_REFERENCE_CONFIGURATION }) }) });
 export const pleuralReferencePatient: Patient = Object.freeze({ id: PLEURAL_INJURY_REFERENCE.patientId, isikukood: "39011230064", name: "Pleural Injury Reference", triage: "P1", status: "Active", location: "Resus", lastSeen: "T+0", mist: Object.freeze({ mechanism: "Blunt thoracic trauma", injuries: "Massive hemopneumothorax", signs: "Hypoxia, respiratory distress and progressive blood loss", treatment: "No treatment yet" }) });
 export const pleuralReferenceFixture: GoldenFixture = Object.freeze({ fixtureId: "FX-PLEURAL-REFERENCE", fixtureType: "PROCESS", patientId: pleuralReferencePatient.id, seed: 44, clockState: "RUNNING", ownershipVersion: 1,
   loadedModules: Object.freeze(["PLEURAL_INJURY_V1", "RESPIRATORY_FAILURE_V1", "HYPOXIA_V1"]),
@@ -36,4 +54,5 @@ export const packagePatientDatasetRegistry = new PackagePatientDatasetRegistry()
     { patient: pelvicReferencePatient, runtimeFixture: pelvicReferenceFixture },
     { patient: pleuralReferencePatient, runtimeFixture: pleuralReferenceFixture },
   ]),
+  dataset("patients.massive-transfusion-reference.v1", [{ patient: pelvicReferencePatient, runtimeFixture: mtpReferenceFixture }]),
 ].forEach(value => packagePatientDatasetRegistry.register(value));

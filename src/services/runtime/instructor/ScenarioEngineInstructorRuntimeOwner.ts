@@ -58,6 +58,15 @@ export function createScenarioEngineInstructorRuntimeOwner(
         return { ok: false, reason: error instanceof Error ? error.message : "Resource intervention failed" };
       }
     },
+    executeMtpAction(commandId, action, units) {
+      if (!runtimeWritesAllowed()) return readOnly();
+      try {
+        engine.dispatch({ sequenceId: `SEQ:${commandId}`, step: 1, offsetSec: engine.getRuntimeState().exerciseTimeSec,
+          eventType: "ACTION", actor: "EXCON", target: patientId, eventId: `MTP:${commandId}`, actionId: action,
+          result: "SUCCESS", payload: { units } });
+        notifySync("local"); return { ok: true, runtimeEventId: `MTP:${commandId}` };
+      } catch (error) { return { ok: false, reason: error instanceof Error ? error.message : "MTP action failed" }; }
+    },
     advanceRuntime(commandId, durationSec, canonicalSimulationTimeSec) {
       if (!runtimeWritesAllowed()) return readOnly();
       try {

@@ -26,4 +26,12 @@ describe("WP-44B Supabase repository diagnostics",()=>{
       leaseId:"L",exerciseId:"E",writerInstanceId:"W",userId:"U",
     });
   });
+  test("publishes through the metadata-only RPC and reconstructs the acknowledged local envelope",async()=>{
+    const mockClient=client({data:{checkpoint_revision:5,payload_hash:"H",provenance_hash:"P"}}) as never;
+    const repository=new SupabaseRuntimeCheckpointRepository(mockClient);
+    const checkpoint={exerciseId:"E",checkpointRevision:5,payloadHash:"H",provenanceHash:"P",payload:{}} as never;
+    await expect(repository.publish({leaseId:"L",exerciseId:"E",writerInstanceId:"W",userId:"U",expiresAt:"x"},4,checkpoint))
+      .resolves.toEqual({status:"PUBLISHED",checkpoint});
+    expect((mockClient as {rpc:jest.Mock}).rpc).toHaveBeenCalledWith("publish_runtime_checkpoint_metadata",expect.any(Object));
+  });
 });
