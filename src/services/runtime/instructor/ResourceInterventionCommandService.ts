@@ -25,10 +25,12 @@ export function handleResourceInterventionCommand(command: Readonly<{ commandId:
   if (previous) return structuredClone(previous);
   const owner = getInstructorRuntimeOwner(command.exerciseId, command.patientId);
   const exercise = getCanonicalExerciseSnapshot();
+  const resourceBefore = getPatientResourceDebugSnapshot(command.patientId).resources.find(item => item.resourceId === command.resourceId);
+  const timedAccess = resourceBefore?.type === "peripheralIV" || resourceBefore?.type === "centralVenousCatheter";
   const canonicalSimulationTimeSec = owner?.executeResourceIntervention && exercise.exerciseId === command.exerciseId && exercise.lifecycleState === "RUNNING"
-    ? exercise.simulationTimeSec + 60 : undefined;
+    ? exercise.simulationTimeSec + (timedAccess ? 0 : 60) : undefined;
   const applied = owner?.executeResourceIntervention?.(command.commandId, command.resourceId, canonicalSimulationTimeSec);
-  if (applied?.ok && canonicalSimulationTimeSec !== undefined) advanceExerciseMinutes(1);
+  if (applied?.ok && canonicalSimulationTimeSec !== undefined && !timedAccess) advanceExerciseMinutes(1);
   const result: ResourceInterventionCommandResult = !applied
     ? { ok: false, commandId: command.commandId, errorCode: "UNAVAILABLE", message: "Resource runtime is not available" }
     : applied.ok
@@ -38,11 +40,11 @@ export function handleResourceInterventionCommand(command: Readonly<{ commandId:
     const simulationTimeSec = getCanonicalPatientRuntimeSnapshot(command.patientId)?.state.exerciseTimeSec ?? 0;
     const resource = getPatientResourceDebugSnapshot(command.patientId).resources.find(item => item.resourceId === command.resourceId);
     const chestDrain = resource?.type === "chestDrain";
-    const accessTitle = resource?.type === "peripheralIV" ? "Veenitee rajatud"
-      : resource?.type === "centralVenousCatheter" ? "Tsentraalveenitee rajatud" : undefined;
+    const accessTitle = resource?.type === "peripheralIV" ? "Perifeerse veenitee rajamine alustatud"
+      : resource?.type === "centralVenousCatheter" ? "Tsentraalveenitee rajamine alustatud" : undefined;
     addTimelineEvent({ id: `TL-RESOURCE-${command.commandId}`, exerciseId: command.exerciseId, patientId: command.patientId,
       timestamp: `T+${simulationTimeSec}s`, simulationTimeSec, type: "intervention", title: accessTitle ?? (chestDrain ? "Chest drain inserted" : "Resource intervention applied"),
-      description: accessTitle ? `Kanooniline vaskulaarne ligipääs ${command.resourceId} rajati` : chestDrain
+      description: accessTitle ? `Kanoonilise vaskulaarse ligipääsu ${command.resourceId} rajamine algas` : chestDrain
         ? "Canonical pleural drainage intervention applied" : `Canonical resource ${command.resourceId} applied`, author: command.issuedBy, visibility: "revealed" });
   }
   results.set(command.commandId, structuredClone(result));

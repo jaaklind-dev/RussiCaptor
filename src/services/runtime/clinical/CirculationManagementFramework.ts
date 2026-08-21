@@ -19,14 +19,16 @@ export class CirculationManagementFramework {
       patientId: instance.patientId, interventionInstanceId: instance.instanceId, definitionId: instance.definitionId });
     const accessType = accessTypes[instance.definitionId];
     if (accessType) {
-      state.vascularAccess = starting
+      if (instance.status === "RUNNING") return [];
+      const completed = instance.status === "COMPLETED";
+      state.vascularAccess = completed
         ? [...state.vascularAccess.filter(item => item.interventionInstanceId !== instance.instanceId), {
           interventionInstanceId: instance.instanceId, type: accessType, resourceIds: [...instance.resourceIds],
           location: typeof instance.parameters.location === "string" ? instance.parameters.location : undefined,
-          establishedAt: instance.startedAt,
+          establishedAt: instance.endedAt ?? instance.startedAt,
         }].sort((a, b) => a.interventionInstanceId.localeCompare(b.interventionInstanceId))
         : state.vascularAccess.filter(item => item.interventionInstanceId !== instance.instanceId);
-      emit(starting ? "VascularAccessEstablished" : "VascularAccessRemoved");
+      emit(completed ? "VascularAccessEstablished" : "VascularAccessRemoved");
     }
     if (["CRYSTALLOID_INFUSION", "BLOOD_PRODUCT_ADMINISTRATION", "PRESSURE_INFUSION"].includes(instance.definitionId)) {
       state.runningInfusions = starting

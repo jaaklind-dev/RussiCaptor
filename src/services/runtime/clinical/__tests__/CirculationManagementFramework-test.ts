@@ -23,8 +23,9 @@ describe("WP-13 CirculationState", () => {
 
   test("supports multiple simultaneous IV access and independent removal", () => {
     const framework = new CirculationManagementFramework();
-    framework.apply(instance("IV-1", "PERIPHERAL_IV_ACCESS", "RUNNING", ["IV-R1"]));
-    framework.apply(instance("IV-2", "PERIPHERAL_IV_ACCESS", "RUNNING", ["IV-R2"]));
+    expect(framework.apply(instance("IV-1", "PERIPHERAL_IV_ACCESS", "RUNNING", ["IV-R1"]))).toEqual([]);
+    framework.apply(instance("IV-1", "PERIPHERAL_IV_ACCESS", "COMPLETED", ["IV-R1"]));
+    framework.apply(instance("IV-2", "PERIPHERAL_IV_ACCESS", "COMPLETED", ["IV-R2"]));
     expect(framework.getState("PT-C").vascularAccess).toHaveLength(2);
     expect(framework.apply(instance("IV-1", "PERIPHERAL_IV_ACCESS", "CANCELLED"))[0].eventType).toBe("VascularAccessRemoved");
     expect(framework.getState("PT-C").vascularAccess.map(item => item.interventionInstanceId)).toEqual(["IV-2"]);
@@ -67,7 +68,7 @@ function replay(): ClinicalScenarioEngine {
     definitionId: "PERIPHERAL_IV_ACCESS", parameters: { location: "left arm", gauge: 18, attempts: 1 } });
   engine.scheduleIntervention({ interventionId: "TQ-A", patientId: "PT-C", resourceId: "TQ-1", action: "APPLY", timestamp: 1,
     definitionId: "TOURNIQUET_APPLICATION", parameters: { limb: "left leg", applicationTime: 1 } });
-  engine.advanceTo(1); engine.dispatch(tick("T1", 1)); return engine;
+  engine.advanceTo(1); engine.dispatch(tick("T1", 1)); engine.advanceTo(181); engine.dispatch(tick("T2", 181)); return engine;
 }
 
 test("WP-13 ScenarioEngine circulation, events, assessment and replay are deterministic", () => {

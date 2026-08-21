@@ -80,12 +80,15 @@ describe("WP-47D canonical vascular access integration", () => {
     expect(source).toContain('line.status === "MISSING" ? "PUUDUB"');
   });
 
-  test("ScenarioEngine projects an established canonical access into MTP before product commands", () => {
+  test("ScenarioEngine projects only a completed canonical access into MTP before product commands", () => {
     const engine = new ClinicalScenarioEngine(); engine.reset(mtpReferenceFixture);
     engine.scheduleIntervention({ interventionId: "PIV-CANONICAL", patientId: "PT-PELVIC-001", resourceId: "PIV-1", action: "APPLY",
       timestamp: 1, definitionId: "PERIPHERAL_IV_ACCESS", parameters: { location: "left arm", gauge: 18, attempts: 1 } });
     engine.advanceTo(1); engine.dispatch({ sequenceId: "ACCESS", step: 1, offsetSec: 1, eventType: "ENGINE_TICK", actor: "ENGINE",
       target: "PT-PELVIC-001", eventId: "ACCESS-TICK", result: "SUCCESS", payload: { tickMin: 1 / 60 } });
+    expect(engine.getCirculationState().vascularAccess).toHaveLength(0);
+    engine.advanceTo(181); engine.dispatch({ sequenceId: "ACCESS", step: 2, offsetSec: 181, eventType: "ENGINE_TICK", actor: "ENGINE",
+      target: "PT-PELVIC-001", eventId: "ACCESS-COMPLETE", result: "SUCCESS", payload: { tickMin: 3 } });
     const mtp = engine.getPatientProcesses().find(process => process.processType === "MASSIVE_TRANSFUSION") as unknown as ReturnType<typeof fresh>;
     expect(engine.getCirculationState().vascularAccess).toHaveLength(1);
     expect(mtp.clinicalState.vascularAccessLines[0]).toMatchObject({ status: "FREE", accessInterventionInstanceId: "PIV-CANONICAL:INSTANCE" });

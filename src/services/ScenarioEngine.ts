@@ -380,41 +380,8 @@ export class ClinicalScenarioEngine {
     if (event.eventType !== "ENGINE_TICK") {
       throw new Error(`NOT_IMPLEMENTED: ClinicalScenarioEngine sündmus ${event.eventType}.`);
     }
-    this.resourcePool.update(this.simulationTimeSec);
-    for (const resourceEvent of this.interventionEngine.applyDue(this.simulationTimeSec, this.resourcePool)) {
-      this.logResourceEvent(resourceEvent);
-      const changedInstance = this.interventionRuntime.consumeResourceEvent(
-        resourceEvent, this.requireProcess().encounterId, this.resourcePool.snapshot(), this.airwayClinicalContext()
-      );
-      if (changedInstance) {
-        for (const airwayEvent of this.airwayManagement.apply(changedInstance)) {
-          this.logEvent(airwayEvent.eventType, {
-            interventionInstanceId: airwayEvent.interventionInstanceId,
-            definitionId: airwayEvent.definitionId,
-            airwayState: airwayEvent.airwayState,
-            ventilationState: airwayEvent.ventilationState,
-          }, airwayEvent.patientId);
-        }
-        for (const circulationEvent of this.circulationManagement.apply(changedInstance)) {
-          this.logEvent(circulationEvent.eventType, {
-            interventionInstanceId: circulationEvent.interventionInstanceId,
-            definitionId: circulationEvent.definitionId,
-          }, circulationEvent.patientId);
-        }
-      }
-      if (changedInstance?.definitionId === "OXYGEN_THERAPY" && changedInstance.status === "CANCELLED" &&
-        !this.interventionRuntime.active(changedInstance.patientId).some(item => item.definitionId === "OXYGEN_THERAPY")) {
-        this.applyClinicalEffect({
-          effectId: `${changedInstance.instanceId}:STOP:${resourceEvent.timestamp}`,
-          effectType: "INSPIRED_OXYGEN_REMOVED",
-          encounterId: changedInstance.encounterId,
-          patientId: changedInstance.patientId,
-          timestamp: resourceEvent.timestamp,
-          sourceInterventionInstanceId: changedInstance.instanceId,
-          parameters: {},
-        }, true);
-      }
-    }
+    this.applyDueResourceInterventions();
+    for (const completed of this.interventionRuntime.completeDue(this.simulationTimeSec)) this.projectInterventionState(completed);
     this.reconcileMtpAccessFromCanonicalCirculation();
     const activeEffects = [...this.interventionRuntime.effectsAt(this.simulationTimeSec), ...this.medicationEngine.activeEffects()]
       .sort((a,b) => a.effectType.localeCompare(b.effectType) || a.effectId.localeCompare(b.effectId));
@@ -484,8 +451,17 @@ export class ClinicalScenarioEngine {
       startedAt: this.simulationTimeSec, resourceIds: [], clinicalContext: this.airwayClinicalContext() });
   }
 
+  /** Applies commands scheduled for the current canonical instant without advancing clinical time. */
+  applyScheduledResourceInterventionsAtCurrentTime(): void {
+    this.applyDueResourceInterventions();
+    this.reconcileMtpAccessFromCanonicalCirculation();
+    this.publishResourceDebugSnapshot();
+  }
+
   stopClinicalIntervention(sourceInterventionId: string): InterventionInstance | undefined {
-    return this.interventionRuntime.finishBySource(sourceInterventionId, "CANCELLED", this.simulationTimeSec);
+    const cancelled = this.interventionRuntime.finishBySource(sourceInterventionId, "CANCELLED", this.simulationTimeSec);
+    if (cancelled) { this.projectInterventionState(cancelled); this.reconcileMtpAccessFromCanonicalCirculation(); this.publishResourceDebugSnapshot(); }
+    return cancelled;
   }
 
   getBotulismRoot(): BotulismRootPatientProcessRuntime | undefined {
@@ -829,6 +805,42 @@ export class ClinicalScenarioEngine {
     for (const process of this.lifecycleProcesses("MASSIVE_TRANSFUSION")) {
       const access = this.circulationManagement.getState(process.encounterId).vascularAccess;
       this.replaceLifecycleProcess(reconcileMtpVascularAccess(process as MassiveTransfusionPatientProcessRuntime, access));
+    }
+  }
+
+  private applyDueResourceInterventions(): void {
+    this.resourcePool.update(this.simulationTimeSec);
+    for (const resourceEvent of this.interventionEngine.applyDue(this.simulationTimeSec, this.resourcePool)) {
+      this.logResourceEvent(resourceEvent);
+      const changedInstance = this.interventionRuntime.consumeResourceEvent(
+        resourceEvent, this.requireProcess().encounterId, this.resourcePool.snapshot(), this.airwayClinicalContext()
+      );
+      if (changedInstance) {
+        this.projectInterventionState(changedInstance);
+        if (["PERIPHERAL_IV_ACCESS", "CENTRAL_VENOUS_ACCESS"].includes(changedInstance.definitionId) && changedInstance.status === "RUNNING") {
+          this.logEvent("VascularAccessEstablishmentStarted", { interventionInstanceId: changedInstance.instanceId,
+            definitionId: changedInstance.definitionId }, changedInstance.patientId);
+        }
+      }
+      if (changedInstance?.definitionId === "OXYGEN_THERAPY" && changedInstance.status === "CANCELLED" &&
+        !this.interventionRuntime.active(changedInstance.patientId).some(item => item.definitionId === "OXYGEN_THERAPY")) {
+        this.applyClinicalEffect({ effectId: `${changedInstance.instanceId}:STOP:${resourceEvent.timestamp}`,
+          effectType: "INSPIRED_OXYGEN_REMOVED", encounterId: changedInstance.encounterId,
+          patientId: changedInstance.patientId, timestamp: resourceEvent.timestamp,
+          sourceInterventionInstanceId: changedInstance.instanceId, parameters: {} }, true);
+      }
+    }
+  }
+
+  private projectInterventionState(instance: InterventionInstance): void {
+    for (const airwayEvent of this.airwayManagement.apply(instance)) {
+      this.logEvent(airwayEvent.eventType, { interventionInstanceId: airwayEvent.interventionInstanceId,
+        definitionId: airwayEvent.definitionId, airwayState: airwayEvent.airwayState,
+        ventilationState: airwayEvent.ventilationState }, airwayEvent.patientId);
+    }
+    for (const circulationEvent of this.circulationManagement.apply(instance)) {
+      this.logEvent(circulationEvent.eventType, { interventionInstanceId: circulationEvent.interventionInstanceId,
+        definitionId: circulationEvent.definitionId }, circulationEvent.patientId);
     }
   }
 

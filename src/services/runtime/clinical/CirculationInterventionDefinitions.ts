@@ -6,7 +6,7 @@ const definition = (value: InterventionDefinition) => value;
 
 export const circulationInterventionDefinitions: InterventionDefinition[] = [
   definition({ definitionId: "PERIPHERAL_IV_ACCESS", version: "1.0.0", name: "Peripheral IV access",
-    requiredResources: [{ resourceType: "peripheralIV", quantity: 1 }], duration,
+    requiredResources: [{ resourceType: "peripheralIV", quantity: 1 }], duration: { kind: "FIXED", durationSec: 180 },
     effects: [{ effectType: "VASCULAR_ACCESS_AVAILABLE", parameterMap: { accessType: "accessType", location: "location", gauge: "gauge" } }],
     parameters: [{ name: "accessType", type: "STRING", required: true, defaultValue: "PERIPHERAL_IV" },
       { name: "location", type: "STRING", required: true, defaultValue: "unspecified" },
@@ -19,7 +19,7 @@ export const circulationInterventionDefinitions: InterventionDefinition[] = [
       { name: "location", type: "STRING", required: true, defaultValue: "unspecified" },
       { name: "device", type: "STRING", required: true, defaultValue: "IO" }], preconditions: [active] }),
   definition({ definitionId: "CENTRAL_VENOUS_ACCESS", version: "1.0.0", name: "Central venous access",
-    requiredResources: [{ resourceType: "centralVenousCatheter", quantity: 1 }], duration,
+    requiredResources: [{ resourceType: "centralVenousCatheter", quantity: 1 }], duration: { kind: "FIXED", durationSec: 600 },
     effects: [{ effectType: "VASCULAR_ACCESS_AVAILABLE", parameterMap: { accessType: "accessType", location: "location" } }],
     parameters: [{ name: "accessType", type: "STRING", required: true, defaultValue: "CENTRAL_ACCESS" },
       { name: "location", type: "STRING", required: true, defaultValue: "unspecified" }], preconditions: [active] }),

@@ -48,6 +48,9 @@ export function createScenarioEngineInstructorRuntimeOwner(
         if (interventionTime < before) return { ok: false, reason: "Canonical exercise clock is behind patient runtime" };
         engine.scheduleIntervention({ interventionId: sourceInterventionId, patientId, resourceId,
           action: "APPLY", timestamp: interventionTime, definitionId });
+        if (["PERIPHERAL_IV_ACCESS", "CENTRAL_VENOUS_ACCESS"].includes(definitionId)) {
+          engine.applyScheduledResourceInterventionsAtCurrentTime();
+        }
         if (canonicalSimulationTimeSec !== undefined) { notifySync("local"); return { ok: true, runtimeEventId: `INTERVENTION:${sourceInterventionId}` }; }
         if (interventionTime > before) engine.advanceTo(interventionTime);
         engine.dispatch({ sequenceId: `SEQ:${commandId}`, step: 1, offsetSec: interventionTime,

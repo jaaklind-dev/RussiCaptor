@@ -39,8 +39,9 @@ const fixture: GoldenFixture = { fixtureId: "FX-MED", fixtureType: "PROCESS", pa
 const tick = (id:string,time:number): GoldenInputEvent => ({ sequenceId:"M",step:time,offsetSec:time,eventType:"ENGINE_TICK",actor:"ENGINE",target:"PT-M",eventId:id,result:"SUCCESS",payload:{tickMin:1} });
 function replay() { const e=new ClinicalScenarioEngine(); e.installMedicationDefinitions(definitions); e.reset(fixture); e.setAssessmentRules(medicationAssessmentRules);
   e.scheduleIntervention({ interventionId:"IV-I",patientId:"PT-M",resourceId:"IV",action:"APPLY",timestamp:1,definitionId:"PERIPHERAL_IV_ACCESS",parameters:{location:"arm",gauge:18,attempts:1} });
-  e.advanceTo(1); e.dispatch(tick("T1",1)); const access=e.getCirculationState().vascularAccess[0].interventionInstanceId;
-  e.administerMedication(admin({ vascularAccessId:access,timestamp:2 })); e.advanceTo(2); e.dispatch(tick("T2",2)); return e; }
+  e.advanceTo(1); e.dispatch(tick("T1",1)); e.advanceTo(181); e.dispatch(tick("T2",181));
+  const access=e.getCirculationState().vascularAccess[0].interventionInstanceId;
+  e.administerMedication(admin({ vascularAccessId:access,timestamp:182 })); e.advanceTo(182); e.dispatch(tick("T3",182)); return e; }
 test("WP-15 medication state, effects, events, assessment and replay are deterministic",()=>{ const a=replay(),b=replay();
   expect(a.getMedicationState()).toContainEqual(expect.objectContaining({status:"ACTIVE"}));
   expect(a.getEventLog().map(x=>x.eventType)).toEqual(expect.arrayContaining(["MedicationOrdered","MedicationStarted"]));

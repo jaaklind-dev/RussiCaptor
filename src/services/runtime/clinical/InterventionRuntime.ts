@@ -72,11 +72,19 @@ export class InterventionRuntime {
     return structuredClone(instance);
   }
 
-  finishBySource(sourceInterventionId: string, status: "COMPLETED" | "CANCELLED", endedAt: number): InterventionInstance | undefined {
+  finishBySource(sourceInterventionId: string, status: "COMPLETED" | "CANCELLED" | "FAILED", endedAt: number): InterventionInstance | undefined {
     const instance = [...this.instances.values()].find(item =>
       item.sourceInterventionId === sourceInterventionId && item.status === "RUNNING"
     );
     return instance ? this.finish(instance.instanceId, status, endedAt) : undefined;
+  }
+
+  completeDue(timestamp: number): InterventionInstance[] {
+    return this.active().flatMap(instance => {
+      const definition = this.definitions.get(instance.definitionId);
+      if (definition?.duration.kind !== "FIXED" || timestamp < instance.startedAt + definition.duration.durationSec) return [];
+      return [this.finish(instance.instanceId, "COMPLETED", instance.startedAt + definition.duration.durationSec)];
+    });
   }
 
   consumeResourceEvent(
@@ -206,7 +214,7 @@ export class InterventionRuntime {
     return instance ? this.finish(instance.instanceId, "CANCELLED", event.timestamp) : undefined;
   }
 
-  private finish(instanceId: string, status: "COMPLETED" | "CANCELLED", endedAt: number): InterventionInstance {
+  private finish(instanceId: string, status: "COMPLETED" | "CANCELLED" | "FAILED", endedAt: number): InterventionInstance {
     const current = this.instances.get(instanceId);
     if (!current || current.status !== "RUNNING") throw new Error(`InterventionInstance ${instanceId} pole RUNNING.`);
     const finished: InterventionInstance = { ...current, status, endedAt };
