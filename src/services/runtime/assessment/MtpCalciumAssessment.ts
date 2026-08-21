@@ -9,8 +9,8 @@ export type MtpCalciumAssessment = Readonly<{
 
 /** Pure protocol projection. It has no effect on Runtime completion or physiology. */
 export function assessMtpCalcium(process: MassiveTransfusionPatientProcessRuntime): MtpCalciumAssessment {
-  const state = process.clinicalState;
-  if (!process.configuration.calciumReplacement?.calciumEnabled) {
+  const state = process.clinicalState.transfusionCalcium;
+  if (state.rbcUnitsPerCalcium === null) {
     return { status: "NOT_APPLICABLE", completedRbcUnitsTotal: state.completedRbcUnitsTotal,
       calciumAdministrations: state.calciumAdministrations.length, explanation: "Kaltsiumiasendus ei olnud kasutusel." };
   }

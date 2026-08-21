@@ -8,10 +8,12 @@ import type { BloodProductDeliveryMode } from "@/models/MassiveTransfusion";
 
 type MtpProjection = Readonly<{
   activated?: boolean;
-  completedRbcUnitsTotal?: number;
-  completedRbcUnitsSinceLastCalcium?: number;
-  rbcUnitsPerCalcium?: number | null;
-  calciumRecommended?: boolean;
+  transfusionCalcium?: Readonly<{
+    completedRbcUnitsTotal?: number;
+    completedRbcUnitsSinceLastCalcium?: number;
+    rbcUnitsPerCalcium?: number | null;
+    calciumRecommended?: boolean;
+  }>;
   vascularAccessCount?: number;
   vascularAccessLines?: readonly Readonly<{ lineId: string; status: "MISSING" | "FREE" | "OCCUPIED"; accessType?: string; administrationId?: string }>[];
   administrations?: readonly Readonly<{ administrationId: string; product: string; state: string; deliveryMode?: BloodProductDeliveryMode; expectedCompletionAtSec?: number }>[];
@@ -29,6 +31,7 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
   const runtimeSnapshot = getCanonicalPatientRuntimeSnapshot(patientId, version);
   const process = runtimeSnapshot?.processes.find(item => item.moduleId === "MASSIVE_TRANSFUSION_V1");
   const state = process?.clinicalState as MtpProjection | undefined;
+  const calcium = state?.transfusionCalcium;
   const [submitting, setSubmitting] = useState<MtpAction>();
   const [message, setMessage] = useState<string>();
   const [deliveryMode, setDeliveryMode] = useState<BloodProductDeliveryMode>("GRAVITY");
@@ -45,7 +48,7 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
 
   return <View style={styles.card} testID="cm-mtp-controls">
     <Text style={styles.title}>Massiivse transfusiooni protokoll</Text>
-    <Text style={styles.status}>Lõpetatud erütrotsüüdiühikuid: {state?.completedRbcUnitsTotal ?? 0}</Text>
+    <Text style={styles.status}>Lõpetatud erütrotsüüdiühikuid: {calcium?.completedRbcUnitsTotal ?? 0}</Text>
     {state?.vascularAccessLines && <View style={styles.accessCard}>
       <Text style={styles.status}>Veeniteed: {state.vascularAccessCount ?? 0}/3</Text>
       {state.vascularAccessLines.map(line => { const administration = state.administrations?.find(item => item.administrationId === line.administrationId);
@@ -58,14 +61,14 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
         <Text style={styles.choiceText}>{({ GRAVITY: "Vabavool", PRESSURE_BAG: "Survekott", RAPID_INFUSER: "Verepump/soojendaja" } as const)[mode]}</Text>
       </Pressable>)}</View>}
     </View>}
-    <Text style={state?.calciumRecommended ? styles.due : styles.status}>
-      {state?.calciumRecommended ? "Kaltsium on näidustatud" : state?.rbcUnitsPerCalcium
-        ? `Kaltsium on näidustatud pärast ${state.rbcUnitsPerCalcium} lõpetatud erütrotsüüdiühikut · ${state?.completedRbcUnitsSinceLastCalcium ?? 0}/${state.rbcUnitsPerCalcium}`
+    <Text style={calcium?.calciumRecommended ? styles.due : styles.status}>
+      {calcium?.calciumRecommended ? "Kaltsium on näidustatud" : calcium?.rbcUnitsPerCalcium
+        ? `Kaltsium on näidustatud pärast ${calcium.rbcUnitsPerCalcium} lõpetatud erütrotsüüdiühikut · ${calcium.completedRbcUnitsSinceLastCalcium ?? 0}/${calcium.rbcUnitsPerCalcium}`
         : "Kaltsiumiasendus ei ole selles protokollis kasutusel"}
     </Text>
     {!readOnly && actions.map(({ action, label }) => <Pressable key={action} disabled={Boolean(submitting)}
       onPress={() => submit(action)} style={styles.button}><Text style={styles.buttonText}>{label}</Text></Pressable>)}
-    {!readOnly && state?.activated && state?.rbcUnitsPerCalcium && <Pressable testID="administer-calcium" disabled={Boolean(submitting)}
+    {!readOnly && calcium?.rbcUnitsPerCalcium && <Pressable testID="administer-calcium" disabled={Boolean(submitting)}
       onPress={() => submit("CALCIUM_ADMINISTRATION")} style={styles.calciumButton}>
       <Text style={styles.buttonText}>Manusta kaltsiumi</Text>
     </Pressable>}

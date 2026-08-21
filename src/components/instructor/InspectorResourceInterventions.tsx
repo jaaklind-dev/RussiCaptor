@@ -17,6 +17,7 @@ export function InspectorResourceInterventions({ patientId }: Readonly<{ patient
   const [submitting, setSubmitting] = useState<string>();
   const [result, setResult] = useState<ResourceInterventionCommandResult>();
   const mtp = getCanonicalPatientRuntimeSnapshot(patientId, runtimeSnapshotVersion)?.processes.find(process => process.moduleId === "MASSIVE_TRANSFUSION_V1");
+  const calcium = mtp?.clinicalState?.transfusionCalcium as Readonly<{ rbcUnitsPerCalcium?: number | null }> | undefined;
   const apply = (resourceId: string) => {
     if (submitting) return;
     const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
@@ -33,7 +34,7 @@ export function InspectorResourceInterventions({ patientId }: Readonly<{ patient
       <Text style={styles.buttonText}>{submitting === resource.resourceId ? "Applying…" : `Apply ${resource.type}`}</Text>
     </Pressable>)}
     {mtp && <View style={styles.mtp}><Text style={styles.title}>Massiivse transfusiooni protokoll</Text>
-      {(["MTP_ACTIVATION", "RBC_ADMINISTRATION", "PLASMA_ADMINISTRATION", "PLATELET_ADMINISTRATION", ...(mtp.clinicalState?.activated && mtp.clinicalState?.rbcUnitsPerCalcium ? ["CALCIUM_ADMINISTRATION" as const] : [])] as MtpAction[]).map(action =>
+      {(["MTP_ACTIVATION", "RBC_ADMINISTRATION", "PLASMA_ADMINISTRATION", "PLATELET_ADMINISTRATION", ...(calcium?.rbcUnitsPerCalcium ? ["CALCIUM_ADMINISTRATION" as const] : [])] as MtpAction[]).map(action =>
         <Pressable key={action} disabled={Boolean(submitting)} onPress={() => {
           const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
           const commandId = createMtpCommandId(exerciseId, patientId, action); setSubmitting(action);

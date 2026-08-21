@@ -47,6 +47,15 @@ export type MassiveTransfusionEvidence = Readonly<{
   eventType: "MTP_ACTIVATED" | "BLOOD_PRODUCT_ADMINISTRATION_STARTED" | "BLOOD_PRODUCT_ADMINISTRATION_COMPLETED" | "MTP_CALCIUM_DUE" | "MTP_CALCIUM_ADMINISTERED";
   details: Readonly<Record<string, unknown>>;
 }>;
+export type TransfusionCalciumSupportState = {
+  completedRbcUnitsTotal: number;
+  completedRbcUnitsSinceLastCalcium: number;
+  rbcUnitsPerCalcium: number | null;
+  calciumRecommended: boolean;
+  calciumAdministrations: Readonly<{ administrationId: string; product: string; dose: string; route: string; completedAtSec: number }>[];
+  calciumLastAdministeredAt: number | null;
+  calciumAdministrationCount: number;
+};
 export type MassiveTransfusionPatientProcessRuntime = {
   processId: string; encounterId: string; instanceKey: string; processType: "MASSIVE_TRANSFUSION";
   templateId: string; state: "Active" | "Controlled" | "Resolved"; elapsedTime: number; nextTick: number;
@@ -60,13 +69,7 @@ export type MassiveTransfusionPatientProcessRuntime = {
     oxygenCarryingCapacity: number;
     coagulationSupport: number;
     administrations: BloodProductAdministration[];
-    completedRbcUnitsTotal: number;
-    completedRbcUnitsSinceLastCalcium: number;
-    rbcUnitsPerCalcium: number | null;
-    calciumRecommended: boolean;
-    calciumAdministrations: Readonly<{ administrationId: string; product: string; dose: string; route: string; completedAtSec: number }>[];
-    calciumLastAdministeredAt: number | null;
-    calciumAdministrationCount: number;
+    transfusionCalcium: TransfusionCalciumSupportState;
     vascularAccessCount: number;
     vascularAccessLines: Readonly<{ lineId: VascularAccessLineId; status: "MISSING" | "FREE" | "OCCUPIED";
       accessInterventionInstanceId?: string; accessType?: VascularAccessType; administrationId?: string }>[];

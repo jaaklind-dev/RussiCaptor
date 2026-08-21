@@ -1,4 +1,4 @@
-import type { BloodProductDeliveryMode, BloodProductType, MassiveTransfusionConfiguration, MassiveTransfusionEvidence, MassiveTransfusionPatientProcessRuntime, VascularAccessLineId } from "@/models/MassiveTransfusion";
+import { MTP_REFERENCE_CONFIGURATION, type BloodProductDeliveryMode, type BloodProductType, type MassiveTransfusionConfiguration, type MassiveTransfusionEvidence, type MassiveTransfusionPatientProcessRuntime, type TransfusionCalciumSupportState, type VascularAccessLineId } from "@/models/MassiveTransfusion";
 import type { ActiveVascularAccess } from "@/models/CirculationState";
 import type { ProcessOutput } from "@/models/RuntimeAggregation";
 
@@ -22,10 +22,41 @@ function output(p: Omit<MassiveTransfusionPatientProcessRuntime, "outputs">): Pr
 }
 function withOutput(base: Omit<MassiveTransfusionPatientProcessRuntime, "outputs">): MassiveTransfusionPatientProcessRuntime { return { ...base, outputs: output(base) }; }
 
+type LegacyCalciumState = Partial<TransfusionCalciumSupportState>;
+function calciumConfiguration(configuration: MassiveTransfusionConfiguration) {
+  return configuration.calciumReplacement ?? MTP_REFERENCE_CONFIGURATION.calciumReplacement!;
+}
+function normalizePatientTransfusionState(previous: MassiveTransfusionPatientProcessRuntime): MassiveTransfusionPatientProcessRuntime {
+  const base = structuredClone(previous) as MassiveTransfusionPatientProcessRuntime & {
+    clinicalState: MassiveTransfusionPatientProcessRuntime["clinicalState"] & LegacyCalciumState;
+  };
+  if (!base.clinicalState.transfusionCalcium) {
+    const calcium = calciumConfiguration(base.configuration);
+    base.clinicalState.transfusionCalcium = {
+      completedRbcUnitsTotal: base.clinicalState.completedRbcUnitsTotal ?? 0,
+      completedRbcUnitsSinceLastCalcium: base.clinicalState.completedRbcUnitsSinceLastCalcium ?? 0,
+      rbcUnitsPerCalcium: base.clinicalState.rbcUnitsPerCalcium ?? (calcium.calciumEnabled ? calcium.rbcUnitsPerCalcium : null),
+      calciumRecommended: base.clinicalState.calciumRecommended ?? false,
+      calciumAdministrations: base.clinicalState.calciumAdministrations ?? [],
+      calciumLastAdministeredAt: base.clinicalState.calciumLastAdministeredAt ?? null,
+      calciumAdministrationCount: base.clinicalState.calciumAdministrationCount ?? base.clinicalState.calciumAdministrations?.length ?? 0,
+    };
+    delete base.clinicalState.completedRbcUnitsTotal;
+    delete base.clinicalState.completedRbcUnitsSinceLastCalcium;
+    delete base.clinicalState.rbcUnitsPerCalcium;
+    delete base.clinicalState.calciumRecommended;
+    delete base.clinicalState.calciumAdministrations;
+    delete base.clinicalState.calciumLastAdministeredAt;
+    delete base.clinicalState.calciumAdministrationCount;
+  }
+  const { outputs: _outputs, ...without } = base;
+  return withOutput(without);
+}
+
 export function bootstrapMassiveTransfusionPatientProcess(encounterId: string, initial: Readonly<Record<string, unknown>>): MassiveTransfusionPatientProcessRuntime {
   const configuration = structuredClone(initial.configuration) as MassiveTransfusionConfiguration;
   if (!configuration?.products || !configuration.initialInventory) throw new Error("MTP_CONFIGURATION_INVALID");
-  const calcium = configuration.calciumReplacement;
+  const calcium = calciumConfiguration(configuration);
   const delivery = configuration.bloodProductDelivery;
   if (calcium && (!Number.isInteger(calcium.rbcUnitsPerCalcium) || calcium.rbcUnitsPerCalcium <= 0 ||
     !calcium.calciumProduct.trim() || !calcium.calciumDose.trim() || !calcium.calciumRoute.trim())) throw new Error("MTP_CALCIUM_CONFIGURATION_INVALID");
@@ -38,33 +69,35 @@ export function bootstrapMassiveTransfusionPatientProcess(encounterId: string, i
     templateId: String(initial.templateId ?? "MTP_REFERENCE_V1"), state: "Active", elapsedTime: 0, nextTick: 60, configuration,
     clinicalState: { activated: false, inventory: { ...configuration.initialInventory }, administeredUnits: { RBC: 0, PLASMA: 0, PLATELETS: 0 },
       transfusedVolumeMl: 0, oxygenCarryingCapacity: 0, coagulationSupport: 0, administrations: [],
-      completedRbcUnitsTotal: 0, completedRbcUnitsSinceLastCalcium: 0,
-      rbcUnitsPerCalcium: calcium?.calciumEnabled ? calcium.rbcUnitsPerCalcium : null,
-      calciumRecommended: false, calciumAdministrations: [], calciumLastAdministeredAt: null,
-      calciumAdministrationCount: 0, vascularAccessCount: 0,
+      transfusionCalcium: { completedRbcUnitsTotal: 0, completedRbcUnitsSinceLastCalcium: 0,
+        rbcUnitsPerCalcium: calcium.calciumEnabled ? calcium.rbcUnitsPerCalcium : null,
+        calciumRecommended: false, calciumAdministrations: [], calciumLastAdministeredAt: null,
+        calciumAdministrationCount: 0 }, vascularAccessCount: 0,
       vascularAccessLines: lineIds.map(lineId => ({ lineId, status: "MISSING" as const })), processedCommandIds: [] }, pendingEvidence: [],
   };
   return withOutput(base);
 }
 
 export function administerMtpCalcium(previous: MassiveTransfusionPatientProcessRuntime, commandId: string): MassiveTransfusionPatientProcessRuntime {
+  previous = normalizePatientTransfusionState(previous);
   if (previous.clinicalState.processedCommandIds.includes(commandId)) return structuredClone(previous);
-  const calcium = previous.configuration.calciumReplacement;
+  const calcium = calciumConfiguration(previous.configuration);
   if (!calcium?.calciumEnabled) throw new Error("MTP_CALCIUM_DISABLED");
-  if (!previous.clinicalState.activated) throw new Error("MTP_NOT_ACTIVATED");
   const base = structuredClone(previous);
+  const state = base.clinicalState.transfusionCalcium;
   base.clinicalState.processedCommandIds.push(commandId); base.clinicalState.processedCommandIds.sort();
-  base.clinicalState.calciumAdministrations.push({ administrationId: commandId, product: calcium.calciumProduct,
+  state.calciumAdministrations.push({ administrationId: commandId, product: calcium.calciumProduct,
     dose: calcium.calciumDose, route: calcium.calciumRoute, completedAtSec: base.elapsedTime });
-  base.clinicalState.calciumAdministrationCount = base.clinicalState.calciumAdministrations.length;
-  base.clinicalState.calciumLastAdministeredAt = base.elapsedTime;
-  base.clinicalState.completedRbcUnitsSinceLastCalcium = 0; base.clinicalState.calciumRecommended = false;
+  state.calciumAdministrationCount = state.calciumAdministrations.length;
+  state.calciumLastAdministeredAt = base.elapsedTime;
+  state.completedRbcUnitsSinceLastCalcium = 0; state.calciumRecommended = false;
   base.pendingEvidence.push({ eventType: "MTP_CALCIUM_ADMINISTERED", details: { commandId, product: calcium.calciumProduct,
     dose: calcium.calciumDose, route: calcium.calciumRoute, completedAtSec: base.elapsedTime } });
   const { outputs: _outputs, ...without } = base; return withOutput(without);
 }
 
 export function activateMassiveTransfusion(previous: MassiveTransfusionPatientProcessRuntime, commandId: string): MassiveTransfusionPatientProcessRuntime {
+  previous = normalizePatientTransfusionState(previous);
   if (previous.clinicalState.processedCommandIds.includes(commandId)) return structuredClone(previous);
   if (previous.clinicalState.activated) return structuredClone(previous);
   const base = structuredClone(previous); base.clinicalState.activated = true; base.clinicalState.activationId = commandId;
@@ -81,6 +114,7 @@ const durationForMode = (configuration: MassiveTransfusionConfiguration, mode: B
 
 export function reconcileMtpVascularAccess(previous: MassiveTransfusionPatientProcessRuntime,
   canonicalAccesses: readonly ActiveVascularAccess[]): MassiveTransfusionPatientProcessRuntime {
+  previous = normalizePatientTransfusionState(previous);
   if (!previous.configuration.bloodProductDelivery) return structuredClone(previous);
   const supported = canonicalAccesses.filter(access => access.type === "PERIPHERAL_IV" || access.type === "CENTRAL_ACCESS")
     .sort((left, right) => left.establishedAt - right.establishedAt || left.interventionInstanceId.localeCompare(right.interventionInstanceId));
@@ -110,8 +144,8 @@ export function reconcileMtpVascularAccess(previous: MassiveTransfusionPatientPr
 
 export function startBloodProductAdministration(previous: MassiveTransfusionPatientProcessRuntime, commandId: string, product: BloodProductType, units: number,
   deliveryMode: BloodProductDeliveryMode = "GRAVITY", requestedLineId?: VascularAccessLineId): MassiveTransfusionPatientProcessRuntime {
+  previous = normalizePatientTransfusionState(previous);
   if (previous.clinicalState.processedCommandIds.includes(commandId)) return structuredClone(previous);
-  if (!previous.clinicalState.activated) throw new Error("MTP_NOT_ACTIVATED");
   if (!Number.isInteger(units) || units <= 0) throw new Error("INVALID_BLOOD_PRODUCT_QUANTITY");
   if (previous.clinicalState.inventory[product] < units) throw new Error("BLOOD_PRODUCT_UNAVAILABLE");
   const delivery = previous.configuration.bloodProductDelivery;
@@ -141,10 +175,11 @@ export function startBloodProductAdministration(previous: MassiveTransfusionPati
 }
 
 export function tickMassiveTransfusionPatientProcess(previous: MassiveTransfusionPatientProcessRuntime, seconds: number): MassiveTransfusionPatientProcessRuntime {
+  previous = normalizePatientTransfusionState(previous);
   if (!Number.isFinite(seconds) || seconds < 0) throw new Error("INVALID_TICK_DURATION");
   const base = structuredClone(previous); const evidence: MassiveTransfusionEvidence[] = [];
   base.clinicalState.administrations = base.clinicalState.administrations.map(item => {
-    if (item.state === "COMPLETED") return item;
+    if (item.state !== "RUNNING") return item;
     const definition = base.configuration.products[item.product];
     const rateMlMin = item.durationSec ? item.totalVolumeMl / (item.durationSec / 60) : definition.administrationRateMlMin;
     const deliveredVolumeMl = Math.min(item.totalVolumeMl, precise(item.deliveredVolumeMl + rateMlMin * seconds / 60));
@@ -155,13 +190,14 @@ export function tickMassiveTransfusionPatientProcess(previous: MassiveTransfusio
     const state = deliveredVolumeMl >= item.totalVolumeMl ? "COMPLETED" as const : "RUNNING" as const;
     if (state === "COMPLETED") { base.clinicalState.administeredUnits[item.product] = precise(base.clinicalState.administeredUnits[item.product] + item.units);
       if (item.product === "RBC") {
-        base.clinicalState.completedRbcUnitsTotal = precise(base.clinicalState.completedRbcUnitsTotal + item.units);
-        base.clinicalState.completedRbcUnitsSinceLastCalcium = precise(base.clinicalState.completedRbcUnitsSinceLastCalcium + item.units);
-        const calcium = base.configuration.calciumReplacement;
-        if (calcium?.calciumEnabled && !base.clinicalState.calciumRecommended && base.clinicalState.completedRbcUnitsSinceLastCalcium >= calcium.rbcUnitsPerCalcium) {
-          base.clinicalState.calciumRecommended = true;
-          evidence.push({ eventType: "MTP_CALCIUM_DUE", details: { completedRbcUnitsTotal: base.clinicalState.completedRbcUnitsTotal,
-            completedRbcUnitsSinceLastCalcium: base.clinicalState.completedRbcUnitsSinceLastCalcium, threshold: calcium.rbcUnitsPerCalcium } });
+        const state = base.clinicalState.transfusionCalcium;
+        state.completedRbcUnitsTotal = precise(state.completedRbcUnitsTotal + item.units);
+        state.completedRbcUnitsSinceLastCalcium = precise(state.completedRbcUnitsSinceLastCalcium + item.units);
+        const calcium = calciumConfiguration(base.configuration);
+        if (calcium.calciumEnabled && !state.calciumRecommended && state.completedRbcUnitsSinceLastCalcium >= calcium.rbcUnitsPerCalcium) {
+          state.calciumRecommended = true;
+          evidence.push({ eventType: "MTP_CALCIUM_DUE", details: { completedRbcUnitsTotal: state.completedRbcUnitsTotal,
+            completedRbcUnitsSinceLastCalcium: state.completedRbcUnitsSinceLastCalcium, threshold: calcium.rbcUnitsPerCalcium } });
         }
       }
       if (item.vascularAccessLineId) base.clinicalState.vascularAccessLines = base.clinicalState.vascularAccessLines.map(line =>
@@ -176,6 +212,7 @@ export function tickMassiveTransfusionPatientProcess(previous: MassiveTransfusio
 
 export function terminateBloodProductAdministration(previous: MassiveTransfusionPatientProcessRuntime, administrationId: string,
   terminalState: "CANCELLED" | "FAILED"): MassiveTransfusionPatientProcessRuntime {
+  previous = normalizePatientTransfusionState(previous);
   const base = structuredClone(previous); const administration = base.clinicalState.administrations.find(item => item.administrationId === administrationId);
   if (!administration || administration.state !== "RUNNING") return base;
   base.clinicalState.administrations = base.clinicalState.administrations.map(item => item.administrationId === administrationId ? { ...item, state: terminalState } : item);
@@ -185,6 +222,7 @@ export function terminateBloodProductAdministration(previous: MassiveTransfusion
 }
 
 export function drainMassiveTransfusionEvidence(previous: MassiveTransfusionPatientProcessRuntime): { process: MassiveTransfusionPatientProcessRuntime; evidence: MassiveTransfusionEvidence[] } {
+  previous = normalizePatientTransfusionState(previous);
   const evidence = structuredClone(previous.pendingEvidence); const base = structuredClone(previous); base.pendingEvidence = [];
   return { process: base, evidence };
 }

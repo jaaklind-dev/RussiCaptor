@@ -61,7 +61,7 @@ describe("WP-47C delivery rate and vascular access capacity", () => {
     let process = start(fresh(1), "R1", "RBC", mode);
     process = tickMassiveTransfusionPatientProcess(process, duration - 1);
     expect(process.clinicalState.administrations[0].state).toBe("RUNNING");
-    expect(process.clinicalState.completedRbcUnitsTotal).toBe(0);
+    expect(process.clinicalState.transfusionCalcium.completedRbcUnitsTotal).toBe(0);
     process = tickMassiveTransfusionPatientProcess(process, 1);
     expect(process.clinicalState.administrations[0]).toMatchObject({ state: "COMPLETED", deliveredVolumeMl: 300 });
     expect(process.clinicalState.vascularAccessLines[0].status).toBe("FREE");
@@ -90,9 +90,9 @@ describe("WP-47C delivery rate and vascular access capacity", () => {
   test("three parallel RBC bags count calcium only at canonical completion", () => {
     let process = start(fresh(3), "R1", "RBC", "GRAVITY"); process = start(process, "R2", "RBC", "GRAVITY"); process = start(process, "R3", "RBC", "GRAVITY");
     process = tickMassiveTransfusionPatientProcess(process, 719);
-    expect(process.clinicalState).toMatchObject({ completedRbcUnitsTotal: 0, calciumRecommended: false });
+    expect(process.clinicalState.transfusionCalcium).toMatchObject({ completedRbcUnitsTotal: 0, calciumRecommended: false });
     process = tickMassiveTransfusionPatientProcess(process, 1);
-    expect(process.clinicalState).toMatchObject({ completedRbcUnitsTotal: 3, completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: true });
+    expect(process.clinicalState.transfusionCalcium).toMatchObject({ completedRbcUnitsTotal: 3, completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: true });
   });
 
   test("restart and takeover preserve occupancy, modes and completion times", () => {
