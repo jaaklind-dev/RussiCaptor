@@ -325,6 +325,7 @@ useEffect(() => {
 
         {activeTab === "actions" && (
           <InterventionsTab
+            patientId={patient.id}
             interventions={getInterventions(patient.id)}
             interventionOptions={getInterventionOptions(patient.id)}
             medicationOptions={getMedicationOptions(patient.id)}

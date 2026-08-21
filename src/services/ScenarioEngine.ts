@@ -275,7 +275,8 @@ export class ClinicalScenarioEngine {
     this.vitalSignEvents = [];
     publishRuntimeSnapshot(this.runtimeState, this.orderedLifecycleLeaves("SERIALIZATION").map(process => ({
       processId: process.outputs.processId, moduleId: process.outputs.moduleId, status: process.outputs.status,
-      ...(process.processType === "CARDIAC_ARREST" ? { clinicalState: structuredClone(process.clinicalState) } : {}),
+      ...(process.processType === "CARDIAC_ARREST" || process.processType === "MASSIVE_TRANSFUSION"
+        ? { clinicalState: structuredClone(process.clinicalState) } : {}),
     })));
     this.publishResourceDebugSnapshot();
     this.publishAssessmentSnapshot(true);
@@ -698,7 +699,7 @@ export class ClinicalScenarioEngine {
     this.runtimeState = aggregated.state;
     publishRuntimeSnapshot(this.runtimeState, processes.map(process => ({
       processId: process.outputs.processId, moduleId: process.outputs.moduleId, status: process.outputs.status,
-      ...(process.processType === "CARDIAC_ARREST" ? {
+      ...(process.processType === "CARDIAC_ARREST" || process.processType === "MASSIVE_TRANSFUSION" ? {
         clinicalState: structuredClone(process.clinicalState),
         lastEvent: this.eventLog.filter(event => event.target === process.processId).at(-1)
           ? { type: this.eventLog.filter(event => event.target === process.processId).at(-1)!.eventType,
@@ -721,7 +722,7 @@ export class ClinicalScenarioEngine {
       processId: process.outputs.processId,
       moduleId: process.outputs.moduleId,
       status: process.outputs.status,
-      ...(process.processType === "CARDIAC_ARREST" ? {
+      ...(process.processType === "CARDIAC_ARREST" || process.processType === "MASSIVE_TRANSFUSION" ? {
         clinicalState: structuredClone(process.clinicalState),
         lastEvent: this.eventLog.filter(event => event.target === process.processId).at(-1)
           ? { type: this.eventLog.filter(event => event.target === process.processId).at(-1)!.eventType,

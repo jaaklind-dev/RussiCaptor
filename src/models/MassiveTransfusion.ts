@@ -12,6 +12,13 @@ export type MassiveTransfusionConfiguration = Readonly<{
   products: Readonly<Record<BloodProductType, BloodProductDefinition>>;
   initialInventory: Readonly<Record<BloodProductType, number>>;
   vitalResponsePer1000Ml: Readonly<{ heartRateDelta: number; systolicBpDelta: number; diastolicBpDelta: number; crtDelta: number }>;
+  calciumReplacement?: Readonly<{
+    calciumEnabled: boolean;
+    rbcUnitsPerCalcium: number;
+    calciumProduct: string;
+    calciumDose: string;
+    calciumRoute: string;
+  }>;
 }>;
 export type BloodProductAdministration = Readonly<{
   administrationId: string;
@@ -23,7 +30,7 @@ export type BloodProductAdministration = Readonly<{
   state: "RUNNING" | "COMPLETED";
 }>;
 export type MassiveTransfusionEvidence = Readonly<{
-  eventType: "MTP_ACTIVATED" | "BLOOD_PRODUCT_ADMINISTRATION_STARTED" | "BLOOD_PRODUCT_ADMINISTRATION_COMPLETED";
+  eventType: "MTP_ACTIVATED" | "BLOOD_PRODUCT_ADMINISTRATION_STARTED" | "BLOOD_PRODUCT_ADMINISTRATION_COMPLETED" | "MTP_CALCIUM_DUE" | "MTP_CALCIUM_ADMINISTERED";
   details: Readonly<Record<string, unknown>>;
 }>;
 export type MassiveTransfusionPatientProcessRuntime = {
@@ -39,6 +46,13 @@ export type MassiveTransfusionPatientProcessRuntime = {
     oxygenCarryingCapacity: number;
     coagulationSupport: number;
     administrations: BloodProductAdministration[];
+    completedRbcUnitsTotal: number;
+    completedRbcUnitsSinceLastCalcium: number;
+    rbcUnitsPerCalcium: number | null;
+    calciumRecommended: boolean;
+    calciumAdministrations: Readonly<{ administrationId: string; product: string; dose: string; route: string; completedAtSec: number }>[];
+    calciumLastAdministeredAt: number | null;
+    calciumAdministrationCount: number;
     processedCommandIds: string[];
   };
   pendingEvidence: MassiveTransfusionEvidence[];
@@ -54,4 +68,6 @@ export const MTP_REFERENCE_CONFIGURATION: MassiveTransfusionConfiguration = Obje
   }),
   initialInventory: Object.freeze({ RBC: 6, PLASMA: 6, PLATELETS: 1 }),
   vitalResponsePer1000Ml: Object.freeze({ heartRateDelta: -12, systolicBpDelta: 14, diastolicBpDelta: 8, crtDelta: -0.7 }),
+  calciumReplacement: Object.freeze({ calciumEnabled: true, rbcUnitsPerCalcium: 3, calciumProduct: "Kaltsiumkloriid",
+    calciumDose: "1 g", calciumRoute: "IV" }),
 });

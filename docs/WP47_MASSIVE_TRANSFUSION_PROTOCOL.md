@@ -10,7 +10,7 @@
 | Blood-product resource model | ABSENT | MTP owns configured finite RBC, plasma and platelet inventory. |
 | Oxygen-carrying capacity | ABSENT | v1 adds normalized RBC capacity, not a falsely precise Hb/Hct equation. |
 | Coagulation | ABSENT | v1 records normalized plasma/platelet support; detailed coagulopathy is deferred. |
-| Calcium | ABSENT | Deferred; MTP activation does not administer calcium. |
+| Calcium | PROTOCOL SUPPORT | WP-47B records a configurable replacement obligation and administration evidence; detailed calcium/citrate physiology remains deferred. |
 | Temperature | ABSENT | Deferred; v1 does not claim lethal-diamond modelling. |
 | Persistence | EXTENSION_REQUIRED | The process is a canonical lifecycle process and is serialized by existing WP-44A/WP-44B process persistence. |
 | ADR required | NO | This uses frozen PatientProcess, contributor, module and persistence extension points; no Runtime layer changes. |
@@ -45,6 +45,12 @@ RBC and plasma are the core WP-47 MTP capabilities. Platelet administration is a
 
 The architecture supports a configurable balanced cycle without representing it as an opaque bolus. Product identities and quantities remain individually observable and persistable.
 
+## WP-47B calcium replacement workflow
+
+Calcium is an MTP protocol intervention, not a second medication framework. During active MTP the configurable calcium action is always available and documentable. The reference configuration recommends calcium after every three canonically completed RBC units since the last calcium administration and specifies calcium chloride 1 g IV by default. Started, failed and duplicate RBC commands do not increment the counter.
+
+Only one calcium recommendation can be current. If additional RBC units complete while calcium is recommended, the same recommendation remains active and the exact counter continues increasing. Every successful calcium administration—including an early or repeated dose—is atomic in v1, records one canonical event, resets the since-calcium counter to zero from that administration point and starts the next recommendation cycle. It does not alter vitals. An outstanding recommendation never blocks exercise completion; Debrief presents omission after the threshold as a protocol miss and lists every actual administration factually. The process state, including counters, recommendation flag, last-administration time and administration history, follows the existing Runtime checkpoint and rehydration path. No separate calcium inventory is introduced; exercise-specific stock is deferred to package configuration work.
+
 ## Deferred capabilities
 
-Detailed dilutional coagulopathy, fibrinogen/cryoprecipitate, ionized calcium, citrate toxicity, hypothermia, laboratory Hb/Hct and transfusion reactions require later explicit clinical extensions. v1 does not imply those effects.
+Detailed dilutional coagulopathy, fibrinogen/cryoprecipitate, ionized calcium, citrate toxicity, hypothermia, laboratory Hb/Hct and transfusion reactions require later explicit clinical extensions. Protocol recording of calcium replacement does not imply those physiological effects.

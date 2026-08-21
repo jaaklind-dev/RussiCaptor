@@ -5,8 +5,10 @@ import type {
   MedicationAdministration,
   MedicationOption,
 } from "@/models/Medication";
+import { MassiveTransfusionControls } from "./MassiveTransfusionControls";
 
 type Props = {
+  patientId: string;
   interventions: Intervention[];
   interventionOptions: InterventionOption[];
   medicationOptions: MedicationOption[];
@@ -17,6 +19,7 @@ type Props = {
 };
 
 export default function InterventionsTab({
+  patientId,
   interventions,
   interventionOptions,
   medicationOptions,
@@ -27,6 +30,7 @@ export default function InterventionsTab({
 }: Props) {
   return (
     <View style={styles.card}>
+      <MassiveTransfusionControls patientId={patientId} readOnly={readOnly} />
       <Text style={styles.title}>Reageerija tegevused</Text>
       <Text style={styles.description}>
         Registreeri patsiendile teostatud kliiniline tegevus.

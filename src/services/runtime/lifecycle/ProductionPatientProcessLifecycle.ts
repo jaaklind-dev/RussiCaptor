@@ -12,7 +12,7 @@ import { bootstrapCardiacArrestPatientProcess, drainCardiacEvidence, tickCardiac
 import { bootstrapPleuralInjuryPatientProcess, tickPleuralInjuryPatientProcess } from "@/services/runtime/PleuralInjuryPatientProcess";
 import { bootstrapRespiratoryFailurePatientProcess, tickRespiratoryFailurePatientProcess } from "@/services/runtime/RespiratoryFailurePatientProcess";
 import type { MassiveTransfusionPatientProcessRuntime } from "@/models/MassiveTransfusion";
-import { activateMassiveTransfusion, bootstrapMassiveTransfusionPatientProcess, drainMassiveTransfusionEvidence, startBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
+import { activateMassiveTransfusion, administerMtpCalcium, bootstrapMassiveTransfusionPatientProcess, drainMassiveTransfusionEvidence, startBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
 
 const respiratoryImpairment = (processes: readonly CanonicalLifecycleProcess[]) => Math.max(1, ...processes.map(process => Number(process.outputs.runtimeContributions?.respiratoryImpairmentMultiplier ?? 1)));
 
@@ -235,6 +235,7 @@ const massiveTransfusion: PatientProcessLifecycleDescriptor = {
     const current = process as MassiveTransfusionPatientProcessRuntime;
     let next: MassiveTransfusionPatientProcessRuntime;
     if (event.actionId === "MTP_ACTIVATION") next = activateMassiveTransfusion(current, event.eventId);
+    else if (event.actionId === "CALCIUM_ADMINISTRATION") next = administerMtpCalcium(current, event.eventId);
     else {
       const product = ({ RBC_ADMINISTRATION: "RBC", PLASMA_ADMINISTRATION: "PLASMA", PLATELET_ADMINISTRATION: "PLATELETS" } as const)[event.actionId as "RBC_ADMINISTRATION" | "PLASMA_ADMINISTRATION" | "PLATELET_ADMINISTRATION"];
       if (!product) return undefined;

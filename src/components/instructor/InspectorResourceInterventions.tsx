@@ -33,13 +33,13 @@ export function InspectorResourceInterventions({ patientId }: Readonly<{ patient
       <Text style={styles.buttonText}>{submitting === resource.resourceId ? "Applying…" : `Apply ${resource.type}`}</Text>
     </Pressable>)}
     {mtp && <View style={styles.mtp}><Text style={styles.title}>Massiivse transfusiooni protokoll</Text>
-      {(["MTP_ACTIVATION", "RBC_ADMINISTRATION", "PLASMA_ADMINISTRATION", "PLATELET_ADMINISTRATION"] as MtpAction[]).map(action =>
+      {(["MTP_ACTIVATION", "RBC_ADMINISTRATION", "PLASMA_ADMINISTRATION", "PLATELET_ADMINISTRATION", ...(mtp.clinicalState?.activated && mtp.clinicalState?.rbcUnitsPerCalcium ? ["CALCIUM_ADMINISTRATION" as const] : [])] as MtpAction[]).map(action =>
         <Pressable key={action} disabled={Boolean(submitting)} onPress={() => {
           const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
           const commandId = createMtpCommandId(exerciseId, patientId, action); setSubmitting(action);
           const next = handleMtpCommand({ commandId, exerciseId, patientId, action, units: 1, issuedBy: "EXCON" });
           setResult(next.ok ? { ok: true, commandId, runtimeEventId: next.runtimeEventId } : { ok: false, commandId, errorCode: next.errorCode, message: next.message }); setSubmitting(undefined); }} style={styles.button}>
-          <Text style={styles.buttonText}>{({ MTP_ACTIVATION: "Aktiveeri MTP", RBC_ADMINISTRATION: "Manusta 1 ühik erütrotsüüte", PLASMA_ADMINISTRATION: "Manusta 1 ühik plasmat", PLATELET_ADMINISTRATION: "Manusta 1 doos trombotsüüte" } as const)[action]}</Text>
+          <Text style={styles.buttonText}>{({ MTP_ACTIVATION: "Aktiveeri MTP", RBC_ADMINISTRATION: "Manusta 1 ühik erütrotsüüte", PLASMA_ADMINISTRATION: "Manusta 1 ühik plasmat", PLATELET_ADMINISTRATION: "Manusta 1 doos trombotsüüte", CALCIUM_ADMINISTRATION: "Manusta kaltsiumi" } as const)[action]}</Text>
         </Pressable>)}</View>}
     <Pressable accessibilityRole="button" accessibilityLabel="Keri kliinilist simulatsiooni 60 s edasi"
       disabled={Boolean(submitting)}
