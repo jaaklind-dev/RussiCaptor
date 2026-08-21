@@ -1,4 +1,5 @@
 import type { BloodProductDeliveryMode, BloodProductType, MassiveTransfusionConfiguration, MassiveTransfusionEvidence, MassiveTransfusionPatientProcessRuntime, VascularAccessLineId } from "@/models/MassiveTransfusion";
+import type { ActiveVascularAccess } from "@/models/CirculationState";
 import type { ProcessOutput } from "@/models/RuntimeAggregation";
 
 const precise = (value: number) => {
@@ -29,9 +30,8 @@ export function bootstrapMassiveTransfusionPatientProcess(encounterId: string, i
   if (calcium && (!Number.isInteger(calcium.rbcUnitsPerCalcium) || calcium.rbcUnitsPerCalcium <= 0 ||
     !calcium.calciumProduct.trim() || !calcium.calciumDose.trim() || !calcium.calciumRoute.trim())) throw new Error("MTP_CALCIUM_CONFIGURATION_INVALID");
   if (delivery && (![delivery.gravityDurationSec, delivery.pressureBagDurationSec, delivery.rapidInfuserDurationSec].every(value => Number.isFinite(value) && value > 0) ||
-    !Number.isInteger(delivery.rapidInfuserBagCapacity) || delivery.rapidInfuserBagCapacity <= 0 || !Number.isInteger(delivery.initialVascularAccessCount) ||
-    delivery.initialVascularAccessCount < 0 || delivery.initialVascularAccessCount > 3)) throw new Error("MTP_DELIVERY_CONFIGURATION_INVALID");
-  const lineIds = (["IV-1", "IV-2", "IV-3"] as VascularAccessLineId[]).slice(0, delivery?.initialVascularAccessCount ?? 0);
+    !Number.isInteger(delivery.rapidInfuserBagCapacity) || delivery.rapidInfuserBagCapacity <= 0)) throw new Error("MTP_DELIVERY_CONFIGURATION_INVALID");
+  const lineIds = delivery ? (["IV-1", "IV-2", "IV-3"] as VascularAccessLineId[]) : [];
   const base: Omit<MassiveTransfusionPatientProcessRuntime, "outputs"> = {
     processId: String(initial.processId ?? `${encounterId}:MASSIVE_TRANSFUSION`), encounterId,
     instanceKey: String(initial.instanceKey ?? `${encounterId}:massive-transfusion`), processType: "MASSIVE_TRANSFUSION",
@@ -41,8 +41,8 @@ export function bootstrapMassiveTransfusionPatientProcess(encounterId: string, i
       completedRbcUnitsTotal: 0, completedRbcUnitsSinceLastCalcium: 0,
       rbcUnitsPerCalcium: calcium?.calciumEnabled ? calcium.rbcUnitsPerCalcium : null,
       calciumRecommended: false, calciumAdministrations: [], calciumLastAdministeredAt: null,
-      calciumAdministrationCount: 0, vascularAccessCount: lineIds.length,
-      vascularAccessLines: lineIds.map(lineId => ({ lineId, status: "FREE" as const })), processedCommandIds: [] }, pendingEvidence: [],
+      calciumAdministrationCount: 0, vascularAccessCount: 0,
+      vascularAccessLines: lineIds.map(lineId => ({ lineId, status: "MISSING" as const })), processedCommandIds: [] }, pendingEvidence: [],
   };
   return withOutput(base);
 }
@@ -79,13 +79,32 @@ const durationForMode = (configuration: MassiveTransfusionConfiguration, mode: B
     RAPID_INFUSER: delivery.rapidInfuserDurationSec } as const)[mode];
 };
 
-export function setMtpVascularAccessCount(previous: MassiveTransfusionPatientProcessRuntime, count: number): MassiveTransfusionPatientProcessRuntime {
-  if (!Number.isInteger(count) || count < 0 || count > 3) throw new Error("INVALID_VASCULAR_ACCESS_COUNT");
-  const occupied = previous.clinicalState.vascularAccessLines.filter(line => line.status === "OCCUPIED");
-  if (occupied.some(line => Number(line.lineId.slice(3)) > count)) throw new Error("VASCULAR_ACCESS_OCCUPIED");
-  const base = structuredClone(previous); const ids = (["IV-1", "IV-2", "IV-3"] as VascularAccessLineId[]).slice(0, count);
-  base.clinicalState.vascularAccessCount = count;
-  base.clinicalState.vascularAccessLines = ids.map(lineId => occupied.find(line => line.lineId === lineId) ?? { lineId, status: "FREE" as const });
+export function reconcileMtpVascularAccess(previous: MassiveTransfusionPatientProcessRuntime,
+  canonicalAccesses: readonly ActiveVascularAccess[]): MassiveTransfusionPatientProcessRuntime {
+  if (!previous.configuration.bloodProductDelivery) return structuredClone(previous);
+  const supported = canonicalAccesses.filter(access => access.type === "PERIPHERAL_IV" || access.type === "CENTRAL_ACCESS")
+    .sort((left, right) => left.establishedAt - right.establishedAt || left.interventionInstanceId.localeCompare(right.interventionInstanceId));
+  const selected = supported.slice(0, 3); const selectedIds = new Set(selected.map(access => access.interventionInstanceId));
+  const base = structuredClone(previous);
+  const lostOccupied = base.clinicalState.vascularAccessLines.filter(line => line.status === "OCCUPIED" &&
+    line.accessInterventionInstanceId && !selectedIds.has(line.accessInterventionInstanceId));
+  const lostAdministrationIds = new Set(lostOccupied.flatMap(line => line.administrationId ? [line.administrationId] : []));
+  base.clinicalState.administrations = base.clinicalState.administrations.map(item =>
+    lostAdministrationIds.has(item.administrationId) && item.state === "RUNNING" ? { ...item, state: "FAILED" as const } : item);
+  const retainedByAccess = new Map(base.clinicalState.vascularAccessLines
+    .filter(line => line.accessInterventionInstanceId && selectedIds.has(line.accessInterventionInstanceId))
+    .map(line => [line.accessInterventionInstanceId!, line]));
+  const assignedAccessIds = new Set(retainedByAccess.keys());
+  const unassigned = selected.filter(access => !assignedAccessIds.has(access.interventionInstanceId));
+  let nextAccess = 0;
+  base.clinicalState.vascularAccessLines = (["IV-1", "IV-2", "IV-3"] as VascularAccessLineId[]).map(lineId => {
+    const retained = [...retainedByAccess.values()].find(line => line.lineId === lineId);
+    if (retained) return retained;
+    const access = unassigned[nextAccess++];
+    return access ? { lineId, status: "FREE" as const, accessInterventionInstanceId: access.interventionInstanceId, accessType: access.type }
+      : { lineId, status: "MISSING" as const };
+  });
+  base.clinicalState.vascularAccessCount = selected.length;
   const { outputs: _outputs, ...without } = base; return withOutput(without);
 }
 
@@ -146,7 +165,7 @@ export function tickMassiveTransfusionPatientProcess(previous: MassiveTransfusio
         }
       }
       if (item.vascularAccessLineId) base.clinicalState.vascularAccessLines = base.clinicalState.vascularAccessLines.map(line =>
-        line.lineId === item.vascularAccessLineId && line.administrationId === item.administrationId ? { lineId: line.lineId, status: "FREE" as const } : line);
+        line.lineId === item.vascularAccessLineId && line.administrationId === item.administrationId ? { ...line, status: "FREE" as const, administrationId: undefined } : line);
       evidence.push({ eventType: "BLOOD_PRODUCT_ADMINISTRATION_COMPLETED", details: { commandId: item.administrationId, product: item.product, units: item.units,
         ...(item.deliveryMode ? { deliveryMode: item.deliveryMode, vascularAccessLineId: item.vascularAccessLineId, completedAtSec: base.elapsedTime + seconds } : {}) } }); }
     return { ...item, deliveredVolumeMl, deliveredUnits, state };
@@ -161,7 +180,7 @@ export function terminateBloodProductAdministration(previous: MassiveTransfusion
   if (!administration || administration.state !== "RUNNING") return base;
   base.clinicalState.administrations = base.clinicalState.administrations.map(item => item.administrationId === administrationId ? { ...item, state: terminalState } : item);
   if (administration.vascularAccessLineId) base.clinicalState.vascularAccessLines = base.clinicalState.vascularAccessLines.map(line =>
-    line.lineId === administration.vascularAccessLineId && line.administrationId === administrationId ? { lineId: line.lineId, status: "FREE" as const } : line);
+    line.lineId === administration.vascularAccessLineId && line.administrationId === administrationId ? { ...line, status: "FREE" as const, administrationId: undefined } : line);
   const { outputs: _outputs, ...without } = base; return withOutput(without);
 }
 

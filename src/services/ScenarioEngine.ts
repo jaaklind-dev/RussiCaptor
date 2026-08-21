@@ -57,6 +57,8 @@ import type { CanonicalLifecycleProcess, PatientProcessEvidence, PatientProcessP
 import { createProductionPatientProcessLifecyclePlan, isClinicalProcess } from "@/services/runtime/lifecycle/ProductionPatientProcessLifecycle";
 import type { PersistedRuntimePayload } from "@/models/PersistedRuntimeState";
 import { RuntimePersistenceError } from "@/models/PersistedRuntimeState";
+import type { MassiveTransfusionPatientProcessRuntime } from "@/models/MassiveTransfusion";
+import { reconcileMtpVascularAccess } from "@/services/runtime/MassiveTransfusionPatientProcess";
 
 export function runScenarioEvents(
 
@@ -413,6 +415,7 @@ export class ClinicalScenarioEngine {
         }, true);
       }
     }
+    this.reconcileMtpAccessFromCanonicalCirculation();
     const activeEffects = [...this.interventionRuntime.effectsAt(this.simulationTimeSec), ...this.medicationEngine.activeEffects()]
       .sort((a,b) => a.effectType.localeCompare(b.effectType) || a.effectId.localeCompare(b.effectId));
     for (const descriptor of this.lifecyclePlan.forPhase("PREPARE")) {
@@ -820,6 +823,13 @@ export class ClinicalScenarioEngine {
       throw new Error(`Lifecycle process identity conflict: ${process.processId}.`);
     }
     this.lifecycleProcessStore.set(process.processId, process);
+  }
+
+  private reconcileMtpAccessFromCanonicalCirculation(): void {
+    for (const process of this.lifecycleProcesses("MASSIVE_TRANSFUSION")) {
+      const access = this.circulationManagement.getState(process.encounterId).vascularAccess;
+      this.replaceLifecycleProcess(reconcileMtpVascularAccess(process as MassiveTransfusionPatientProcessRuntime, access));
+    }
   }
 
   private rootProcess(): BotulismRootPatientProcessRuntime | undefined {

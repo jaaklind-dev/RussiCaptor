@@ -1,15 +1,19 @@
 import { MTP_REFERENCE_CONFIGURATION, WP47C_DEFAULT_DELIVERY_CONFIGURATION, type BloodProductDeliveryMode,
   type MassiveTransfusionConfiguration, type MassiveTransfusionPatientProcessRuntime } from "@/models/MassiveTransfusion";
-import { activateMassiveTransfusion, bootstrapMassiveTransfusionPatientProcess, setMtpVascularAccessCount,
+import type { ActiveVascularAccess } from "@/models/CirculationState";
+import { activateMassiveTransfusion, bootstrapMassiveTransfusionPatientProcess, reconcileMtpVascularAccess,
   startBloodProductAdministration, terminateBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
 
-const configuration = (initialVascularAccessCount: number): MassiveTransfusionConfiguration => ({
+const configuration = (): MassiveTransfusionConfiguration => ({
   ...structuredClone(MTP_REFERENCE_CONFIGURATION),
-  bloodProductDelivery: { ...WP47C_DEFAULT_DELIVERY_CONFIGURATION, initialVascularAccessCount },
+  bloodProductDelivery: { ...WP47C_DEFAULT_DELIVERY_CONFIGURATION },
 });
-const fresh = (lines: number) => activateMassiveTransfusion(bootstrapMassiveTransfusionPatientProcess("PT-WP47C", {
-  configuration: configuration(lines),
-}), "ACTIVATE");
+const access = (index: number, type: ActiveVascularAccess["type"] = "PERIPHERAL_IV"): ActiveVascularAccess => ({
+  interventionInstanceId: `ACCESS-${index}`, type, resourceIds: [`RESOURCE-${index}`], establishedAt: index,
+});
+const fresh = (lines: number) => reconcileMtpVascularAccess(activateMassiveTransfusion(bootstrapMassiveTransfusionPatientProcess("PT-WP47C", {
+  configuration: configuration(),
+}), "ACTIVATE"), Array.from({ length: lines }, (_, index) => access(index + 1)));
 const start = (process: MassiveTransfusionPatientProcessRuntime, id: string, product: "RBC" | "PLASMA" | "PLATELETS",
   mode: BloodProductDeliveryMode = "GRAVITY", line?: "IV-1" | "IV-2" | "IV-3") =>
   startBloodProductAdministration(process, id, product, 1, mode, line);
@@ -106,11 +110,12 @@ describe("WP-47C delivery rate and vascular access capacity", () => {
     expect(duplicate.clinicalState.vascularAccessLines.filter(line => line.status === "OCCUPIED")).toHaveLength(1);
   });
 
-  test("access count is canonical, bounded and cannot remove an occupied line", () => {
-    let process = setMtpVascularAccessCount(fresh(0), 3); expect(process.clinicalState.vascularAccessLines.map(line => line.lineId)).toEqual(["IV-1", "IV-2", "IV-3"]);
+  test("canonical access reconciliation is bounded and fails a bag whose occupied access is lost", () => {
+    let process = fresh(4); expect(process.clinicalState.vascularAccessCount).toBe(3);
     process = start(process, "R1", "RBC", "GRAVITY", "IV-3");
-    expect(() => setMtpVascularAccessCount(process, 2)).toThrow("VASCULAR_ACCESS_OCCUPIED");
-    expect(() => setMtpVascularAccessCount(process, 4)).toThrow("INVALID_VASCULAR_ACCESS_COUNT");
+    process = reconcileMtpVascularAccess(process, [access(1), access(2)]);
+    expect(process.clinicalState.administrations.at(-1)?.state).toBe("FAILED");
+    expect(process.clinicalState.vascularAccessLines[2].status).toBe("MISSING");
   });
 
   test("legacy configuration retains historical rate and unrestricted concurrency", () => {

@@ -38,9 +38,12 @@ export function handleResourceInterventionCommand(command: Readonly<{ commandId:
     const simulationTimeSec = getCanonicalPatientRuntimeSnapshot(command.patientId)?.state.exerciseTimeSec ?? 0;
     const resource = getPatientResourceDebugSnapshot(command.patientId).resources.find(item => item.resourceId === command.resourceId);
     const chestDrain = resource?.type === "chestDrain";
+    const accessTitle = resource?.type === "peripheralIV" ? "Veenitee rajatud"
+      : resource?.type === "centralVenousCatheter" ? "Tsentraalveenitee rajatud" : undefined;
     addTimelineEvent({ id: `TL-RESOURCE-${command.commandId}`, exerciseId: command.exerciseId, patientId: command.patientId,
-      timestamp: `T+${simulationTimeSec}s`, simulationTimeSec, type: "intervention", title: chestDrain ? "Chest drain inserted" : "Resource intervention applied",
-      description: chestDrain ? "Canonical pleural drainage intervention applied" : `Canonical resource ${command.resourceId} applied`, author: command.issuedBy, visibility: "revealed" });
+      timestamp: `T+${simulationTimeSec}s`, simulationTimeSec, type: "intervention", title: accessTitle ?? (chestDrain ? "Chest drain inserted" : "Resource intervention applied"),
+      description: accessTitle ? `Kanooniline vaskulaarne ligipääs ${command.resourceId} rajati` : chestDrain
+        ? "Canonical pleural drainage intervention applied" : `Canonical resource ${command.resourceId} applied`, author: command.issuedBy, visibility: "revealed" });
   }
   results.set(command.commandId, structuredClone(result));
   return structuredClone(result);

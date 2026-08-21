@@ -1,4 +1,5 @@
 import type { ProcessOutput } from "@/models/RuntimeAggregation";
+import type { VascularAccessType } from "@/models/CirculationState";
 
 export type BloodProductType = "RBC" | "PLASMA" | "PLATELETS";
 export type BloodProductDeliveryMode = "GRAVITY" | "PRESSURE_BAG" | "RAPID_INFUSER";
@@ -26,7 +27,6 @@ export type MassiveTransfusionConfiguration = Readonly<{
     pressureBagDurationSec: number;
     rapidInfuserDurationSec: number;
     rapidInfuserBagCapacity: number;
-    initialVascularAccessCount: number;
   }>;
 }>;
 export type BloodProductAdministration = Readonly<{
@@ -68,7 +68,8 @@ export type MassiveTransfusionPatientProcessRuntime = {
     calciumLastAdministeredAt: number | null;
     calciumAdministrationCount: number;
     vascularAccessCount: number;
-    vascularAccessLines: Readonly<{ lineId: VascularAccessLineId; status: "FREE" | "OCCUPIED"; administrationId?: string }>[];
+    vascularAccessLines: Readonly<{ lineId: VascularAccessLineId; status: "MISSING" | "FREE" | "OCCUPIED";
+      accessInterventionInstanceId?: string; accessType?: VascularAccessType; administrationId?: string }>[];
     processedCommandIds: string[];
   };
   pendingEvidence: MassiveTransfusionEvidence[];
@@ -93,5 +94,4 @@ export const WP47C_DEFAULT_DELIVERY_CONFIGURATION = Object.freeze({
   pressureBagDurationSec: 480,
   rapidInfuserDurationSec: 180,
   rapidInfuserBagCapacity: 2,
-  initialVascularAccessCount: 1,
 });

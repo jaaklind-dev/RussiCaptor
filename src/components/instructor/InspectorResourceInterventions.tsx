@@ -33,7 +33,7 @@ export function InspectorResourceInterventions({ patientId }: Readonly<{ patient
       <Text style={styles.buttonText}>{submitting === resource.resourceId ? "Applying…" : `Apply ${resource.type}`}</Text>
     </Pressable>)}
     {mtp && <View style={styles.mtp}><Text style={styles.title}>Massiivse transfusiooni protokoll</Text>
-      {(["MTP_ACTIVATION", "RBC_ADMINISTRATION", "PLASMA_ADMINISTRATION", "PLATELET_ADMINISTRATION", ...(mtp.clinicalState?.activated && mtp.clinicalState?.rbcUnitsPerCalcium ? ["CALCIUM_ADMINISTRATION" as const] : [])] as Exclude<MtpAction, "MTP_SET_VASCULAR_ACCESS_COUNT">[]).map(action =>
+      {(["MTP_ACTIVATION", "RBC_ADMINISTRATION", "PLASMA_ADMINISTRATION", "PLATELET_ADMINISTRATION", ...(mtp.clinicalState?.activated && mtp.clinicalState?.rbcUnitsPerCalcium ? ["CALCIUM_ADMINISTRATION" as const] : [])] as MtpAction[]).map(action =>
         <Pressable key={action} disabled={Boolean(submitting)} onPress={() => {
           const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
           const commandId = createMtpCommandId(exerciseId, patientId, action); setSubmitting(action);
