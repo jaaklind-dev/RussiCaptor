@@ -1,6 +1,8 @@
 import type { ProcessOutput } from "@/models/RuntimeAggregation";
 
 export type BloodProductType = "RBC" | "PLASMA" | "PLATELETS";
+export type BloodProductDeliveryMode = "GRAVITY" | "PRESSURE_BAG" | "RAPID_INFUSER";
+export type VascularAccessLineId = "IV-1" | "IV-2" | "IV-3";
 export type BloodProductDefinition = Readonly<{
   volumeMlPerUnit: number;
   oxygenCapacityPerUnit: number;
@@ -19,6 +21,13 @@ export type MassiveTransfusionConfiguration = Readonly<{
     calciumDose: string;
     calciumRoute: string;
   }>;
+  bloodProductDelivery?: Readonly<{
+    gravityDurationSec: number;
+    pressureBagDurationSec: number;
+    rapidInfuserDurationSec: number;
+    rapidInfuserBagCapacity: number;
+    initialVascularAccessCount: number;
+  }>;
 }>;
 export type BloodProductAdministration = Readonly<{
   administrationId: string;
@@ -27,7 +36,12 @@ export type BloodProductAdministration = Readonly<{
   totalVolumeMl: number;
   deliveredVolumeMl: number;
   deliveredUnits: number;
-  state: "RUNNING" | "COMPLETED";
+  state: "RUNNING" | "COMPLETED" | "CANCELLED" | "FAILED";
+  deliveryMode?: BloodProductDeliveryMode;
+  vascularAccessLineId?: VascularAccessLineId;
+  startedAtSec?: number;
+  expectedCompletionAtSec?: number;
+  durationSec?: number;
 }>;
 export type MassiveTransfusionEvidence = Readonly<{
   eventType: "MTP_ACTIVATED" | "BLOOD_PRODUCT_ADMINISTRATION_STARTED" | "BLOOD_PRODUCT_ADMINISTRATION_COMPLETED" | "MTP_CALCIUM_DUE" | "MTP_CALCIUM_ADMINISTERED";
@@ -53,6 +67,8 @@ export type MassiveTransfusionPatientProcessRuntime = {
     calciumAdministrations: Readonly<{ administrationId: string; product: string; dose: string; route: string; completedAtSec: number }>[];
     calciumLastAdministeredAt: number | null;
     calciumAdministrationCount: number;
+    vascularAccessCount: number;
+    vascularAccessLines: Readonly<{ lineId: VascularAccessLineId; status: "FREE" | "OCCUPIED"; administrationId?: string }>[];
     processedCommandIds: string[];
   };
   pendingEvidence: MassiveTransfusionEvidence[];
@@ -70,4 +86,12 @@ export const MTP_REFERENCE_CONFIGURATION: MassiveTransfusionConfiguration = Obje
   vitalResponsePer1000Ml: Object.freeze({ heartRateDelta: -12, systolicBpDelta: 14, diastolicBpDelta: 8, crtDelta: -0.7 }),
   calciumReplacement: Object.freeze({ calciumEnabled: true, rbcUnitsPerCalcium: 3, calciumProduct: "Kaltsiumkloriid",
     calciumDose: "1 g", calciumRoute: "IV" }),
+});
+
+export const WP47C_DEFAULT_DELIVERY_CONFIGURATION = Object.freeze({
+  gravityDurationSec: 720,
+  pressureBagDurationSec: 480,
+  rapidInfuserDurationSec: 180,
+  rapidInfuserBagCapacity: 2,
+  initialVascularAccessCount: 1,
 });

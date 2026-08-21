@@ -53,4 +53,10 @@ Only one calcium recommendation can be current. If additional RBC units complete
 
 ## Deferred capabilities
 
+## WP-47C delivery capacity
+
+WP-47C extends the same canonical MTP process with up to three deterministic vascular-access slots (`IV-1`–`IV-3`). A configured administration reserves the lowest-index compatible free line and decrements inventory only after a successful start. A rejected request consumes no inventory. Cancelled or failed bags remain historically consumed under the existing start-time accounting policy but release their line. There is no UI-only queue: capacity failures return `NO_FREE_VASCULAR_ACCESS` or `DELIVERY_DEVICE_CAPACITY_FULL`, and the responder retries after capacity becomes available.
+
+Configured per-bag durations are 720 seconds for gravity, 480 seconds for a pressure bag and 180 seconds for a rapid infuser. One rapid infuser accepts at most two simultaneous bags and never overrides vascular-line capacity. Each bag retains its own mode, line, start time and expected completion. Volume enters continuously at `configured bag volume / configured duration`; completion, line release and RBC/calcium counting use only the canonical simulation clock. Packages without `bloodProductDelivery` retain the prior rate and concurrency behavior, preserving historical replay.
+
 Detailed dilutional coagulopathy, fibrinogen/cryoprecipitate, ionized calcium, citrate toxicity, hypothermia, laboratory Hb/Hct and transfusion reactions require later explicit clinical extensions. Protocol recording of calcium replacement does not imply those physiological effects.

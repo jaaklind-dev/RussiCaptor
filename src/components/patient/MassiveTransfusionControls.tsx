@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots } from "@/services/RuntimeSnapshotService";
 import { createMtpCommandId, handleMtpCommand, type MtpAction } from "@/services/runtime/instructor/MassiveTransfusionCommandService";
+import type { BloodProductDeliveryMode } from "@/models/MassiveTransfusion";
 
 type MtpProjection = Readonly<{
   activated?: boolean;
@@ -11,6 +12,9 @@ type MtpProjection = Readonly<{
   completedRbcUnitsSinceLastCalcium?: number;
   rbcUnitsPerCalcium?: number | null;
   calciumRecommended?: boolean;
+  vascularAccessCount?: number;
+  vascularAccessLines?: readonly Readonly<{ lineId: string; status: "FREE" | "OCCUPIED"; administrationId?: string }>[];
+  administrations?: readonly Readonly<{ administrationId: string; product: string; state: string; deliveryMode?: BloodProductDeliveryMode; expectedCompletionAtSec?: number }>[];
 }>;
 
 const actions: readonly Readonly<{ action: MtpAction; label: string }>[] = [
@@ -22,24 +26,39 @@ const actions: readonly Readonly<{ action: MtpAction; label: string }>[] = [
 
 export function MassiveTransfusionControls({ patientId, readOnly = false }: Readonly<{ patientId: string; readOnly?: boolean }>) {
   const version = useSyncExternalStore(subscribeToRuntimeSnapshots, getRuntimeSnapshotVersion, getRuntimeSnapshotVersion);
-  const process = getCanonicalPatientRuntimeSnapshot(patientId, version)?.processes.find(item => item.moduleId === "MASSIVE_TRANSFUSION_V1");
+  const runtimeSnapshot = getCanonicalPatientRuntimeSnapshot(patientId, version);
+  const process = runtimeSnapshot?.processes.find(item => item.moduleId === "MASSIVE_TRANSFUSION_V1");
   const state = process?.clinicalState as MtpProjection | undefined;
   const [submitting, setSubmitting] = useState<MtpAction>();
   const [message, setMessage] = useState<string>();
+  const [deliveryMode, setDeliveryMode] = useState<BloodProductDeliveryMode>("GRAVITY");
   if (!process) return null;
 
-  const submit = (action: MtpAction) => {
+  const submit = (action: MtpAction, vascularAccessCount?: number) => {
     if (submitting || readOnly) return;
     const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
     const commandId = createMtpCommandId(exerciseId, patientId, action);
     setSubmitting(action); setMessage(undefined);
-    const result = handleMtpCommand({ commandId, exerciseId, patientId, action, units: 1, issuedBy: "Case Manager" });
+    const result = handleMtpCommand({ commandId, exerciseId, patientId, action, units: 1, issuedBy: "Case Manager", deliveryMode, vascularAccessCount });
     setMessage(result.ok ? "Korraldus rakendati." : result.message); setSubmitting(undefined);
   };
 
   return <View style={styles.card} testID="cm-mtp-controls">
     <Text style={styles.title}>Massiivse transfusiooni protokoll</Text>
     <Text style={styles.status}>Lõpetatud erütrotsüüdiühikuid: {state?.completedRbcUnitsTotal ?? 0}</Text>
+    {state?.vascularAccessLines && <View style={styles.accessCard}>
+      <Text style={styles.status}>Veeniteed: {state.vascularAccessCount ?? 0}/3</Text>
+      {state.vascularAccessLines.map(line => { const administration = state.administrations?.find(item => item.administrationId === line.administrationId);
+        const remaining = administration?.expectedCompletionAtSec === undefined ? undefined : Math.max(0, administration.expectedCompletionAtSec - (runtimeSnapshot?.state.exerciseTimeSec ?? 0));
+        return <Text key={line.lineId} style={line.status === "OCCUPIED" ? styles.due : styles.status}>{line.lineId}: {line.status === "FREE" ? "VABA" :
+          `HÕIVATUD · ${administration?.product ?? "verekomponent"} · ${administration?.deliveryMode ?? ""} · ${remaining ?? "?"} s`}</Text>; })}
+      {!readOnly && <View style={styles.row}>{[0, 1, 2, 3].map(count => <Pressable key={count} disabled={Boolean(submitting)}
+        onPress={() => submit("MTP_SET_VASCULAR_ACCESS_COUNT", count)} style={styles.choice}><Text style={styles.choiceText}>{count}</Text></Pressable>)}</View>}
+      {!readOnly && <View style={styles.row}>{(["GRAVITY", "PRESSURE_BAG", "RAPID_INFUSER"] as const).map(mode => <Pressable key={mode}
+        onPress={() => setDeliveryMode(mode)} style={mode === deliveryMode ? styles.choiceSelected : styles.choice}>
+        <Text style={styles.choiceText}>{({ GRAVITY: "Vabavool", PRESSURE_BAG: "Survekott", RAPID_INFUSER: "Verepump/soojendaja" } as const)[mode]}</Text>
+      </Pressable>)}</View>}
+    </View>}
     <Text style={state?.calciumRecommended ? styles.due : styles.status}>
       {state?.calciumRecommended ? "Kaltsium on näidustatud" : state?.rbcUnitsPerCalcium
         ? `Kaltsium on näidustatud pärast ${state.rbcUnitsPerCalcium} lõpetatud erütrotsüüdiühikut · ${state?.completedRbcUnitsSinceLastCalcium ?? 0}/${state.rbcUnitsPerCalcium}`
@@ -62,4 +81,9 @@ const styles = StyleSheet.create({
   button: { backgroundColor: "#9a3412", padding: 12, borderRadius: 10, alignItems: "center" },
   calciumButton: { backgroundColor: "#b91c1c", padding: 12, borderRadius: 10, alignItems: "center" },
   buttonText: { color: "#fff", fontWeight: "900" }, message: { color: "#7c2d12", fontWeight: "700" },
+  accessCard: { gap: 6, borderWidth: 1, borderColor: "#fdba74", borderRadius: 8, padding: 8 },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  choice: { backgroundColor: "#7c2d12", borderRadius: 7, padding: 8 },
+  choiceSelected: { backgroundColor: "#c2410c", borderRadius: 7, padding: 8, borderWidth: 2, borderColor: "#fed7aa" },
+  choiceText: { color: "#fff", fontWeight: "800" },
 });

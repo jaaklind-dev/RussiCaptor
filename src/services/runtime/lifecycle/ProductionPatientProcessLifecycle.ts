@@ -11,8 +11,8 @@ import { PatientProcessLifecycleRegistry } from "./PatientProcessLifecycleRegist
 import { bootstrapCardiacArrestPatientProcess, drainCardiacEvidence, tickCardiacArrestPatientProcess } from "@/services/runtime/CardiacArrestPatientProcess";
 import { bootstrapPleuralInjuryPatientProcess, tickPleuralInjuryPatientProcess } from "@/services/runtime/PleuralInjuryPatientProcess";
 import { bootstrapRespiratoryFailurePatientProcess, tickRespiratoryFailurePatientProcess } from "@/services/runtime/RespiratoryFailurePatientProcess";
-import type { MassiveTransfusionPatientProcessRuntime } from "@/models/MassiveTransfusion";
-import { activateMassiveTransfusion, administerMtpCalcium, bootstrapMassiveTransfusionPatientProcess, drainMassiveTransfusionEvidence, startBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
+import type { BloodProductDeliveryMode, MassiveTransfusionPatientProcessRuntime, VascularAccessLineId } from "@/models/MassiveTransfusion";
+import { activateMassiveTransfusion, administerMtpCalcium, bootstrapMassiveTransfusionPatientProcess, drainMassiveTransfusionEvidence, setMtpVascularAccessCount, startBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
 
 const respiratoryImpairment = (processes: readonly CanonicalLifecycleProcess[]) => Math.max(1, ...processes.map(process => Number(process.outputs.runtimeContributions?.respiratoryImpairmentMultiplier ?? 1)));
 
@@ -236,11 +236,16 @@ const massiveTransfusion: PatientProcessLifecycleDescriptor = {
     let next: MassiveTransfusionPatientProcessRuntime;
     if (event.actionId === "MTP_ACTIVATION") next = activateMassiveTransfusion(current, event.eventId);
     else if (event.actionId === "CALCIUM_ADMINISTRATION") next = administerMtpCalcium(current, event.eventId);
-    else {
+    else if (event.actionId === "MTP_SET_VASCULAR_ACCESS_COUNT") {
+      const payload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload) ? event.payload as Record<string, unknown> : {};
+      next = setMtpVascularAccessCount(current, Number(payload.count));
+    } else {
       const product = ({ RBC_ADMINISTRATION: "RBC", PLASMA_ADMINISTRATION: "PLASMA", PLATELET_ADMINISTRATION: "PLATELETS" } as const)[event.actionId as "RBC_ADMINISTRATION" | "PLASMA_ADMINISTRATION" | "PLATELET_ADMINISTRATION"];
       if (!product) return undefined;
       const payload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload) ? event.payload as Record<string, unknown> : {};
-      next = startBloodProductAdministration(current, event.eventId, product, Number(payload.units ?? 1));
+      next = startBloodProductAdministration(current, event.eventId, product, Number(payload.units ?? 1),
+        String(payload.deliveryMode ?? "GRAVITY") as BloodProductDeliveryMode,
+        payload.vascularAccessLineId ? String(payload.vascularAccessLineId) as VascularAccessLineId : undefined);
     }
     const drained = drainMassiveTransfusionEvidence(next);
     return { processes: [drained.process], aggregationRequested: true, events: drained.evidence.map(item => ({ eventType: item.eventType,

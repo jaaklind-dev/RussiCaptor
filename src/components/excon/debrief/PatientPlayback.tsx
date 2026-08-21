@@ -14,6 +14,13 @@ export function PatientPlayback({ view }: { view?: PatientPlaybackView }) {
       <Text style={styles.process}>• {process.processId} · {processStatusLabel(process.status)}</Text>
       {process.moduleId === "MASSIVE_TRANSFUSION_V1" && (Number(process.clinicalState?.completedRbcUnitsTotal ?? 0) > 0 ||
         (Array.isArray(process.clinicalState?.calciumAdministrations) && process.clinicalState.calciumAdministrations.length > 0)) && <View>
+        {Array.isArray(process.clinicalState?.vascularAccessLines) && <Text style={styles.meta}>
+          Veeniteid: {String(process.clinicalState.vascularAccessCount ?? process.clinicalState.vascularAccessLines.length)} · manustamisi: {Array.isArray(process.clinicalState?.administrations) ? process.clinicalState.administrations.length : 0}
+        </Text>}
+        {Array.isArray(process.clinicalState?.administrations) && process.clinicalState.administrations.map((item, index) =>
+          <Text key={String(item.administrationId ?? index)} style={styles.meta}>
+            {String(item.product)} · {String(item.deliveryMode ?? "pärandkiirus")} · {String(item.vascularAccessLineId ?? "veenitee määramata")} · {String(item.state)}
+          </Text>)}
         <Text style={process.clinicalState?.calciumRecommended ? styles.miss : styles.meta}>
           Erütrotsüüdiühikuid: {String(process.clinicalState?.completedRbcUnitsTotal ?? 0)} · {process.clinicalState?.calciumRecommended
             ? "näidustatud kaltsium jäi manustamata (protokolli kõrvalekalle)"

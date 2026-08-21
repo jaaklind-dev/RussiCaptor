@@ -7,7 +7,7 @@ import { PELVIC_HEMORRHAGE_REFERENCE_CONFIGURATION, PELVIC_INJURY_REFERENCE_PATI
 import { PLEURAL_INJURY_REFERENCE } from "@/modules/pleuralInjury/PleuralInjuryReference";
 import { CARDIAC_ARREST_REFERENCE_FIXTURE } from "@/services/golden/CardiacArrestReferenceFixture";
 import { PackagePatientDatasetRegistry } from "./PackagePatientMaterializationService";
-import { MTP_REFERENCE_CONFIGURATION } from "@/models/MassiveTransfusion";
+import { MTP_REFERENCE_CONFIGURATION, WP47C_DEFAULT_DELIVERY_CONFIGURATION } from "@/models/MassiveTransfusion";
 
 const clone = (patient: Patient): Patient => ({ ...patient, mist: { ...patient.mist } });
 const dataset = (datasetId: string, records: PackagePatientDataset["patients"]): PackagePatientDataset => Object.freeze({ datasetId, version: datasetId.split(".v").at(-1)!, patients: Object.freeze(records) });
@@ -24,6 +24,7 @@ export const pelvicReferenceFixture: GoldenFixture = Object.freeze({ fixtureId: 
  */
 export const MTP_PELVIC_REFERENCE_CONFIGURATION = Object.freeze({
   ...MTP_REFERENCE_CONFIGURATION,
+  bloodProductDelivery: WP47C_DEFAULT_DELIVERY_CONFIGURATION,
   vitalResponsePer1000Ml: Object.freeze({
     heartRateDelta: -PELVIC_HEMORRHAGE_REFERENCE_CONFIGURATION.vitalResponsePer1000Ml!.heartRateDelta!,
     systolicBpDelta: -PELVIC_HEMORRHAGE_REFERENCE_CONFIGURATION.vitalResponsePer1000Ml!.systolicBpDelta!,

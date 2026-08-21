@@ -1,4 +1,4 @@
-import { MTP_REFERENCE_CONFIGURATION } from "@/models/MassiveTransfusion";
+import { MTP_REFERENCE_CONFIGURATION, type MassiveTransfusionConfiguration } from "@/models/MassiveTransfusion";
 import { bootstrapHemorrhagePatientProcess, setHemorrhageEffects, tickHemorrhagePatientProcess } from "@/services/runtime/HemorrhagePatientProcess";
 import { activateMassiveTransfusion, bootstrapMassiveTransfusionPatientProcess, drainMassiveTransfusionEvidence,
   startBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
@@ -9,6 +9,9 @@ import type { ClinicalEffect } from "@/models/ClinicalIntegration";
 import { MTP_PELVIC_REFERENCE_CONFIGURATION } from "@/services/exercise/CanonicalPatientDatasets";
 
 const fresh = (patientId = "PT-MTP") => bootstrapMassiveTransfusionPatientProcess(patientId, { configuration: MTP_REFERENCE_CONFIGURATION });
+const legacyPelvicConfiguration = (): MassiveTransfusionConfiguration => ({
+  ...structuredClone(MTP_PELVIC_REFERENCE_CONFIGURATION), bloodProductDelivery: undefined,
+});
 const hemorrhage = () => bootstrapHemorrhagePatientProcess("PT-MTP", { configuration: {
   baselineBleedingRateMlMin: 500, tourniquetEfficiency: 0.9, binderEfficiency: 0.8, infusionOffsetMlMin: 0, bloodProductOffsetMlMin: 0,
   severityThresholdsMl: [500, 1000, 2000, 3000], perfusionThresholdsMl: [1000, 2000, 3000], compensationThresholdsMl: [1500, 2500],
@@ -89,7 +92,7 @@ describe("WP-47 massive transfusion clinical module", () => {
     const before = tickHemorrhagePatientProcess(pelvicHemorrhage(), 300).process;
     const after = tickHemorrhagePatientProcess(setHemorrhageEffects(before, [binderEffect()]), 60).process;
     const configuration = {
-      ...structuredClone(MTP_PELVIC_REFERENCE_CONFIGURATION),
+      ...legacyPelvicConfiguration(),
       initialInventory: { ...MTP_PELVIC_REFERENCE_CONFIGURATION.initialInventory, PLATELETS: 0 },
     };
     let mtp = activateMassiveTransfusion(bootstrapMassiveTransfusionPatientProcess("PT-MTP", { configuration }), "ACT");
@@ -135,13 +138,13 @@ describe("WP-47 massive transfusion clinical module", () => {
     expect(before.clinicalState.cumulativeLossMl).toBe(700);
 
     const oneRbc = tickMassiveTransfusionPatientProcess(startBloodProductAdministration(
-      activateMassiveTransfusion(bootstrapMassiveTransfusionPatientProcess("PT-MTP", { configuration: MTP_PELVIC_REFERENCE_CONFIGURATION }), "ACT-A"), "RBC-A", "RBC", 1), 60);
+      activateMassiveTransfusion(bootstrapMassiveTransfusionPatientProcess("PT-MTP", { configuration: legacyPelvicConfiguration() }), "ACT-A"), "RBC-A", "RBC", 1), 60);
     const negativeLoss = tickHemorrhagePatientProcess(before, 60).process;
     expect(oneRbc.clinicalState.transfusedVolumeMl - 140).toBe(-40);
     expect(negativeLoss.clinicalState.cumulativeLossMl - oneRbc.clinicalState.transfusedVolumeMl).toBe(740);
 
     const equalConfiguration = {
-      ...structuredClone(MTP_PELVIC_REFERENCE_CONFIGURATION),
+      ...legacyPelvicConfiguration(),
       products: {
         ...structuredClone(MTP_PELVIC_REFERENCE_CONFIGURATION.products),
         RBC: { ...MTP_PELVIC_REFERENCE_CONFIGURATION.products.RBC, administrationRateMlMin: 140 },
@@ -151,7 +154,7 @@ describe("WP-47 massive transfusion clinical module", () => {
       activateMassiveTransfusion(bootstrapMassiveTransfusionPatientProcess("PT-MTP", { configuration: equalConfiguration }), "ACT-B"), "RBC-B", "RBC", 1), 60);
     expect(equal.clinicalState.transfusedVolumeMl - 140).toBe(0);
 
-    let positive = activateMassiveTransfusion(bootstrapMassiveTransfusionPatientProcess("PT-MTP", { configuration: MTP_PELVIC_REFERENCE_CONFIGURATION }), "ACT-C");
+    let positive = activateMassiveTransfusion(bootstrapMassiveTransfusionPatientProcess("PT-MTP", { configuration: legacyPelvicConfiguration() }), "ACT-C");
     positive = startBloodProductAdministration(positive, "RBC-C", "RBC", 1);
     positive = startBloodProductAdministration(positive, "PLASMA-C", "PLASMA", 1);
     positive = startBloodProductAdministration(positive, "PLATELETS-C", "PLATELETS", 1);
@@ -164,7 +167,7 @@ describe("WP-47 massive transfusion clinical module", () => {
     const before = tickHemorrhagePatientProcess(pelvicHemorrhage(), 300).process;
     const controlled = setHemorrhageEffects(before, [binderEffect()]);
     const after = tickHemorrhagePatientProcess(controlled, 60).process;
-    let mtp = activateMassiveTransfusion(bootstrapMassiveTransfusionPatientProcess("PT-MTP", { configuration: MTP_PELVIC_REFERENCE_CONFIGURATION }), "ACT");
+    let mtp = activateMassiveTransfusion(bootstrapMassiveTransfusionPatientProcess("PT-MTP", { configuration: legacyPelvicConfiguration() }), "ACT");
     mtp = startBloodProductAdministration(mtp, "RBC", "RBC", 1);
     mtp = startBloodProductAdministration(mtp, "PLASMA", "PLASMA", 1);
     mtp = startBloodProductAdministration(mtp, "PLATELETS", "PLATELETS", 1);
