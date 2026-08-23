@@ -7,7 +7,7 @@ const compareVersion = (a: string, b: string) => { const left = semver(a), right
 export class ExercisePackageRegistry {
   private readonly values = new Map<string, ExercisePackage>();
   constructor(private readonly validator: ExercisePackageValidator) {}
-  register(pkg: ExercisePackage): void { this.validator.assertValid(pkg); const id = key(pkg.packageId, pkg.packageVersion); if (this.values.has(id)) throw new Error(`DUPLICATE_EXERCISE_PACKAGE:${id}`); this.values.set(id, pkg); }
+  register(pkg: ExercisePackage): void { this.validator.assertValid(pkg); const id = key(pkg.packageId, pkg.packageVersion); const existing = this.values.get(id); if (existing) { if (existing.packageHash !== pkg.packageHash) throw new Error(`EXERCISE_PACKAGE_VERSION_CONFLICT:${id}`); return; } this.values.set(id, pkg); }
   get(packageId: string, packageVersion: string): ExercisePackage | undefined { return this.values.get(key(packageId, packageVersion)); }
   require(packageId: string, packageVersion: string): ExercisePackage { const pkg = this.get(packageId, packageVersion); if (!pkg) throw new Error(`UNKNOWN_EXERCISE_PACKAGE:${key(packageId, packageVersion)}`); return pkg; }
   latest(packageId: string): ExercisePackage | undefined { return this.packages.filter(pkg => pkg.packageId === packageId).at(-1); }

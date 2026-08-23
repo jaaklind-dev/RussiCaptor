@@ -180,6 +180,12 @@ describe("WP-3A package robustness", () => {
     expect(codes(triggerValue)).toContain("DUPLICATE_TRIGGER");
   });
 
+  test("applies Botulism trigger invariants only through its package validator", () => {
+    const value = clonePackage();
+    value.modules[1].payload.sheets.TriggerRules.rows = [];
+    expect(codes(value)).toEqual(expect.arrayContaining(["HV_CHILD_REPLACEMENT", "HYPOXIA_CHILD_IDEMPOTENCY"]));
+  });
+
   test("rejects patient, process and per-patient count violations", () => {
     const patientValue = clonePackage();
     exercise(patientValue).payload.sheets.PatientRoster.rows.pop();

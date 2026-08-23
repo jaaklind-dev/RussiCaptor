@@ -103,6 +103,13 @@ describe("module manifest parser", () => {
       .map((item) => item.code)).toContain("INVALID_EXERCISE_BINDING");
   });
 
+  test("rejects duplicate generic ownership", () => {
+    const sheets = createManifestSheets();
+    sheets.OwnershipMap.push([...sheets.OwnershipMap[3]]);
+    expect(validateModuleManifest(parseModuleManifest(sheets), ["Exercise.xlsx"])
+      .map((item) => item.code)).toContain("OWNERSHIP_CONFLICT");
+  });
+
   test("file selection order does not change validation", () => {
     const manifest = parseModuleManifest(createManifestSheets());
     expect(validateModuleManifest(manifest, ["Exercise.xlsx", "Old.xlsx"]))

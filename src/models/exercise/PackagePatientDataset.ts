@@ -3,6 +3,7 @@ import type { Patient } from "@/models/Patient";
 
 export type PackagePatientRecord = Readonly<{
   patient: Readonly<Patient>;
+  initialLocationId?: string;
   runtimeFixture?: Readonly<GoldenFixture>;
 }>;
 

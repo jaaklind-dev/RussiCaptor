@@ -220,6 +220,11 @@ export function validateModuleManifest(
     fatal("MANIFEST_METADATA", "ManifestID või ManifestVersion puudub.");
   }
 
+  for (const module of manifest.modules) {
+    if (!/^[A-Z0-9_.-]+$/.test(module.moduleId)) fatal("INVALID_MODULE_ID", `ModuleID ${module.moduleId || "<tühi>"} formaat on vigane.`);
+    if (module.moduleVersion !== "repo" && !/^\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?$/.test(module.moduleVersion)) fatal("INVALID_MODULE_VERSION", `${module.moduleId} versioon ${module.moduleVersion || "<tühi>"} on vigane.`);
+  }
+
   for (const duplicate of duplicateValues(manifest.modules.map((item) => item.moduleId))) {
     fatal("DUPLICATE_MODULE", `ModuleID ${duplicate} esineb mitu korda.`);
   }
@@ -276,16 +281,21 @@ export function validateModuleManifest(
   }
 
   const runtimeClasses = new Set(["RUNTIME_CONFIG", "EXERCISE_DATA"]);
+  for (const duplicate of duplicateValues(manifest.importUnits.map((item) => item.importUnitId))) fatal("DUPLICATE_IMPORT_UNIT", `ImportUnitID ${duplicate} esineb mitu korda.`);
+  for (const duplicate of duplicateValues(manifest.sheetRules.map((item) => `${item.moduleId}\u0000${item.sheetName}`))) fatal("DUPLICATE_SHEET_RULE", `SheetImportRule ${duplicate.replace("\u0000", "/")} esineb mitu korda.`);
   for (const unit of manifest.importUnits.filter((item) => item.enabledForExercise)) {
     const rule = manifest.sheetRules.find(
       (candidate) => candidate.moduleId === unit.moduleId && candidate.sheetName === unit.sheetName
     );
     if (!runtimeClasses.has(unit.importClass) || !rule || !rule.importAtRuntime || rule.importClass !== unit.importClass) {
       fatal("IMPORT_UNIT_CLASS", `${unit.importUnitId} ei vasta runtime sheet-reeglile.`);
+    } else if (rule.sourceFile !== unit.sourceFile || byId.get(unit.moduleId)?.sourceFile !== unit.sourceFile) {
+      fatal("IMPORT_UNIT_SOURCE", `${unit.importUnitId} SourceFile ei vasta mooduli ja sheet-reegli allikale.`);
     }
   }
 
   for (const rule of manifest.sheetRules) {
+    if (!byId.has(rule.moduleId) || byId.get(rule.moduleId)?.sourceFile !== rule.sourceFile) fatal("SHEET_MODULE_SOURCE", `${rule.moduleId}/${rule.sheetName} SourceFile ei vasta ModuleRegistry väärtusele.`);
     if (rule.importAtRuntime && !runtimeClasses.has(rule.importClass)) {
       fatal("SHEET_CLASS", `${rule.moduleId}/${rule.sheetName} on runtime, kuid klass ${rule.importClass} pole lubatud.`);
     }

@@ -18,9 +18,14 @@ import {
 } from "@/providers/excel/ModuleManifestParser";
 import { isSupabaseConfigured, supabase } from "@/services/SupabaseService";
 import { sha256Hex, sha256Text } from "@/utils/sha256";
+import { botulismPackageValidator } from "@/services/import/BotulismPackageValidator";
+import { PackageSpecificValidatorRegistry } from "@/services/import/PackageSpecificValidator";
+import { hasGenericPackageContract, parseImportedExercisePackageArtifacts, validateGenericPackageContract } from "@/services/import/ImportedExercisePackageParser";
+import { importedExercisePackageRegistry } from "@/services/import/ImportedExercisePackageRegistry";
 
 export const moduleManifestFileName = "RussiCaptor_Module_Import_Manifest_v1.xlsx";
 const runtimeClasses = new Set(["RUNTIME_CONFIG", "EXERCISE_DATA"]);
+const packageSpecificValidators = new PackageSpecificValidatorRegistry([botulismPackageValidator]);
 
 export type ModulePackageFile = { name: string; uri: string };
 export type ActiveModulePackageSummary = {
@@ -93,12 +98,6 @@ function validateUniqueColumn(
   if (duplicate) issues.push(issue(code, `${column} ${duplicate} esineb definitsioonides mitu korda.`));
 }
 
-function settingValue(payload: CanonicalModulePayload, settingId: string): ImportCellValue | undefined {
-  return rowsFor(payload, "ScenarioSettings").find(
-    (row) => cellText(row.SettingID) === settingId
-  )?.Value;
-}
-
 export function validateStagedPackage(
   modules: StagedModule[],
   manifest: ReturnType<typeof parseModuleManifest>
@@ -132,35 +131,16 @@ export function validateStagedPackage(
 
   const patientRows = rowsFor(exercise.payload, "PatientRoster");
   const processRows = rowsFor(exercise.payload, "PatientProcessAssignments");
-  const expectedPatients = Number(settingValue(exercise.payload, "PatientCountExpected"));
-  const expectedPerPatient = Number(settingValue(exercise.payload, "ProcessesPerPatientExpected"));
-  if (!Number.isFinite(expectedPatients) || patientRows.length !== expectedPatients) {
-    issues.push(issue("PATIENT_COUNT", `Patsiente on ${patientRows.length}, oodatud ${expectedPatients}.`));
-  }
-  if (!Number.isFinite(expectedPerPatient) || processRows.length !== expectedPatients * expectedPerPatient) {
-    issues.push(issue("PROCESS_COUNT", `PatientProcess ridu on ${processRows.length}, oodatud ${expectedPatients * expectedPerPatient}.`));
-  }
-
   const patientIds = patientRows.map((row) => cellText(row.PatientID));
   const duplicatePatient = findDuplicate(patientIds);
   if (duplicatePatient) issues.push(issue("DUPLICATE_PATIENT", `PatientID ${duplicatePatient} esineb mitu korda.`));
   if (patientRows.some((row) => cellText(row.SourceStatus) !== "READY")) {
     issues.push(issue("PATIENT_READY", "Kõik patsiendid peavad olema READY."));
   }
-  const pt012 = patientRows.find((row) => cellText(row.PatientID) === "PT-012");
-  if (!pt012 || cellText(pt012.ArrivalClock) !== "13:35") {
-    issues.push(issue("PT012_ARRIVAL", "PT-012 saabumisaeg peab olema 13:35."));
-  }
 
   const processIds = processRows.map((row) => cellText(row.PatientProcessID));
   const duplicateProcess = findDuplicate(processIds);
   if (duplicateProcess) issues.push(issue("DUPLICATE_PROCESS", `PatientProcessID ${duplicateProcess} esineb mitu korda.`));
-  for (const patientId of patientIds) {
-    const count = processRows.filter((row) => cellText(row.PatientID) === patientId).length;
-    if (count !== expectedPerPatient) {
-      issues.push(issue("PROCESSES_PER_PATIENT", `${patientId} protsesside arv on ${count}, oodatud ${expectedPerPatient}.`));
-    }
-  }
   for (const row of processRows) {
     if (!patientIds.includes(cellText(row.PatientID))) {
       issues.push(issue("PROCESS_PATIENT_REF", `${cellText(row.PatientProcessID)} viitab puuduvale patsiendile.`));
@@ -190,33 +170,6 @@ export function validateStagedPackage(
     }
   }
 
-  const severeHvTriggers = modules.flatMap((module) =>
-    rowsFor(module.payload, "TriggerRules").filter((row) =>
-      ["HV_NM_SEV"].includes(cellText(row.ChildTemplateID) || cellText(row.ChildTemplateOrEvent))
-    )
-  );
-  if (severeHvTriggers.length === 0 || severeHvTriggers.some(
-    (row) => cellText(row.ParentTransition) !== "RESOLVE_AND_REPLACE" || cellText(row.Repeatable) !== "FALSE"
-  )) {
-    issues.push(issue(
-      "HV_CHILD_REPLACEMENT",
-      "HV_NM_SEV trigger peab olema mittekorduv ja kasutama RESOLVE_AND_REPLACE üleminekut."
-    ));
-  }
-  const hypoventilationChildTriggers = modules.flatMap((module) =>
-    rowsFor(module.payload, "TriggerRules").filter((row) =>
-      (cellText(row.ChildTemplateID) || cellText(row.ChildTemplateOrEvent)) === "HYP_HYPOVENT_MOD"
-    )
-  );
-  if (hypoventilationChildTriggers.length === 0 || hypoventilationChildTriggers.some(
-    (row) => cellText(row.Repeatable) !== "FALSE"
-  )) {
-    issues.push(issue(
-      "HYPOXIA_CHILD_IDEMPOTENCY",
-      "HYP_HYPOVENT_MOD child trigger peab olema mittekorduv."
-    ));
-  }
-
   validateUniqueColumn(modules, /Templates$/, "TemplateID", "DUPLICATE_TEMPLATE", issues);
   validateUniqueColumn(modules, /^TriggerRules$/, "TriggerRuleID", "DUPLICATE_TRIGGER", issues);
   validateUniqueColumn(modules, /^ExerciseEvents$/, "EventID", "DUPLICATE_EVENT", issues);
@@ -237,16 +190,12 @@ export function validateStagedPackage(
     }
   }
 
-  const serialized = JSON.stringify(modules.map((module) => module.payload));
-  for (const forbidden of ["TRG-RESP-01", "WORK-B-PAIR"]) {
-    if (serialized.includes(forbidden)) {
-      issues.push(issue("DEPRECATED_REFERENCE", `${forbidden} viide on aktiivses payload'is keelatud.`));
-    }
-  }
+  issues.push(...validateGenericPackageContract(modules, exercise));
+  issues.push(...packageSpecificValidators.validate({ modules, manifest, exercise }));
   return issues;
 }
 
-async function buildStagedModules(
+export async function buildStagedModules(
   files: Map<string, { buffer: ArrayBuffer }>,
   manifest: ReturnType<typeof parseModuleManifest>
 ): Promise<StagedModule[]> {
@@ -498,6 +447,7 @@ export async function importModulePackage(
     }
     await ensureAuthenticatedUser();
     if (await isExactActiveNoOp(modules, exerciseId, exerciseVersion)) {
+      if (hasGenericPackageContract(exercise)) importedExercisePackageRegistry.register(parseImportedExercisePackageArtifacts(modules, exercise));
       return {
         ok: true,
         exerciseId,
@@ -509,6 +459,7 @@ export async function importModulePackage(
     }
 
     const importRunId = await persistStagedPackage(manifest, modules, exerciseId, exerciseVersion);
+    if (hasGenericPackageContract(exercise)) importedExercisePackageRegistry.register(parseImportedExercisePackageArtifacts(modules, exercise));
     return {
       ok: true,
       importRunId,

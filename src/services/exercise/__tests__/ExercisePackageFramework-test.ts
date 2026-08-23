@@ -38,9 +38,9 @@ describe("WP-28 Exercise Package Framework", () => {
     expect(calculateExercisePackageHash(DEFAULT_EXERCISE_PACKAGE)).toBe(DEFAULT_EXERCISE_PACKAGE.packageHash);
   });
 
-  test("registry resolves versions deterministically and rejects duplicates", () => {
+  test("registry resolves versions deterministically and treats identical versions as idempotent", () => {
     const registry = new ExercisePackageRegistry(validator); registry.register(makePackage("registry", "2.0.0")); registry.register(makePackage("registry", "1.0.0"));
-    expect(registry.packages.map(pkg => pkg.packageVersion)).toEqual(["1.0.0", "2.0.0"]); expect(registry.latest("registry")?.packageVersion).toBe("2.0.0"); expect(() => registry.register(makePackage("registry", "1.0.0"))).toThrow("DUPLICATE_EXERCISE_PACKAGE");
+    expect(registry.packages.map(pkg => pkg.packageVersion)).toEqual(["1.0.0", "2.0.0"]); expect(registry.latest("registry")?.packageVersion).toBe("2.0.0"); expect(() => registry.register(makePackage("registry", "1.0.0"))).not.toThrow();
   });
 
   test("classifies supported, safely legacy and incompatible packages", () => {

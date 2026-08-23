@@ -47,7 +47,9 @@ export class ExercisePackageLoader {
     const existing = exerciseDefinitionRegistry.get(canonicalPackage.definition.exerciseTypeId, canonicalPackage.definition.definitionVersion);
     if (existing && hashExerciseDefinition(existing) !== canonicalPackage.manifest.definitionHash) throw new Error("EXERCISE_DEFINITION_VERSION_CONFLICT");
     if (!existing) exerciseDefinitionRegistry.register(canonicalPackage.definition);
-    if (!this.registry.get(canonicalPackage.packageId, canonicalPackage.packageVersion)) this.registry.register(canonicalPackage);
+    const existingPackage = this.registry.get(canonicalPackage.packageId, canonicalPackage.packageVersion);
+    if (existingPackage && existingPackage.packageHash !== canonicalPackage.packageHash) throw new Error("EXERCISE_PACKAGE_VERSION_CONFLICT");
+    if (!existingPackage) this.registry.register(canonicalPackage);
     const published = this.registry.require(canonicalPackage.packageId, canonicalPackage.packageVersion);
     return published;
   }

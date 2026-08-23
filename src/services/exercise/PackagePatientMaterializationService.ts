@@ -21,7 +21,11 @@ export class PackagePatientDatasetRegistry {
   private readonly values = new Map<string, PackagePatientDataset>();
   register(dataset: PackagePatientDataset): void {
     const identity = splitIdentity(dataset.datasetId); if (identity.version !== dataset.version) throw new PatientDatasetError("UNSUPPORTED_PATIENT_DATASET_VERSION", `Dataset ${dataset.datasetId} version mismatch.`);
-    if (this.values.has(dataset.datasetId)) throw new PatientDatasetError("UNSUPPORTED_PATIENT_DATASET_VERSION", `Dataset ${dataset.datasetId} is already registered.`);
+    const existing = this.values.get(dataset.datasetId);
+    if (existing) {
+      if (sha256Text(stableJson(existing)) !== sha256Text(stableJson(dataset))) throw new PatientDatasetError("UNSUPPORTED_PATIENT_DATASET_VERSION", `Dataset ${dataset.datasetId} version content conflict.`);
+      return;
+    }
     this.values.set(dataset.datasetId, deepFreeze(structuredClone(dataset)) as PackagePatientDataset);
   }
   resolve(datasetId: string): PackagePatientDataset {
