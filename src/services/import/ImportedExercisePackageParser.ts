@@ -116,6 +116,10 @@ export function parseImportedExercisePackageArtifacts(modules: readonly StagedMo
   const locationNames = new Set(locations.map((item) => item.name));
   const locationIds = new Set(locations.map((item) => item.locationId));
   if (sourceDataset.patients.some((record) => !record.initialLocationId || !locationIds.has(record.initialLocationId) || !locationNames.has(record.patient.location))) throw new Error("Patsiendi initial location ID/nimi ei lahendu PackageLocations lehel.");
+  const transport = exercisePackage.transportConfiguration;
+  if (transport && (!locationIds.has(transport.vehicleLocationId) || transport.resources.some((resource) => !locationIds.has(resource.homeLocationId)) || transport.destinations.some((destination) => !locationIds.has(destination.destinationId)))) {
+    throw new Error("Transport configuration location binding ei lahendu PackageLocations lehel.");
+  }
 
   const relationships: ImportedRelationshipBinding[] = rows(exercise, "RelationshipBindings").map((row) => ({ relationshipId: text(row.RelationshipID), sourcePatientId: text(row.SourcePatientID), targetPatientId: text(row.TargetPatientID), relationshipType: text(row.RelationshipType) }));
   if (new Set(relationships.map((item) => item.relationshipId)).size !== relationships.length || relationships.some((item) => !item.relationshipId || !patientIds.includes(item.sourcePatientId) || !patientIds.includes(item.targetPatientId) || !item.relationshipType)) throw new Error("RelationshipBindings sisaldab korduvat või lahendamata viidet.");

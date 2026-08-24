@@ -1,8 +1,6 @@
-import { createExerciseControlCommand } from "@/features/exercise/ExerciseControlCommandFactory";
 import type { ExerciseControlCommandType } from "@/models/exercise/ExerciseControlCommand";
 import type { CanonicalExerciseSnapshot, CanonicalExerciseSpeed } from "@/models/exercise/CanonicalExerciseSnapshot";
-import { handleExerciseControlCommand } from "@/services/runtime/exercise/ExerciseControlCommandHandler";
-import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { prepareExerciseControlSubmission } from "@/services/runtime/exercise/ExerciseControlSubmission";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 const SPEEDS: readonly CanonicalExerciseSpeed[] = [1, 2, 4];
@@ -13,15 +11,18 @@ export function getExerciseControlAvailability(state: CanonicalExerciseSnapshot[
 
 export default function ExerciseControlsCard({ snapshot, onApplied }: { snapshot: CanonicalExerciseSnapshot; onApplied?: () => void }) {
   const enabled = getExerciseControlAvailability(snapshot.lifecycleState);
-  const issue = (commandType: ExerciseControlCommandType, speed?: CanonicalExerciseSpeed) => {
-    const current = getCanonicalExerciseSnapshot();
-    const result = handleExerciseControlCommand(createExerciseControlCommand({ exerciseId: current.exerciseId, commandType, expectedVersion: current.version, speed }));
+  const apply = (submit: () => ReturnType<ReturnType<typeof prepareExerciseControlSubmission>>) => {
+    const result = submit();
     if (!result.ok) Alert.alert("Käsk lükati tagasi", result.message);
     else onApplied?.();
   };
-  const confirmComplete = () => Alert.alert("Kas lõpetada õppus?", "See toiming on lõplik ega lähtesta õppuse olekut.", [
-    { text: "Tühista", style: "cancel" }, { text: "Lõpeta õppus", style: "destructive", onPress: () => issue("COMPLETE_EXERCISE") },
-  ]);
+  const issue = (commandType: ExerciseControlCommandType, speed?: CanonicalExerciseSpeed) => apply(prepareExerciseControlSubmission(commandType, speed));
+  const confirmComplete = () => {
+    const submit = prepareExerciseControlSubmission("COMPLETE_EXERCISE");
+    Alert.alert("Kas lõpetada õppus?", "See toiming on lõplik ega lähtesta õppuse olekut.", [
+      { text: "Tühista", style: "cancel" }, { text: "Lõpeta õppus", style: "destructive", onPress: () => apply(submit) },
+    ]);
+  };
   const action = snapshot.lifecycleState === "READY" ? { label: "▶ Alusta", type: "START_EXERCISE" as const, enabled: enabled.start }
     : snapshot.lifecycleState === "PAUSED" ? { label: "▶ Jätka", type: "RESUME_EXERCISE" as const, enabled: enabled.resume }
       : { label: "⏸ Peata", type: "PAUSE_EXERCISE" as const, enabled: enabled.pause };

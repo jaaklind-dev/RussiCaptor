@@ -34,6 +34,10 @@ const authoredTitleLabels: Readonly<Record<string, string>> = {
   "Clinical runtime advanced": "Kliiniline simulatsioon liikus edasi", "Chest drain inserted": "Pleuradreen paigaldati",
   "Chest drain insertion started": "Pleuradreeni paigaldamine",
   "Pelvic binder applied": "Vaagnalahas paigaldati", "Exercise Controller event injected": "Õppuse juhtimiskeskus lisas sündmuse",
+  TRANSPORT_REQUESTED: "Transport telliti", PATIENT_ONBOARD: "Patsient paigutati reanimobiili",
+  TRANSPORT_DEPARTED: "Transport alustas sõitu", TRANSPORT_ARRIVED: "Patsient saabus sihtkohta",
+  TRANSPORT_HANDOVER_COMPLETED: "Patsiendi üleandmine lõpetati", TRANSPORT_RETURNING: "Reanimobiil alustas tagasisõitu",
+  TRANSPORT_RESOURCE_AVAILABLE: "Reanimobiil on jälle saadaval", TRANSPORT_CANCELLED: "Transport tühistati",
 };
 export const timelineEventTitleLabel = (event: Pick<ExerciseTimelineEvent, "type" | "title">): string => eventTypeLabels[event.type] ?? authoredTitleLabels[event.title] ?? `Sündmus: ${event.type}`;
 

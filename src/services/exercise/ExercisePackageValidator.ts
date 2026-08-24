@@ -6,7 +6,7 @@ import { hashExerciseDefinition } from "./ExerciseDefinitionRegistry";
 import { ExerciseDefinitionValidator } from "./ExerciseDefinitionValidator";
 
 export const CURRENT_PACKAGE_COMPATIBILITY_VERSION = 1;
-export type ExercisePackageValidationCode = "INVALID_PACKAGE_ID" | "INVALID_PACKAGE_VERSION" | "INVALID_MANIFEST" | "INVALID_HASH" | "INVALID_DEFINITION" | "UNKNOWN_PATIENT_PROCESS" | "UNKNOWN_ANALYTICS_PROVIDER" | "UNKNOWN_METRIC_PROVIDER" | "INCONSISTENT_SELECTION" | "DUPLICATE_VALUE" | "INCOMPATIBLE_PACKAGE" | "INVALID_MODULE_DEPENDENCY" | "INVALID_EVALUATION_PROFILE_REFERENCE";
+export type ExercisePackageValidationCode = "INVALID_PACKAGE_ID" | "INVALID_PACKAGE_VERSION" | "INVALID_MANIFEST" | "INVALID_HASH" | "INVALID_DEFINITION" | "UNKNOWN_PATIENT_PROCESS" | "UNKNOWN_ANALYTICS_PROVIDER" | "UNKNOWN_METRIC_PROVIDER" | "INCONSISTENT_SELECTION" | "DUPLICATE_VALUE" | "INCOMPATIBLE_PACKAGE" | "INVALID_MODULE_DEPENDENCY" | "INVALID_EVALUATION_PROFILE_REFERENCE" | "INVALID_TRANSPORT_CONFIGURATION";
 export type ExercisePackageDiagnostic = Readonly<{ code: ExercisePackageValidationCode; path: string; message: string }>;
 const duplicates = (values: readonly string[]) => values.filter((value, index) => values.indexOf(value) !== index);
 
@@ -34,6 +34,13 @@ export class ExercisePackageValidator {
     for (const moduleId of [...new Set(duplicates(moduleDependencies.map(item => item.moduleId)))].sort()) add("DUPLICATE_VALUE", "requiredClinicalModules", `Duplicate Clinical Module ${moduleId}`);
     if (pkg.evaluationProfile && (!pkg.evaluationProfile.profileId?.trim() || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pkg.evaluationProfile.version))) add("INVALID_EVALUATION_PROFILE_REFERENCE", "evaluationProfile", "Evaluation Profile requires an ID and exact semantic version");
     if (pkg.evaluationProfile && !pkg.protocolConfiguration) add("INVALID_EVALUATION_PROFILE_REFERENCE", "evaluationProfile", "Evaluation Profile requires an exact Protocol binding");
+    const transport = pkg.transportConfiguration;
+    if (transport) {
+      if (!transport.version?.trim() || !transport.vehicleLocationId?.trim()) add("INVALID_TRANSPORT_CONFIGURATION", "transportConfiguration", "Transport configuration requires a version and vehicle location");
+      const resourceIds = transport.resources.map(item => item.resourceId); const destinationIds = transport.destinations.map(item => item.destinationId);
+      if (new Set(resourceIds).size !== resourceIds.length || transport.resources.some(item => !item.resourceId?.trim() || !item.resourceType?.trim() || !item.displayName?.trim() || !item.homeLocationId?.trim() || item.capacity !== 1)) add("INVALID_TRANSPORT_CONFIGURATION", "transportConfiguration.resources", "Transport resources require unique identity, home location and capacity one");
+      if (new Set(destinationIds).size !== destinationIds.length || transport.destinations.some(item => !item.destinationId?.trim() || !item.displayName?.trim() || [item.travelDurationSec, item.handoverDurationSec, item.returnDurationSec, item.turnaroundDurationSec].some(value => !Number.isInteger(value) || value < 0))) add("INVALID_TRANSPORT_CONFIGURATION", "transportConfiguration.destinations", "Transport destinations require unique identity and non-negative canonical durations");
+    }
     return Object.freeze(issues.sort((a, b) => a.path.localeCompare(b.path) || a.code.localeCompare(b.code)));
   }
   assertValid(pkg: ExercisePackage): void { const issues = this.validate(pkg); if (issues.length) throw new Error(`INVALID_EXERCISE_PACKAGE:${issues.map(issue => `${issue.code}@${issue.path}`).join(",")}`); }

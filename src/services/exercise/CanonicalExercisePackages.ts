@@ -321,3 +321,20 @@ export const MASSIVE_TRANSFUSION_EXERCISE_PACKAGE = createExercisePackage({
     author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "TRAUMA",
     tags: ["canonical", "massive-transfusion", "reference", "technical", "trauma"] },
 });
+
+const transportReferenceDefinition: ExerciseDefinition = Object.freeze({ ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
+  exerciseTypeId: "RUSSICAPTOR_TRANSPORT_REFERENCE", name: "Transpordi tehniline referentsõppus",
+  description: "Kahe patsiendi ja ühe jagatud reanimobiili deterministlik tehniline referents.", profile: "TRAUMA" });
+export const TRANSPORT_REFERENCE_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.transport-reference", packageVersion: "1.0.0", definition: transportReferenceDefinition,
+  patientDatasetId: "patients.transport-reference.v1", enabledPatientProcesses: transportReferenceDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: transportReferenceDefinition.enabledAnalyticsProviders, enabledMetricProviders: transportReferenceDefinition.enabledMetricProviders,
+  transportConfiguration: Object.freeze({ version: "1.0.0", vehicleLocationId: "REANIMOBILE", resources: Object.freeze([
+    Object.freeze({ resourceId: "REANIMOBILE-01", resourceType: "CRITICAL_CARE_AMBULANCE", displayName: "Reanimobiil 01", capacity: 1, homeLocationId: "ED" }),
+  ]), destinations: Object.freeze([
+    Object.freeze({ destinationId: "THORACIC_CENTER", displayName: "Torakaalkeskus", capabilities: Object.freeze(["THORACOTOMY"]), travelDurationSec: 1800, handoverDurationSec: 600, returnDurationSec: 1800, turnaroundDurationSec: 300 }),
+    Object.freeze({ destinationId: "PELVIC_CENTER", displayName: "Vaagnatraumakeskus", capabilities: Object.freeze(["PELVIC_SURGERY"]), travelDurationSec: 7200, handoverDurationSec: 600, returnDurationSec: 7200, turnaroundDurationSec: 0 }),
+  ]) }),
+  metadata: { name: "Transpordi tehniline referentspakett", description: "Üldise transpordi ressursi-, teekonna- ja tagastustsükli kontrollpakett; ei kodeeri kliinilist ravijärjekorda.",
+    author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "TRAUMA", tags: ["canonical", "reference", "technical", "transport"] },
+});

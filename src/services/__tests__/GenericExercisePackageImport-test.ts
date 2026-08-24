@@ -81,4 +81,18 @@ describe("WP-45A generic exercise package import", () => {
     value.exercise.payload.sheets.PatientProcessBindings.rows.push({ BindingID: "PB-B-HEM", PatientID: "GEN-B", ProcessType: "HEMORRHAGE", ProviderModuleID: "CORE_ENGINE", ProviderVersion: "repo" });
     expect(codes(value)).toContain("GENERIC_PACKAGE_CONTRACT");
   });
+
+  test("imports generic transport resources and destinations through package data", () => {
+    const value = genericPackage();
+    const definition = value.pkg.definition;
+    const pkg = createExercisePackage({ ...value.pkg, definition, transportConfiguration: { version: "1.0.0", vehicleLocationId: "VEHICLE", resources: [{ resourceId: "AMB-1", resourceType: "AMBULANCE", displayName: "Ambulance", capacity: 1, homeLocationId: "LOC-1" }], destinations: [{ destinationId: "DEST-1", displayName: "Center", capabilities: ["TRAUMA"], travelDurationSec: 30, handoverDurationSec: 10, returnDurationSec: 30, turnaroundDurationSec: 5 }] } });
+    const row=value.exercise.payload.sheets.ExercisePackage.rows[0]; row.PackageID=pkg.packageId; row.PackageVersion=pkg.packageVersion; row.ContentHash=pkg.packageHash; row.PackageJSON=JSON.stringify(pkg);
+    value.exercise.payload.sheets.PackageLocations.rows.push({ LocationID:"VEHICLE",Code:"VEHICLE",Name:"Ambulance" }, { LocationID:"DEST-1",Code:"DEST",Name:"Center" });
+    expect(codes(value)).toEqual([]); expect(parseImportedExercisePackageArtifacts(value.modules,value.exercise).exercisePackage.transportConfiguration?.resources[0].resourceId).toBe("AMB-1");
+  });
+
+  test("rejects unresolved transport location bindings", () => {
+    const value=genericPackage(); const pkg=createExercisePackage({ ...value.pkg, transportConfiguration:{ version:"1.0.0",vehicleLocationId:"MISSING",resources:[{resourceId:"AMB-1",resourceType:"AMBULANCE",displayName:"Ambulance",capacity:1,homeLocationId:"LOC-1"}],destinations:[{destinationId:"DEST-MISSING",displayName:"Center",capabilities:[],travelDurationSec:30,handoverDurationSec:0,returnDurationSec:30,turnaroundDurationSec:0}] } });
+    const row=value.exercise.payload.sheets.ExercisePackage.rows[0]; row.ContentHash=pkg.packageHash; row.PackageJSON=JSON.stringify(pkg); expect(codes(value)).toContain("GENERIC_PACKAGE_CONTRACT");
+  });
 });

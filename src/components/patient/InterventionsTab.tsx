@@ -8,6 +8,7 @@ import type {
 import { MassiveTransfusionControls } from "./MassiveTransfusionControls";
 import { VascularAccessControls } from "./VascularAccessControls";
 import { PleuralDrainControls } from "./PleuralDrainControls";
+import { PatientTransportControls } from "./PatientTransportControls";
 
 type Props = {
   patientId: string;
@@ -32,6 +33,7 @@ export default function InterventionsTab({
 }: Props) {
   return (
     <View style={styles.card}>
+      <PatientTransportControls patientId={patientId} readOnly={readOnly} />
       <PleuralDrainControls patientId={patientId} readOnly={readOnly} />
       <VascularAccessControls patientId={patientId} readOnly={readOnly} />
       <MassiveTransfusionControls patientId={patientId} readOnly={readOnly} />

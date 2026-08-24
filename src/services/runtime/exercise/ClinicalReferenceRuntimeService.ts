@@ -13,6 +13,7 @@ import { canonicalRuntimePersistenceService, moduleCompositionHash } from "@/ser
 import { registerExerciseClockTarget } from "@/services/runtime/exercise/ExerciseClockTargetRegistry";
 import { createScenarioEngineExerciseClockTarget } from "@/services/runtime/exercise/ScenarioEngineExerciseClockTarget";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
+import { clearPatientTransportRuntime, preparePatientTransportRuntime } from "./PatientTransportRuntimeService";
 
 let active: Readonly<{ exerciseId: string; patientId: string; engine: ClinicalScenarioEngine; dispose: () => void }>[] = [];
 
@@ -38,6 +39,7 @@ function provenance(exerciseId: string, patientId: string, pkg: NonNullable<Retu
 export function prepareActiveClinicalReferenceRuntime(exerciseId: string, persisted: readonly PersistedRuntimeState[] = []): void {
   const pkg = persisted.length ? getExercisePackage(exerciseId) : activeExercisePackageService.getActive();
   const materialized = getPatientMaterialization(exerciseId);
+  preparePatientTransportRuntime(exerciseId);
   const configured = materialized?.patients.filter(record => record.runtimeFixture) ?? [];
   const legacyReference = pkg?.packageId === CARDIAC_ARREST_EXERCISE_PACKAGE.packageId || pkg?.packageId === ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE.packageId;
   const fallback = legacyReference ? getAllPatients().find(item => item.status === "Active" || item.status === "Incoming") : undefined;
@@ -98,7 +100,7 @@ export function prepareActiveClinicalReferenceRuntime(exerciseId: string, persis
   });
 }
 
-export function clearActiveClinicalReferenceRuntime(): void { active.forEach(item => item.dispose()); active = []; }
+export function clearActiveClinicalReferenceRuntime(): void { active.forEach(item => item.dispose()); active = []; clearPatientTransportRuntime(); }
 
 export function captureActiveClinicalReferenceRuntimes(expectedSimulationTimeSec?: number, expectedExerciseId?: string): readonly PersistedRuntimeState[] {
   if (!active.length) return [];

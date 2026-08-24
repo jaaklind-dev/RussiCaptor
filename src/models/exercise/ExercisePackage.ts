@@ -4,6 +4,7 @@ import type { PackageMetadata } from "./PackageMetadata";
 import type { ClinicalModuleDependency } from "@/models/clinical/ClinicalModuleDependency";
 import type { ProtocolReference } from "@/models/protocol/ClinicalProtocolConfiguration";
 import type { EvaluationProfileReference } from "@/models/evaluation/ExerciseEvaluation";
+import type { TransportConfiguration } from "@/models/PatientTransport";
 
 export type ExercisePackage = Readonly<{
   packageId: string;
@@ -19,4 +20,5 @@ export type ExercisePackage = Readonly<{
   requiredClinicalModules?: readonly ClinicalModuleDependency[];
   protocolConfiguration?: ProtocolReference;
   evaluationProfile?: EvaluationProfileReference;
+  transportConfiguration?: TransportConfiguration;
 }>;

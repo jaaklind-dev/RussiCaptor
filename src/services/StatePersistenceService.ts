@@ -36,6 +36,7 @@ import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { getRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
 import { BoundedObsoleteGenerationGate, LatestGenerationPipeline } from "@/services/runtime/persistence/LatestGenerationPipeline";
+import { capturePatientTransportRuntime, preparePatientTransportRuntime } from "@/services/runtime/exercise/PatientTransportRuntimeService";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
@@ -130,6 +131,7 @@ function collectSharedExerciseProjection(): SharedExerciseState {
     exercisePackageReference: packageReference(),
     completedExerciseArchives: [...getCompletedExerciseArchives()],
     patientMaterialization: getPatientMaterialization(getCanonicalExerciseSnapshot().exerciseId),
+    patientTransportRuntime: capturePatientTransportRuntime(),
   };
 }
 
@@ -353,6 +355,7 @@ function restoreCanonicalRuntime(restored: SharedExerciseState, startRuntime: bo
   if (lifecycleState === "RUNNING" || lifecycleState === "PAUSED") {
     assertRuntimeCheckpointClockConsistency(restored);
     prepareActiveClinicalReferenceRuntime(session.exerciseId, restored.persistedRuntimeStates);
+    preparePatientTransportRuntime(session.exerciseId, restored.patientTransportRuntime);
     if (lifecycleState === "RUNNING" && startRuntime) startClockRunner();
   }
 }

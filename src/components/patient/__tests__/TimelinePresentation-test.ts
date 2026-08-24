@@ -44,4 +44,10 @@ describe("WP-45B patient History presentation", () => {
     expect(rendered[0].id).toBe("TL-CHEST-DRAIN-CMD-1");
     expect(source[0]).toMatchObject({ type: "intervention", simulationTimeSec: 206, title: "Chest drain inserted" });
   });
+
+  test("localizes transport evidence without replacing its canonical identity", () => {
+    const source = event({ id: "TL-TRANSPORT-1-1", type: "transfer", title: "TRANSPORT_DEPARTED" });
+    expect(patientHistoryTitleLabel(source)).toBe("Transport alustas sõitu");
+    expect(source).toMatchObject({ id: "TL-TRANSPORT-1-1", type: "transfer", title: "TRANSPORT_DEPARTED" });
+  });
 });

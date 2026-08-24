@@ -20,6 +20,7 @@ import type { MaterializedPatientDataset } from "@/models/exercise/PackagePatien
 import type { InstalledWorkbook } from "@/services/WorkbookImportService";
 import type { ExerciseResetAudit } from "@/services/runtime/exercise/ExerciseResetService";
 import type { CompletedExerciseArchive } from "@/services/exercise/CompletedExerciseArchiveService";
+import type { PatientTransportRuntimeState } from "@/models/PatientTransport";
 
 export type SharedExerciseState = {
   exerciseSession: ExerciseSession | CanonicalExerciseSnapshot;
@@ -45,4 +46,5 @@ export type SharedExerciseState = {
   completedExerciseArchives?: CompletedExerciseArchive[];
   patientMaterialization?: MaterializedPatientDataset;
   persistedRuntimeStates?: readonly PersistedRuntimeState[];
+  patientTransportRuntime?: PatientTransportRuntimeState;
 };

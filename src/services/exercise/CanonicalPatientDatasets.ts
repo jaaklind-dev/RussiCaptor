@@ -66,6 +66,9 @@ export const pleuralWp45bFixture: GoldenFixture = Object.freeze({ fixtureId: "FX
       configuration: Object.freeze({ ...structuredClone(PLEURAL_INJURY_REFERENCE.hemorrhageSources[0].configuration), baselineBleedingRateMlMin: WP45B_THORACIC_BLEEDING_RATE_ML_MIN,
         bleedingRateAfterPleuralDrainageMlMin: WP45B_THORACIC_BLEEDING_RATE_ML_MIN }), estimatedBloodLossMl: 1450 }]) }) });
 
+const transportPatient = (id: string, name: string): Patient => Object.freeze({ id, isikukood: `TRANSPORT-${id}`, name, triage: "P1", status: "Active", location: "ED", lastSeen: "T+0", mist: Object.freeze({ mechanism: "Technical", injuries: "Technical", signs: "Technical", treatment: "None" }) });
+const transportFixture = (patientId: string, seed: number): GoldenFixture => Object.freeze({ ...structuredClone(pelvicReferenceFixture), fixtureId: `FX-${patientId}`, patientId, seed });
+
 export const packagePatientDatasetRegistry = new PackagePatientDatasetRegistry();
 [
   normal("patients.als.v1"), normal("patients.trauma.v1"), normal("patients.mascal.v1"), normal("patients.botulism.v1"), botulismJohvi,
@@ -80,4 +83,5 @@ export const packagePatientDatasetRegistry = new PackagePatientDatasetRegistry()
     { patient: pleuralReferencePatient, runtimeFixture: pleuralReferenceFixture },
   ]),
   dataset("patients.massive-transfusion-reference.v1", [{ patient: pelvicReferencePatient, runtimeFixture: mtpReferenceFixture }]),
+  dataset("patients.transport-reference.v1", [{ patient: transportPatient("PT-TRANSPORT-01", "Transport Patient 1"), runtimeFixture: transportFixture("PT-TRANSPORT-01", 51) }, { patient: transportPatient("PT-TRANSPORT-02", "Transport Patient 2"), runtimeFixture: transportFixture("PT-TRANSPORT-02", 52) }]),
 ].forEach(value => packagePatientDatasetRegistry.register(value));

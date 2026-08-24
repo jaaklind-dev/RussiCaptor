@@ -37,6 +37,7 @@ export class ExercisePackageLoader {
       metadata: pkg.metadata, requiredClinicalModules: pkg.requiredClinicalModules,
       protocolConfiguration: pkg.protocolConfiguration,
       evaluationProfile: pkg.evaluationProfile,
+      transportConfiguration: pkg.transportConfiguration,
       compatibilityVersion: pkg.manifest.compatibilityVersion,
     });
   }

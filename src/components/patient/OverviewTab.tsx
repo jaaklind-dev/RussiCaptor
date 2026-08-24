@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { Patient } from "@/models/Patient";
 import type { TimelineEvent } from "@/models/TimelineEvent";
 import type { VitalSigns } from "@/models/VitalSigns";
+import { patientHistoryDescriptionLabel, patientHistoryTitleLabel } from "./TimelinePresentation";
 
 type Props = {
 
@@ -77,8 +78,8 @@ export default function OverviewTab({
         ) : (
           recentEvents.map((event) => (
             <View key={event.id} style={styles.eventRow}>
-              <Text style={styles.eventTitle}>{event.title}</Text>
-              <Text style={styles.eventDescription}>{event.description}</Text>
+              <Text style={styles.eventTitle}>{patientHistoryTitleLabel(event)}</Text>
+              <Text style={styles.eventDescription}>{patientHistoryDescriptionLabel(event.description)}</Text>
             </View>
           ))
         )}
