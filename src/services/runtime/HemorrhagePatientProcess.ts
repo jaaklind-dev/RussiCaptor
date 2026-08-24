@@ -8,6 +8,7 @@ function validConfig(value: unknown): value is HemorrhageConfiguration {
   const c = value as HemorrhageConfiguration;
   return [c.baselineBleedingRateMlMin, c.tourniquetEfficiency, c.binderEfficiency,
     c.infusionOffsetMlMin, c.bloodProductOffsetMlMin].every(Number.isFinite) &&
+    (c.bleedingRateAfterPleuralDrainageMlMin === undefined || (Number.isFinite(c.bleedingRateAfterPleuralDrainageMlMin) && c.bleedingRateAfterPleuralDrainageMlMin >= 0)) &&
     c.severityThresholdsMl?.length === 4 && c.perfusionThresholdsMl?.length === 3 &&
     c.compensationThresholdsMl?.length === 2 && Boolean(c.trendThresholdsMlMin);
 }
@@ -44,7 +45,8 @@ export function bootstrapHemorrhagePatientProcess(encounterId: string, initial: 
   return { ...base, outputs: output(base) };
 }
 export function setHemorrhageEffects(previous: HemorrhagePatientProcessRuntime, effects: ClinicalEffect[]): HemorrhagePatientProcessRuntime {
-  const applicableEffects = effects.filter(e => ["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED"].includes(e.effectType))
+  const applicableEffects = effects.filter(e => ["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED"].includes(e.effectType) ||
+    (e.effectType === "PLEURAL_DRAINAGE" && previous.configuration.bleedingRateAfterPleuralDrainageMlMin !== undefined))
     .filter(e => {
       const targetSourceId = typeof e.parameters.sourceId === "string" ? e.parameters.sourceId : undefined;
       if (targetSourceId && targetSourceId !== previous.sourceId) return false;
@@ -64,7 +66,11 @@ export function tickHemorrhagePatientProcess(previous: HemorrhagePatientProcessR
   const stopped = effects.some(e => e.effectType === "STOP_EXTERNAL_BLEEDING");
   const reduction = Math.max(0, ...effects.map(e => e.effectType === "REDUCE_EXTERNAL_BLEEDING" ? c.tourniquetEfficiency : e.effectType === "PELVIC_STABILIZATION" ? c.binderEfficiency : 0));
   const support = effects.reduce((sum, e) => sum + (e.effectType === "BLOOD_PRODUCT_STARTED" ? c.bloodProductOffsetMlMin : e.effectType === "INFUSION_RUNNING" ? c.infusionOffsetMlMin : 0), 0);
-  const rate = precise(stopped ? 0 : Math.max(0, c.baselineBleedingRateMlMin * (1 - reduction) - support));
+  const pleuralDrainageActive = previous.sourceType === "THORACIC" && effects.some(e => e.effectType === "PLEURAL_DRAINAGE");
+  const untreatedRate = pleuralDrainageActive && c.bleedingRateAfterPleuralDrainageMlMin !== undefined
+    ? c.bleedingRateAfterPleuralDrainageMlMin
+    : c.baselineBleedingRateMlMin;
+  const rate = precise(stopped ? 0 : Math.max(0, untreatedRate * (1 - reduction) - support));
   const cumulative = precise(previous.clinicalState.cumulativeLossMl + rate * seconds / 60);
   const severities = ["NONE", "MINOR", "MODERATE", "SEVERE", "CATASTROPHIC"] as const;
   const perfusions = ["NORMAL", "COMPENSATED", "DECOMPENSATED", "CRITICAL"] as const;

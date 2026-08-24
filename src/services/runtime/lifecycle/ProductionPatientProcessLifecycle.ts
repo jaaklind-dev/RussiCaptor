@@ -1,6 +1,6 @@
 import type { ClinicalProcessRuntime } from "@/models/ClinicalIntegration";
 import type { CanonicalLifecycleProcess, PatientProcessLifecycleDescriptor, PatientProcessLifecycleResult } from "@/models/PatientProcessLifecycle";
-import type { BotulismRootPatientProcessRuntime, CardiacArrestConfiguration, CardiacArrestPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime, PleuralInjuryPatientProcessRuntime, RespiratoryFailurePatientProcessRuntime } from "@/models/PatientProcessRuntime";
+import type { BotulismRootPatientProcessRuntime, CardiacArrestConfiguration, CardiacArrestPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime, PleuralInjuryPatientProcessRuntime, PleuralRespiratoryRecoveryConfiguration, RespiratoryFailurePatientProcessRuntime } from "@/models/PatientProcessRuntime";
 import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatientProcess";
 import { bootstrapBotulismRoot, tickBotulismRoot } from "@/services/runtime/BotulismRootPatientProcess";
 import { bootstrapHemorrhagePatientProcess, setHemorrhageEffects, tickHemorrhagePatientProcess } from "@/services/runtime/HemorrhagePatientProcess";
@@ -15,6 +15,10 @@ import type { BloodProductDeliveryMode, MassiveTransfusionPatientProcessRuntime,
 import { activateMassiveTransfusion, administerMtpCalcium, bootstrapMassiveTransfusionPatientProcess, drainMassiveTransfusionEvidence, startBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
 
 const respiratoryImpairment = (processes: readonly CanonicalLifecycleProcess[]) => Math.max(1, ...processes.map(process => Number(process.outputs.runtimeContributions?.respiratoryImpairmentMultiplier ?? 1)));
+const pleuralRespiratoryRecovery = (processes: readonly CanonicalLifecycleProcess[]): PleuralRespiratoryRecoveryConfiguration | undefined => {
+  const pleural = processes.find((process): process is PleuralInjuryPatientProcessRuntime => process.processType === "PLEURAL_INJURY");
+  return pleural?.clinicalState.drainageActive ? pleural.configuration.postDrainRespiratoryRecovery : undefined;
+};
 
 const unchanged = (process: CanonicalLifecycleProcess): PatientProcessLifecycleResult => ({ processes: [process], events: [], aggregationRequested: false });
 const initial = (fixture: { initialState: unknown }) => fixture.initialState as Record<string, unknown>;
@@ -148,7 +152,9 @@ const pleuralInjury: PatientProcessLifecycleDescriptor = {
     const previous = process as PleuralInjuryPatientProcessRuntime;
     const next = tickPleuralInjuryPatientProcess(previous, context.tickSeconds);
     return { processes: [next], aggregationRequested: true, events: [{ eventType: "PLEURAL_STATE_UPDATED", target: next.encounterId,
-      details: { airBurden: next.clinicalState.airBurden, bloodBurdenMl: next.clinicalState.bloodBurdenMl, drainageActive: next.clinicalState.drainageActive },
+      details: { airBurden: next.clinicalState.airBurden, bloodBurdenMl: next.clinicalState.bloodBurdenMl, drainageActive: next.clinicalState.drainageActive,
+        initialDrainageVolumeMl: next.clinicalState.initialDrainageVolumeMl, ongoingDrainRateMlMin: next.clinicalState.ongoingDrainRateMlMin,
+        ongoingDrainOutputMl: next.clinicalState.ongoingDrainOutputMl, totalDrainOutputMl: next.clinicalState.totalDrainOutputMl },
       recordPhase: "BEFORE_AGGREGATION", sourceProcessId: next.processId }] };
   },
 };
@@ -166,7 +172,7 @@ const respiratoryFailure: PatientProcessLifecycleDescriptor = {
     if (parent) { process.parentProcessId = parent.processId; process.parentProcessType = parent.processType; }
     return { processes: [process], events: [], aggregationRequested: false };
   },
-  tick(process, context) { return { processes: [tickRespiratoryFailurePatientProcess(process as RespiratoryFailurePatientProcessRuntime, context.tickSeconds, respiratoryImpairment(context.existingProcesses))], events: [], aggregationRequested: true }; },
+  tick(process, context) { return { processes: [tickRespiratoryFailurePatientProcess(process as RespiratoryFailurePatientProcessRuntime, context.tickSeconds, respiratoryImpairment(context.existingProcesses), pleuralRespiratoryRecovery(context.existingProcesses))], events: [], aggregationRequested: true }; },
 };
 
 const hypoxia: PatientProcessLifecycleDescriptor = {
@@ -189,7 +195,7 @@ const hypoxia: PatientProcessLifecycleDescriptor = {
     }, parent));
     return { processes, events: [], aggregationRequested: false };
   },
-  tick(process, context) { return { processes: [tickHypoxiaPatientProcess(process as HypoxiaPatientProcessRuntime, context.tickSeconds, respiratoryImpairment(context.existingProcesses))], events: [], aggregationRequested: true }; },
+  tick(process, context) { return { processes: [tickHypoxiaPatientProcess(process as HypoxiaPatientProcessRuntime, context.tickSeconds, respiratoryImpairment(context.existingProcesses), pleuralRespiratoryRecovery(context.existingProcesses))], events: [], aggregationRequested: true }; },
   postAggregate(process, context) { return context.inputEvent ? [{ eventType: "PROCESS_TICK_APPLIED", details: {
     inputEventId: context.inputEvent.eventId, tickSeconds: context.tickSeconds,
   }, target: process.processId, recordPhase: "AFTER_AGGREGATION", sourceProcessId: process.processId }] : []; },

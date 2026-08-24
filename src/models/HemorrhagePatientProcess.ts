@@ -6,6 +6,8 @@ export type PerfusionState = "NORMAL" | "COMPENSATED" | "DECOMPENSATED" | "CRITI
 export type CompensationState = "COMPENSATED" | "FAILING" | "FAILED";
 export type HemorrhageConfiguration = {
   baselineBleedingRateMlMin: number;
+  /** Optional thoracic rate used while a canonical pleural drain is active. */
+  bleedingRateAfterPleuralDrainageMlMin?: number;
   tourniquetEfficiency: number;
   binderEfficiency: number;
   infusionOffsetMlMin: number;

@@ -6,10 +6,12 @@ export const pleuralInjuryClinicalProcessHandler: ClinicalProcessHandler = {
   processType: "PLEURAL_INJURY",
   accepts(input, process) { return process.processType === "PLEURAL_INJURY" && input.payload.effectType === "PLEURAL_DRAINAGE"; },
   apply(input, process) {
+    const previous = process as PleuralInjuryPatientProcessRuntime;
+    const semanticNoOp = previous.configuration.initialDrainageVolumeMl !== undefined && previous.clinicalState.initialDrainageCompleted === true;
     const updated = applyPleuralEffects(process as PleuralInjuryPatientProcessRuntime, [{ ...input.payload, effectId: input.inputId,
       encounterId: input.encounterId, patientId: input.patientId, timestamp: input.timestamp,
       sourceInterventionInstanceId: input.source.sourceId }]);
-    return { process: updated, event: { eventType: "ClinicalEffectApplied", timestamp: input.timestamp, inputId: input.inputId,
+    return { process: updated, changed: !semanticNoOp, event: { eventType: "ClinicalEffectApplied", timestamp: input.timestamp, inputId: input.inputId,
       encounterId: input.encounterId, sourceId: input.source.sourceId, sourceProcessId: updated.processId,
       instanceKey: updated.instanceKey, effectType: input.payload.effectType } };
   },

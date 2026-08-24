@@ -39,14 +39,16 @@ export class ClinicalIntegrationFramework {
     try {
       for (const target of targets) {
         const result = target.handler.apply(input, structuredClone(target.process));
+        if (result.changed === false) continue;
         replacements.set(result.process.processId, result.process);
         events.push(result.event);
       }
     } catch (error) {
       return this.reject(input, current, "PROCESS_REJECTED", error instanceof Error ? error.message : String(error));
     }
-    const processes = sorted(current.map(process => replacements.get(process.processId) ?? structuredClone(process)));
     this.completedInputIds.add(input.inputId);
+    if (replacements.size === 0) return { status: "NO_OP", processes: structuredClone(sorted(current)), outputs: current.map(p => structuredClone(p.outputs)), events: [] };
+    const processes = sorted(current.map(process => replacements.get(process.processId) ?? structuredClone(process)));
     this.eventLog.push(...structuredClone(events));
     return { status: "APPLIED", processes, outputs: processes.map(p => structuredClone(p.outputs)), events };
   }

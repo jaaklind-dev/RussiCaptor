@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import OrdersTab from "@/components/patient/OrdersTab";
 import { getOrders } from "@/repositories/OrderRepository";
 import { placeOrder } from "@/services/OrderService";
@@ -50,6 +50,7 @@ import { recordVitalSigns } from "@/services/VitalSignsService";
 import ResourceDeveloperCard from "@/components/patient/ResourceDeveloperCard";
 import ActiveInterventionsCard from "@/components/patient/ActiveInterventionsCard";
 import ClinicalAssessmentDeveloperCard from "@/components/patient/ClinicalAssessmentDeveloperCard";
+import { getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots } from "@/services/RuntimeSnapshotService";
 type PatientTab =
   | "overview"
   | "vitals"
@@ -68,6 +69,7 @@ export default function PatientWorkspaceScreen() {
 const [activeTab, setActiveTab] = useState<PatientTab>("overview");
 const [showMoreTabs, setShowMoreTabs] = useState(false);
 const [, setRefreshKey] = useState(0);
+  const runtimeVersion = useSyncExternalStore(subscribeToRuntimeSnapshots, getRuntimeSnapshotVersion, getRuntimeSnapshotVersion);
   const patient = findPatientById(id ?? "");
 const isCompleted = patient?.status === "Completed";
 const assignment = patient ? getPatientAssignment(patient.id) : undefined;
@@ -260,6 +262,7 @@ useEffect(() => {
         {activeTab === "vitals" && (
           <VitalsTab
             measurements={getVitalSigns(patient.id)}
+            canonicalRuntime={getCanonicalPatientRuntimeSnapshot(patient.id, runtimeVersion)}
             readOnly={isReadOnly}
             onRecord={(values) => recordVitalSigns(patient.id, values)}
           />

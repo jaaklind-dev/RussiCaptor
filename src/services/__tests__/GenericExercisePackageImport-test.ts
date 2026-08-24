@@ -57,4 +57,28 @@ describe("WP-45A generic exercise package import", () => {
   test("materializes exactly the imported patients and fixtures", () => { const value = genericPackage(); const artifacts = parseImportedExercisePackageArtifacts(value.modules, value.exercise); const datasets = new PackagePatientDatasetRegistry(); datasets.register(artifacts.patientDataset); const plan = createPatientMaterializationPlan("EX-GENERIC", artifacts.exercisePackage, datasets); expect(plan.patients.map((record) => record.patient.id)).toEqual(["GEN-A", "GEN-B"]); expect(plan.patients.map((record) => record.runtimeFixture?.patientId)).toEqual(["GEN-A", "GEN-B"]); });
   test("registers and discovers an imported package generically", () => { const value = genericPackage(); const artifacts = parseImportedExercisePackageArtifacts(value.modules, value.exercise); const registry = new ImportedExercisePackageRegistry(); const published = registry.register(artifacts); expect(registry.get(published.exercisePackage.packageId, published.exercisePackage.packageVersion)?.patientDataset.patients).toHaveLength(2); });
   test("package and dataset registries accept identical re-registration and reject changed content", () => { const value = genericPackage(); const artifacts = parseImportedExercisePackageArtifacts(value.modules, value.exercise); const datasets = new PackagePatientDatasetRegistry(); datasets.register(artifacts.patientDataset); expect(() => datasets.register(structuredClone(artifacts.patientDataset))).not.toThrow(); const changed = structuredClone(artifacts.patientDataset) as unknown as { datasetId: string; version: string; patients: { patient: { name: string } }[] }; changed.patients[0].patient.name = "Changed"; expect(() => datasets.register(changed as unknown as PackagePatientDataset)).toThrow("version content conflict"); const packages = new ExercisePackageRegistry(new ExercisePackageValidator(EXERCISE_DEFINITION_CATALOG)); packages.register(artifacts.exercisePackage); expect(() => packages.register(structuredClone(artifacts.exercisePackage))).not.toThrow(); const changedPackage = createExercisePackage({ ...artifacts.exercisePackage, metadata: { ...artifacts.exercisePackage.metadata, description: "Changed" } }); expect(() => packages.register(changedPackage)).toThrow("EXERCISE_PACKAGE_VERSION_CONFLICT"); const registry = new ImportedExercisePackageRegistry(); expect(registry.get("missing", "1.0.0")).toBeUndefined(); });
+
+  test("imports a generic pleural config with Narva-representative values", () => {
+    const value = genericPackage();
+    const fixtureRow = value.exercise.payload.sheets.PatientRuntimeFixtures.rows[1];
+    const fixture = JSON.parse(String(fixtureRow.RuntimeFixtureJSON)) as { initialState: Record<string, unknown> };
+    fixture.initialState.pleuralInjury = { configuration: { initialDrainageVolumeMl: 1450, ongoingDrainOutputRateMlMin: 400 / 60 } };
+    fixture.initialState.hemorrhageSources = [{ sourceType: "THORACIC", configuration: { baselineBleedingRateMlMin: 20, bleedingRateAfterPleuralDrainageMlMin: 400 / 60 } }];
+    fixtureRow.RuntimeFixtureJSON = JSON.stringify(fixture);
+    value.exercise.payload.sheets.PatientProcessBindings.rows.push({ BindingID: "PB-B-HEM", PatientID: "GEN-B", ProcessType: "HEMORRHAGE", ProviderModuleID: "CORE_ENGINE", ProviderVersion: "repo" });
+    expect(codes(value)).toEqual([]);
+    const artifacts = parseImportedExercisePackageArtifacts(value.modules, value.exercise);
+    const imported = artifacts.patientDataset.patients[1].runtimeFixture?.initialState as Record<string, { configuration: Record<string, number> }>;
+    expect(imported.pleuralInjury.configuration).toMatchObject({ initialDrainageVolumeMl: 1450, ongoingDrainOutputRateMlMin: 400 / 60 });
+  });
+
+  test("rejects negative or non-finite generic pleural configuration", () => {
+    const value = genericPackage();
+    const fixtureRow = value.exercise.payload.sheets.PatientRuntimeFixtures.rows[1];
+    const fixture = JSON.parse(String(fixtureRow.RuntimeFixtureJSON)) as { initialState: Record<string, unknown> };
+    fixture.initialState.pleuralInjury = { configuration: { initialDrainageVolumeMl: -1, ongoingDrainOutputRateMlMin: 400 / 60 } };
+    fixtureRow.RuntimeFixtureJSON = JSON.stringify(fixture);
+    value.exercise.payload.sheets.PatientProcessBindings.rows.push({ BindingID: "PB-B-HEM", PatientID: "GEN-B", ProcessType: "HEMORRHAGE", ProviderModuleID: "CORE_ENGINE", ProviderVersion: "repo" });
+    expect(codes(value)).toContain("GENERIC_PACKAGE_CONTRACT");
+  });
 });

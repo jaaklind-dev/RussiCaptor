@@ -1,5 +1,5 @@
 import type { GoldenFixture } from "@/models/GoldenTest";
-import type { HypoxiaPatientProcessRuntime } from "@/models/PatientProcessRuntime";
+import type { HypoxiaPatientProcessRuntime, PleuralRespiratoryRecoveryConfiguration } from "@/models/PatientProcessRuntime";
 import type { ProcessOutput } from "@/models/RuntimeAggregation";
 
 const hypoxiaModuleId = "HYPOXIA_V1";
@@ -70,7 +70,8 @@ export function setHypoxiaOxygenTherapy(
 export function tickHypoxiaPatientProcess(
   previous: HypoxiaPatientProcessRuntime,
   tickSeconds: number,
-  impairmentMultiplier = 1
+  impairmentMultiplier = 1,
+  pleuralRecovery?: PleuralRespiratoryRecoveryConfiguration
 ): HypoxiaPatientProcessRuntime {
   const minutes = tickSeconds / 60;
   const supported = previous.clinicalState.oxygenTherapyActive;
@@ -78,7 +79,8 @@ export function tickHypoxiaPatientProcess(
     100,
     previous.clinicalState.oxygenationReserve + (supported ? 2 : -Math.max(0, impairmentMultiplier)) * minutes
   ));
-  const spo2 = Math.max(40, Math.min(100, previous.clinicalState.spo2 + (supported ? 2 : -Math.max(0, impairmentMultiplier)) * minutes));
+  const unboundedSpo2 = previous.clinicalState.spo2 + ((supported ? 2 : -Math.max(0, impairmentMultiplier)) + (pleuralRecovery?.spo2RecoveryPerMin ?? 0)) * minutes;
+  const spo2 = Math.max(40, Math.min(pleuralRecovery ? pleuralRecovery.spo2Ceiling : 100, unboundedSpo2));
   const clinicalState = {
     ...previous.clinicalState,
     oxygenationReserve,

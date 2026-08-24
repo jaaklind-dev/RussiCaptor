@@ -171,6 +171,22 @@ export type PleuralInjuryConfiguration = Readonly<{
   drainedBloodReductionMl: number;
   drainageAirAccumulationMultiplier: number;
   maximumBloodBurdenMl: number;
+  /** Optional versioned extension. Omitted configurations retain WP-44/V1 behavior byte-for-byte. */
+  initialDrainageVolumeMl?: number;
+  ongoingDrainOutputRateMlMin?: number;
+  /** Generic canonical recovery contributed by a functioning pleural drain. */
+  postDrainRespiratoryRecovery?: PleuralRespiratoryRecoveryConfiguration;
+}>;
+
+export type PleuralRespiratoryRecoveryConfiguration = Readonly<{
+  spo2RecoveryPerMin: number;
+  spo2Ceiling: number;
+  respiratoryRateRecoveryPerMin: number;
+  respiratoryRateFloor: number;
+  workOfBreathingRecoveryPerMin: number;
+  workOfBreathingFloor: number;
+  fatigueRecoveryPerMin: number;
+  fatigueFloor: number;
 }>;
 
 export type PleuralInjuryPatientProcessRuntime = {
@@ -187,6 +203,12 @@ export type PleuralInjuryPatientProcessRuntime = {
     drainageActive: boolean;
     drainedAir: number;
     drainedBloodMl: number;
+    initialDrainageCompleted?: boolean;
+    initialDrainageVolumeMl?: number;
+    ongoingDrainOutputMl?: number;
+    totalDrainOutputMl?: number;
+    ongoingDrainRateMlMin?: number;
+    drainageCompletedAtSec?: number;
     appliedEffectIds: string[];
     /** Compatibility discriminator for the existing clinical process registry. Pleural injury never owns oxygen therapy. */
     oxygenTherapyActive: false;

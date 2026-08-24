@@ -89,6 +89,28 @@ export function parseImportedExercisePackageArtifacts(modules: readonly StagedMo
     if (binding.ownerModuleId !== binding.providerModuleId) throw new Error(`ActionBinding ${binding.actionId} ownership on vastuoluline.`);
   }
 
+  for (const [patientId, fixture] of fixtureByPatient) {
+    const initialState = fixture.initialState && typeof fixture.initialState === "object" && !Array.isArray(fixture.initialState)
+      ? fixture.initialState as Record<string, unknown>
+      : {};
+    const pleural = initialState.pleuralInjury && typeof initialState.pleuralInjury === "object" && !Array.isArray(initialState.pleuralInjury)
+      ? initialState.pleuralInjury as Record<string, unknown>
+      : undefined;
+    const configuration = pleural?.configuration && typeof pleural.configuration === "object" && !Array.isArray(pleural.configuration)
+      ? pleural.configuration as Record<string, unknown>
+      : undefined;
+    if (!configuration || (configuration.initialDrainageVolumeMl === undefined && configuration.ongoingDrainOutputRateMlMin === undefined)) continue;
+    for (const field of ["initialDrainageVolumeMl", "ongoingDrainOutputRateMlMin"] as const) {
+      const value = configuration[field];
+      if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value) || value < 0)) throw new Error(`Pleural configuration ${patientId}/${field} peab olema mittenegatiivne lõplik arv.`);
+    }
+    if (!processBindings.some((binding) => binding.patientId === patientId && binding.processType === "PLEURAL_INJURY") ||
+      !processBindings.some((binding) => binding.patientId === patientId && binding.processType === "HEMORRHAGE") ||
+      !actionBindings.some((binding) => binding.patientId === patientId && binding.definitionId === "CHEST_DRAIN_INSERTION")) {
+      throw new Error(`Pleural configuration ${patientId} process/action bindingud ei lahendu.`);
+    }
+  }
+
   const locations: ImportedLocationBinding[] = rows(exercise, "PackageLocations").map((row) => ({ locationId: text(row.LocationID), code: text(row.Code), name: text(row.Name) }));
   if (new Set(locations.map((item) => item.locationId)).size !== locations.length || locations.some((item) => !item.locationId || !item.code || !item.name)) throw new Error("PackageLocations sisaldab korduvat või puudulikku asukohta.");
   const locationNames = new Set(locations.map((item) => item.name));

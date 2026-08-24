@@ -16,6 +16,17 @@ export const defaultPleuralInjuryConfiguration: PleuralInjuryConfiguration = Obj
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+function assertExtendedConfiguration(configuration: PleuralInjuryConfiguration): void {
+  for (const [field, value] of [
+    ["initialDrainageVolumeMl", configuration.initialDrainageVolumeMl],
+    ["ongoingDrainOutputRateMlMin", configuration.ongoingDrainOutputRateMlMin],
+  ] as const) {
+    if (value !== undefined && (!Number.isFinite(value) || value < 0)) throw new Error(`Pleural configuration ${field} peab olema mittenegatiivne lõplik arv.`);
+  }
+  const recovery = configuration.postDrainRespiratoryRecovery;
+  if (recovery && Object.values(recovery).some(value => !Number.isFinite(value) || value < 0)) throw new Error("Pleural respiratory recovery configuration peab sisaldama mittenegatiivseid lõplikke arve.");
+}
+
 function output(process: Omit<PleuralInjuryPatientProcessRuntime, "outputs">): ProcessOutput {
   const state = process.clinicalState;
   const airSeverity = state.airBurden / 100;
@@ -32,6 +43,14 @@ function output(process: Omit<PleuralInjuryPatientProcessRuntime, "outputs">): P
       pleuralBloodBurdenMl: state.bloodBurdenMl,
       pleuralDrainageActive: state.drainageActive,
       respiratoryImpairmentMultiplier: 1 + Math.max(airSeverity, bloodSeverity),
+      ...(state.initialDrainageCompleted !== undefined ? {
+        pleuralInitialDrainageCompleted: state.initialDrainageCompleted,
+        pleuralInitialDrainageVolumeMl: state.initialDrainageVolumeMl,
+        pleuralOngoingDrainOutputMl: state.ongoingDrainOutputMl,
+        pleuralOngoingDrainRateMlMin: state.ongoingDrainRateMlMin,
+        pleuralTotalDrainOutputMl: state.totalDrainOutputMl,
+        pleuralDrainageCompletedAtSec: state.drainageCompletedAtSec,
+      } : {}),
     },
     observedAtSec: process.elapsedTime,
   };
@@ -39,6 +58,8 @@ function output(process: Omit<PleuralInjuryPatientProcessRuntime, "outputs">): P
 
 export function bootstrapPleuralInjuryPatientProcess(encounterId: string, input: Record<string, unknown>): PleuralInjuryPatientProcessRuntime {
   const configuration = { ...defaultPleuralInjuryConfiguration, ...(input.configuration as Partial<PleuralInjuryConfiguration> | undefined) };
+  assertExtendedConfiguration(configuration);
+  const extendedDrainage = configuration.initialDrainageVolumeMl !== undefined || configuration.ongoingDrainOutputRateMlMin !== undefined;
   const processWithoutOutput: Omit<PleuralInjuryPatientProcessRuntime, "outputs"> = {
     processId: String(input.processId ?? `${encounterId}:PLEURAL_INJURY:1`),
     encounterId,
@@ -53,6 +74,13 @@ export function bootstrapPleuralInjuryPatientProcess(encounterId: string, input:
       drainageActive: false,
       drainedAir: 0,
       drainedBloodMl: 0,
+      ...(extendedDrainage ? {
+        initialDrainageCompleted: false,
+        initialDrainageVolumeMl: 0,
+        ongoingDrainOutputMl: 0,
+        totalDrainOutputMl: 0,
+        ongoingDrainRateMlMin: configuration.ongoingDrainOutputRateMlMin ?? 0,
+      } : {}),
       appliedEffectIds: [],
       oxygenTherapyActive: false,
     },
@@ -66,13 +94,27 @@ export function applyPleuralEffects(previous: PleuralInjuryPatientProcessRuntime
   let state = { ...previous.clinicalState, appliedEffectIds: [...previous.clinicalState.appliedEffectIds] };
   for (const effect of [...effects].sort((a, b) => a.timestamp - b.timestamp || a.effectId.localeCompare(b.effectId))) {
     if (effect.effectType !== "PLEURAL_DRAINAGE" || state.appliedEffectIds.includes(effect.effectId)) continue;
+    const extendedDrainage = previous.configuration.initialDrainageVolumeMl !== undefined || previous.configuration.ongoingDrainOutputRateMlMin !== undefined;
+    if (extendedDrainage && state.initialDrainageCompleted) {
+      continue;
+    }
+    const configuredInitialDrainage = previous.configuration.initialDrainageVolumeMl ?? previous.configuration.drainedBloodReductionMl;
+    const initialDrainage = Math.min(state.bloodBurdenMl, configuredInitialDrainage);
     state = {
       ...state,
       drainageActive: true,
       airBurden: clamp(state.airBurden - previous.configuration.drainedAirReduction, 0, 100),
-      bloodBurdenMl: clamp(state.bloodBurdenMl - previous.configuration.drainedBloodReductionMl, 0, previous.configuration.maximumBloodBurdenMl),
+      bloodBurdenMl: clamp(state.bloodBurdenMl - configuredInitialDrainage, 0, previous.configuration.maximumBloodBurdenMl),
       drainedAir: state.drainedAir + Math.min(state.airBurden, previous.configuration.drainedAirReduction),
-      drainedBloodMl: state.drainedBloodMl + Math.min(state.bloodBurdenMl, previous.configuration.drainedBloodReductionMl),
+      drainedBloodMl: state.drainedBloodMl + initialDrainage,
+      ...(extendedDrainage ? {
+        initialDrainageCompleted: true,
+        initialDrainageVolumeMl: initialDrainage,
+        ongoingDrainOutputMl: state.ongoingDrainOutputMl ?? 0,
+        totalDrainOutputMl: initialDrainage + (state.ongoingDrainOutputMl ?? 0),
+        ongoingDrainRateMlMin: previous.configuration.ongoingDrainOutputRateMlMin ?? 0,
+        drainageCompletedAtSec: effect.timestamp,
+      } : {}),
       appliedEffectIds: [...state.appliedEffectIds, effect.effectId].sort(),
     };
   }
@@ -83,10 +125,20 @@ export function applyPleuralEffects(previous: PleuralInjuryPatientProcessRuntime
 export function tickPleuralInjuryPatientProcess(previous: PleuralInjuryPatientProcessRuntime, tickSeconds: number): PleuralInjuryPatientProcessRuntime {
   const minutes = tickSeconds / 60;
   const airRate = previous.configuration.airAccumulationPerMin * (previous.clinicalState.drainageActive ? previous.configuration.drainageAirAccumulationMultiplier : 1);
+  const extendedDrainage = previous.configuration.initialDrainageVolumeMl !== undefined || previous.configuration.ongoingDrainOutputRateMlMin !== undefined;
+  const ongoingDrainIncrement = previous.clinicalState.drainageActive && extendedDrainage
+    ? (previous.configuration.ongoingDrainOutputRateMlMin ?? 0) * minutes
+    : 0;
+  const ongoingDrainOutputMl = (previous.clinicalState.ongoingDrainOutputMl ?? 0) + ongoingDrainIncrement;
   const clinicalState = {
     ...previous.clinicalState,
     airBurden: clamp(previous.clinicalState.airBurden + airRate * minutes, 0, 100),
-    bloodBurdenMl: clamp(previous.clinicalState.bloodBurdenMl + previous.configuration.bloodAccumulationPerMin * minutes, 0, previous.configuration.maximumBloodBurdenMl),
+    bloodBurdenMl: clamp(previous.clinicalState.bloodBurdenMl + (previous.clinicalState.drainageActive && extendedDrainage ? 0 : previous.configuration.bloodAccumulationPerMin * minutes), 0, previous.configuration.maximumBloodBurdenMl),
+    ...(extendedDrainage ? {
+      ongoingDrainOutputMl,
+      totalDrainOutputMl: (previous.clinicalState.initialDrainageVolumeMl ?? 0) + ongoingDrainOutputMl,
+      ongoingDrainRateMlMin: previous.configuration.ongoingDrainOutputRateMlMin ?? 0,
+    } : {}),
   };
   const processWithoutOutput = { ...previous, clinicalState, elapsedTime: previous.elapsedTime + tickSeconds, nextTick: previous.nextTick + tickSeconds };
   return { ...processWithoutOutput, outputs: output(processWithoutOutput) };

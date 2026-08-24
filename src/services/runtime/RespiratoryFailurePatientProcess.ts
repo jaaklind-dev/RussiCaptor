@@ -3,6 +3,7 @@ import type {
   RespiratoryFailureConfiguration,
   RespiratoryFailurePatientProcessRuntime,
   RespiratoryFailurePhenotype,
+  PleuralRespiratoryRecoveryConfiguration,
 } from "@/models/PatientProcessRuntime";
 import type { ProcessOutput } from "@/models/RuntimeAggregation";
 
@@ -180,7 +181,8 @@ export function applyRespiratoryFailureClinicalEffect(
 export function tickRespiratoryFailurePatientProcess(
   previous: RespiratoryFailurePatientProcessRuntime,
   tickSeconds: number,
-  impairmentMultiplier = 1
+  impairmentMultiplier = 1,
+  pleuralRecovery?: PleuralRespiratoryRecoveryConfiguration
 ): RespiratoryFailurePatientProcessRuntime {
   if (!Number.isFinite(tickSeconds) || tickSeconds <= 0) throw new Error("ENGINE_TICK kestus peab olema positiivne arv sekundeid.");
   if (previous.state === "Resolved") return previous;
@@ -200,12 +202,19 @@ export function tickRespiratoryFailurePatientProcess(
     : clinical.ventilationMode === "BVM" ? support.bvmFatigueRecoveryPerMin : 0;
   const supported = clinical.oxygenSupport || clinical.ventilationMode !== "NONE";
   const impairment = Math.max(0, impairmentMultiplier);
-  const spo2 = clamp(clinical.spo2 + ((clinical.oxygenSupport ? support.oxygenSpo2RecoveryPerMin : 0) + ventilationSpo2 - (hypoxaemic ? progression.spo2DeclinePerMin * impairment : 0)) * minutes, limits.spo2);
+  const respiratorySpo2Recovery = pleuralRecovery?.spo2RecoveryPerMin ?? 0;
+  const unboundedSpo2 = clinical.spo2 + ((clinical.oxygenSupport ? support.oxygenSpo2RecoveryPerMin : 0) + ventilationSpo2 + respiratorySpo2Recovery - (hypoxaemic ? progression.spo2DeclinePerMin * impairment : 0)) * minutes;
+  const spo2 = clamp(pleuralRecovery ? Math.min(pleuralRecovery.spo2Ceiling, unboundedSpo2) : unboundedSpo2, limits.spo2);
   const etco2 = clamp(clinical.etco2 + ((hypercapnic ? progression.etco2RisePerMin * impairment : 0) - ventilationCo2) * minutes, limits.etco2);
-  const fatigue = clamp(clinical.fatigue + (progression.fatigueRisePerMin * impairment - fatigueRecovery) * minutes, limits.fatigue);
-  const workOfBreathing = clamp(clinical.workOfBreathing + (progression.workOfBreathingRisePerMin * impairment - (clinical.airwayPatent ? support.patentAirwayWorkRecoveryPerMin : 0) - fatigueRecovery) * minutes, limits.workOfBreathing);
+  const fatigue = clamp(pleuralRecovery
+    ? Math.max(pleuralRecovery.fatigueFloor, clinical.fatigue + (progression.fatigueRisePerMin * impairment - fatigueRecovery - pleuralRecovery.fatigueRecoveryPerMin) * minutes)
+    : clinical.fatigue + (progression.fatigueRisePerMin * impairment - fatigueRecovery) * minutes, limits.fatigue);
+  const workOfBreathing = clamp(pleuralRecovery
+    ? Math.max(pleuralRecovery.workOfBreathingFloor, clinical.workOfBreathing + (progression.workOfBreathingRisePerMin * impairment - (clinical.airwayPatent ? support.patentAirwayWorkRecoveryPerMin : 0) - fatigueRecovery - pleuralRecovery.workOfBreathingRecoveryPerMin) * minutes)
+    : clinical.workOfBreathing + (progression.workOfBreathingRisePerMin * impairment - (clinical.airwayPatent ? support.patentAirwayWorkRecoveryPerMin : 0) - fatigueRecovery) * minutes, limits.workOfBreathing);
   const respiratoryRateDirection = clinical.ventilationMode === "NONE" ? progression.respiratoryRateChangePerMin * impairment : -progression.respiratoryRateChangePerMin;
-  const respiratoryRate = clamp(clinical.respiratoryRate + respiratoryRateDirection * minutes, limits.respiratoryRate);
+  const unboundedRespiratoryRate = clinical.respiratoryRate + (respiratoryRateDirection - (pleuralRecovery?.respiratoryRateRecoveryPerMin ?? 0)) * minutes;
+  const respiratoryRate = clamp(pleuralRecovery ? Math.max(pleuralRecovery.respiratoryRateFloor, unboundedRespiratoryRate) : unboundedRespiratoryRate, limits.respiratoryRate);
   const deteriorating = (!supported && hypoxaemic) || (hypercapnic && ventilationCo2 === 0);
   const gcs = clamp(clinical.gcs + (deteriorating ? -progression.gcsDeclinePerMin : progression.gcsDeclinePerMin) * minutes, limits.gcs);
   const scoreBefore = clinical.spo2 - clinical.etco2 - clinical.fatigue - clinical.workOfBreathing;

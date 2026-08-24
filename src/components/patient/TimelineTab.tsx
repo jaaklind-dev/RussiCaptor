@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 import { TimelineEvent } from "@/models/TimelineEvent";
+import { patientHistoryDescriptionLabel, patientHistoryTimeLabel, patientHistoryTitleLabel } from "./TimelinePresentation";
 
 type Props = {
   events: TimelineEvent[];
@@ -16,13 +17,13 @@ export default function TimelineTab({ events }: Props) {
         events.map((event) => (
           <View key={event.id} style={styles.event}>
             <Text style={styles.time}>
-              {new Date(event.timestamp).toLocaleTimeString()}
+              {patientHistoryTimeLabel(event)}
             </Text>
 
-            <Text style={styles.eventTitle}>{event.title}</Text>
+            <Text style={styles.eventTitle}>{patientHistoryTitleLabel(event)}</Text>
 
             <Text style={styles.description}>
-              {event.description}
+              {patientHistoryDescriptionLabel(event.description)}
             </Text>
           </View>
         ))

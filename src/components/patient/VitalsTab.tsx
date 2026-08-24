@@ -3,11 +3,13 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 
 import type { VitalSigns } from "@/models/VitalSigns";
 import type { VitalSignsInput } from "@/services/VitalSignsService";
+import type { CanonicalPatientRuntimeSnapshot } from "@/services/RuntimeSnapshotService";
 
 type Props = {
   measurements: VitalSigns[];
   readOnly?: boolean;
   onRecord: (values: VitalSignsInput) => boolean;
+  canonicalRuntime?: CanonicalPatientRuntimeSnapshot;
 };
 
 type Field = {
@@ -61,7 +63,7 @@ function measurementLabel(measurement: VitalSigns): string {
   return `T+${measurement.exerciseMinute} min · ${source}`;
 }
 
-export default function VitalsTab({ measurements, readOnly = false, onRecord }: Props) {
+export default function VitalsTab({ measurements, readOnly = false, onRecord, canonicalRuntime }: Props) {
   const [values, setValues] = useState<Record<string, string>>({});
   const latest = measurements[0];
 
@@ -89,6 +91,7 @@ export default function VitalsTab({ measurements, readOnly = false, onRecord }: 
 
   return (
     <View style={styles.container}>
+      {canonicalRuntime?.state.vitalSignState && <CanonicalRuntimeCard runtime={canonicalRuntime} />}
       <View style={styles.card}>
         <Text style={styles.title}>Elulised näitajad</Text>
         {!latest ? (
@@ -153,6 +156,31 @@ export default function VitalsTab({ measurements, readOnly = false, onRecord }: 
       </View>
     </View>
   );
+}
+
+function CanonicalRuntimeCard({ runtime }: Readonly<{ runtime: CanonicalPatientRuntimeSnapshot }>) {
+  const state = runtime.state; const vitals = state.vitalSignState!;
+  const pleural = runtime.processes.find(process => process.moduleId === "PLEURAL_INJURY_V1")?.clinicalState;
+  const hemorrhage = runtime.processes.find(process => process.moduleId === "HEMORRHAGE_V1")?.clinicalState;
+  const value = (candidate: unknown) => typeof candidate === "number" ? Math.round(candidate * 100) / 100 : "–";
+  return <View style={styles.card} testID="canonical-runtime-vitals">
+    <Text style={styles.title}>Kanooniline Runtime</Text>
+    <Text style={styles.timestamp}>T+{state.exerciseTimeSec}s · versioon {state.stateVersion}</Text>
+    <View style={styles.grid}>
+      <Vital label="Pulss" value={`${value(vitals.readings.heartRate.current)} /min`} />
+      <Vital label="Vererõhk" value={`${value(vitals.readings.systolicBp.current)}/${value(vitals.readings.diastolicBp.current)} mmHg`} />
+      <Vital label="MAP" value={`${value(vitals.derived.meanArterialPressure)} mmHg`} />
+      <Vital label="Hingamissagedus" value={`${value(vitals.readings.respiratoryRate.current)} /min`} />
+      <Vital label="SpO₂" value={`${value(vitals.readings.spo2.current)} %`} />
+      <Vital label="Ajalooline verekaotus" value={`${value(hemorrhage?.cumulativeLossMl)} ml`} />
+      <Vital label="Veritsuskiirus" value={`${value(hemorrhage?.bleedingRateMlMin)} ml/min`} />
+      <Vital label="Dreeni kogumaht" value={`${value(pleural?.totalDrainOutputMl)} ml`} />
+    </View>
+  </View>;
+}
+
+function Vital({ label, value }: Readonly<{ label: string; value: string }>) {
+  return <View style={styles.vital}><Text style={styles.vitalLabel}>{label}</Text><Text style={styles.vitalValue}>{value}</Text></View>;
 }
 
 const styles = StyleSheet.create({

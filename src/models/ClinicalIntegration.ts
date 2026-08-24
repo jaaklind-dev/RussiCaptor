@@ -75,6 +75,7 @@ export type ClinicalIntegrationEvent = {
 export type ClinicalProcessResult = {
   process: ClinicalProcessRuntime;
   event: ClinicalIntegrationEvent;
+  changed?: boolean;
 };
 
 export type ClinicalIntegrationResult = {

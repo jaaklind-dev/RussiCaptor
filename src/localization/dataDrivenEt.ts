@@ -32,6 +32,7 @@ const authoredTitleLabels: Readonly<Record<string, string>> = {
   "Exercise completed": "Õppus lõpetati", "Simulation speed changed": "Simulatsiooni kiirust muudeti",
   "Exercise command rejected": "Õppuse juhtimiskäsk lükati tagasi", "Patient event command rejected": "Patsiendisündmuse käsk lükati tagasi",
   "Clinical runtime advanced": "Kliiniline simulatsioon liikus edasi", "Chest drain inserted": "Pleuradreen paigaldati",
+  "Chest drain insertion started": "Pleuradreeni paigaldamine",
   "Pelvic binder applied": "Vaagnalahas paigaldati", "Exercise Controller event injected": "Õppuse juhtimiskeskus lisas sündmuse",
 };
 export const timelineEventTitleLabel = (event: Pick<ExerciseTimelineEvent, "type" | "title">): string => eventTypeLabels[event.type] ?? authoredTitleLabels[event.title] ?? `Sündmus: ${event.type}`;

@@ -2,10 +2,9 @@ import type { ExerciseTimelineEvent } from "@/models/exercise/ExerciseTimelineEv
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { timelineActorLabel, timelineCategoryLabel, timelineEventTitleLabel } from "@/localization/dataDrivenEt";
+import { formatSimulationTime } from "@/localization/simulationTimeEt";
 
 const icons: Record<ExerciseTimelineEvent["category"], string> = { EXERCISE: "▶", PATIENT: "●", COMMAND: "⌁", SYSTEM: "⚙", AUDIT: "✓" };
-function formatSimulationTime(seconds: number): string { const minutes = Math.floor(seconds / 60); return `${String(minutes).padStart(2, "0")}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`; }
-
 export const ExerciseTimelineEventCard = memo(function ExerciseTimelineEventCard({ event, onPress }: { event: ExerciseTimelineEvent; onPress: (id: string) => void }) {
   return <Pressable style={styles.card} onPress={() => onPress(event.id)}>
     <View style={styles.header}><Text style={styles.time}>{formatSimulationTime(event.simulationTimeSec)}</Text><Text style={styles.category}>{icons[event.category]} {timelineCategoryLabel(event.category)}</Text><View style={[styles.severity, styles[event.severity.toLowerCase() as "info" | "warning" | "error"]]} /></View>

@@ -280,6 +280,16 @@ export const PLEURAL_INJURY_EXERCISE_PACKAGE = createExercisePackage({
     tags: ["canonical", "clinical-module", "hemopneumothorax", "pleural-injury", "reference", "trauma"] },
 });
 
+export const PLEURAL_INJURY_WP45B_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.pleural-injury-reference", packageVersion: "1.1.0", definition: pleuralInjuryDefinition,
+  patientDatasetId: "patients.pleural-injury-reference.v2", enabledPatientProcesses: pleuralInjuryDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: pleuralInjuryDefinition.enabledAnalyticsProviders, enabledMetricProviders: pleuralInjuryDefinition.enabledMetricProviders,
+  requiredClinicalModules: Object.freeze([{ moduleId: PLEURAL_INJURY_MODULE_ID, version: PLEURAL_INJURY_MODULE_VERSION }]),
+  metadata: { name: "WP-45B Pleural Physical Acceptance Package", description: "Versioned technical fixture for 1450 ml initial pleural drainage and persistent 400 ml/h thoracic bleeding.",
+    author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "TRAUMA",
+    tags: ["canonical", "clinical-module", "physical-acceptance", "pleural-injury", "technical", "wp-45b"] },
+});
+
 const runtimeContinuityDefinition: ExerciseDefinition = Object.freeze({ ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
   exerciseTypeId: "RUSSICAPTOR_RUNTIME_CONTINUITY_REFERENCE", name: "Runtime Continuity Reference Exercise",
   description: "Technical two-patient reference for canonical persistence and rehydration acceptance only.", profile: "TRAUMA" });

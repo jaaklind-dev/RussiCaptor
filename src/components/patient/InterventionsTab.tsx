@@ -7,6 +7,7 @@ import type {
 } from "@/models/Medication";
 import { MassiveTransfusionControls } from "./MassiveTransfusionControls";
 import { VascularAccessControls } from "./VascularAccessControls";
+import { PleuralDrainControls } from "./PleuralDrainControls";
 
 type Props = {
   patientId: string;
@@ -31,6 +32,7 @@ export default function InterventionsTab({
 }: Props) {
   return (
     <View style={styles.card}>
+      <PleuralDrainControls patientId={patientId} readOnly={readOnly} />
       <VascularAccessControls patientId={patientId} readOnly={readOnly} />
       <MassiveTransfusionControls patientId={patientId} readOnly={readOnly} />
       <Text style={styles.title}>Reageerija tegevused</Text>

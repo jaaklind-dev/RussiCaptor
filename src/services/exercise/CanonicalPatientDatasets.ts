@@ -49,6 +49,23 @@ export const pleuralReferenceFixture: GoldenFixture = Object.freeze({ fixtureId:
     pleuralInjury: PLEURAL_INJURY_REFERENCE.pleuralInjury, respiratoryFailure: PLEURAL_INJURY_REFERENCE.respiratoryFailure,
     hypoxia: PLEURAL_INJURY_REFERENCE.hypoxia, hemorrhageSources: PLEURAL_INJURY_REFERENCE.hemorrhageSources }) });
 
+const WP45B_THORACIC_BLEEDING_RATE_ML_MIN = 400 / 60;
+export const pleuralWp45bPatient: Patient = Object.freeze({ id: "PT-PLEURAL-WP45B-001", isikukood: "50101010009", name: "WP-45B Pleural Acceptance", triage: "P1", status: "Active", location: "Resus", lastSeen: "T+0", mist: Object.freeze({ mechanism: "Blunt thoracic trauma", injuries: "Massive hemopneumothorax", signs: "Hypoxia, respiratory distress and ongoing thoracic blood loss", treatment: "No treatment yet" }) });
+export const pleuralWp45bFixture: GoldenFixture = Object.freeze({ fixtureId: "FX-PLEURAL-WP45B-1.1", fixtureType: "PROCESS", patientId: pleuralWp45bPatient.id, seed: 45, clockState: "RUNNING", ownershipVersion: 1,
+  loadedModules: Object.freeze(["PLEURAL_INJURY_V1", "RESPIRATORY_FAILURE_V1", "HYPOXIA_V1"]),
+  activeResources: Object.freeze({ resources: Object.freeze([{ resourceId: "CD-WP45B-1", type: "chestDrain", status: "AVAILABLE", metadata: Object.freeze({}) }]) }),
+  initialState: Object.freeze({ processType: "HYPOVENTILATION_HYPERCAPNIA", templateId: "HV-NEUTRAL", ventilationReserve: 70, reserveLossPerMin: 0, co2Burden: 30, co2GainPerMin: 0,
+    pleuralInjury: Object.freeze({ ...structuredClone(PLEURAL_INJURY_REFERENCE.pleuralInjury), processId: "PT-PLEURAL-WP45B:PLEURAL:1", instanceKey: "PT-PLEURAL-WP45B:pleural:1",
+      configuration: Object.freeze({ ...structuredClone(PLEURAL_INJURY_REFERENCE.pleuralInjury.configuration), initialBloodBurdenMl: 1450,
+        initialDrainageVolumeMl: 1450, ongoingDrainOutputRateMlMin: WP45B_THORACIC_BLEEDING_RATE_ML_MIN,
+        postDrainRespiratoryRecovery: Object.freeze({ spo2RecoveryPerMin: 10, spo2Ceiling: 94, respiratoryRateRecoveryPerMin: 8,
+          respiratoryRateFloor: 30, workOfBreathingRecoveryPerMin: 10, workOfBreathingFloor: 25, fatigueRecoveryPerMin: 8, fatigueFloor: 20 }) }) }),
+    respiratoryFailure: Object.freeze({ ...structuredClone(PLEURAL_INJURY_REFERENCE.respiratoryFailure), processId: "PT-PLEURAL-WP45B:RESPIRATORY_FAILURE:1", instanceKey: "PT-PLEURAL-WP45B:respiratory:1" }),
+    hypoxia: Object.freeze({ ...structuredClone(PLEURAL_INJURY_REFERENCE.hypoxia), processId: "PT-PLEURAL-WP45B:HYPOXIA:1", instanceKey: "PT-PLEURAL-WP45B:hypoxia:1" }),
+    hemorrhageSources: Object.freeze([{ ...structuredClone(PLEURAL_INJURY_REFERENCE.hemorrhageSources[0]), processId: "PT-PLEURAL-WP45B:HEMORRHAGE:THORACIC_1", instanceKey: "PT-PLEURAL-WP45B:hemorrhage:thoracic",
+      configuration: Object.freeze({ ...structuredClone(PLEURAL_INJURY_REFERENCE.hemorrhageSources[0].configuration), baselineBleedingRateMlMin: WP45B_THORACIC_BLEEDING_RATE_ML_MIN,
+        bleedingRateAfterPleuralDrainageMlMin: WP45B_THORACIC_BLEEDING_RATE_ML_MIN }), estimatedBloodLossMl: 1450 }]) }) });
+
 export const packagePatientDatasetRegistry = new PackagePatientDatasetRegistry();
 [
   normal("patients.als.v1"), normal("patients.trauma.v1"), normal("patients.mascal.v1"), normal("patients.botulism.v1"), botulismJohvi,
@@ -57,6 +74,7 @@ export const packagePatientDatasetRegistry = new PackagePatientDatasetRegistry()
   dataset("patients.als-protocol-reference.v1", [{ patient: Object.freeze(clone(demoPatients[0])), runtimeFixture: cardiacFixture(demoPatients[0].id) }]),
   dataset("patients.pelvic-injury-reference.v1", [{ patient: pelvicReferencePatient, runtimeFixture: pelvicReferenceFixture }]),
   dataset("patients.pleural-injury-reference.v1", [{ patient: pleuralReferencePatient, runtimeFixture: pleuralReferenceFixture }]),
+  dataset("patients.pleural-injury-reference.v2", [{ patient: pleuralWp45bPatient, runtimeFixture: pleuralWp45bFixture }]),
   dataset("patients.runtime-continuity-reference.v1", [
     { patient: pelvicReferencePatient, runtimeFixture: pelvicReferenceFixture },
     { patient: pleuralReferencePatient, runtimeFixture: pleuralReferenceFixture },

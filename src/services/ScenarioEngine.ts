@@ -95,7 +95,7 @@ const firstClinicalOwnershipRules: OwnershipRule[] = [{
   conflictAction: "REJECT_CONFLICTING_OWNER",
 }, {
   objectType: "RuntimeField",
-  objectOrField: "pleuralAirBurden / pleuralBloodBurdenMl / pleuralDrainageActive / respiratoryImpairmentMultiplier",
+  objectOrField: "pleuralAirBurden / pleuralBloodBurdenMl / pleuralDrainageActive / respiratoryImpairmentMultiplier / pleuralInitialDrainageCompleted / pleuralInitialDrainageVolumeMl / pleuralOngoingDrainOutputMl / pleuralOngoingDrainRateMlMin / pleuralTotalDrainOutputMl / pleuralDrainageCompletedAtSec",
   canonicalOwner: "PLEURAL_INJURY_V1", contributionAllowedFrom: "CORE_ENGINE",
   aggregationOrWriteRule: "LATEST attributable owner value", conflictAction: "REJECT_CONFLICTING_OWNER",
 }, {
@@ -142,6 +142,10 @@ const firstClinicalOwnershipRules: OwnershipRule[] = [{
   aggregationOrWriteRule: "MOST_SEVERE valid status proposal",
   conflictAction: "REJECT_DIRECT_OVERRIDE",
 }];
+
+function exposesSnapshotClinicalState(process: CanonicalLifecycleProcess): process is CanonicalLifecycleProcess & { clinicalState: Record<string, unknown> } {
+  return "clinicalState" in process && ["CARDIAC_ARREST", "MASSIVE_TRANSFUSION", "PLEURAL_INJURY", "HEMORRHAGE"].includes(process.processType);
+}
 
 function initialRuntimeState(fixture: GoldenFixture, process: PatientProcessRuntime): RuntimeState {
   const initial = eventPayload({ payload: fixture.initialState } as GoldenInputEvent);
@@ -277,7 +281,7 @@ export class ClinicalScenarioEngine {
     this.vitalSignEvents = [];
     publishRuntimeSnapshot(this.runtimeState, this.orderedLifecycleLeaves("SERIALIZATION").map(process => ({
       processId: process.outputs.processId, moduleId: process.outputs.moduleId, status: process.outputs.status,
-      ...(process.processType === "CARDIAC_ARREST" || process.processType === "MASSIVE_TRANSFUSION"
+      ...(exposesSnapshotClinicalState(process)
         ? { clinicalState: structuredClone(process.clinicalState) } : {}),
     })));
     this.publishResourceDebugSnapshot();
@@ -678,7 +682,7 @@ export class ClinicalScenarioEngine {
     this.runtimeState = aggregated.state;
     publishRuntimeSnapshot(this.runtimeState, processes.map(process => ({
       processId: process.outputs.processId, moduleId: process.outputs.moduleId, status: process.outputs.status,
-      ...(process.processType === "CARDIAC_ARREST" || process.processType === "MASSIVE_TRANSFUSION" ? {
+      ...(exposesSnapshotClinicalState(process) ? {
         clinicalState: structuredClone(process.clinicalState),
         lastEvent: this.eventLog.filter(event => event.target === process.processId).at(-1)
           ? { type: this.eventLog.filter(event => event.target === process.processId).at(-1)!.eventType,
@@ -701,7 +705,7 @@ export class ClinicalScenarioEngine {
       processId: process.outputs.processId,
       moduleId: process.outputs.moduleId,
       status: process.outputs.status,
-      ...(process.processType === "CARDIAC_ARREST" || process.processType === "MASSIVE_TRANSFUSION" ? {
+      ...(exposesSnapshotClinicalState(process) ? {
         clinicalState: structuredClone(process.clinicalState),
         lastEvent: this.eventLog.filter(event => event.target === process.processId).at(-1)
           ? { type: this.eventLog.filter(event => event.target === process.processId).at(-1)!.eventType,
