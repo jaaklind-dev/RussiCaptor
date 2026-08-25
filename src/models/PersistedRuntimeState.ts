@@ -10,7 +10,11 @@ import type { RuntimeState } from "@/models/RuntimeAggregation";
 import type { VitalSignEvent } from "@/models/VitalSign";
 import type { AssessmentRule } from "@/models/ClinicalAssessment";
 
-export const PERSISTED_RUNTIME_SCHEMA_VERSION = 1 as const;
+export const LEGACY_PERSISTED_RUNTIME_SCHEMA_VERSION = 1 as const;
+export const PERSISTED_RUNTIME_SCHEMA_VERSION = 2 as const;
+export type PersistedRuntimeSchemaVersion =
+  | typeof LEGACY_PERSISTED_RUNTIME_SCHEMA_VERSION
+  | typeof PERSISTED_RUNTIME_SCHEMA_VERSION;
 
 export type RuntimeProvenance = Readonly<{
   exerciseId: string;
@@ -56,7 +60,7 @@ export type PersistedRuntimePayload = Readonly<{
 }>;
 
 export type PersistedRuntimeState = Readonly<{
-  schemaVersion: typeof PERSISTED_RUNTIME_SCHEMA_VERSION;
+  schemaVersion: PersistedRuntimeSchemaVersion;
   provenance: RuntimeProvenance;
   capturedAtSimulationTimeSec: number;
   payload: PersistedRuntimePayload;

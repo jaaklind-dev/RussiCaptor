@@ -1,4 +1,5 @@
 import {
+  LEGACY_PERSISTED_RUNTIME_SCHEMA_VERSION,
   PERSISTED_RUNTIME_SCHEMA_VERSION,
   RuntimePersistenceError,
   type PersistedRuntimeState,
@@ -87,7 +88,8 @@ export class CanonicalRuntimePersistenceService {
     if (!artifact || typeof artifact !== "object" || !artifact.payload || !artifact.provenance) {
       throw new RuntimePersistenceError("INVALID_ARTIFACT", "Persisted runtime artifact is malformed.");
     }
-    if (artifact.schemaVersion !== PERSISTED_RUNTIME_SCHEMA_VERSION) {
+    if (artifact.schemaVersion !== PERSISTED_RUNTIME_SCHEMA_VERSION &&
+      artifact.schemaVersion !== LEGACY_PERSISTED_RUNTIME_SCHEMA_VERSION) {
       throw new RuntimePersistenceError("UNSUPPORTED_SCHEMA_VERSION", `Runtime schema ${String(artifact.schemaVersion)} is unsupported.`);
     }
     if (!isCapturedCanonicalRuntimeArtifact(artifact) && artifact.payloadHash !== sha256Text(stableJson(artifact.payload))) {

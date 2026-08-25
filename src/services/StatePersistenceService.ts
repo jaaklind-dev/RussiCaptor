@@ -22,7 +22,7 @@ import {
   getExerciseResetAudit,
   restoreExerciseResetAudit,
 } from "@/services/runtime/exercise/ExerciseResetService";
-import { getCompletedExerciseArchives, restoreCompletedExerciseArchives } from "@/services/exercise/CompletedExerciseArchiveService";
+import { restoreCompletedExerciseArchives } from "@/services/exercise/CompletedExerciseArchiveService";
 import {
   exercisePackageRegistry,
   getExercisePackage,
@@ -37,6 +37,7 @@ import { getRuntimeWriterAuthorityState } from "@/services/runtime/persistence/R
 import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
 import { BoundedObsoleteGenerationGate, LatestGenerationPipeline } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { capturePatientTransportRuntime, preparePatientTransportRuntime } from "@/services/runtime/exercise/PatientTransportRuntimeService";
+import { compactActiveExerciseState } from "@/services/runtime/persistence/ActiveCheckpointCompaction";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
@@ -106,7 +107,7 @@ function collectSharedExerciseProjection(): SharedExerciseState {
   const medicationAdministrations =
     clinicalDataProvider.getMedicationAdministrations();
   const vitalSigns = clinicalDataProvider.getVitalSigns();
-  return {
+  return compactActiveExerciseState({
     exerciseSession,
     patients: patients.map((patient) => ({ ...patient, mist: { ...patient.mist } })),
     assignments: assignmentState.assignments,
@@ -129,10 +130,9 @@ function collectSharedExerciseProjection(): SharedExerciseState {
     instructorCommandAudit: [...getInstructorCommandAudit()],
     exerciseResetAudit: [...getExerciseResetAudit()],
     exercisePackageReference: packageReference(),
-    completedExerciseArchives: [...getCompletedExerciseArchives()],
     patientMaterialization: getPatientMaterialization(getCanonicalExerciseSnapshot().exerciseId),
     patientTransportRuntime: capturePatientTransportRuntime(),
-  };
+  });
 }
 
 function collectSharedExerciseState(): SharedExerciseState {
@@ -159,13 +159,13 @@ function packageReference(): { packageId: string; packageVersion: string } {
   return { packageId: pkg.packageId, packageVersion: pkg.packageVersion };
 }
 
-function restoreExerciseIdentity(restored: SharedExerciseState): void {
+function restoreExerciseIdentity(restored: SharedExerciseState, restoreArchives = true): void {
   const session = restored.exerciseSession; const exerciseId = session.exerciseId;
   const reference = restored.exercisePackageReference;
   const pkg = reference ? exercisePackageRegistry.get(reference.packageId, reference.packageVersion) : undefined;
   installCurrentExercise(exerciseId, pkg?.metadata.name ?? exerciseId, pkg);
   restoreExerciseSession(session);
-  restoreCompletedExerciseArchives(restored.completedExerciseArchives ?? []);
+  if (restoreArchives) restoreCompletedExerciseArchives(restored.completedExerciseArchives ?? []);
   restorePatientMaterialization(restored.patientMaterialization);
 }
 
@@ -194,7 +194,7 @@ export function restoreRemoteExerciseIdentity(restored: SharedExerciseState): vo
     stopClockRunner();
     clearActiveClinicalReferenceRuntime();
   }
-  restoreExerciseIdentity(restored);
+  restoreExerciseIdentity(restored, false);
 }
 
 export function getLocalRuntimeCheckpoint(): RuntimeCheckpointEnvelope<SharedExerciseState> | undefined {

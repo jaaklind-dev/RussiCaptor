@@ -10,6 +10,17 @@ import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepo
 import { getRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { exerciseLifecycle, resolveCurrentExercise } from "@/services/exercise/CurrentExerciseSelectionService";
 import type { CurrentExerciseCandidate } from "@/services/exercise/CurrentExerciseSelectionService";
+import { captureCompletedExerciseArchive } from "@/services/exercise/ExercisePreparationService";
+import {
+  getPendingCompletedExerciseArchives,
+  markCompletedExerciseArchiveDurable,
+  type CompletedExerciseArchive,
+} from "@/services/exercise/CompletedExerciseArchiveService";
+import {
+  archiveForExercise,
+  compactActiveExerciseState,
+  withTerminalExerciseArchive,
+} from "@/services/runtime/persistence/ActiveCheckpointCompaction";
 
 export type CloudSyncStatus = {
   state: "disabled" | "connecting" | "synced" | "saving" | "offline" | "error";
@@ -351,7 +362,16 @@ async function saveToCloud(): Promise<void> {
   const nextRevision = (remoteVersions.get(exerciseId)?.revision ?? 0) + 1;
   setStatus({ state: "saving", syncedAt: status.syncedAt });
 
-  const sharedProjection = createSharedExerciseProjection();
+  const baseProjection = compactActiveExerciseState(createSharedExerciseProjection());
+  const savedSession = baseProjection.exerciseSession;
+  const lifecycleState = "lifecycleState" in savedSession
+    ? savedSession.lifecycleState
+    : savedSession.state === "running" ? "RUNNING" : savedSession.state === "paused" ? "PAUSED" : "READY";
+  // A terminal exercise row owns exactly its own immutable derived archive.
+  // Active rows and Runtime checkpoints never carry archives from prior runs.
+  const sharedProjection = lifecycleState === "COMPLETED"
+    ? withTerminalExerciseArchive(baseProjection, captureCompletedExerciseArchive())
+    : baseProjection;
   const { data, error } = await supabase
     .from("exercise_states")
     .upsert(
@@ -374,7 +394,7 @@ async function saveToCloud(): Promise<void> {
 
   const row = data as Pick<ExerciseStateRow, "exercise_id" | "revision" | "updated_at">;
   remoteVersions.set(row.exercise_id, { revision: row.revision, updatedAt: row.updated_at });
-  const savedSession = sharedProjection.exerciseSession;
+  if (lifecycleState === "COMPLETED") markCompletedExerciseArchiveDurable(exerciseId);
   latestRemoteExercise = {
     exerciseId: savedSession.exerciseId,
     lifecycleState: "lifecycleState" in savedSession
@@ -382,6 +402,54 @@ async function saveToCloud(): Promise<void> {
       : savedSession.state === "running" ? "RUNNING" : savedSession.state === "paused" ? "PAUSED" : "READY",
   };
   setStatus({ state: "synced", syncedAt: row.updated_at });
+}
+
+/**
+ * Moves legacy checkpoint-carried evidence to the historical row that owns it.
+ * A failed or missing row remains pending in the local checkpoint, so compaction
+ * never trades bounded size for evidence loss.
+ */
+export async function migratePendingCompletedExerciseArchives(userId: string): Promise<number> {
+  if (!supabase) return 0;
+  let migrated = 0;
+  for (const archive of getPendingCompletedExerciseArchives()) {
+    const { data, error } = await supabase.from("exercise_states")
+      .select("exercise_id,revision,state,updated_at,updated_by")
+      .eq("exercise_id", archive.exerciseId)
+      .single();
+    if (error || !data) continue;
+    const row = data as ExerciseStateRow;
+    if (!isSharedExerciseState(row.state)) continue;
+    const existing = archiveForExercise(row.state.completedExerciseArchives, archive.exerciseId);
+    if (!existing) {
+      const terminalState = withTerminalExerciseArchive(row.state, archive);
+      if (!terminalState.completedExerciseArchives) continue;
+      const { error: writeError } = await supabase.from("exercise_states").upsert({
+        exercise_id: row.exercise_id,
+        revision: row.revision + 1,
+        state: terminalState,
+        updated_at: new Date().toISOString(),
+        updated_by: userId,
+      }, { onConflict: "exercise_id" });
+      if (writeError) continue;
+    }
+    markCompletedExerciseArchiveDurable(archive.exerciseId);
+    migrated += 1;
+  }
+  if (migrated > 0) notifySync("local");
+  return migrated;
+}
+
+/** Reads historical evidence from its durable terminal exercise row, never from the active checkpoint. */
+export async function loadCompletedExerciseArchive(exerciseId: string): Promise<CompletedExerciseArchive | undefined> {
+  if (!supabase) return undefined;
+  const { data, error } = await supabase.from("exercise_states")
+    .select("completed_exercise_archives:state->completedExerciseArchives")
+    .eq("exercise_id", exerciseId)
+    .single();
+  if (error) return undefined;
+  const row = data as unknown as { completed_exercise_archives?: CompletedExerciseArchive[] };
+  return archiveForExercise(row.completed_exercise_archives, exerciseId);
 }
 
 function scheduleCloudSave(): void {
@@ -426,6 +494,9 @@ export async function startCloudSync(): Promise<() => void> {
       return () => {};
     }
   }
+
+  const { data: authData } = await supabase.auth.getUser();
+  if (authData.user) await migratePendingCompletedExerciseArchives(authData.user.id);
 
   await refreshRemoteCurrentExercise();
 

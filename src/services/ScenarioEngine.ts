@@ -61,6 +61,7 @@ import type { PersistedRuntimePayload } from "@/models/PersistedRuntimeState";
 import { RuntimePersistenceError } from "@/models/PersistedRuntimeState";
 import type { MassiveTransfusionPatientProcessRuntime } from "@/models/MassiveTransfusion";
 import { reconcileMtpVascularAccess } from "@/services/runtime/MassiveTransfusionPatientProcess";
+import { ACTIVE_CHECKPOINT_VITAL_EVENT_LIMIT, boundedVitalSignEvents } from "@/services/runtime/persistence/VitalHistoryCompaction";
 
 export function runScenarioEvents(
 
@@ -523,7 +524,7 @@ export class ClinicalScenarioEngine {
       circulation: this.circulationManagement.snapshot(),
       medication: this.medicationEngine.snapshot(),
       assessmentRules: this.assessmentRules,
-      vitalSignEvents: this.vitalSignEvents,
+      vitalSignEvents: boundedVitalSignEvents(this.vitalSignEvents),
     }) as PersistedRuntimePayload;
   }
 
@@ -562,7 +563,7 @@ export class ClinicalScenarioEngine {
     this.airwayManagement.restore(candidate.airway); this.circulationManagement.restore(candidate.circulation);
     this.medicationEngine.restore(candidate.medication);
     this.assessmentRules = structuredClone(candidate.assessmentRules) as AssessmentRule[];
-    this.vitalSignEvents = [...candidate.vitalSignEvents];
+    this.vitalSignEvents = boundedVitalSignEvents(candidate.vitalSignEvents);
     this.publishCanonicalState();
   }
 
@@ -713,6 +714,9 @@ export class ClinicalScenarioEngine {
         vital: event.field as VitalSignKey | undefined, from: event.details?.from as number | string | undefined,
         to: event.details?.to as number | string | undefined, sourceProcessId: "VITAL_SIGN_ENGINE",
       });
+    }
+    if (this.vitalSignEvents.length > ACTIVE_CHECKPOINT_VITAL_EVENT_LIMIT) {
+      this.vitalSignEvents.splice(0, this.vitalSignEvents.length - ACTIVE_CHECKPOINT_VITAL_EVENT_LIMIT);
     }
     for (const event of aggregated.events.filter(item => ["PULSE_OX_SIGNAL_LOST", "PULSE_OX_SIGNAL_CHANGED", "PHYSIOLOGIC_STATE_CHANGED", "PATIENT_DIED"].includes(item.eventType))) {
       this.logEvent(event.eventType, event.details ?? {}, this.requireProcess().encounterId);

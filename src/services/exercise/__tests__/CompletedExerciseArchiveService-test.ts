@@ -3,6 +3,8 @@ import {
   clearCompletedExerciseArchives,
   getCompletedExerciseArchive,
   getCompletedExerciseArchives,
+  getPendingCompletedExerciseArchives,
+  markCompletedExerciseArchiveDurable,
   restoreCompletedExerciseArchives,
   storeCompletedExerciseArchive,
 } from "../CompletedExerciseArchiveService";
@@ -51,5 +53,24 @@ describe("completed exercise archives", () => {
       "EX-1",
       "EX-2",
     ]);
+  });
+
+  test("keeps restored legacy archives pending until their historical rows are durable", () => {
+    restoreCompletedExerciseArchives([archive("EX-2"), archive("EX-1")]);
+    markCompletedExerciseArchiveDurable("EX-1");
+
+    restoreCompletedExerciseArchives([archive("EX-2"), archive("EX-1")]);
+
+    expect(getPendingCompletedExerciseArchives().map(item => item.exerciseId)).toEqual(["EX-2"]);
+    clearCompletedExerciseArchives();
+    expect(getPendingCompletedExerciseArchives()).toEqual([]);
+  });
+
+  test("remembers terminal durability when cloud persistence precedes local archival", () => {
+    markCompletedExerciseArchiveDurable("EX-COMPLETED");
+    storeCompletedExerciseArchive(archive("EX-COMPLETED"));
+
+    expect(getCompletedExerciseArchive("EX-COMPLETED")).toBeDefined();
+    expect(getPendingCompletedExerciseArchives()).toEqual([]);
   });
 });
