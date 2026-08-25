@@ -6,7 +6,11 @@ import {
   isIdenticalCheckpointPayload,
   ROUTINE_CHECKPOINT_PUBLICATION_MS,
 } from "@/services/RuntimeCheckpointSyncService";
-import { CLOUD_PROJECTION_INTERVAL_MS } from "@/services/CloudSyncService";
+import {
+  CLOUD_PROJECTION_INTERVAL_MS,
+  EXERCISE_DISCOVERY_ACTIVE_FILTER,
+  shouldFetchTerminalDiscoveryState,
+} from "@/services/CloudSyncService";
 import type { RuntimeCheckpointEnvelope } from "@/models/RuntimeCheckpointAuthority";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 
@@ -28,6 +32,17 @@ describe("WP-47A Supabase egress hardening",()=>{
     expect(source).toContain('.select("exercise_id,revision,updated_at")');
     expect(source).not.toMatch(/from\("exercise_states"\)\s*\n\s*\.select\(\)/);
     expect(source).not.toContain('table: "exercise_states"');
+    expect(source).toContain(".or(EXERCISE_DISCOVERY_ACTIVE_FILTER)");
+    expect(source).toContain(".limit(1)");
+  });
+
+  test("routine discovery is bounded to active rows and unchanged terminal state is not re-fetched",()=>{
+    expect(EXERCISE_DISCOVERY_ACTIVE_FILTER).toContain("lifecycleState.in.(READY,RUNNING,PAUSED)");
+    expect(EXERCISE_DISCOVERY_ACTIVE_FILTER).toContain("state.in.(ready,running,paused)");
+    const row={exercise_id:"E",revision:7,updated_at:"2026-08-25T08:00:00Z"};
+    expect(shouldFetchTerminalDiscoveryState(row)).toBe(true);
+    expect(shouldFetchTerminalDiscoveryState(row,{revision:7,updatedAt:row.updated_at})).toBe(false);
+    expect(shouldFetchTerminalDiscoveryState({...row,revision:8},{revision:7,updatedAt:row.updated_at})).toBe(true);
   });
 
   test("routine publication is bounded to five seconds and duplicate payloads are suppressed",()=>{

@@ -43,6 +43,15 @@ const EXERCISE_DISCOVERY_COLUMNS = [
   "exercise_package_reference:state->exercisePackageReference",
 ].join(",");
 
+// Keep terminal history out of the five-second discovery poll. The fallback
+// query below requests at most the newest terminal row when no active exercise
+// exists, preserving historical presentation without making response size grow
+// with every completed exercise.
+export const EXERCISE_DISCOVERY_ACTIVE_FILTER = [
+  "state->exerciseSession->>lifecycleState.in.(READY,RUNNING,PAUSED)",
+  "state->exerciseSession->>state.in.(ready,running,paused)",
+].join(",");
+
 /** Minimal projection used only for current-exercise selection and identity. */
 export function discoveryState(row: ExerciseDiscoveryRow): SharedExerciseState {
   return {
@@ -51,6 +60,14 @@ export function discoveryState(row: ExerciseDiscoveryRow): SharedExerciseState {
     patients: [], assignments: [], transfers: [], questions: [], labs: [],
     imagingStudies: [], orders: [], notes: [], scenarioEvents: [], timelineEvents: [],
   };
+}
+
+export function shouldFetchTerminalDiscoveryState(
+  row: Pick<ExerciseDiscoveryRow, "exercise_id" | "revision" | "updated_at">,
+  known?: Readonly<{ revision: number; updatedAt: string }>,
+): boolean {
+  return !known || row.revision > known.revision ||
+    (row.revision === known.revision && row.updated_at > known.updatedAt);
 }
 
 type CloudStatusListener = (status: CloudSyncStatus) => void;
@@ -218,12 +235,22 @@ export async function refreshRemoteCurrentExercise(): Promise<void> {
   if (!supabase || refreshingRemoteSelection) return;
   refreshingRemoteSelection = true;
   try {
-    const { data: rows, error } = await supabase
+    const { data: activeRows, error } = await supabase
       .from("exercise_states")
       .select(EXERCISE_DISCOVERY_COLUMNS)
+      .or(EXERCISE_DISCOVERY_ACTIVE_FILTER)
       .order("updated_at", { ascending: false });
     if (error) { setStatus({ state: "error", message: error.message }); return; }
-    const discoveryRows = (rows ?? []) as unknown as ExerciseDiscoveryRow[];
+    let discoveryRows = (activeRows ?? []) as unknown as ExerciseDiscoveryRow[];
+    if (discoveryRows.length === 0) {
+      const { data: terminalRows, error: terminalError } = await supabase
+        .from("exercise_states")
+        .select(EXERCISE_DISCOVERY_COLUMNS)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+      if (terminalError) { setStatus({ state: "error", message: terminalError.message }); return; }
+      discoveryRows = (terminalRows ?? []) as unknown as ExerciseDiscoveryRow[];
+    }
     const candidates = discoveryRows.map(row => ({
       exerciseId: row.exercise_id,
       revision: row.revision,
@@ -254,6 +281,15 @@ export async function refreshRemoteCurrentExercise(): Promise<void> {
           applyRemoteRow({ exercise_id: discoveryRow.exercise_id, revision: discoveryRow.revision,
             state: selection.candidate.state, updated_at: discoveryRow.updated_at, updated_by: discoveryRow.updated_by });
         } else {
+          const known = remoteVersions.get(discoveryRow.exercise_id);
+          if (!shouldFetchTerminalDiscoveryState(discoveryRow, known)) {
+            latestRemoteExercise = {
+              exerciseId: discoveryRow.exercise_id,
+              lifecycleState: lifecycle,
+            };
+            setStatus({ state: "synced", syncedAt: discoveryRow.updated_at });
+            return;
+          }
           const { data: selectedRow, error: selectedError } = await supabase.from("exercise_states")
             .select("exercise_id,revision,state,updated_at,updated_by")
             .eq("exercise_id", discoveryRow.exercise_id).single();
