@@ -1,4 +1,4 @@
-import type { Avpu } from "@/models/VitalSign";
+import type { Avpu, PulseOxSignalQuality } from "@/models/VitalSign";
 import type { InstructorPatientStatus } from "@/models/InstructorDashboard";
 import type { CardiacRhythm, CardiacRhythmClassification, CardiacState } from "@/models/PatientProcessRuntime";
 
@@ -19,6 +19,9 @@ export type InspectorClinicalStateModel = {
   readonly heartRate?: number;
   readonly respiratoryRate?: number;
   readonly spo2?: number;
+  readonly physiologicOxygenation?: number;
+  readonly pulseOxSignalQuality?: PulseOxSignalQuality;
+  readonly perfusionScore?: number;
   readonly systolicBp?: number;
   readonly diastolicBp?: number;
   readonly map?: number;
@@ -26,6 +29,8 @@ export type InspectorClinicalStateModel = {
   readonly etco2?: number;
   readonly avpu?: Avpu;
   readonly gcs?: number;
+  readonly gcsCause?: string;
+  readonly terminalState?: string;
 };
 
 export type InspectorListItem = {

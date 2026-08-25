@@ -36,11 +36,14 @@ export function projectInstructorPatients(
       caseManagerId: patient.assignment?.endedAt ? undefined : patient.assignment?.caseManagerId,
       caseManagerName: patient.assignment?.endedAt ? undefined : patient.assignment?.caseManagerName,
       status: projectedStatus(patient, runtime), avpu: vitals?.avpu,
-      spo2: vitals?.readings.spo2.current, respiratoryRate: vitals?.readings.respiratoryRate.current,
+      spo2: vitals?.pulseOx?.signalQuality === "NO_SIGNAL" ? undefined : vitals?.pulseOx?.measuredSpO2 ?? vitals?.readings.spo2.current,
+      pulseOxSignalQuality: vitals?.pulseOx?.signalQuality,
+      respiratoryRate: vitals?.readings.respiratoryRate.current,
       heartRate: vitals?.readings.heartRate.current, systolicBp: vitals?.readings.systolicBp.current,
       simulationTimeSec: runtime?.exerciseTimeSec,
       lastUpdate: runtime?.lastAggregatedAt ?? (runtime ? `T+${runtime.exerciseTimeSec}s` : undefined),
       hasCanonicalRuntime: Boolean(runtime?.vitalSignState),
+      clinicalState: runtime?.physiologicDecompensation?.clinicalState,
     };
   }).sort((a, b) => comparePatientIds(a.patientId, b.patientId));
 }

@@ -92,3 +92,12 @@ export function tickHemorrhagePatientProcess(previous: HemorrhagePatientProcessR
   if (compensation !== previous.clinicalState.compensation) events.push({ eventType: "CompensationChanged", details: { from: previous.clinicalState.compensation, to: compensation } });
   return { process, events };
 }
+
+/** Finalizes circulation-driven bleeding when the canonical patient state becomes DEAD. */
+export function terminateHemorrhageAtDeath(previous: HemorrhagePatientProcessRuntime): HemorrhagePatientProcessRuntime {
+  if (!previous.clinicalState.activeHemorrhage && previous.clinicalState.bleedingRateMlMin === 0) return structuredClone(previous);
+  const clinicalState = { ...structuredClone(previous.clinicalState), bleedingRateMlMin: 0, activeHemorrhage: false,
+    heartRateTrend: "STABLE" as const, bloodPressureTrend: "STABLE" as const, perfusionTrend: "STABLE" as const };
+  const withoutOutput = { ...structuredClone(previous), state: "Resolved" as const, clinicalState };
+  return { ...withoutOutput, outputs: output(withoutOutput) };
+}

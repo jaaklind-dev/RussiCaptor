@@ -12,12 +12,14 @@ import type { GoldenActualEvent, GoldenFixture, GoldenInputEvent } from "@/model
 import type { OwnershipRule } from "@/models/ModuleImport";
 import type { BotulismRootPatientProcessRuntime, CardiacArrestPatientProcessRuntime, HypoxiaPatientProcessRuntime, PatientProcessRuntime, RespiratoryFailurePatientProcessRuntime } from "@/models/PatientProcessRuntime";
 import type { RuntimeState } from "@/models/RuntimeAggregation";
+import { DEFAULT_PHYSIOLOGIC_DECOMPENSATION_CONFIG } from "@/services/runtime/PhysiologicDecompensationEngine";
 import type { ClinicalEffect, ClinicalProcessRuntime } from "@/models/ClinicalIntegration";
 import type { InterventionInstance } from "@/models/InterventionInstance";
 import type { AirwayState } from "@/models/AirwayState";
 import type { AssessmentRule, AssessmentSnapshot } from "@/models/ClinicalAssessment";
 import type { CirculationState } from "@/models/CirculationState";
 import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatientProcess";
+import { terminateHemorrhageAtDeath } from "@/services/runtime/HemorrhagePatientProcess";
 import type { MedicationAdministration, MedicationDefinition, MedicationInstance } from "@/models/MedicationRuntime";
 import type { ResourceRuntimeEvent, RuntimeResource, ResourceType, SchedulableIntervention } from "@/models/ResourceRuntime";
 import {
@@ -185,6 +187,8 @@ function initialRuntimeState(fixture: GoldenFixture, process: PatientProcessRunt
     aggregationConfigVersion: "WP-5/HV-001",
     vitalSignConfiguration,
     randomSeed: fixture.seed,
+    ...(initial.physiologicDecompensationEnabled === true ? { physiologicDecompensationConfig: DEFAULT_PHYSIOLOGIC_DECOMPENSATION_CONFIG,
+      physiologicDecompensation: { clinicalState: "ALIVE" as const, gcsCause: "NONE" as const } } : {}),
   };
 }
 
@@ -384,6 +388,15 @@ export class ClinicalScenarioEngine {
     if (event.eventType !== "ENGINE_TICK") {
       throw new Error(`NOT_IMPLEMENTED: ClinicalScenarioEngine sündmus ${event.eventType}.`);
     }
+    // DEAD is an absorbing physiologic state. The exercise clock may continue,
+    // but no patient process may accrue loss, treatment delivery or recovery.
+    if (runtimeState.globalStatus === "Dead") {
+      this.hemorrhageProcesses().forEach(current => this.replaceLifecycleProcess(terminateHemorrhageAtDeath(current)));
+      this.aggregateProcesses(runtimeState);
+      this.appliedEventIds.add(event.eventId);
+      this.publishResourceDebugSnapshot();
+      return;
+    }
     this.applyDueResourceInterventions();
     for (const completed of this.interventionRuntime.completeDue(this.simulationTimeSec)) this.projectInterventionState(completed);
     this.reconcileMtpAccessFromCanonicalCirculation();
@@ -414,6 +427,10 @@ export class ClinicalScenarioEngine {
       }
     }
     this.aggregateProcesses(runtimeState);
+    if (this.runtimeState?.globalStatus === "Dead") {
+      this.hemorrhageProcesses().forEach(current => this.replaceLifecycleProcess(terminateHemorrhageAtDeath(current)));
+      this.aggregateProcesses(this.runtimeState);
+    }
     this.appliedEventIds.add(event.eventId);
     for (const descriptor of this.lifecyclePlan.forPhase("POST_AGGREGATE")) {
       for (const current of this.lifecycleProcesses(descriptor.processType)) {
@@ -696,6 +713,9 @@ export class ClinicalScenarioEngine {
         vital: event.field as VitalSignKey | undefined, from: event.details?.from as number | string | undefined,
         to: event.details?.to as number | string | undefined, sourceProcessId: "VITAL_SIGN_ENGINE",
       });
+    }
+    for (const event of aggregated.events.filter(item => ["PULSE_OX_SIGNAL_LOST", "PULSE_OX_SIGNAL_CHANGED", "PHYSIOLOGIC_STATE_CHANGED", "PATIENT_DIED"].includes(item.eventType))) {
+      this.logEvent(event.eventType, event.details ?? {}, this.requireProcess().encounterId);
     }
   }
 

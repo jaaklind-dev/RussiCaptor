@@ -20,7 +20,7 @@ export function projectVitalSignState(state: VitalSignState): VitalSignCompatibi
     displayedVitals: Object.freeze({
       hr: state.readings.heartRate.current, sbp: state.readings.systolicBp.current,
       dbp: state.readings.diastolicBp.current, rr: state.readings.respiratoryRate.current,
-      spo2: state.readings.spo2.current, temperature: state.readings.temperature.current,
+      ...(state.pulseOx?.signalQuality === "NO_SIGNAL" ? {} : { spo2: state.pulseOx?.measuredSpO2 ?? state.readings.spo2.current }), temperature: state.readings.temperature.current,
       crt: state.readings.crt.current,
     }),
     mapCalculated: state.derived.meanArterialPressure,

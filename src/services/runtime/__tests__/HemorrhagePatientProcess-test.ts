@@ -1,7 +1,7 @@
 import type { ClinicalEffect } from "@/models/ClinicalIntegration";
 import type { GoldenFixture, GoldenInputEvent } from "@/models/GoldenTest";
 import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
-import { bootstrapHemorrhagePatientProcess, setHemorrhageEffects, tickHemorrhagePatientProcess } from "@/services/runtime/HemorrhagePatientProcess";
+import { bootstrapHemorrhagePatientProcess, setHemorrhageEffects, terminateHemorrhageAtDeath, tickHemorrhagePatientProcess } from "@/services/runtime/HemorrhagePatientProcess";
 import { hemorrhageAssessmentRules } from "@/services/runtime/assessment/HemorrhageAssessmentRules";
 
 const configuration = { baselineBleedingRateMlMin: 100, tourniquetEfficiency: 0.9, binderEfficiency: 0.5,
@@ -31,6 +31,21 @@ describe("WP-14 Hemorrhage PatientProcess", () => {
     const result = tickHemorrhagePatientProcess(setHemorrhageEffects(initial, [effect("REDUCE_EXTERNAL_BLEEDING", "A"), effect("STOP_EXTERNAL_BLEEDING", "B")]), 60);
     expect(result.process.clinicalState).toMatchObject({ bleedingRateMlMin: 0, activeHemorrhage: false });
     expect(result.events).toContainEqual(expect.objectContaining({ eventType: "HemorrhageStopped" }));
+  });
+  test("bleeding rate is pressure-independent and changes only through canonical effects", () => {
+    const initial = bootstrapHemorrhagePatientProcess("PT-H", { configuration });
+    const early = tickHemorrhagePatientProcess(initial, 60).process;
+    const late = tickHemorrhagePatientProcess(early, 600).process;
+    expect(early.clinicalState.bleedingRateMlMin).toBe(100);
+    expect(late.clinicalState.bleedingRateMlMin).toBe(100);
+    expect(late.clinicalState.perfusion).not.toBe(early.clinicalState.perfusion);
+  });
+  test("normalizes a legacy DEAD checkpoint hemorrhage without changing cumulative loss", () => {
+    const bleeding = tickHemorrhagePatientProcess(bootstrapHemorrhagePatientProcess("PT-H", { configuration }), 60).process;
+    const stopped = terminateHemorrhageAtDeath(bleeding);
+    expect(stopped).toMatchObject({state:"Resolved",clinicalState:{cumulativeLossMl:100,estimatedBloodLossMl:100,bleedingRateMlMin:0,activeHemorrhage:false},
+      outputs:{runtimeContributions:{cumulativeBloodLossMl:100,bleedingRateMlMin:0}}});
+    expect(terminateHemorrhageAtDeath(stopped)).toEqual(stopped);
   });
 });
 

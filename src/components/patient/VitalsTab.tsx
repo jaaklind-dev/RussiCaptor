@@ -171,7 +171,9 @@ function CanonicalRuntimeCard({ runtime }: Readonly<{ runtime: CanonicalPatientR
       <Vital label="Vererõhk" value={`${value(vitals.readings.systolicBp.current)}/${value(vitals.readings.diastolicBp.current)} mmHg`} />
       <Vital label="MAP" value={`${value(vitals.derived.meanArterialPressure)} mmHg`} />
       <Vital label="Hingamissagedus" value={`${value(vitals.readings.respiratoryRate.current)} /min`} />
-      <Vital label="SpO₂" value={`${value(vitals.readings.spo2.current)} %`} />
+      <Vital label="SpO₂" value={vitals.pulseOx?.signalQuality === "NO_SIGNAL" ? "Signaal puudub" : vitals.pulseOx?.signalQuality === "POOR" ? "Signaal ebausaldusväärne" : `${value(vitals.pulseOx?.measuredSpO2 ?? vitals.readings.spo2.current)} %`} />
+      <Vital label="GCS" value={`${value(vitals.readings.gcs.current)}`} />
+      <Vital label="Kliiniline seisund" value={state.physiologicDecompensation?.clinicalState === "DEAD" ? "Surnud" : state.physiologicDecompensation?.clinicalState === "TERMINAL" ? "Terminaalne" : state.physiologicDecompensation?.clinicalState === "CRITICAL" ? "Kriitiline" : "Elus"} />
       <Vital label="Ajalooline verekaotus" value={`${value(hemorrhage?.cumulativeLossMl)} ml`} />
       <Vital label="Veritsuskiirus" value={`${value(hemorrhage?.bleedingRateMlMin)} ml/min`} />
       <Vital label="Dreeni kogumaht" value={`${value(pleural?.totalDrainOutputMl)} ml`} />

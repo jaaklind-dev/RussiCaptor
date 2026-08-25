@@ -49,7 +49,25 @@ export type RuntimeState = {
   randomSeed: string | number;
   lastAggregatedAt?: string;
   criticalClearSinceSec?: number;
+  physiologicDecompensationConfig?: PhysiologicDecompensationConfiguration;
+  physiologicDecompensation?: PhysiologicDecompensationState;
 };
+
+export type PhysiologicDecompensationConfiguration = Readonly<{
+  version: "WP-48/V1";
+  poorSignalScore: number;
+  noSignalScore: number;
+  terminalFailureDurationSec: number;
+  deathFailureDurationSec: number;
+}>;
+
+export type PhysiologicDecompensationState = Readonly<{
+  profoundFailureSinceSec?: number;
+  terminalSinceSec?: number;
+  clinicalState: "ALIVE" | "CRITICAL" | "TERMINAL" | "DEAD";
+  gcsCause: "NONE" | "HYPOXIA" | "HYPOPERFUSION" | "COMBINED";
+  pulseOxSignalQuality?: import("@/models/VitalSign").PulseOxSignalQuality;
+}>;
 
 export type RuntimeFinding = {
   code: string;

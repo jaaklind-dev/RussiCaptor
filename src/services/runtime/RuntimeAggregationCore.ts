@@ -13,6 +13,7 @@ import type {
 import { RuntimeOwnershipResolver } from "@/services/runtime/OwnershipResolver";
 import type { VitalRuntimeResolution } from "@/services/runtime/vitals/VitalSignRuntimeResolver";
 import { projectVitalSignState } from "@/services/runtime/vitals/VitalSignProjection";
+import { resolvePhysiologicDecompensation } from "@/services/runtime/PhysiologicDecompensationEngine";
 
 const constants = {
   criticalRecoverySec: 120,
@@ -328,14 +329,24 @@ export function aggregateResolvedRuntimeState(
   const dominant = [...outputs].sort((left, right) =>
     right.globalSeverityScore - left.globalSeverityScore || left.processId.localeCompare(right.processId)
   )[0];
-  const monitor = vitalResolution.state;
+  let monitor = vitalResolution.state;
+  let decompensation = input.previous.physiologicDecompensation;
+  let resolvedStatus = status.status;
+  if (input.previous.physiologicDecompensationConfig) {
+    if (input.previous.globalStatus === "Dead" && input.previous.vitalSignState) monitor = structuredClone(input.previous.vitalSignState);
+    const resolved = resolvePhysiologicDecompensation({ monitor, previous: decompensation,
+      config: input.previous.physiologicDecompensationConfig, simulationTimeSec: input.exerciseTimeSec,
+      previousStatus: status.status === "Dead" || input.previous.globalStatus === "Dead" ? "Dead" : status.status });
+    monitor = resolved.monitor; decompensation = resolved.state; resolvedStatus = resolved.status;
+    events.push(...resolved.events);
+  }
   const projection = projectVitalSignState(monitor);
 
   const state: RuntimeState = {
     ...structuredClone(input.previous),
     stateVersion: input.previous.stateVersion + 1,
     exerciseTimeSec: input.exerciseTimeSec,
-    globalStatus: status.status,
+    globalStatus: resolvedStatus,
     dominantProcessId: status.primaryProcessId ?? dominant?.processId,
     targetVitals: projection.targetVitals,
     displayedVitals: projection.displayedVitals,
@@ -355,6 +366,7 @@ export function aggregateResolvedRuntimeState(
     },
     criticalClearSinceSec: status.clearSince,
     aggregationConfigVersion: input.aggregationConfigVersion,
+    ...(decompensation ? { physiologicDecompensation: decompensation } : {}),
   };
   applyNonVitalOverrides(input, state, events, new Set(vitalResolution.acceptedOverrideFields));
   if (state.globalStatus !== input.previous.globalStatus) {

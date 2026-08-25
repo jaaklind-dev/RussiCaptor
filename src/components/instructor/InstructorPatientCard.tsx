@@ -34,7 +34,7 @@ function InstructorPatientCardComponent({ patient, onPress }: {
       <Text numberOfLines={1} style={styles.owner}>CM: {patient.caseManagerName ?? "—"}</Text>
       <View style={styles.vitals}>
         <Text style={styles.vital}>AVPU {value(patient.avpu)}</Text>
-        <Text style={styles.vital}>SpO₂ {value(patient.spo2, "%")}</Text>
+        <Text style={styles.vital}>SpO₂ {patient.pulseOxSignalQuality === "NO_SIGNAL" ? "signaal puudub" : patient.pulseOxSignalQuality === "POOR" ? "signaal ebausaldusväärne" : value(patient.spo2, "%")}</Text>
         <Text style={styles.vital}>RR {value(patient.respiratoryRate)}</Text>
         <Text style={styles.vital}>HR {value(patient.heartRate)}</Text>
         <Text style={styles.vital}>SBP {value(patient.systolicBp)}</Text>

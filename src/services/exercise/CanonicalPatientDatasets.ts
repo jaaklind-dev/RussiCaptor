@@ -68,6 +68,16 @@ export const pleuralWp45bFixture: GoldenFixture = Object.freeze({ fixtureId: "FX
 
 const transportPatient = (id: string, name: string): Patient => Object.freeze({ id, isikukood: `TRANSPORT-${id}`, name, triage: "P1", status: "Active", location: "ED", lastSeen: "T+0", mist: Object.freeze({ mechanism: "Technical", injuries: "Technical", signs: "Technical", treatment: "None" }) });
 const transportFixture = (patientId: string, seed: number): GoldenFixture => Object.freeze({ ...structuredClone(pelvicReferenceFixture), fixtureId: `FX-${patientId}`, patientId, seed });
+const physiologicDecompensationInitialState = structuredClone(mtpReferenceFixture.initialState) as Record<string, unknown>;
+// The physical rescue fixture isolates hemorrhagic decompensation. Inheriting the
+// MTP reference hypoxia process would add autonomous, untreated respiratory decline
+// and make a perfusion-rescue acceptance impossible to interpret.
+delete physiologicDecompensationInitialState.hypoxia;
+export const physiologicDecompensationFixture: GoldenFixture = Object.freeze({ ...structuredClone(mtpReferenceFixture),
+  fixtureId: "FX-PHYSIOLOGIC-DECOMPENSATION", patientId: "PT-DECOMP-01", seed: 48,
+  initialState: Object.freeze({ ...physiologicDecompensationInitialState, physiologicDecompensationEnabled: true }) });
+const decompensationPatient: Patient = Object.freeze({ id:"PT-DECOMP-01", isikukood:"DECOMP-48001", name:"Füsioloogilise dekompensatsiooni referentspatsient",
+  triage:"P1", status:"Active", location:"ED", lastSeen:"T+0", mist:Object.freeze({mechanism:"Technical",injuries:"Uncontrolled hemorrhage",signs:"Initially compensated",treatment:"None"}) });
 
 export const packagePatientDatasetRegistry = new PackagePatientDatasetRegistry();
 [
@@ -84,4 +94,5 @@ export const packagePatientDatasetRegistry = new PackagePatientDatasetRegistry()
   ]),
   dataset("patients.massive-transfusion-reference.v1", [{ patient: pelvicReferencePatient, runtimeFixture: mtpReferenceFixture }]),
   dataset("patients.transport-reference.v1", [{ patient: transportPatient("PT-TRANSPORT-01", "Transport Patient 1"), runtimeFixture: transportFixture("PT-TRANSPORT-01", 51) }, { patient: transportPatient("PT-TRANSPORT-02", "Transport Patient 2"), runtimeFixture: transportFixture("PT-TRANSPORT-02", 52) }]),
+  dataset("patients.physiologic-decompensation-reference.v1", [{ patient: decompensationPatient, runtimeFixture: physiologicDecompensationFixture }]),
 ].forEach(value => packagePatientDatasetRegistry.register(value));

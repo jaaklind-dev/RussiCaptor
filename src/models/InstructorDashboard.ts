@@ -1,4 +1,4 @@
-import type { Avpu } from "@/models/VitalSign";
+import type { Avpu, PulseOxSignalQuality } from "@/models/VitalSign";
 
 export type InstructorPatientStatus =
   | "Stable" | "Requires attention" | "Critical" | "Life threatening" | "Completed";
@@ -13,12 +13,14 @@ export type InstructorPatientCardModel = {
   readonly status: InstructorPatientStatus;
   readonly avpu?: Avpu;
   readonly spo2?: number;
+  readonly pulseOxSignalQuality?: PulseOxSignalQuality;
   readonly respiratoryRate?: number;
   readonly heartRate?: number;
   readonly systolicBp?: number;
   readonly simulationTimeSec?: number;
   readonly lastUpdate?: string;
   readonly hasCanonicalRuntime: boolean;
+  readonly clinicalState?: "ALIVE" | "CRITICAL" | "TERMINAL" | "DEAD";
 };
 
 export type InstructorDashboardFilters = {

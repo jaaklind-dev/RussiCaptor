@@ -26,6 +26,8 @@ const eventTypeLabels: Readonly<Record<string, string>> = {
   RECOVERY_TRIGGER: "Taastumise käivitamine", CPR_STARTED: "Elustamine alustati", CPR_STOPPED: "Elustamine lõpetati",
   DEFIBRILLATION_ATTEMPT: "Defibrillatsioonikatse", CARDIAC_ARREST_STARTED: "Südameseiskus",
   PELVIC_BINDER_APPLICATION: "Vaagnalahase paigaldamine", CHEST_DRAIN_APPLICATION: "Pleuradreeni paigaldamine",
+  PULSE_OX_SIGNAL_LOST: "SpO₂ signaal kadus", PULSE_OX_SIGNAL_CHANGED: "SpO₂ signaal muutus",
+  PHYSIOLOGIC_STATE_CHANGED: "Patsiendi kliiniline seisund muutus", PATIENT_DIED: "Patsient suri",
 };
 const authoredTitleLabels: Readonly<Record<string, string>> = {
   "Exercise started": "Õppus käivitati", "Exercise paused": "Õppus peatati", "Exercise resumed": "Õppus jätkus",

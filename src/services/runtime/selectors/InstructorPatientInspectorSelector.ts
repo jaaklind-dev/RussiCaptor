@@ -63,10 +63,13 @@ export function projectInstructorPatientInspector(input: InstructorPatientInspec
     },
     clinicalState: {
       hasCanonicalRuntime: Boolean(vitals), heartRate: vitals?.readings.heartRate.current,
-      respiratoryRate: vitals?.readings.respiratoryRate.current, spo2: vitals?.readings.spo2.current,
+      respiratoryRate: vitals?.readings.respiratoryRate.current, spo2: vitals?.pulseOx?.signalQuality === "NO_SIGNAL" ? undefined : vitals?.pulseOx?.measuredSpO2 ?? vitals?.readings.spo2.current,
+      physiologicOxygenation: vitals?.pulseOx?.physiologicOxygenation, pulseOxSignalQuality: vitals?.pulseOx?.signalQuality,
+      perfusionScore: vitals?.pulseOx?.perfusionScore,
       systolicBp: vitals?.readings.systolicBp.current, diastolicBp: vitals?.readings.diastolicBp.current,
       map: vitals?.derived.meanArterialPressure, temperature: vitals?.readings.temperature.current,
       etco2: vitals?.readings.etco2.current, avpu: vitals?.avpu, gcs: vitals?.readings.gcs.current,
+      gcsCause: runtime?.physiologicDecompensation?.gcsCause, terminalState: runtime?.physiologicDecompensation?.clinicalState,
     },
     processes: (input.runtime?.processes ?? []).map(process => ({
       id: process.processId, title: processLabel(process), detail: process.processId, status: process.status,

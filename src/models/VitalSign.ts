@@ -5,6 +5,7 @@ export type VitalSignKey =
 export type VitalTrendDirection = "RISING" | "FALLING" | "UNCHANGED";
 export type VitalTrendStability = "STABLE" | "UNSTABLE";
 export type MonitorQuality = "VALID" | "UNRELIABLE" | "LOST" | "OFFLINE";
+export type PulseOxSignalQuality = "GOOD" | "POOR" | "NO_SIGNAL";
 export type Avpu = "ALERT" | "VOICE" | "PAIN" | "UNRESPONSIVE";
 export type VitalContributionLayer = "PERMANENT" | "PROCESS" | "MEDICATION" | "TEMPORARY";
 
@@ -23,6 +24,12 @@ export type VitalSignState = {
   readings: Record<VitalSignKey, VitalSignReading>;
   avpu: Avpu;
   derived: { meanArterialPressure: number; shockIndex: number; pulsePressure: number };
+  pulseOx?: {
+    signalQuality: PulseOxSignalQuality;
+    physiologicOxygenation: number;
+    measuredSpO2?: number;
+    perfusionScore: number;
+  };
   activeContributors: VitalSignContributor[];
 };
 

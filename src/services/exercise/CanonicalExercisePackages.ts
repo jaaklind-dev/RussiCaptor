@@ -338,3 +338,17 @@ export const TRANSPORT_REFERENCE_EXERCISE_PACKAGE = createExercisePackage({
   metadata: { name: "Transpordi tehniline referentspakett", description: "Üldise transpordi ressursi-, teekonna- ja tagastustsükli kontrollpakett; ei kodeeri kliinilist ravijärjekorda.",
     author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: "TRAUMA", tags: ["canonical", "reference", "technical", "transport"] },
 });
+
+const decompensationReferenceDefinition: ExerciseDefinition = Object.freeze({ ...structuredClone(DEFAULT_EXERCISE_DEFINITION),
+  exerciseTypeId:"RUSSICAPTOR_PHYSIOLOGIC_DECOMPENSATION_REFERENCE", name:"Füsioloogilise dekompensatsiooni referentsõppus",
+  description:"Üldise perfusiooniteadliku SpO₂, GCS ja terminalseisundi deterministlik referents.", profile:"TRAUMA" });
+export const PHYSIOLOGIC_DECOMPENSATION_REFERENCE_EXERCISE_PACKAGE = createExercisePackage({
+  packageId:"russicaptor.physiologic-decompensation-reference", packageVersion:"1.0.0", definition:decompensationReferenceDefinition,
+  patientDatasetId:"patients.physiologic-decompensation-reference.v1", enabledPatientProcesses:decompensationReferenceDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders:decompensationReferenceDefinition.enabledAnalyticsProviders, enabledMetricProviders:decompensationReferenceDefinition.enabledMetricProviders,
+  requiredClinicalModules:Object.freeze([
+    {moduleId:PELVIC_INJURY_MODULE_ID,version:PELVIC_INJURY_MODULE_VERSION},
+    {moduleId:MASSIVE_TRANSFUSION_MODULE_ID,version:MASSIVE_TRANSFUSION_MODULE_VERSION},
+  ]),
+  metadata:{name:"Füsioloogilise dekompensatsiooni referentspakett",description:"WP-48 opt-in tehniline referents.",author:"RussiCaptor",organization:"RussiCaptor",createdVersion:"0.8.0",exerciseType:"TRAUMA",tags:["canonical","decompensation","reference","technical"]},
+});
