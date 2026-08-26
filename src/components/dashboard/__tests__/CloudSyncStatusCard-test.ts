@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { getRuntimeAuthorityPresentation, resumeRuntime } from "../CloudSyncStatusCard";
+import { getRuntimeAuthorityPresentation, recoverRuntimeFromRemoteCheckpoint, resumeRuntime } from "../CloudSyncStatusCard";
 
 describe("WP-44B Runtime Resume control", () => {
   test("enabled Resume dispatch invokes the existing authority handler exactly once", async () => {
@@ -52,5 +52,18 @@ describe("WP-44B Runtime Resume control", () => {
 
     expect(source).toContain('import CloudSyncStatusCard from "@/components/dashboard/CloudSyncStatusCard"');
     expect(source).toContain("<CloudSyncStatusCard lifecycleState={exerciseSnapshot.lifecycleState} />");
+  });
+  test("revision conflict exposes explicit remote-checkpoint recovery", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/components/dashboard/CloudSyncStatusCard.tsx"), "utf8");
+    expect(source).toContain('runtimeStatus.code === "CHECKPOINT_REVISION_CONFLICT"');
+    expect(source).toContain('testID="runtime-checkpoint-recovery"');
+    expect(source).toContain("recoverRuntimeFromRemoteCheckpoint().finally");
+    expect(source).toContain("Taasta pilve kontrollpunktist");
+  });
+  test("recovery press handler dispatches exactly one recovery command", async () => {
+    const recover = jest.fn(async () => ({ state: "WRITER" as const, revision: 718 }));
+
+    await expect(recoverRuntimeFromRemoteCheckpoint(recover)).resolves.toEqual({ state: "WRITER", revision: 718 });
+    expect(recover).toHaveBeenCalledTimes(1);
   });
 });

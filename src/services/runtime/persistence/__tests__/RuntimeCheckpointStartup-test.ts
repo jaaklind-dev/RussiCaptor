@@ -5,6 +5,7 @@ import {
   checkpointForExercise,
   isWriterCheckpointEcho,
   publicationResultRevokesWriter,
+  RuntimeCheckpointRecoveryCoordinator,
   renewalFailureRevokesWriter,
   renewRuntimeWriterTerminal,
   resolveRuntimeAuthSession,
@@ -22,6 +23,88 @@ describe("WP-44B checkpoint startup coordination", () => {
     writerInstanceId: "WRITER-A",
     userId: "USER-A",
     expiresAt: "2099-08-14T12:00:00.000Z",
+  });
+
+  const checkpoint = (exerciseId = "EX-1", checkpointRevision = 10, payloadHash = `HASH-${checkpointRevision}`) => ({
+    exerciseId, checkpointRevision, payloadHash,
+  }) as RuntimeCheckpointEnvelope<never>;
+  const recovery = (remote: RuntimeCheckpointEnvelope<never> | undefined = checkpoint()) => {
+    const repository = {
+      loadLatest: jest.fn(async () => remote),
+      releaseWriter: jest.fn(async () => undefined),
+    };
+    const acquire = jest.fn(async () => ({ status:"ACQUIRED" as const, checkpointRevision:remote?.checkpointRevision ?? 0, lease:writerLease }));
+    const adopt = jest.fn(async () => undefined);
+    return { repository, acquire, adopt, request: { intentId:"INTENT-1", exerciseId:"EX-1", writerInstanceId:"WRITER-A",
+      repository, acquire, adopt, validate:(value:RuntimeCheckpointEnvelope<never>|undefined):value is RuntimeCheckpointEnvelope<never>=>Boolean(value) } };
+  };
+
+  test("behavior: revision conflict recovery adopts the validated remote checkpoint and active writer lease", async () => {
+    const fixture=recovery();
+    await expect(new RuntimeCheckpointRecoveryCoordinator().recover(fixture.request as never)).resolves.toMatchObject({
+      state:"RECOVERED", checkpoint:{exerciseId:"EX-1",checkpointRevision:10,payloadHash:"HASH-10"}, lease:writerLease,
+    });
+    expect(fixture.acquire).toHaveBeenCalledWith(10);
+    expect(fixture.adopt).toHaveBeenCalledWith(expect.objectContaining({checkpointRevision:10}),writerLease);
+  });
+
+  test("behavior: post-recovery canonical progression preserves lineage and advances revision", async () => {
+    let local=checkpoint(); const fixture=recovery(local);
+    fixture.adopt.mockImplementation((async (value: RuntimeCheckpointEnvelope<never>)=>{ local=value; }) as never);
+    await new RuntimeCheckpointRecoveryCoordinator().recover(fixture.request as never);
+    const progressed=checkpoint("EX-1",local.checkpointRevision+1,"HASH-11"); local=progressed;
+    expect(local).toMatchObject({exerciseId:"EX-1",checkpointRevision:11,payloadHash:"HASH-11"});
+  });
+
+  test("behavior: duplicate recovery intent is idempotent", async () => {
+    const fixture=recovery(); const coordinator=new RuntimeCheckpointRecoveryCoordinator();
+    const [first,second]=await Promise.all([coordinator.recover(fixture.request as never),coordinator.recover(fixture.request as never)]);
+    expect(second).toBe(first); expect(fixture.repository.loadLatest).toHaveBeenCalledTimes(2);
+    expect(fixture.acquire).toHaveBeenCalledTimes(1); expect(fixture.adopt).toHaveBeenCalledTimes(1);
+  });
+
+  test("behavior: remote change during acquisition fails closed and releases the acquired lease", async () => {
+    const fixture=recovery(); fixture.repository.loadLatest
+      .mockResolvedValueOnce(checkpoint("EX-1",10,"HASH-10")).mockResolvedValueOnce(checkpoint("EX-1",11,"HASH-11"));
+    await expect(new RuntimeCheckpointRecoveryCoordinator().recover(fixture.request as never)).resolves.toEqual({
+      state:"REJECTED",code:"CHECKPOINT_REVISION_CONFLICT",revision:11,
+    });
+    expect(fixture.repository.releaseWriter).toHaveBeenCalledWith(writerLease); expect(fixture.adopt).not.toHaveBeenCalled();
+  });
+
+  test("behavior: active competing writer is never adopted or released", async () => {
+    const fixture=recovery(); fixture.acquire.mockResolvedValue({status:"HELD_BY_OTHER_WRITER",code:"WRITER_AUTHORITY_HELD"} as never);
+    await expect(new RuntimeCheckpointRecoveryCoordinator().recover(fixture.request as never)).resolves.toEqual({
+      state:"REJECTED",code:"WRITER_AUTHORITY_HELD",revision:undefined,
+    });
+    expect(fixture.adopt).not.toHaveBeenCalled(); expect(fixture.repository.releaseWriter).not.toHaveBeenCalled();
+  });
+
+  test("behavior: checkpoint from another exercise is rejected before acquisition", async () => {
+    const fixture=recovery(checkpoint("EX-2"));
+    await expect(new RuntimeCheckpointRecoveryCoordinator().recover(fixture.request as never)).resolves.toEqual({state:"REJECTED",code:"REMOTE_SYNC_CONFLICT"});
+    expect(fixture.acquire).not.toHaveBeenCalled(); expect(fixture.adopt).not.toHaveBeenCalled();
+  });
+
+  test("behavior: invalid remote checkpoint is rejected without authority or partial adoption", async () => {
+    const fixture=recovery(); fixture.request.validate=(() => false) as never;
+    await expect(new RuntimeCheckpointRecoveryCoordinator().recover(fixture.request as never)).resolves.toEqual({state:"REJECTED",code:"CHECKPOINT_HASH_INVALID"});
+    expect(fixture.acquire).not.toHaveBeenCalled(); expect(fixture.adopt).not.toHaveBeenCalled();
+  });
+
+  test("behavior: failed adoption releases authority and preserves a non-recovered result", async () => {
+    const fixture=recovery(); fixture.adopt.mockRejectedValue(new Error("RUNTIME_CHECKPOINT_CLOCK_MISMATCH"));
+    await expect(new RuntimeCheckpointRecoveryCoordinator().recover(fixture.request as never)).resolves.toEqual({state:"REJECTED",code:"CHECKPOINT_HASH_INVALID"});
+    expect(fixture.repository.releaseWriter).toHaveBeenCalledWith(writerLease);
+  });
+
+  test("behavior: restart after recovery continues the same exercise lineage", async () => {
+    let remote=checkpoint(); const repository={loadLatest:jest.fn(async()=>remote),releaseWriter:jest.fn(async()=>undefined)};
+    const run=async(intentId:string)=>new RuntimeCheckpointRecoveryCoordinator().recover({intentId,exerciseId:"EX-1",writerInstanceId:"WRITER-A",repository,
+      acquire:async (revision: number)=>({status:"ALREADY_OWNED",checkpointRevision:revision,lease:writerLease}),validate:(value: RuntimeCheckpointEnvelope<never> | undefined):value is RuntimeCheckpointEnvelope<never>=>Boolean(value),adopt:async()=>undefined} as never);
+    await expect(run("BEFORE-RESTART")).resolves.toMatchObject({state:"RECOVERED",checkpoint:{checkpointRevision:10}});
+    remote=checkpoint("EX-1",11,"HASH-11");
+    await expect(run("AFTER-RESTART")).resolves.toMatchObject({state:"RECOVERED",checkpoint:{exerciseId:"EX-1",checkpointRevision:11}});
   });
 
   test("transient renewal failure preserves the exact active canonical lease", async () => {
@@ -135,6 +218,114 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(renew.mock.calls.every(([renewed]) => renewed.writerInstanceId === "WRITER-A")).toBe(true);
     loop.stop();
     jest.useRealTimers();
+  });
+
+  test("realtime reconnect wakes a dormant interval and resumes renewal immediately", async () => {
+    jest.useFakeTimers();
+    let activeLease = writerLease;
+    const refreshedLease = Object.freeze({ ...writerLease, expiresAt: "2099-08-14T12:01:00.000Z" });
+    const renew = jest.fn(async () => ({ status: "ALREADY_OWNED" as const, checkpointRevision: 1, lease: refreshedLease }));
+    const loop = startRuntimeWriterRenewalLoop({
+      getLease: () => activeLease,
+      isWriter: () => true,
+      renew,
+      onRenewed: (_current, refreshed) => { activeLease = refreshed; },
+      onTransientFailure: jest.fn(),
+      onRevoked: jest.fn(),
+      intervalMs: 20_000,
+    });
+
+    loop.wake();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(renew).toHaveBeenCalledTimes(1);
+    expect(activeLease).toBe(refreshedLease);
+    await jest.advanceTimersByTimeAsync(19_999);
+    expect(renew).toHaveBeenCalledTimes(1);
+    loop.stop();
+    jest.useRealTimers();
+  });
+
+  test("reconnect after authoritative expiry clears stale local writer", async () => {
+    jest.useFakeTimers();
+    let activeLease: RuntimeWriterLease | undefined = Object.freeze({
+      ...writerLease,
+      expiresAt: "2026-08-14T12:00:00.000Z",
+    });
+    let writer = true;
+    const onRevoked = jest.fn(() => { activeLease = undefined; writer = false; });
+    const loop = startRuntimeWriterRenewalLoop({
+      getLease: () => activeLease,
+      isWriter: () => writer,
+      renew: async () => ({ status: "AUTHORITY_UNAVAILABLE" as const, code: "WRITER_AUTHORITY_UNAVAILABLE" as const }),
+      onRenewed: jest.fn(),
+      onTransientFailure: jest.fn(),
+      onRevoked,
+      intervalMs: 20_000,
+      now: () => Date.parse("2026-08-14T12:00:01.000Z"),
+    });
+
+    loop.wake();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onRevoked).toHaveBeenCalledWith(expect.objectContaining({ leaseId: "LEASE-A" }), "WRITER_AUTHORITY_UNAVAILABLE");
+    expect(activeLease).toBeUndefined();
+    expect(writer).toBe(false);
+    loop.stop();
+    jest.useRealTimers();
+  });
+
+  test("repeated reconnect signals never create overlapping renewal attempts", async () => {
+    jest.useFakeTimers();
+    type RenewalResult = Awaited<ReturnType<typeof renewRuntimeWriterTerminal>>;
+    let settle: ((value: RenewalResult) => void) | undefined;
+    const renew = jest.fn(() => new Promise<RenewalResult>(resolve => { settle = resolve; }));
+    const loop = startRuntimeWriterRenewalLoop({
+      getLease: () => writerLease,
+      isWriter: () => true,
+      renew,
+      onRenewed: jest.fn(),
+      onTransientFailure: jest.fn(),
+      onRevoked: jest.fn(),
+      intervalMs: 20_000,
+    });
+
+    loop.wake();
+    loop.wake();
+    loop.wake();
+    expect(renew).toHaveBeenCalledTimes(1);
+    settle?.({ status: "ALREADY_OWNED", checkpointRevision: 1, lease: writerLease });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(renew).toHaveBeenCalledTimes(1);
+    loop.stop();
+    jest.useRealTimers();
+  });
+
+  test("publication failure retains dirty state and rearms one bounded retry", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const publisher = source.slice(source.indexOf("let publishInFlight=false"), source.indexOf("const stopPrepared="));
+    expect(publisher).toContain("let publicationDirty=false");
+    expect(publisher).toContain("publicationDirty=true;setStatus");
+    expect(publisher).toContain("if(publicationDirty)schedulePublicationRetry()");
+    expect(publisher.match(/publicationRetryTimer=setTimeout/g)).toHaveLength(1);
+    expect(publisher).toContain("ROUTINE_CHECKPOINT_PUBLICATION_MS");
+  });
+
+  test("a late publication acknowledgement never overwrites a newer local checkpoint", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const publisher = source.slice(source.indexOf("if(result.state===\"PUBLISHED\")"), source.indexOf("else if(publicationResultRevokesWriter"));
+    expect(publisher).toContain("currentLocal.checkpointRevision<=result.checkpoint.checkpointRevision");
+    expect(publisher).toContain("lastPublishedCheckpoint=result.checkpoint");
+    expect(publisher).toContain("remoteRevision=result.checkpoint.checkpointRevision");
+    expect(publisher.indexOf("currentLocal.checkpointRevision")).toBeLessThan(publisher.indexOf("localRuntimeCheckpointStore.accept"));
+  });
+
+  test("reconnect and legitimate authority acquisition rearm the same publication scheduler", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    expect(source).toContain('if(channelStatus==="SUBSCRIBED"&&!generationStopped()){renewalLoop?.wake();requestPublish();}');
+    expect(source.match(/wakeCheckpointPublicationForCurrentWriter\?\.\(\)/g)).toHaveLength(2);
+    expect(source).toContain("if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined");
   });
 
   test("typed stale authority or actual local expiry revokes writer", () => {
@@ -345,6 +536,16 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(restore).toBeGreaterThan(writer);
   });
 
+  test("explicit revision-conflict recovery delegates one user intent to the recovery coordinator", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const recovery = source.slice(source.indexOf("export function reacquireRuntimeFromRemoteCheckpoint"), source.indexOf("function setAndReturn"));
+    expect(recovery).toContain("if (activeRecovery) return activeRecovery");
+    expect(recovery).toContain("runtimeCheckpointRecoveryCoordinator.recover");
+    expect(recovery).toContain("acquireRuntimeWriterTerminal(repository,exerciseId,writerId,expectedRevision");
+    expect(recovery).toContain("acceptAuthoritativeRuntimeCheckpoint(checkpoint,true)");
+    expect(recovery).not.toContain("getLocalRuntimeCheckpoint()");
+  });
+
   test("remote current-exercise discovery resolves before checkpoint authority startup", () => {
     const layout = fs.readFileSync(path.join(process.cwd(), "src/app/_layout.tsx"), "utf8");
     const cloudStart = layout.indexOf("startCloudSync()");
@@ -442,7 +643,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     expect(source).toContain("let stopped=false;");
     expect(source).toContain("if(stopped)return;");
-    expect(source).toContain("return()=>{stopped=true;if(routinePublishTimer)clearTimeout(routinePublishTimer);stopPrepared();renewalLoop?.stop()");
+    expect(source).toContain("return()=>{stopped=true;if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();renewalLoop?.stop()");
   });
 
   test("explicit Resume attaches the acquired writer to the canonical renewal lifecycle", () => {

@@ -11,7 +11,7 @@ import {
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { supabase } from "@/services/SupabaseService";
 import { subscribeToSync } from "@/services/SyncService";
-import { localRuntimeCheckpointStore, resolveAgainstValidatedLocalCheckpoint, resolveAuthoritativeCheckpoint } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
+import { isValidRuntimeCheckpoint, localRuntimeCheckpointStore, resolveAgainstValidatedLocalCheckpoint, resolveAuthoritativeCheckpoint } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 import {
   SupabaseRuntimeCheckpointRepository,
   type RuntimeCheckpointRepository,
@@ -39,6 +39,7 @@ let activeStartup: Promise<()=>void>|undefined;
 let publicationBarrier: Promise<void> = Promise.resolve();
 let exerciseSyncGeneration = 0;
 let ensureLeaseRenewalForCurrentWriter: (() => void) | undefined;
+let wakeCheckpointPublicationForCurrentWriter: (() => void) | undefined;
 
 async function startupAwait<T>(operation: Promise<T>, timeoutMs = STARTUP_TIMEOUT_MS): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -64,6 +65,73 @@ type RuntimeWriterRenewal = Pick<RuntimeCheckpointRepository, "renewWriter"> &
   Pick<SupabaseRuntimeCheckpointRepository, "loadWriterLease">;
 
 type RuntimeWriterRenewalResult = Awaited<ReturnType<typeof renewRuntimeWriterTerminal>>;
+
+export type RuntimeCheckpointRecoveryResult = Readonly<
+  | { state: "RECOVERED"; checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>; lease: RuntimeWriterLease }
+  | { state: "REJECTED"; code: string; revision?: number }
+>;
+
+type RuntimeCheckpointRecoveryRequest = Readonly<{
+  intentId: string;
+  exerciseId: string;
+  writerInstanceId: string;
+  repository: Pick<RuntimeCheckpointRepository, "loadLatest" | "releaseWriter">;
+  acquire: (expectedRevision: number) => Promise<Awaited<ReturnType<typeof acquireRuntimeWriterTerminal>>>;
+  validate?: (checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined) => checkpoint is RuntimeCheckpointEnvelope<SharedExerciseState>;
+  adopt: (checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, lease: RuntimeWriterLease) => Promise<void> | void;
+}>;
+
+/** One coordinator owns recovery-intent idempotency; repository CAS still owns writer authority. */
+export class RuntimeCheckpointRecoveryCoordinator {
+  private readonly intents = new Map<string, Promise<RuntimeCheckpointRecoveryResult>>();
+
+  recover(request: RuntimeCheckpointRecoveryRequest): Promise<RuntimeCheckpointRecoveryResult> {
+    const existing = this.intents.get(request.intentId);
+    if (existing) return existing;
+    const pending = this.execute(request);
+    this.intents.set(request.intentId, pending);
+    return pending;
+  }
+
+  private async execute(request: RuntimeCheckpointRecoveryRequest): Promise<RuntimeCheckpointRecoveryResult> {
+    const validate = request.validate ?? isValidRuntimeCheckpoint;
+    const inspected = await request.repository.loadLatest(request.exerciseId);
+    if (!inspected) return { state: "REJECTED", code: "CHECKPOINT_NOT_FOUND" };
+    if (inspected.exerciseId !== request.exerciseId) return { state: "REJECTED", code: "REMOTE_SYNC_CONFLICT" };
+    if (!validate(inspected)) return { state: "REJECTED", code: "CHECKPOINT_HASH_INVALID" };
+
+    const acquired = await request.acquire(inspected.checkpointRevision);
+    if (!("lease" in acquired)) {
+      return { state: "REJECTED", code: acquired.code, revision: acquired.checkpointRevision };
+    }
+    if (acquired.lease.exerciseId !== request.exerciseId || acquired.lease.writerInstanceId !== request.writerInstanceId) {
+      await request.repository.releaseWriter(acquired.lease);
+      return { state: "REJECTED", code: "REMOTE_SYNC_CONFLICT" };
+    }
+
+    const latest = await request.repository.loadLatest(request.exerciseId);
+    if (!latest || latest.exerciseId !== request.exerciseId || !validate(latest)) {
+      await request.repository.releaseWriter(acquired.lease);
+      return { state: "REJECTED", code: latest ? "CHECKPOINT_HASH_INVALID" : "CHECKPOINT_NOT_FOUND" };
+    }
+    if (latest.checkpointRevision !== inspected.checkpointRevision || latest.payloadHash !== inspected.payloadHash) {
+      await request.repository.releaseWriter(acquired.lease);
+      return { state: "REJECTED", code: "CHECKPOINT_REVISION_CONFLICT", revision: latest.checkpointRevision };
+    }
+
+    try {
+      await request.adopt(latest, acquired.lease);
+    } catch {
+      await request.repository.releaseWriter(acquired.lease);
+      return { state: "REJECTED", code: "CHECKPOINT_HASH_INVALID" };
+    }
+    return { state: "RECOVERED", checkpoint: latest, lease: acquired.lease };
+  }
+}
+
+const runtimeCheckpointRecoveryCoordinator = new RuntimeCheckpointRecoveryCoordinator();
+let recoveryIntentSequence = 0;
+let activeRecovery: Promise<Status> | undefined;
 
 export function renewalFailureRevokesWriter(
   result: Exclude<RuntimeWriterRenewalResult, { lease: RuntimeWriterLease }>,
@@ -93,6 +161,7 @@ type RuntimeWriterRenewalLoopOptions = Readonly<{
 
 type RuntimeWriterRenewalLoop = Readonly<{
   isActive: () => boolean;
+  wake: () => void;
   stop: () => void;
 }>;
 
@@ -100,6 +169,39 @@ export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopO
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inFlight = false;
   let stopped = false;
+  const runAttempt = () => {
+    const renewingLease = options.getLease();
+    if (stopped || inFlight) return;
+    if (!renewingLease || !options.isWriter()) {
+      stopped = true;
+      return;
+    }
+    inFlight = true;
+    void options.renew(renewingLease).then(result => {
+      if (stopped || options.getLease()?.leaseId !== renewingLease.leaseId) return;
+      if ("lease" in result) {
+        options.onRenewed(renewingLease, result.lease);
+      } else if (renewalFailureRevokesWriter(result, renewingLease, options.now?.() ?? Date.now())) {
+        options.onRevoked(renewingLease, result.code);
+      } else {
+        options.onTransientFailure(renewingLease, result.code);
+      }
+    }).catch(() => {
+      if (stopped || options.getLease()?.leaseId !== renewingLease.leaseId) return;
+      const transient = {
+        status: "AUTHORITY_UNAVAILABLE" as const,
+        code: "WRITER_AUTHORITY_UNAVAILABLE" as const,
+      };
+      if (renewalFailureRevokesWriter(transient, renewingLease, options.now?.() ?? Date.now())) {
+        options.onRevoked(renewingLease, transient.code);
+      } else {
+        options.onTransientFailure(renewingLease, transient.code);
+      }
+    }).finally(() => {
+      inFlight = false;
+      schedule();
+    });
+  };
   const schedule = () => {
     if (stopped || timer || inFlight) return;
     if (!options.getLease() || !options.isWriter()) {
@@ -108,42 +210,18 @@ export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopO
     }
     timer = setTimeout(() => {
       timer = undefined;
-      const renewingLease = options.getLease();
-      if (stopped || inFlight) return;
-      if (!renewingLease || !options.isWriter()) {
-        stopped = true;
-        return;
-      }
-      inFlight = true;
-      void options.renew(renewingLease).then(result => {
-        if (stopped || options.getLease()?.leaseId !== renewingLease.leaseId) return;
-        if ("lease" in result) {
-          options.onRenewed(renewingLease, result.lease);
-        } else if (renewalFailureRevokesWriter(result, renewingLease, options.now?.() ?? Date.now())) {
-          options.onRevoked(renewingLease, result.code);
-        } else {
-          options.onTransientFailure(renewingLease, result.code);
-        }
-      }).catch(() => {
-        if (stopped || options.getLease()?.leaseId !== renewingLease.leaseId) return;
-        const transient = {
-          status: "AUTHORITY_UNAVAILABLE" as const,
-          code: "WRITER_AUTHORITY_UNAVAILABLE" as const,
-        };
-        if (renewalFailureRevokesWriter(transient, renewingLease, options.now?.() ?? Date.now())) {
-          options.onRevoked(renewingLease, transient.code);
-        } else {
-          options.onTransientFailure(renewingLease, transient.code);
-        }
-      }).finally(() => {
-        inFlight = false;
-        schedule();
-      });
+      runAttempt();
     }, options.intervalMs ?? RENEW_MS);
   };
   schedule();
   return {
     isActive: () => !stopped,
+    wake: () => {
+      if (stopped || inFlight) return;
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      runAttempt();
+    },
     stop: () => {
       stopped = true;
       if (timer) clearTimeout(timer);
@@ -338,6 +416,46 @@ export async function takeOverRuntimeWriter(): Promise<Status> {
   // fetch is only the CAS freshness guard; matching revision and payload hash
   // let us avoid validating another large JSON copy on the UI thread.
   acceptAuthoritativeRuntimeCheckpoint(resolved.checkpoint, true);
+  wakeCheckpointPublicationForCurrentWriter?.();
+  return status;
+}
+
+/** Explicit user recovery from a stale local revision; remote checkpoint remains authoritative. */
+export function reacquireRuntimeFromRemoteCheckpoint(): Promise<Status> {
+  if (status.state === "WRITER") return Promise.resolve(status);
+  if (activeRecovery) return activeRecovery;
+  recoveryIntentSequence += 1;
+  const intentId = `RUNTIME-RECOVERY-${recoveryIntentSequence}`;
+  const pending = reacquireRuntimeFromRemoteCheckpointForIntent(intentId);
+  const tracked = pending.finally(() => { if (activeRecovery === tracked) activeRecovery = undefined; });
+  activeRecovery = tracked;
+  return activeRecovery;
+}
+
+async function reacquireRuntimeFromRemoteCheckpointForIntent(intentId: string): Promise<Status> {
+  if (!supabase) return { state:"DISABLED" };
+  const repository=new SupabaseRuntimeCheckpointRepository(supabase);
+  const exerciseId=getCanonicalExerciseSnapshot().exerciseId;
+  if (isRemoteRuntimeLifecycleActive(exerciseId) === false) {
+    stopClockRunner(); return setAndReturn({state:"DISABLED",code:"EXERCISE_NOT_ACTIVE"});
+  }
+  const writerId=await startupAwait(getRuntimeWriterInstanceId());
+  const recovered = await runtimeCheckpointRecoveryCoordinator.recover({ intentId, exerciseId, writerInstanceId:writerId, repository,
+    acquire: expectedRevision => acquireRuntimeWriterTerminal(repository,exerciseId,writerId,expectedRevision,LEASE_SECONDS),
+    adopt: checkpoint => {
+      setRuntimeWriterAuthorityState("WRITER");
+      try { acceptAuthoritativeRuntimeCheckpoint(checkpoint,true); }
+      catch (error) { setRuntimeWriterAuthorityState("UNRESOLVED"); throw error; }
+    },
+  });
+  if (recovered.state === "REJECTED") return setAndReturn({
+    state: recovered.code === "WRITER_AUTHORITY_HELD" ? "READER" : "CONFLICT",
+    code: recovered.code, revision: recovered.revision,
+  });
+  lease=recovered.lease; remoteRevision=recovered.checkpoint.checkpointRevision;
+  setStatus({state:"WRITER",revision:remoteRevision});
+  ensureLeaseRenewalForCurrentWriter?.();
+  wakeCheckpointPublicationForCurrentWriter?.();
   return status;
 }
 
@@ -397,30 +515,48 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
 
   let publishInFlight=false;
   let publishQueued=false;
+  let publicationDirty=false;
   let routinePublishTimer:ReturnType<typeof setTimeout>|undefined;
+  let publicationRetryTimer:ReturnType<typeof setTimeout>|undefined;
   let lastPublishedCheckpoint=remote ?? (resolved.status!=="NONE"&&resolved.status!=="CONFLICT" ? resolved.checkpoint : undefined);
   let lastPublicationAt=Date.now();
   let pendingWriterEcho: Readonly<{
     payloadHash:string;
     resolve:(result:RuntimeCheckpointPublicationTerminal)=>void;
   }>|undefined;
+  const schedulePublicationRetry=()=>{
+    if(generationStopped()||publicationRetryTimer||!publicationDirty||!lease||status.state!=="WRITER")return;
+    publicationRetryTimer=setTimeout(()=>{publicationRetryTimer=undefined;requestPublish();},ROUTINE_CHECKPOINT_PUBLICATION_MS);
+  };
   const runPublish=async()=>{
     publishInFlight=true;
     try {
       do {
         publishQueued=false;
         const checkpoint=getLocalRuntimeCheckpoint(); if(!checkpoint||!lease||status.state!=="WRITER"||checkpoint.checkpointRevision<=remoteRevision||isIdenticalCheckpointPayload(lastPublishedCheckpoint,checkpoint)) return;
+        publicationDirty=true;
         const echoAcknowledgement=new Promise<Awaited<ReturnType<typeof publishRuntimeCheckpointTerminal>>>(resolve=>{
           pendingWriterEcho={payloadHash:checkpoint.payloadHash,resolve};
         });
         const result=await Promise.race([publishRuntimeCheckpointTerminal(repository,lease,remoteRevision,checkpoint),echoAcknowledgement]);
         if(generationStopped())return;
         if(pendingWriterEcho?.payloadHash===checkpoint.payloadHash)pendingWriterEcho=undefined;
-        if(result.state==="PUBLISHED") { localRuntimeCheckpointStore.accept(result.checkpoint); lastPublishedCheckpoint=result.checkpoint;lastPublicationAt=Date.now();remoteRevision=result.checkpoint.checkpointRevision; setStatus({state:"WRITER",revision:remoteRevision}); }
+        if(result.state==="PUBLISHED") {
+          const currentLocal=getLocalRuntimeCheckpoint();
+          // A newer prepared checkpoint may exist by the time this ACK arrives.
+          // Never replace that dirty canonical state with an older acknowledged
+          // envelope; advance only the remote publication cursor.
+          if(!currentLocal||currentLocal.checkpointRevision<=result.checkpoint.checkpointRevision||isIdenticalCheckpointPayload(currentLocal,result.checkpoint))localRuntimeCheckpointStore.accept(result.checkpoint);
+          lastPublishedCheckpoint=result.checkpoint;lastPublicationAt=Date.now();remoteRevision=result.checkpoint.checkpointRevision;
+          publicationDirty=Boolean(currentLocal&&!isIdenticalCheckpointPayload(result.checkpoint,currentLocal));
+          setStatus({state:"WRITER",revision:remoteRevision});
+        }
         else if(publicationResultRevokesWriter(result.state)) { lease=undefined; stopClockRunner(); setStatus({state:"CONFLICT",code:result.code}); return; }
-        else { setStatus({state:"WRITER",code:result.code,revision:remoteRevision}); }
+        else { publicationDirty=true;setStatus({state:"WRITER",code:result.code,revision:remoteRevision});schedulePublicationRetry(); }
       } while(publishQueued);
-    } finally { publishInFlight=false; }
+    } catch {
+      publicationDirty=true;schedulePublicationRetry();
+    } finally { publishInFlight=false;if(publicationDirty)schedulePublicationRetry(); }
   };
   const publishNow=()=>{
     if(generationStopped())return;
@@ -433,11 +569,13 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     if(generationStopped())return;
     const checkpoint=getLocalRuntimeCheckpoint();
     if(!checkpoint||isIdenticalCheckpointPayload(lastPublishedCheckpoint,checkpoint))return;
+    publicationDirty=true;
     if(isCheckpointPublicationBoundary(lastPublishedCheckpoint,checkpoint)){publishNow();return;}
     if(routinePublishTimer)return;
     const remaining=Math.max(0,ROUTINE_CHECKPOINT_PUBLICATION_MS-(Date.now()-lastPublicationAt));
     routinePublishTimer=setTimeout(()=>{routinePublishTimer=undefined;publishNow();},remaining);
   };
+  wakeCheckpointPublicationForCurrentWriter=requestPublish;
   // Prepared checkpoints are the single canonical publication trigger.
   // Listening to SyncService here duplicated every trigger before capture.
   const stopPrepared=subscribeToLocalRuntimeCheckpointPrepared(requestPublish);
@@ -481,8 +619,14 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
       if(lease){lease=undefined;stopClockRunner();setStatus({state:"CONFLICT",code:"REMOTE_SYNC_CONFLICT",revision:decision.checkpoint.checkpointRevision});}
       else {acceptAuthoritativeRuntimeCheckpoint(decision.checkpoint,false);stopClockRunner();remoteRevision=decision.checkpoint.checkpointRevision;setStatus({state:"READER",revision:remoteRevision});}
     }
-  }).subscribe();
-  return()=>{stopped=true;if(routinePublishTimer)clearTimeout(routinePublishTimer);stopPrepared();renewalLoop?.stop();if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration)lease=undefined;};
+  }).subscribe(channelStatus=>{
+    // Android may suspend timers while backgrounded or disconnected. A
+    // successful realtime resubscription is the canonical connectivity signal:
+    // reconcile the current lease immediately instead of waiting on a dormant
+    // interval handle.
+    if(channelStatus==="SUBSCRIBED"&&!generationStopped()){renewalLoop?.wake();requestPublish();}
+  });
+  return()=>{stopped=true;if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();renewalLoop?.stop();if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration)lease=undefined;};
 }
 
 async function startRuntimeCheckpointSyncOnce(): Promise<()=>void> {

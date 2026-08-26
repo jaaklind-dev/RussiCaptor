@@ -6,7 +6,7 @@ import {
   subscribeToCloudSyncStatus,
   type CloudSyncStatus,
 } from "@/services/CloudSyncService";
-import { getRuntimeCheckpointSyncStatus, subscribeToRuntimeCheckpointSync, takeOverRuntimeWriter } from "@/services/RuntimeCheckpointSyncService";
+import { getRuntimeCheckpointSyncStatus, reacquireRuntimeFromRemoteCheckpoint, subscribeToRuntimeCheckpointSync, takeOverRuntimeWriter } from "@/services/RuntimeCheckpointSyncService";
 import { authorityStateLabel } from "@/localization/et";
 import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
 import { router } from "expo-router";
@@ -15,6 +15,12 @@ export async function resumeRuntime(
   resume: typeof takeOverRuntimeWriter = takeOverRuntimeWriter,
 ) {
   return resume();
+}
+
+export async function recoverRuntimeFromRemoteCheckpoint(
+  recover: typeof reacquireRuntimeFromRemoteCheckpoint = reacquireRuntimeFromRemoteCheckpoint,
+) {
+  return recover();
 }
 
 export function getRuntimeAuthorityPresentation(
@@ -74,6 +80,7 @@ export default function CloudSyncStatusCard({ lifecycleState }: { lifecycleState
   const isBusy = status.state === "connecting" || status.state === "saving";
   const runtimePresentation = getRuntimeAuthorityPresentation(lifecycleState, runtimeStatus);
   const multipleExerciseConflict = status.state === "error" && status.message?.startsWith("MULTIPLE_ACTIVE_EXERCISES:");
+  const recoverableRevisionConflict = runtimeStatus.state === "CONFLICT" && runtimeStatus.code === "CHECKPOINT_REVISION_CONFLICT";
 
   return (
       <View style={[styles.card, hasProblem && styles.problemCard]}>
@@ -110,6 +117,14 @@ export default function CloudSyncStatusCard({ lifecycleState }: { lifecycleState
             <Text style={styles.takeoverText}>
               {takeoverPending ? "Võtan Runtime’i üle…" : "Võta Runtime üle"}
             </Text>
+          </Pressable>
+        )}
+        {recoverableRevisionConflict && (
+          <Pressable testID="runtime-checkpoint-recovery" accessibilityRole="button"
+            accessibilityLabel="Taasta pilve kontrollpunktist" hitSlop={8} disabled={takeoverPending}
+            style={[styles.takeoverButton, takeoverPending && styles.takeoverButtonDisabled]}
+            onPress={() => { setTakeoverPending(true); void recoverRuntimeFromRemoteCheckpoint().finally(() => setTakeoverPending(false)); }}>
+            <Text style={styles.takeoverText}>{takeoverPending ? "Taastan Runtime’i…" : "Taasta pilve kontrollpunktist"}</Text>
           </Pressable>
         )}
         {multipleExerciseConflict && <Pressable style={styles.takeoverButton} onPress={() => router.push("/excon/active-exercise-conflict" as never)}><Text style={styles.takeoverText}>Lahenda aktiivsete õppuste konflikt</Text></Pressable>}
