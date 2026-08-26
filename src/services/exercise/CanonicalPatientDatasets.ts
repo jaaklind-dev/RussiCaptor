@@ -3,11 +3,13 @@ import type { Patient } from "@/models/Patient";
 import type { PackagePatientDataset } from "@/models/exercise/PackagePatientDataset";
 import { patients as demoPatients } from "@/data/patients";
 import { BOTULISM_JOHVI_PATIENTS } from "@/data/botulismJohviPatients";
-import { PELVIC_HEMORRHAGE_REFERENCE_CONFIGURATION, PELVIC_INJURY_REFERENCE_PATIENT } from "@/modules/pelvicInjury/PelvicInjuryReference";
+import { PELVIC_HEMORRHAGE_REFERENCE_CONFIGURATION, PELVIC_INJURY_REFERENCE_PATIENT,
+  SEVERE_OPEN_BOOK_PELVIC_SOURCE_CONTROL_V1 } from "@/modules/pelvicInjury/PelvicInjuryReference";
 import { PLEURAL_INJURY_REFERENCE } from "@/modules/pleuralInjury/PleuralInjuryReference";
 import { CARDIAC_ARREST_REFERENCE_FIXTURE } from "@/services/golden/CardiacArrestReferenceFixture";
 import { PackagePatientDatasetRegistry } from "./PackagePatientMaterializationService";
 import { MTP_REFERENCE_CONFIGURATION, WP47C_DEFAULT_DELIVERY_CONFIGURATION } from "@/models/MassiveTransfusion";
+import { PRESSURE_DEPENDENT_HEMORRHAGE_FLOW_V1 } from "@/models/HemorrhagePatientProcess";
 
 const clone = (patient: Patient): Patient => ({ ...patient, mist: { ...patient.mist } });
 const dataset = (datasetId: string, records: PackagePatientDataset["patients"]): PackagePatientDataset => Object.freeze({ datasetId, version: datasetId.split(".v").at(-1)!, patients: Object.freeze(records) });
@@ -76,6 +78,18 @@ delete physiologicDecompensationInitialState.hypoxia;
 export const physiologicDecompensationFixture: GoldenFixture = Object.freeze({ ...structuredClone(mtpReferenceFixture),
   fixtureId: "FX-PHYSIOLOGIC-DECOMPENSATION", patientId: "PT-DECOMP-01", seed: 48,
   initialState: Object.freeze({ ...physiologicDecompensationInitialState, physiologicDecompensationEnabled: true }) });
+const pressureFlowInitialState = structuredClone(physiologicDecompensationFixture.initialState) as Record<string, unknown>;
+const pressureFlowSources = structuredClone(pressureFlowInitialState.hemorrhageSources) as Record<string, unknown>[];
+pressureFlowSources[0].configuration = Object.freeze({ ...(pressureFlowSources[0].configuration as Record<string, unknown>),
+  baselineBleedingRateMlMin: 100, pressureDependentFlow: PRESSURE_DEPENDENT_HEMORRHAGE_FLOW_V1,
+  pelvicSourceControl: SEVERE_OPEN_BOOK_PELVIC_SOURCE_CONTROL_V1,
+  coagulation: Object.freeze({ temperatureModifiers: Object.freeze([
+    Object.freeze({ belowCelsius: 35, factor: 1.25 }), Object.freeze({ belowCelsius: 34, factor: 1.5 }),
+  ]) }),
+});
+export const pressureDependentHemorrhageFixture: GoldenFixture = Object.freeze({ ...structuredClone(physiologicDecompensationFixture),
+  fixtureId: "FX-PRESSURE-DEPENDENT-HEMORRHAGE", seed: 481,
+  initialState: Object.freeze({ ...pressureFlowInitialState, hemorrhageSources: Object.freeze(pressureFlowSources) }) });
 const decompensationPatient: Patient = Object.freeze({ id:"PT-DECOMP-01", isikukood:"DECOMP-48001", name:"Füsioloogilise dekompensatsiooni referentspatsient",
   triage:"P1", status:"Active", location:"ED", lastSeen:"T+0", mist:Object.freeze({mechanism:"Technical",injuries:"Uncontrolled hemorrhage",signs:"Initially compensated",treatment:"None"}) });
 
@@ -95,4 +109,5 @@ export const packagePatientDatasetRegistry = new PackagePatientDatasetRegistry()
   dataset("patients.massive-transfusion-reference.v1", [{ patient: pelvicReferencePatient, runtimeFixture: mtpReferenceFixture }]),
   dataset("patients.transport-reference.v1", [{ patient: transportPatient("PT-TRANSPORT-01", "Transport Patient 1"), runtimeFixture: transportFixture("PT-TRANSPORT-01", 51) }, { patient: transportPatient("PT-TRANSPORT-02", "Transport Patient 2"), runtimeFixture: transportFixture("PT-TRANSPORT-02", 52) }]),
   dataset("patients.physiologic-decompensation-reference.v1", [{ patient: decompensationPatient, runtimeFixture: physiologicDecompensationFixture }]),
+  dataset("patients.pressure-dependent-hemorrhage-reference.v1", [{ patient: decompensationPatient, runtimeFixture: pressureDependentHemorrhageFixture }]),
 ].forEach(value => packagePatientDatasetRegistry.register(value));

@@ -1,4 +1,4 @@
-import { PHYSIOLOGIC_DECOMPENSATION_REFERENCE_EXERCISE_PACKAGE } from "../CanonicalExercisePackages";
+import { PHYSIOLOGIC_DECOMPENSATION_REFERENCE_EXERCISE_PACKAGE, PRESSURE_DEPENDENT_HEMORRHAGE_REFERENCE_EXERCISE_PACKAGE } from "../CanonicalExercisePackages";
 import { packagePatientDatasetRegistry } from "../CanonicalPatientDatasets";
 import { exercisePackageRegistry } from "../ExercisePackageService";
 import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
@@ -7,6 +7,17 @@ import fs from "fs";
 import path from "path";
 
 describe("WP-48 reference package", () => {
+  test("registers a separate WP-48A opt-in pressure-flow acceptance fixture", () => {
+    expect(exercisePackageRegistry.require(PRESSURE_DEPENDENT_HEMORRHAGE_REFERENCE_EXERCISE_PACKAGE.packageId, "1.0.0")).toBeDefined();
+    const fixture = packagePatientDatasetRegistry.resolve("patients.pressure-dependent-hemorrhage-reference.v1").patients[0].runtimeFixture!;
+    expect(fixture.initialState).toMatchObject({ hemorrhageSources: [expect.objectContaining({ configuration: expect.objectContaining({
+      baselineBleedingRateMlMin: 100,
+      pressureDependentFlow: expect.objectContaining({ sbpAnchors: expect.arrayContaining([{ sbpMmHg: 60, factor: 0.55 }]) }),
+      pelvicSourceControl: expect.objectContaining({ openRateMlMin: 100, incorrectRateMlMin: 60,
+        correctMaturation: [{ afterSec: 0, rateMlMin: 20 }, { afterSec: 1800, rateMlMin: 12 },
+          { afterSec: 5400, rateMlMin: 8 }, { afterSec: 10800, rateMlMin: 6 }] }),
+    }) })] });
+  });
   test("registers one opt-in generic patient without changing historical packages", () => {
     expect(exercisePackageRegistry.require(PHYSIOLOGIC_DECOMPENSATION_REFERENCE_EXERCISE_PACKAGE.packageId,"1.0.0")).toBeDefined();
     const dataset=packagePatientDatasetRegistry.resolve("patients.physiologic-decompensation-reference.v1");
@@ -44,6 +55,8 @@ describe("WP-48 reference package", () => {
     expect(control).toContain('resource.type === "pelvicBinder"');
     expect(control).toContain('issuedBy: "Case Manager"');
     expect(control).toContain("Paigalda vaagnalahas");
+    expect(control).toContain("Eemalda vaagnalahas");
+    expect(control).toContain("stopResourceInterventionCommand");
   });
   test("DEAD absorbs later physiology ticks and freezes cumulative blood loss", () => {
     const fixture=structuredClone(packagePatientDatasetRegistry.resolve("patients.physiologic-decompensation-reference.v1").patients[0].runtimeFixture!);

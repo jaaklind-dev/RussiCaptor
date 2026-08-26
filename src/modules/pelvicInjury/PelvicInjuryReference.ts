@@ -1,4 +1,4 @@
-import type { HemorrhageConfiguration } from "@/models/HemorrhagePatientProcess";
+import type { HemorrhageConfiguration, PelvicSourceControlConfiguration } from "@/models/HemorrhagePatientProcess";
 import { createTraumaticInjuryDescriptor } from "@/models/trauma/TraumaticInjury";
 import { PELVIC_INJURY_MODULE_ID, PELVIC_INJURY_MODULE_VERSION } from "./PelvicInjuryManifest";
 
@@ -9,6 +9,19 @@ export const OPEN_BOOK_PELVIC_INJURY = createTraumaticInjuryDescriptor({
   anatomicRegion: "PELVIS",
   woundClassification: "CLOSED",
   provenance: Object.freeze({ moduleId: PELVIC_INJURY_MODULE_ID, version: PELVIC_INJURY_MODULE_VERSION }),
+});
+
+/** Opt-in severe open-book source-control profile; package configuration chooses whether to use it. */
+export const SEVERE_OPEN_BOOK_PELVIC_SOURCE_CONTROL_V1: PelvicSourceControlConfiguration = Object.freeze({
+  openRateMlMin: 100,
+  incorrectRateMlMin: 60,
+  loosenedRateMlMin: 50,
+  correctMaturation: Object.freeze([
+    Object.freeze({ afterSec: 0, rateMlMin: 20 }),
+    Object.freeze({ afterSec: 30 * 60, rateMlMin: 12 }),
+    Object.freeze({ afterSec: 90 * 60, rateMlMin: 8 }),
+    Object.freeze({ afterSec: 180 * 60, rateMlMin: 6 }),
+  ]),
 });
 
 /** Reference scenario configuration, not a universal clinical constant. */

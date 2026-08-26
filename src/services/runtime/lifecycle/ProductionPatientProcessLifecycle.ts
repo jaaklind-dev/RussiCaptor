@@ -131,7 +131,9 @@ const hemorrhage: PatientProcessLifecycleDescriptor = {
   },
   prepare(process, context) { return { processes: [setHemorrhageEffects(process as HemorrhagePatientProcessRuntime, [...context.activeEffects])], events: [], aggregationRequested: false }; },
   tick(process, context) {
-    const result = tickHemorrhagePatientProcess(process as HemorrhagePatientProcessRuntime, context.tickSeconds);
+    const result = tickHemorrhagePatientProcess(process as HemorrhagePatientProcessRuntime, context.tickSeconds,
+      context.runtimeState.vitalSignState?.readings.systolicBp.current,
+      context.runtimeState.vitalSignState?.readings.temperature.current);
     return { processes: [result.process], aggregationRequested: true, events: result.events.map(event => ({
       eventType: event.eventType, details: event.details, target: context.inputEvent?.target,
       recordPhase: "BEFORE_AGGREGATION" as const,

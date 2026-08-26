@@ -482,7 +482,15 @@ export class ClinicalScenarioEngine {
 
   stopClinicalIntervention(sourceInterventionId: string): InterventionInstance | undefined {
     const cancelled = this.interventionRuntime.finishBySource(sourceInterventionId, "CANCELLED", this.simulationTimeSec);
-    if (cancelled) { this.projectInterventionState(cancelled); this.reconcileMtpAccessFromCanonicalCirculation(); this.publishResourceDebugSnapshot(); }
+    if (cancelled) {
+      for (const resourceId of cancelled.resourceIds) {
+        const resource = this.resourcePool.getResource(resourceId);
+        if (resource?.status === "RESERVED" && resource.assignedPatientId === cancelled.patientId) {
+          this.resourcePool.release(resourceId);
+        }
+      }
+      this.projectInterventionState(cancelled); this.reconcileMtpAccessFromCanonicalCirculation(); this.publishResourceDebugSnapshot();
+    }
     return cancelled;
   }
 

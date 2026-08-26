@@ -12,6 +12,13 @@ export type ResourceInterventionCommandResult =
 
 const results = new Map<string, ResourceInterventionCommandResult>();
 let manualAdvanceSequence = 0;
+let resourceInterventionSequence = 0;
+
+export function createResourceInterventionCommandId(exerciseId: string, patientId: string, resourceId: string): string {
+  resourceInterventionSequence += 1;
+  const simulationTimeSec = getCanonicalExerciseSnapshot().simulationTimeSec;
+  return `RESOURCE-${exerciseId}-${patientId}-${resourceId}-${simulationTimeSec}-${resourceInterventionSequence}`;
+}
 
 export function createManualRuntimeAdvanceCommandId(exerciseId: string, patientId: string): string {
   manualAdvanceSequence += 1;
@@ -51,7 +58,30 @@ export function handleResourceInterventionCommand(command: Readonly<{ commandId:
   return structuredClone(result);
 }
 
-export function resetResourceInterventionCommands(): void { results.clear(); manualAdvanceSequence = 0; }
+export function stopResourceInterventionCommand(command: Readonly<{ commandId: string; exerciseId: string;
+  patientId: string; sourceInterventionId: string; issuedBy: string }>): ResourceInterventionCommandResult {
+  const previous = results.get(command.commandId);
+  if (previous) return structuredClone(previous);
+  const exercise = getCanonicalExerciseSnapshot();
+  const owner = getInstructorRuntimeOwner(command.exerciseId, command.patientId);
+  const stopped = exercise.exerciseId === command.exerciseId && exercise.lifecycleState === "RUNNING"
+    ? owner?.stopResourceIntervention?.(command.commandId, command.sourceInterventionId) : undefined;
+  const result: ResourceInterventionCommandResult = !stopped
+    ? { ok: false, commandId: command.commandId, errorCode: "UNAVAILABLE", message: "Resource runtime is not available" }
+    : stopped.ok
+      ? { ok: true, commandId: command.commandId, runtimeEventId: stopped.runtimeEventId }
+      : { ok: false, commandId: command.commandId, errorCode: "RUNTIME_FAILURE", message: stopped.reason };
+  if (result.ok) {
+    const simulationTimeSec = getCanonicalPatientRuntimeSnapshot(command.patientId)?.state.exerciseTimeSec ?? 0;
+    addTimelineEvent({ id: `TL-RESOURCE-${command.commandId}`, exerciseId: command.exerciseId, patientId: command.patientId,
+      timestamp: `T+${simulationTimeSec}s`, simulationTimeSec, type: "intervention", title: "Vaagnalahas eemaldati",
+      description: "Vaagna stabiliseerimine katkestati", author: command.issuedBy, visibility: "revealed" });
+  }
+  results.set(command.commandId, structuredClone(result));
+  return structuredClone(result);
+}
+
+export function resetResourceInterventionCommands(): void { results.clear(); manualAdvanceSequence = 0; resourceInterventionSequence = 0; }
 
 export function advancePatientRuntime(command: Readonly<{ commandId: string; exerciseId: string; patientId: string;
   durationSec: number; issuedBy: string }>): ResourceInterventionCommandResult {

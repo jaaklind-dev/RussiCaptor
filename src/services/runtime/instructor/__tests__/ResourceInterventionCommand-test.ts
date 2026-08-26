@@ -5,7 +5,7 @@ import { packagePatientDatasetRegistry } from "@/services/exercise/CanonicalPati
 import { createPatientMaterializationPlan } from "@/services/exercise/PackagePatientMaterializationService";
 import { clearInstructorRuntimeOwners, registerInstructorRuntimeOwner } from "../InstructorRuntimeEventRegistry";
 import { createScenarioEngineInstructorRuntimeOwner } from "../ScenarioEngineInstructorRuntimeOwner";
-import { advancePatientRuntime, createManualRuntimeAdvanceCommandId, handleResourceInterventionCommand, resetResourceInterventionCommands } from "../ResourceInterventionCommandService";
+import { advancePatientRuntime, createManualRuntimeAdvanceCommandId, createResourceInterventionCommandId, handleResourceInterventionCommand, resetResourceInterventionCommands, stopResourceInterventionCommand } from "../ResourceInterventionCommandService";
 import { getCanonicalExerciseSnapshot, resetExerciseSession, restoreExerciseSession } from "@/repositories/ExerciseSessionRepository";
 import { clearExerciseClockTargets, registerExerciseClockTarget } from "@/services/runtime/exercise/ExerciseClockTargetRegistry";
 import { createScenarioEngineExerciseClockTarget } from "@/services/runtime/exercise/ScenarioEngineExerciseClockTarget";
@@ -33,6 +33,25 @@ describe("generic resource intervention command boundary", () => {
     expect(advancePatientRuntime({ commandId: "ADVANCE-1", exerciseId, patientId, durationSec: 60, issuedBy: "Exercise Controller" }).ok).toBe(true);
     expect(engine.getRuntimeState().exerciseTimeSec).toBe(120);
     expect(engine.getPatientProcesses().find(item => item.processType === "HEMORRHAGE")?.outputs.runtimeContributions?.cumulativeBloodLossMl).toBe(112);
+  });
+
+  test("releases a removed pelvic binder so it can be applied again", () => {
+    const fixture = createPatientMaterializationPlan(exerciseId, PELVIC_INJURY_EXERCISE_PACKAGE, packagePatientDatasetRegistry).patients[0].runtimeFixture!;
+    const engine = new ClinicalScenarioEngine(); engine.reset(structuredClone(fixture));
+    restoreExerciseSession({ exerciseId, lifecycleState: "RUNNING", simulationTimeSec: 0, speed: 1, version: 1, clockVersion: 2, clockInitializedAtSimulationTimeSec: 0 });
+    registerExerciseClockTarget(createScenarioEngineExerciseClockTarget(engine, patientId));
+    registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(engine, exerciseId, patientId));
+    const applied = handleResourceInterventionCommand({ commandId: "BINDER-APPLY-1", exerciseId, patientId, resourceId: "PB-1", issuedBy: "Case Manager" });
+    expect(applied.ok).toBe(true);
+    const sourceInterventionId = engine.getInterventionInstances().find(item => item.definitionId === "PELVIC_BINDER_APPLICATION")?.sourceInterventionId;
+    expect(sourceInterventionId).toBeDefined();
+
+    const removed = stopResourceInterventionCommand({ commandId: "BINDER-REMOVE-1", exerciseId, patientId, sourceInterventionId: sourceInterventionId!, issuedBy: "Case Manager" });
+
+    expect(removed.ok).toBe(true);
+    expect(engine.getResourcePoolSnapshot().find(item => item.resourceId === "PB-1")).toMatchObject({ status: "AVAILABLE", assignedPatientId: undefined });
+    expect(engine.getInterventionInstances().find(item => item.sourceInterventionId === sourceInterventionId)?.status).toBe("CANCELLED");
+    expect(handleResourceInterventionCommand({ commandId: "BINDER-APPLY-2", exerciseId, patientId, resourceId: "PB-1", issuedBy: "Case Manager" }).ok).toBe(true);
   });
 
   test("keeps the authoritative exercise clock and registered patient runtime aligned", () => {
@@ -132,6 +151,14 @@ describe("generic resource intervention command boundary", () => {
 
     expect(first).toBe(`RUNTIME-${exerciseId}-${patientId}-82-1`);
     expect(second).toBe(`RUNTIME-${exerciseId}-${patientId}-82-2`);
+  });
+
+  test("issues a distinct command id when a reusable resource receives a new application intent", () => {
+    restoreExerciseSession({ exerciseId, lifecycleState: "RUNNING", simulationTimeSec: 82, speed: 1, version: 1, clockVersion: 2, clockInitializedAtSimulationTimeSec: 0 });
+    const first = createResourceInterventionCommandId(exerciseId, patientId, "PB-1");
+    const second = createResourceInterventionCommandId(exerciseId, patientId, "PB-1");
+    expect(first).toBe(`RESOURCE-${exerciseId}-${patientId}-PB-1-82-1`);
+    expect(second).toBe(`RESOURCE-${exerciseId}-${patientId}-PB-1-82-2`);
   });
 
   test("does not accept a global snapshot version change when the commanded patient snapshot stays stale", () => {

@@ -352,3 +352,15 @@ export const PHYSIOLOGIC_DECOMPENSATION_REFERENCE_EXERCISE_PACKAGE = createExerc
   ]),
   metadata:{name:"Füsioloogilise dekompensatsiooni referentspakett",description:"WP-48 opt-in tehniline referents.",author:"RussiCaptor",organization:"RussiCaptor",createdVersion:"0.8.0",exerciseType:"TRAUMA",tags:["canonical","decompensation","reference","technical"]},
 });
+export const PRESSURE_DEPENDENT_HEMORRHAGE_REFERENCE_EXERCISE_PACKAGE = createExercisePackage({
+  packageId:"russicaptor.pressure-dependent-hemorrhage-reference", packageVersion:"1.0.0", definition:Object.freeze({
+    ...structuredClone(decompensationReferenceDefinition), exerciseTypeId:"RUSSICAPTOR_PRESSURE_DEPENDENT_HEMORRHAGE_REFERENCE",
+    name:"Rõhust sõltuva verejooksu referentsõppus", description:"Üldise rõhust sõltuva verejooksu tehniline vastuvõtufixtuur." }),
+  patientDatasetId:"patients.pressure-dependent-hemorrhage-reference.v1", enabledPatientProcesses:decompensationReferenceDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders:decompensationReferenceDefinition.enabledAnalyticsProviders, enabledMetricProviders:decompensationReferenceDefinition.enabledMetricProviders,
+  requiredClinicalModules:Object.freeze([
+    {moduleId:PELVIC_INJURY_MODULE_ID,version:PELVIC_INJURY_MODULE_VERSION},
+    {moduleId:MASSIVE_TRANSFUSION_MODULE_ID,version:MASSIVE_TRANSFUSION_MODULE_VERSION},
+  ]),
+  metadata:{name:"Rõhust sõltuva verejooksu referentspakett",description:"WP-48A opt-in tehniline referents; ei vali Narva paketi määra.",author:"RussiCaptor",organization:"RussiCaptor",createdVersion:"0.8.0",exerciseType:"TRAUMA",tags:["canonical","hemorrhage","pressure-dependent","reference","technical"]},
+});

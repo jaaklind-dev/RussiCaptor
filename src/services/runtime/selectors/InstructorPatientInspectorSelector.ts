@@ -42,6 +42,21 @@ function processLabel(process: RuntimeProcessProjection): string {
   return process.moduleId.replace(/_V\d+$/u, "").replaceAll("_", " ");
 }
 
+function processDetail(process: RuntimeProcessProjection): string {
+  if (process.moduleId !== "HEMORRHAGE_V1" || !process.clinicalState || process.clinicalState.sourceControlCeilingMlMin === undefined) return process.processId;
+  const state = process.clinicalState;
+  const parts = [
+    `allikas ${String(state.baseSourceRateMlMin)} ml/min`,
+    `vaagnalahas ${String(state.pelvicStabilizationState ?? "NONE")}`,
+    ...(state.timeSinceCorrectStabilizationSec === undefined ? [] : [`stabiliseeritud ${String(state.timeSinceCorrectStabilizationSec)} s`]),
+    `piir ${String(state.sourceControlCeilingMlMin)} ml/min`,
+    `rõhutegur ${String(state.pressureFactor)}`,
+    `koagulatsioon ${String(state.coagulationFactor)}`,
+    `tegelik ${String(state.bleedingRateMlMin)} ml/min`,
+  ];
+  return parts.join(" · ");
+}
+
 const newestFirst = (a: { timestamp: string }, b: { timestamp: string }) =>
   b.timestamp.localeCompare(a.timestamp);
 
@@ -72,7 +87,7 @@ export function projectInstructorPatientInspector(input: InstructorPatientInspec
       gcsCause: runtime?.physiologicDecompensation?.gcsCause, terminalState: runtime?.physiologicDecompensation?.clinicalState,
     },
     processes: (input.runtime?.processes ?? []).map(process => ({
-      id: process.processId, title: processLabel(process), detail: process.processId, status: process.status,
+      id: process.processId, title: processLabel(process), detail: processDetail(process), status: process.status,
     })),
     effects: [...input.activeEffects].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
       .map(effect => ({ id: effect.id, title: effect.name, detail: effect.source, status: "Active" })),

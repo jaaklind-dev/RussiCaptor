@@ -61,6 +61,17 @@ export function createScenarioEngineInstructorRuntimeOwner(
         return { ok: false, reason: error instanceof Error ? error.message : "Resource intervention failed" };
       }
     },
+    stopResourceIntervention(commandId, sourceInterventionId) {
+      if (!runtimeWritesAllowed()) return readOnly();
+      try {
+        const stopped = engine.stopClinicalIntervention(sourceInterventionId);
+        if (!stopped) return { ok: false, reason: "Active resource intervention was not found" };
+        notifySync("local");
+        return { ok: true, runtimeEventId: `INTERVENTION-STOP:${commandId}` };
+      } catch (error) {
+        return { ok: false, reason: error instanceof Error ? error.message : "Resource intervention removal failed" };
+      }
+    },
     executeMtpAction(commandId, action, units, options) {
       if (!runtimeWritesAllowed()) return readOnly();
       try {
