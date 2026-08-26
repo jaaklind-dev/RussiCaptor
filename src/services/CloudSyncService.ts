@@ -21,6 +21,7 @@ import {
   compactActiveExerciseState,
   withTerminalExerciseArchive,
 } from "@/services/runtime/persistence/ActiveCheckpointCompaction";
+import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
 
 export type CloudSyncStatus = {
   state: "disabled" | "connecting" | "synced" | "saving" | "offline" | "error";
@@ -251,6 +252,7 @@ export async function refreshRemoteCurrentExercise(): Promise<void> {
       .select(EXERCISE_DISCOVERY_COLUMNS)
       .or(EXERCISE_DISCOVERY_ACTIVE_FILTER)
       .order("updated_at", { ascending: false });
+    recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.discovery_active", data: activeRows });
     if (error) { setStatus({ state: "error", message: error.message }); return; }
     let discoveryRows = (activeRows ?? []) as unknown as ExerciseDiscoveryRow[];
     if (discoveryRows.length === 0) {
@@ -259,6 +261,7 @@ export async function refreshRemoteCurrentExercise(): Promise<void> {
         .select(EXERCISE_DISCOVERY_COLUMNS)
         .order("updated_at", { ascending: false })
         .limit(1);
+      recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.discovery_terminal", data: terminalRows });
       if (terminalError) { setStatus({ state: "error", message: terminalError.message }); return; }
       discoveryRows = (terminalRows ?? []) as unknown as ExerciseDiscoveryRow[];
     }
@@ -304,6 +307,7 @@ export async function refreshRemoteCurrentExercise(): Promise<void> {
           const { data: selectedRow, error: selectedError } = await supabase.from("exercise_states")
             .select("exercise_id,revision,state,updated_at,updated_by")
             .eq("exercise_id", discoveryRow.exercise_id).single();
+          recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.full_state", data: selectedRow, fullSnapshot: true });
           if (selectedError) { setStatus({ state: "error", message: selectedError.message }); return; }
           applyRemoteRow(selectedRow as ExerciseStateRow);
         }
@@ -332,6 +336,7 @@ export function selectConflictingRemoteExercise(exerciseId: string): boolean {
   } else {
     void supabase?.from("exercise_states").select("exercise_id,revision,state,updated_at,updated_by")
       .eq("exercise_id", selected.exerciseId).single().then(({data,error})=>{
+        recordSupabaseTraffic({operation:"SELECT",endpoint:"exercise_states.conflict_selected_full_state",data,fullSnapshot:true});
         if(error){setStatus({state:"error",message:error.message});return;}
         applyRemoteRow(data as ExerciseStateRow);
       });
@@ -386,6 +391,7 @@ async function saveToCloud(): Promise<void> {
     )
     .select("exercise_id,revision,updated_at")
     .single();
+  recordSupabaseTraffic({ operation: "UPSERT", endpoint: "exercise_states.projection", data });
 
   if (error) {
     setStatus({ state: "offline", syncedAt: status.syncedAt, message: error.message });
@@ -417,6 +423,7 @@ export async function migratePendingCompletedExerciseArchives(userId: string): P
       .select("exercise_id,revision,state,updated_at,updated_by")
       .eq("exercise_id", archive.exerciseId)
       .single();
+    recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.archive_migration_full_state", data, fullSnapshot: true });
     if (error || !data) continue;
     const row = data as ExerciseStateRow;
     if (!isSharedExerciseState(row.state)) continue;
@@ -447,6 +454,7 @@ export async function loadCompletedExerciseArchive(exerciseId: string): Promise<
     .select("completed_exercise_archives:state->completedExerciseArchives")
     .eq("exercise_id", exerciseId)
     .single();
+  recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.completed_archive", data });
   if (error) return undefined;
   const row = data as unknown as { completed_exercise_archives?: CompletedExerciseArchive[] };
   return archiveForExercise(row.completed_exercise_archives, exerciseId);

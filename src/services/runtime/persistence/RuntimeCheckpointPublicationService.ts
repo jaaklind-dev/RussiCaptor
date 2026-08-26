@@ -1,6 +1,6 @@
 import type { RuntimeCheckpointEnvelope, RuntimeWriterLease } from "@/models/RuntimeCheckpointAuthority";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
-import type { RuntimeCheckpointRepository } from "./RuntimeCheckpointRepository";
+import { loadCheckpointFreshness, type RuntimeCheckpointRepository } from "./RuntimeCheckpointRepository";
 
 export type RuntimeCheckpointPublicationTerminal = Readonly<
   | { state: "PUBLISHED"; checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>; reconciled: boolean }
@@ -41,11 +41,11 @@ export async function publishRuntimeCheckpointTerminal(
     return failure(rpc.value.code);
   }
 
-  const lookup = await bounded(repository.loadLatest(checkpoint.exerciseId), timeoutMs);
+  const lookup = await bounded(loadCheckpointFreshness(repository, checkpoint.exerciseId, "cas"), timeoutMs);
   if (!lookup.ok) return { state: "TRANSPORT_TIMEOUT", code: "CHECKPOINT_RECONCILIATION_TIMEOUT" };
   const remote = lookup.value;
   if (remote?.checkpointRevision === checkpoint.checkpointRevision && remote.payloadHash === checkpoint.payloadHash) {
-    return { state: "PUBLISHED", checkpoint: remote, reconciled: true };
+    return { state: "PUBLISHED", checkpoint, reconciled: true };
   }
   if (!remote || remote.checkpointRevision === expectedRevision) {
     return { state: "TRANSPORT_TIMEOUT", code: "CHECKPOINT_PUBLICATION_UNCERTAIN" };

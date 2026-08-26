@@ -5,6 +5,7 @@ import { terminateExerciseWithMissingRuntime } from "@/services/ExerciseRuntimeR
 import { startRuntimeCheckpointSync } from "@/services/RuntimeCheckpointSyncService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { supabase } from "@/services/SupabaseService";
+import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
 
 export type ActiveExerciseConflictDetail = Readonly<{ exerciseId:string; packageId?:string; lifecycle:string; updatedAt:string; simulationTimeSec?:number; version:number; checkpoint:"AVAILABLE"|"MISSING"|"UNKNOWN"; checkpointRevision?:number; lease:"ACTIVE"|"INACTIVE"|"UNKNOWN"; writerInstanceId?:string; recoveryEligible:boolean }>;
 type CheckpointRow={exercise_id:string;checkpoint_revision:number;writer_instance_id:string};
@@ -27,6 +28,8 @@ export async function loadActiveExerciseConflictDetails():Promise<readonly Activ
     supabase.from("runtime_checkpoints").select("exercise_id,checkpoint_revision,writer_instance_id").in("exercise_id",ids),
     supabase.from("runtime_writer_leases").select("exercise_id,writer_instance_id,expires_at,released_at").in("exercise_id",ids),
   ]);
+  recordSupabaseTraffic({operation:"SELECT",endpoint:"runtime_checkpoints.conflict_metadata",data:checkpointRows});
+  recordSupabaseTraffic({operation:"SELECT",endpoint:"runtime_writer_leases.conflict_metadata",data:leaseRows});
   if(checkpointError||leaseError)return Object.freeze(candidates.map(candidate=>detailFromCandidate(candidate,undefined,undefined,false)));
   const checkpoints=new Map(((checkpointRows??[])as CheckpointRow[]).map(row=>[row.exercise_id,row]));
   const leases=new Map(((leaseRows??[])as LeaseRow[]).map(row=>[row.exercise_id,row]));

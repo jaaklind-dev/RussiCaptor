@@ -12,6 +12,10 @@ function repository(remote: RuntimeCheckpointEnvelope<SharedExerciseState> | und
   return {
     publish: () => never,
     loadLatest: async () => remote,
+    loadLatestMetadata: async () => remote ? ({
+      exerciseId: remote.exerciseId, checkpointRevision: remote.checkpointRevision,
+      payloadHash: remote.payloadHash, provenanceHash: "P", writerInstanceId: "W",
+    }) : undefined,
     acquireWriter: jest.fn(), renewWriter: jest.fn(), releaseWriter: jest.fn(),
   } as RuntimeCheckpointRepository;
 }
@@ -31,7 +35,7 @@ describe("WP-44B terminal checkpoint publication", () => {
       .resolves.toEqual({ state: "REVISION_CONFLICT", code: "CHECKPOINT_REVISION_CONFLICT" });
   });
   test("hanging RPC and hanging reconciliation still terminate", async () => {
-    const hanging = { ...repository(undefined), loadLatest: () => never } as RuntimeCheckpointRepository;
+    const hanging = { ...repository(undefined), loadLatestMetadata: () => never } as RuntimeCheckpointRepository;
     await expect(publishRuntimeCheckpointTerminal(hanging, lease, 10, checkpoint, 2))
       .resolves.toEqual({ state: "TRANSPORT_TIMEOUT", code: "CHECKPOINT_RECONCILIATION_TIMEOUT" });
   });

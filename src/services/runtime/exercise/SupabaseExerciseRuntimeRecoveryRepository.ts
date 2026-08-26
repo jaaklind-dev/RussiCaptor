@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import type { ExerciseRuntimeRecoveryCommand, ExerciseRuntimeRecoveryErrorCode, ExerciseRuntimeRecoveryRepository } from "./ExerciseRuntimeRecoveryService";
+import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
 
 type RecoveryRow = Readonly<{ result_code: string; audit_id: string; recovered_state: SharedExerciseState | null }>;
 type ExerciseStateRow = Readonly<{ state: SharedExerciseState }>;
@@ -23,6 +24,8 @@ export class SupabaseExerciseRuntimeRecoveryRepository implements ExerciseRuntim
         this.client.from("exercise_states").select("state").eq("exercise_id", command.exerciseId).single(),
         this.client.from("exercise_runtime_recovery_audit").select("id,result").eq("exercise_id", command.exerciseId).order("occurred_at", { ascending: false }).limit(1),
       ]));
+      recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.recovery_full_state", data: stateRow, fullSnapshot: true });
+      recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_runtime_recovery_audit.latest", data: auditRows });
       if (stateError || auditError) return { code: "RECOVERY_CONFIRMATION_TIMEOUT" as const };
       const state = (stateRow as ExerciseStateRow | null)?.state;
       const session = state?.exerciseSession;
@@ -48,6 +51,7 @@ export class SupabaseExerciseRuntimeRecoveryRepository implements ExerciseRuntim
       return this.reconcileCommittedRecovery(command);
     }
     const { data, error } = response;
+    recordSupabaseTraffic({ operation: "RPC", endpoint: "terminate_exercise_with_missing_runtime", data, fullSnapshot: true });
     if (error) return this.reconcileCommittedRecovery(command);
     const row = (Array.isArray(data) ? data[0] : data) as RecoveryRow | undefined;
     if (!row) return { code: "RECOVERY_BACKEND_FAILED" as const };

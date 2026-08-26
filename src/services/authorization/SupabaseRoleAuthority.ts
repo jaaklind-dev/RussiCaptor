@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RoleAssignment } from "@/models/authorization/Authorization";
 import { deepFreeze } from "@/utils/immutable";
+import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
 
 type AssignmentRow = {
   id: string; user_id: string; role: string; scope_type: string; scope_id: string | null;
@@ -15,6 +16,7 @@ export class SupabaseRoleAuthority {
   async assignmentsFor(userId: string): Promise<RoleAuthorityResult> {
     try {
       const { data, error } = await this.client.from("authorization_role_assignments").select("id,user_id,role,scope_type,scope_id,status,issued_at,expires_at,issued_by").eq("user_id", userId);
+      recordSupabaseTraffic({ operation: "SELECT", endpoint: "authorization_role_assignments", data });
       if (error) return Object.freeze({ state: "UNAVAILABLE" });
       const rows = (data ?? []) as AssignmentRow[];
       if (rows.some(row => row.user_id !== userId || row.role !== "EXCON" || !["GLOBAL", "EXERCISE"].includes(row.scope_type) || !["ACTIVE", "REVOKED"].includes(row.status))) return Object.freeze({ state: "UNAVAILABLE" });

@@ -1,4 +1,4 @@
-import { SupabaseRuntimeCheckpointRepository } from "../RuntimeCheckpointRepository";
+import { loadCheckpointFreshness, SupabaseRuntimeCheckpointRepository } from "../RuntimeCheckpointRepository";
 
 function client(result:{data?:unknown;error?:{message:string}}){return {rpc:jest.fn(async()=>({data:result.data??null,error:result.error??null})),from:jest.fn(()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:result.data,error:result.error??null})})})}))} as never;}
 
@@ -33,5 +33,29 @@ describe("WP-44B Supabase repository diagnostics",()=>{
     await expect(repository.publish({leaseId:"L",exerciseId:"E",writerInstanceId:"W",userId:"U",expiresAt:"x"},4,checkpoint))
       .resolves.toEqual({status:"PUBLISHED",checkpoint});
     expect((mockClient as {rpc:jest.Mock}).rpc).toHaveBeenCalledWith("publish_runtime_checkpoint_metadata",expect.any(Object));
+  });
+  test("loads only checkpoint notification metadata for subscription reconciliation",async()=>{
+    const mockClient=client({data:{exercise_id:"E",checkpoint_revision:5,payload_hash:"H",provenance_hash:"P",writer_instance_id:"W",updated_at:"2026-08-26T00:00:00Z"}}) as never;
+    const repository=new SupabaseRuntimeCheckpointRepository(mockClient);
+    await expect(repository.loadLatestMetadata("E")).resolves.toEqual({exerciseId:"E",checkpointRevision:5,payloadHash:"H",provenanceHash:"P",writerInstanceId:"W",updatedAt:"2026-08-26T00:00:00Z"});
+    expect((mockClient as {from:jest.Mock}).from).toHaveBeenCalledWith("runtime_checkpoint_notifications");
+  });
+  test("freshness decisions avoid payload reads when atomic metadata exists",async()=>{
+    const repository={loadLatestMetadata:jest.fn(async()=>({exerciseId:"E",checkpointRevision:5,payloadHash:"H",provenanceHash:"P",writerInstanceId:"W"})),loadLatest:jest.fn()};
+    await expect(loadCheckpointFreshness(repository,"E","takeover")).resolves.toMatchObject({checkpointRevision:5,payloadHash:"H"});
+    expect(repository.loadLatest).not.toHaveBeenCalled();
+  });
+  test("missing metadata falls back to the authoritative payload",async()=>{
+    const repository={loadLatestMetadata:jest.fn(async()=>undefined),loadLatest:jest.fn(async()=>({exerciseId:"E",checkpointRevision:5,payloadHash:"H",provenanceHash:"P"}))};
+    await expect(loadCheckpointFreshness(repository as never,"E","recovery")).resolves.toMatchObject({checkpointRevision:5,payloadHash:"H"});
+    expect(repository.loadLatest).toHaveBeenCalledWith("E","runtime_checkpoints.recovery_fallback_payload");
+  });
+  test("malformed or rollout-unavailable metadata fails safe through payload fallback",async()=>{
+    const checkpoint={exerciseId:"E",checkpointRevision:5,payloadHash:"H",provenanceHash:"P"};
+    const malformed={loadLatestMetadata:jest.fn(async()=>undefined),loadLatest:jest.fn(async()=>checkpoint)};
+    const unavailable={loadLatestMetadata:jest.fn(async()=>{throw new Error("AUTHORITY_UNAVAILABLE");}),loadLatest:jest.fn(async()=>checkpoint)};
+    await expect(loadCheckpointFreshness(malformed as never,"E","cas")).resolves.toMatchObject(checkpoint);
+    await expect(loadCheckpointFreshness(unavailable as never,"E","cas")).resolves.toMatchObject(checkpoint);
+    expect(malformed.loadLatest).toHaveBeenCalledTimes(1); expect(unavailable.loadLatest).toHaveBeenCalledTimes(1);
   });
 });

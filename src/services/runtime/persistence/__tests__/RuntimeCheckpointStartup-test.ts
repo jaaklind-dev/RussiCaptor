@@ -31,6 +31,10 @@ describe("WP-44B checkpoint startup coordination", () => {
   const recovery = (remote: RuntimeCheckpointEnvelope<never> | undefined = checkpoint()) => {
     const repository = {
       loadLatest: jest.fn(async () => remote),
+      loadLatestMetadata: jest.fn(async () => remote ? ({
+        exerciseId: remote.exerciseId, checkpointRevision: remote.checkpointRevision,
+        payloadHash: remote.payloadHash, provenanceHash: "PROVENANCE", writerInstanceId: "WRITER-A",
+      }) : undefined),
       releaseWriter: jest.fn(async () => undefined),
     };
     const acquire = jest.fn(async () => ({ status:"ACQUIRED" as const, checkpointRevision:remote?.checkpointRevision ?? 0, lease:writerLease }));
@@ -59,17 +63,26 @@ describe("WP-44B checkpoint startup coordination", () => {
   test("behavior: duplicate recovery intent is idempotent", async () => {
     const fixture=recovery(); const coordinator=new RuntimeCheckpointRecoveryCoordinator();
     const [first,second]=await Promise.all([coordinator.recover(fixture.request as never),coordinator.recover(fixture.request as never)]);
-    expect(second).toBe(first); expect(fixture.repository.loadLatest).toHaveBeenCalledTimes(2);
+    expect(second).toBe(first); expect(fixture.repository.loadLatest).toHaveBeenCalledTimes(1);
+    expect(fixture.repository.loadLatestMetadata).toHaveBeenCalledTimes(1);
     expect(fixture.acquire).toHaveBeenCalledTimes(1); expect(fixture.adopt).toHaveBeenCalledTimes(1);
   });
 
   test("behavior: remote change during acquisition fails closed and releases the acquired lease", async () => {
-    const fixture=recovery(); fixture.repository.loadLatest
-      .mockResolvedValueOnce(checkpoint("EX-1",10,"HASH-10")).mockResolvedValueOnce(checkpoint("EX-1",11,"HASH-11"));
+    const fixture=recovery(); fixture.repository.loadLatest.mockResolvedValueOnce(checkpoint("EX-1",10,"HASH-10"));
+    fixture.repository.loadLatestMetadata.mockResolvedValueOnce({exerciseId:"EX-1",checkpointRevision:11,payloadHash:"HASH-11",provenanceHash:"P",writerInstanceId:"WRITER-B"});
     await expect(new RuntimeCheckpointRecoveryCoordinator().recover(fixture.request as never)).resolves.toEqual({
       state:"REJECTED",code:"CHECKPOINT_REVISION_CONFLICT",revision:11,
     });
     expect(fixture.repository.releaseWriter).toHaveBeenCalledWith(writerLease); expect(fixture.adopt).not.toHaveBeenCalled();
+  });
+
+  test("behavior: matching post-acquisition metadata adopts the original validated payload without a second full read", async () => {
+    const fixture=recovery();
+    await expect(new RuntimeCheckpointRecoveryCoordinator().recover(fixture.request as never)).resolves.toMatchObject({state:"RECOVERED"});
+    expect(fixture.repository.loadLatest).toHaveBeenCalledTimes(1);
+    expect(fixture.repository.loadLatestMetadata).toHaveBeenCalledTimes(1);
+    expect(fixture.adopt).toHaveBeenCalledWith(expect.objectContaining({payloadHash:"HASH-10"}),writerLease);
   });
 
   test("behavior: active competing writer is never adopted or released", async () => {
@@ -99,7 +112,7 @@ describe("WP-44B checkpoint startup coordination", () => {
   });
 
   test("behavior: restart after recovery continues the same exercise lineage", async () => {
-    let remote=checkpoint(); const repository={loadLatest:jest.fn(async()=>remote),releaseWriter:jest.fn(async()=>undefined)};
+    let remote=checkpoint(); const repository={loadLatest:jest.fn(async()=>remote),loadLatestMetadata:jest.fn(async()=>({exerciseId:remote.exerciseId,checkpointRevision:remote.checkpointRevision,payloadHash:remote.payloadHash,provenanceHash:"P",writerInstanceId:"WRITER-A"})),releaseWriter:jest.fn(async()=>undefined)};
     const run=async(intentId:string)=>new RuntimeCheckpointRecoveryCoordinator().recover({intentId,exerciseId:"EX-1",writerInstanceId:"WRITER-A",repository,
       acquire:async (revision: number)=>({status:"ALREADY_OWNED",checkpointRevision:revision,lease:writerLease}),validate:(value: RuntimeCheckpointEnvelope<never> | undefined):value is RuntimeCheckpointEnvelope<never>=>Boolean(value),adopt:async()=>undefined} as never);
     await expect(run("BEFORE-RESTART")).resolves.toMatchObject({state:"RECOVERED",checkpoint:{checkpointRevision:10}});
@@ -324,6 +337,9 @@ describe("WP-44B checkpoint startup coordination", () => {
   test("reconnect and legitimate authority acquisition rearm the same publication scheduler", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     expect(source).toContain('if(channelStatus==="SUBSCRIBED"&&!generationStopped()){renewalLoop?.wake();requestPublish();}');
+    expect(source).toContain('table:"runtime_checkpoint_notifications"');
+    expect(source).toContain('"runtime_checkpoint_notifications.reconnect_metadata"');
+    expect(source).not.toContain('table:"runtime_checkpoints",filter:');
     expect(source.match(/wakeCheckpointPublicationForCurrentWriter\?\.\(\)/g)).toHaveLength(2);
     expect(source).toContain("if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined");
   });
@@ -536,6 +552,13 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(restore).toBeGreaterThan(writer);
   });
 
+  test("takeover second freshness check is metadata-only", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const takeover = source.slice(source.indexOf("export async function takeOverRuntimeWriter"), source.indexOf("function setAndReturn"));
+    expect(takeover.match(/repository\.loadLatest\(exerciseId/g)).toHaveLength(1);
+    expect(takeover).toContain('loadCheckpointFreshness(repository,exerciseId,"takeover")');
+  });
+
   test("explicit revision-conflict recovery delegates one user intent to the recovery coordinator", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     const recovery = source.slice(source.indexOf("export function reacquireRuntimeFromRemoteCheckpoint"), source.indexOf("function setAndReturn"));
@@ -629,7 +652,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const fence = source.indexOf("const generationStopped = () => stopped || generation !== exerciseSyncGeneration;", generation);
     const publishFence = source.indexOf("if(generationStopped())return;", source.indexOf("const publish=()=>", fence));
     const renewalFence = source.indexOf("isWriter:()=>!generationStopped()", publishFence);
-    const realtimeFence = source.indexOf("if(generationStopped())return;", source.indexOf("const channel:", renewalFence));
+    const realtimeFence = source.indexOf("if(generationStopped())return;", source.indexOf("const handleMetadata=", renewalFence));
     const guardedRelease = source.indexOf("if(generation===exerciseSyncGeneration&&lease)", realtimeFence);
     expect(generation).toBeGreaterThan(-1);
     expect(fence).toBeGreaterThan(generation);
