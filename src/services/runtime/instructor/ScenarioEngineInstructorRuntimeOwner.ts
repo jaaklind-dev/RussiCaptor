@@ -64,10 +64,17 @@ export function createScenarioEngineInstructorRuntimeOwner(
     executeMtpAction(commandId, action, units, options) {
       if (!runtimeWritesAllowed()) return readOnly();
       try {
+        const administrationId = typeof options?.administrationId === "string" ? options.administrationId : undefined;
+        const beforeMode = action === "BLOOD_PRODUCT_DELIVERY_MODE_CHANGE" && administrationId
+          ? (engine.getPatientProcesses().find(item => item.processType === "MASSIVE_TRANSFUSION") as { clinicalState?: { administrations?: readonly { administrationId: string; deliveryMode?: string }[] } } | undefined)
+            ?.clinicalState?.administrations?.find(item => item.administrationId === administrationId)?.deliveryMode
+          : undefined;
         engine.dispatch({ sequenceId: `SEQ:${commandId}`, step: 1, offsetSec: engine.getRuntimeState().exerciseTimeSec,
           eventType: "ACTION", actor: "EXCON", target: patientId, eventId: `MTP:${commandId}`, actionId: action,
           result: "SUCCESS", payload: { units, ...options } });
-        notifySync("local"); return { ok: true, runtimeEventId: `MTP:${commandId}` };
+        const changed = action !== "BLOOD_PRODUCT_DELIVERY_MODE_CHANGE" || beforeMode !== options?.deliveryMode;
+        if (changed) notifySync("local");
+        return { ok: true, runtimeEventId: `MTP:${commandId}`, changed };
       } catch (error) { return { ok: false, reason: error instanceof Error ? error.message : "MTP action failed" }; }
     },
     advanceRuntime(commandId, durationSec, canonicalSimulationTimeSec) {

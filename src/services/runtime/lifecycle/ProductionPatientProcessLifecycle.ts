@@ -12,7 +12,7 @@ import { bootstrapCardiacArrestPatientProcess, drainCardiacEvidence, tickCardiac
 import { bootstrapPleuralInjuryPatientProcess, tickPleuralInjuryPatientProcess } from "@/services/runtime/PleuralInjuryPatientProcess";
 import { bootstrapRespiratoryFailurePatientProcess, tickRespiratoryFailurePatientProcess } from "@/services/runtime/RespiratoryFailurePatientProcess";
 import type { BloodProductDeliveryMode, MassiveTransfusionPatientProcessRuntime, VascularAccessLineId } from "@/models/MassiveTransfusion";
-import { activateMassiveTransfusion, administerMtpCalcium, bootstrapMassiveTransfusionPatientProcess, drainMassiveTransfusionEvidence, startBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
+import { activateMassiveTransfusion, administerMtpCalcium, bootstrapMassiveTransfusionPatientProcess, changeBloodProductDeliveryMode, drainMassiveTransfusionEvidence, startBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
 
 const respiratoryImpairment = (processes: readonly CanonicalLifecycleProcess[]) => Math.max(1, ...processes.map(process => Number(process.outputs.runtimeContributions?.respiratoryImpairmentMultiplier ?? 1)));
 const pleuralRespiratoryRecovery = (processes: readonly CanonicalLifecycleProcess[]): PleuralRespiratoryRecoveryConfiguration | undefined => {
@@ -242,6 +242,10 @@ const massiveTransfusion: PatientProcessLifecycleDescriptor = {
     let next: MassiveTransfusionPatientProcessRuntime;
     if (event.actionId === "MTP_ACTIVATION") next = activateMassiveTransfusion(current, event.eventId);
     else if (event.actionId === "CALCIUM_ADMINISTRATION") next = administerMtpCalcium(current, event.eventId);
+    else if (event.actionId === "BLOOD_PRODUCT_DELIVERY_MODE_CHANGE") {
+      const payload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload) ? event.payload as Record<string, unknown> : {};
+      next = changeBloodProductDeliveryMode(current, event.eventId, String(payload.administrationId), String(payload.deliveryMode) as BloodProductDeliveryMode);
+    }
     else {
       const product = ({ RBC_ADMINISTRATION: "RBC", PLASMA_ADMINISTRATION: "PLASMA", PLATELET_ADMINISTRATION: "PLATELETS" } as const)[event.actionId as "RBC_ADMINISTRATION" | "PLASMA_ADMINISTRATION" | "PLATELET_ADMINISTRATION"];
       if (!product) return undefined;

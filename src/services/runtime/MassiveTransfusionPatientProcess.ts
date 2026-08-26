@@ -112,6 +112,36 @@ const durationForMode = (configuration: MassiveTransfusionConfiguration, mode: B
     RAPID_INFUSER: delivery.rapidInfuserDurationSec } as const)[mode];
 };
 
+export function changeBloodProductDeliveryMode(previous: MassiveTransfusionPatientProcessRuntime, commandId: string,
+  administrationId: string, deliveryMode: BloodProductDeliveryMode): MassiveTransfusionPatientProcessRuntime {
+  previous = normalizePatientTransfusionState(previous);
+  if (previous.clinicalState.processedCommandIds.includes(commandId)) return structuredClone(previous);
+  const administration = previous.clinicalState.administrations.find(item => item.administrationId === administrationId);
+  if (!administration || administration.state !== "RUNNING" || !administration.vascularAccessLineId)
+    throw new Error("BLOOD_PRODUCT_ADMINISTRATION_NOT_RUNNING");
+  if ((administration.deliveryMode ?? "GRAVITY") === deliveryMode) return structuredClone(previous);
+  const durationSec = durationForMode(previous.configuration, deliveryMode);
+  if (!durationSec) throw new Error("BLOOD_PRODUCT_DELIVERY_NOT_CONFIGURED");
+  const delivery = previous.configuration.bloodProductDelivery!;
+  if (deliveryMode === "RAPID_INFUSER" && previous.clinicalState.administrations.filter(item =>
+    item.state === "RUNNING" && item.administrationId !== administrationId && item.deliveryMode === "RAPID_INFUSER").length >= delivery.rapidInfuserBagCapacity)
+    throw new Error("DELIVERY_DEVICE_CAPACITY_FULL");
+  const remainingFraction = Math.max(0, 1 - administration.deliveredVolumeMl / administration.totalVolumeMl);
+  const remainingDurationSec = precise(durationSec * remainingFraction);
+  const base = structuredClone(previous);
+  base.clinicalState.processedCommandIds.push(commandId); base.clinicalState.processedCommandIds.sort();
+  base.clinicalState.administrations = base.clinicalState.administrations.map(item => item.administrationId === administrationId ? {
+    ...item, deliveryMode, durationSec,
+    expectedCompletionAtSec: precise(base.elapsedTime + remainingDurationSec),
+  } : item);
+  base.pendingEvidence.push({ eventType: "BLOOD_PRODUCT_DELIVERY_MODE_CHANGED", details: {
+    commandId, administrationId, vascularAccessLineId: administration.vascularAccessLineId,
+    from: administration.deliveryMode ?? "GRAVITY", to: deliveryMode, deliveredVolumeMl: administration.deliveredVolumeMl,
+    expectedCompletionAtSec: precise(base.elapsedTime + remainingDurationSec),
+  } });
+  const { outputs: _outputs, ...without } = base; return withOutput(without);
+}
+
 export function reconcileMtpVascularAccess(previous: MassiveTransfusionPatientProcessRuntime,
   canonicalAccesses: readonly ActiveVascularAccess[]): MassiveTransfusionPatientProcessRuntime {
   previous = normalizePatientTransfusionState(previous);

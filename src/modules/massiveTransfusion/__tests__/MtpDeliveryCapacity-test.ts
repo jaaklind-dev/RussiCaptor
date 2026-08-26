@@ -2,7 +2,7 @@ import { MTP_REFERENCE_CONFIGURATION, WP47C_DEFAULT_DELIVERY_CONFIGURATION, type
   type MassiveTransfusionConfiguration, type MassiveTransfusionPatientProcessRuntime } from "@/models/MassiveTransfusion";
 import type { ActiveVascularAccess } from "@/models/CirculationState";
 import { activateMassiveTransfusion, bootstrapMassiveTransfusionPatientProcess, reconcileMtpVascularAccess,
-  startBloodProductAdministration, terminateBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
+  changeBloodProductDeliveryMode, startBloodProductAdministration, terminateBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
 
 const configuration = (): MassiveTransfusionConfiguration => ({
   ...structuredClone(MTP_REFERENCE_CONFIGURATION),
@@ -72,6 +72,94 @@ describe("WP-47C delivery rate and vascular access capacity", () => {
     const rapid = tickMassiveTransfusionPatientProcess(start(fresh(1), "R2", "RBC", "RAPID_INFUSER"), 60);
     expect(gravity.clinicalState.transfusedVolumeMl).toBe(25);
     expect(rapid.clinicalState.transfusedVolumeMl).toBe(100);
+  });
+
+  test("changes delivery mode per running dose without losing delivered volume", () => {
+    let process = tickMassiveTransfusionPatientProcess(start(fresh(2), "R1", "RBC", "GRAVITY", "IV-1"), 120);
+    process = start(process, "P1", "PLASMA", "GRAVITY", "IV-2");
+    const delivered = process.clinicalState.administrations.find(item => item.administrationId === "R1")!.deliveredVolumeMl;
+    process = changeBloodProductDeliveryMode(process, "MODE-1", "R1", "RAPID_INFUSER");
+    expect(process.clinicalState.administrations.find(item => item.administrationId === "R1")).toMatchObject({
+      vascularAccessLineId: "IV-1", deliveryMode: "RAPID_INFUSER", deliveredVolumeMl: delivered, expectedCompletionAtSec: 270,
+    });
+    expect(process.clinicalState.administrations.find(item => item.administrationId === "P1")?.deliveryMode).toBe("GRAVITY");
+    expect(changeBloodProductDeliveryMode(process, "MODE-1", "R1", "PRESSURE_BAG")).toEqual(process);
+  });
+
+  test("recalculates only remaining delivery for slow-to-fast and fast-to-slow switches", () => {
+    const gravityPartial = tickMassiveTransfusionPatientProcess(start(fresh(1), "R1", "RBC", "GRAVITY", "IV-1"), 240);
+    const pressure = changeBloodProductDeliveryMode(gravityPartial, "MODE-P", "R1", "PRESSURE_BAG");
+    expect(pressure.clinicalState.administrations[0]).toMatchObject({ administrationId: "R1", deliveredVolumeMl: 100,
+      deliveryMode: "PRESSURE_BAG", expectedCompletionAtSec: 560, startedAtSec: 0, vascularAccessLineId: "IV-1" });
+    const rapid = changeBloodProductDeliveryMode(gravityPartial, "MODE-R", "R1", "RAPID_INFUSER");
+    expect(rapid.clinicalState.administrations[0]).toMatchObject({ deliveredVolumeMl: 100, expectedCompletionAtSec: 360 });
+
+    const rapidPartial = tickMassiveTransfusionPatientProcess(start(fresh(1), "R2", "RBC", "RAPID_INFUSER", "IV-1"), 60);
+    const gravity = changeBloodProductDeliveryMode(rapidPartial, "MODE-G", "R2", "GRAVITY");
+    expect(gravity.clinicalState.administrations[0]).toMatchObject({ administrationId: "R2", deliveredVolumeMl: 100,
+      deliveryMode: "GRAVITY", expectedCompletionAtSec: 540, startedAtSec: 0, vascularAccessLineId: "IV-1" });
+  });
+
+  test("mode switches preserve inventory and count one RBC completion exactly once", () => {
+    let process = tickMassiveTransfusionPatientProcess(start(fresh(1), "R1", "RBC", "GRAVITY", "IV-1"), 120);
+    const inventory = structuredClone(process.clinicalState.inventory);
+    process = changeBloodProductDeliveryMode(process, "MODE-P", "R1", "PRESSURE_BAG");
+    process = changeBloodProductDeliveryMode(process, "MODE-R", "R1", "RAPID_INFUSER");
+    expect(process.clinicalState.inventory).toEqual(inventory);
+    expect(process.clinicalState.transfusionCalcium.completedRbcUnitsTotal).toBe(0);
+    process = tickMassiveTransfusionPatientProcess(process, 150);
+    expect(process.clinicalState.administrations[0].state).toBe("COMPLETED");
+    expect(process.clinicalState.transfusionCalcium.completedRbcUnitsTotal).toBe(1);
+    expect(tickMassiveTransfusionPatientProcess(process, 60).clinicalState.transfusionCalcium.completedRbcUnitsTotal).toBe(1);
+  });
+
+  test("same-mode selection is a stable no-op without command or evidence drift", () => {
+    const process = tickMassiveTransfusionPatientProcess(start(fresh(1), "R1", "RBC", "GRAVITY", "IV-1"), 120);
+    const same = changeBloodProductDeliveryMode(process, "MODE-SAME", "R1", "GRAVITY");
+    expect(same).toEqual(process);
+    expect(same.clinicalState.processedCommandIds).not.toContain("MODE-SAME");
+    expect(same.pendingEvidence.filter(item => item.eventType === "BLOOD_PRODUCT_DELIVERY_MODE_CHANGED")).toHaveLength(0);
+  });
+
+  test.each(["COMPLETED", "CANCELLED", "FAILED"] as const)("%s administration cannot be switched or resurrected", terminal => {
+    let process = start(fresh(1), "R1", "RBC", "RAPID_INFUSER", "IV-1");
+    process = terminal === "COMPLETED" ? tickMassiveTransfusionPatientProcess(process, 180)
+      : terminateBloodProductAdministration(process, "R1", terminal);
+    expect(() => changeBloodProductDeliveryMode(process, `MODE-${terminal}`, "R1", "GRAVITY"))
+      .toThrow("BLOOD_PRODUCT_ADMINISTRATION_NOT_RUNNING");
+    expect(process.clinicalState.administrations[0].state).toBe(terminal);
+  });
+
+  test("running-dose mode change enforces rapid-infuser capacity", () => {
+    let process = start(fresh(3), "R1", "RBC", "RAPID_INFUSER", "IV-1");
+    process = start(process, "P1", "PLASMA", "RAPID_INFUSER", "IV-2");
+    process = start(process, "T1", "PLATELETS", "GRAVITY", "IV-3");
+    expect(() => changeBloodProductDeliveryMode(process, "MODE-3", "T1", "RAPID_INFUSER")).toThrow("DELIVERY_DEVICE_CAPACITY_FULL");
+    expect(process.clinicalState.administrations.find(item => item.administrationId === "T1")?.deliveryMode).toBe("GRAVITY");
+  });
+
+  test("completion releases one rapid slot for a later running-bag switch", () => {
+    let process = start(fresh(3), "R1", "RBC", "RAPID_INFUSER", "IV-1");
+    process = start(process, "P1", "PLASMA", "RAPID_INFUSER", "IV-2");
+    process = start(process, "T1", "PLATELETS", "GRAVITY", "IV-3");
+    process = tickMassiveTransfusionPatientProcess(process, 180);
+    process = changeBloodProductDeliveryMode(process, "MODE-T", "T1", "RAPID_INFUSER");
+    expect(process.clinicalState.administrations.find(item => item.administrationId === "T1")).toMatchObject({
+      state: "RUNNING", deliveryMode: "RAPID_INFUSER", vascularAccessLineId: "IV-3",
+    });
+    expect(process.clinicalState.administrations.filter(item => item.state === "RUNNING" && item.deliveryMode === "RAPID_INFUSER")).toHaveLength(1);
+  });
+
+  test("restart and takeover preserve a switched administration and one switch evidence record", () => {
+    let process = tickMassiveTransfusionPatientProcess(start(fresh(1), "R1", "RBC", "GRAVITY", "IV-1"), 240);
+    process = changeBloodProductDeliveryMode(process, "MODE-1", "R1", "PRESSURE_BAG");
+    const restored = structuredClone(process);
+    expect(restored.clinicalState.administrations).toEqual(process.clinicalState.administrations);
+    expect(restored.clinicalState.inventory).toEqual(process.clinicalState.inventory);
+    expect(restored.pendingEvidence.filter(item => item.eventType === "BLOOD_PRODUCT_DELIVERY_MODE_CHANGED")).toHaveLength(1);
+    const replay = changeBloodProductDeliveryMode(restored, "MODE-1", "R1", "RAPID_INFUSER");
+    expect(replay).toEqual(restored);
+    expect(tickMassiveTransfusionPatientProcess(restored, 320).clinicalState.administrations[0].state).toBe("COMPLETED");
   });
 
   test("completion releases a line for a new deterministic start", () => {

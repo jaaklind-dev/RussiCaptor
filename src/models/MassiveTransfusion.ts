@@ -44,7 +44,7 @@ export type BloodProductAdministration = Readonly<{
   durationSec?: number;
 }>;
 export type MassiveTransfusionEvidence = Readonly<{
-  eventType: "MTP_ACTIVATED" | "BLOOD_PRODUCT_ADMINISTRATION_STARTED" | "BLOOD_PRODUCT_ADMINISTRATION_COMPLETED" | "MTP_CALCIUM_DUE" | "MTP_CALCIUM_ADMINISTERED";
+  eventType: "MTP_ACTIVATED" | "BLOOD_PRODUCT_ADMINISTRATION_STARTED" | "BLOOD_PRODUCT_DELIVERY_MODE_CHANGED" | "BLOOD_PRODUCT_ADMINISTRATION_COMPLETED" | "MTP_CALCIUM_DUE" | "MTP_CALCIUM_ADMINISTERED";
   details: Readonly<Record<string, unknown>>;
 }>;
 export type TransfusionCalciumSupportState = {
