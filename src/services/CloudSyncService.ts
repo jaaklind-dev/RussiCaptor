@@ -22,6 +22,12 @@ import {
   withTerminalExerciseArchive,
 } from "@/services/runtime/persistence/ActiveCheckpointCompaction";
 import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
+import { AppState } from "react-native";
+import {
+  EXERCISE_DISCOVERY_SAFETY_INTERVAL_MS,
+  ExerciseDiscoveryRefreshCoordinator,
+  type ExerciseDiscoveryRefreshTrigger,
+} from "@/services/exercise/ExerciseDiscoveryRefreshCoordinator";
 
 export type CloudSyncStatus = {
   state: "disabled" | "connecting" | "synced" | "saving" | "offline" | "error";
@@ -89,17 +95,25 @@ let status: CloudSyncStatus = isSupabaseConfigured
   : { state: "disabled" };
 let listeners: CloudStatusListener[] = [];
 let remotePollTimer: ReturnType<typeof setInterval> | undefined;
+let stopDiscoveryConnectivity: (() => void) | undefined;
+let stopDiscoveryAppState: (() => void) | undefined;
 let stopLocalSubscription: (() => void) | undefined;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 const remoteVersions = new Map<string, Readonly<{ revision: number; updatedAt: string }>>();
 let applyingRemoteState = false;
 let latestRemoteExercise: Readonly<{ exerciseId: string; lifecycleState: string }> | undefined;
-let refreshingRemoteSelection = false;
+let lastDiscoveryResponseBytes = 0;
 type RemoteSelectionState = "UNRESOLVED" | "RESOLVED" | "CONFLICT";
 let remoteSelectionState: RemoteSelectionState = "UNRESOLVED";
 let conflictingRemoteExercises: CurrentExerciseCandidate[] = [];
 let explicitlySelectedExerciseId: string | undefined;
 export const CLOUD_PROJECTION_INTERVAL_MS = 5_000;
+export { EXERCISE_DISCOVERY_SAFETY_INTERVAL_MS };
+
+function serializedBytes(value: unknown): number {
+  if (value === undefined || value === null) return 0;
+  try { return new TextEncoder().encode(JSON.stringify(value)).byteLength; } catch { return 0; }
+}
 
 export function getConflictingRemoteExercises(): readonly CurrentExerciseCandidate[] {
   return Object.freeze(conflictingRemoteExercises.map(candidate => Object.freeze({ ...candidate })));
@@ -243,16 +257,15 @@ function applyRemoteRow(row: ExerciseStateRow): void {
   setStatus({ state: "synced", syncedAt: row.updated_at });
 }
 
-export async function refreshRemoteCurrentExercise(): Promise<void> {
-  if (!supabase || refreshingRemoteSelection) return;
-  refreshingRemoteSelection = true;
-  try {
-    const { data: activeRows, error } = await supabase
+async function performRemoteCurrentExerciseRefresh(_trigger: ExerciseDiscoveryRefreshTrigger): Promise<void> {
+  if (!supabase) return;
+  const { data: activeRows, error } = await supabase
       .from("exercise_states")
       .select(EXERCISE_DISCOVERY_COLUMNS)
       .or(EXERCISE_DISCOVERY_ACTIVE_FILTER)
       .order("updated_at", { ascending: false });
     recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.discovery_active", data: activeRows });
+    lastDiscoveryResponseBytes = serializedBytes(activeRows);
     if (error) { setStatus({ state: "error", message: error.message }); return; }
     let discoveryRows = (activeRows ?? []) as unknown as ExerciseDiscoveryRow[];
     if (discoveryRows.length === 0) {
@@ -262,6 +275,7 @@ export async function refreshRemoteCurrentExercise(): Promise<void> {
         .order("updated_at", { ascending: false })
         .limit(1);
       recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.discovery_terminal", data: terminalRows });
+      lastDiscoveryResponseBytes += serializedBytes(terminalRows);
       if (terminalError) { setStatus({ state: "error", message: terminalError.message }); return; }
       discoveryRows = (terminalRows ?? []) as unknown as ExerciseDiscoveryRow[];
     }
@@ -316,9 +330,16 @@ export async function refreshRemoteCurrentExercise(): Promise<void> {
       remoteSelectionState = "RESOLVED";
       await saveToCloud();
     }
-  } finally {
-    refreshingRemoteSelection = false;
-  }
+}
+
+const discoveryRefreshCoordinator = new ExerciseDiscoveryRefreshCoordinator(
+  performRemoteCurrentExerciseRefresh,
+  metric => recordSupabaseTraffic(metric),
+  () => lastDiscoveryResponseBytes,
+);
+
+export function refreshRemoteCurrentExercise(trigger: ExerciseDiscoveryRefreshTrigger = "manual"): Promise<void> {
+  return discoveryRefreshCoordinator.request(trigger);
 }
 
 /** Explicitly resolves a previously discovered authoritative conflict. */
@@ -484,6 +505,7 @@ export async function startCloudSync(): Promise<() => void> {
     setStatus({ state: "disabled" });
     return () => {};
   }
+  const cloudClient = supabase;
 
   setStatus({ state: "connecting" });
   remoteSelectionState = "UNRESOLVED";
@@ -493,6 +515,8 @@ export async function startCloudSync(): Promise<() => void> {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = undefined; }
   stopLocalSubscription?.(); stopLocalSubscription = undefined;
   if (remotePollTimer) { clearInterval(remotePollTimer); remotePollTimer = undefined; }
+  stopDiscoveryConnectivity?.(); stopDiscoveryConnectivity = undefined;
+  stopDiscoveryAppState?.(); stopDiscoveryAppState = undefined;
 
   const { data: sessionData } = await supabase.auth.getSession();
   if (!sessionData.session) {
@@ -506,12 +530,43 @@ export async function startCloudSync(): Promise<() => void> {
   const { data: authData } = await supabase.auth.getUser();
   if (authData.user) await migratePendingCompletedExerciseArchives(authData.user.id);
 
-  await refreshRemoteCurrentExercise();
+  await refreshRemoteCurrentExercise("startup");
 
-  // A table-wide Realtime subscription transfers the complete JSON row for
-  // every update. A bounded metadata poll keeps discovery fresh without
-  // downloading canonical payloads that checkpoint authority already owns.
-  remotePollTimer = setInterval(() => { void refreshRemoteCurrentExercise(); }, 5_000);
+  // Never subscribe to exercise_states: Postgres Changes would transfer its
+  // complete state JSON. This payload-free channel is connectivity-only; a
+  // successful resubscription invalidates discovery after a missed interval.
+  let subscribedOnce = false;
+  let reconnectPending = false;
+  let stopped = false;
+  const connectivityChannel = cloudClient.channel("exercise-discovery-connectivity").subscribe(channelStatus => {
+    if (stopped) return;
+    if (channelStatus === "SUBSCRIBED") {
+      if (subscribedOnce && reconnectPending) {
+        recordSupabaseTraffic({ operation: "DISCOVERY_REALTIME_INVALIDATION", endpoint: "exercise_states.discovery_reconnect", reconnect: true });
+        void refreshRemoteCurrentExercise("reconnect");
+      }
+      subscribedOnce = true;
+      reconnectPending = false;
+    } else if (channelStatus === "CHANNEL_ERROR" || channelStatus === "TIMED_OUT" || channelStatus === "CLOSED") {
+      if (subscribedOnce) reconnectPending = true;
+    }
+  });
+  stopDiscoveryConnectivity = () => { stopped = true; void cloudClient.removeChannel(connectivityChannel); };
+
+  // A 60-second safety query bounds missed-event discovery while reducing the
+  // previous stable cadence from 720 to 60 requests/hour (91.7%).
+  remotePollTimer = setInterval(() => { void discoveryRefreshCoordinator.safetyPoll(); }, EXERCISE_DISCOVERY_SAFETY_INTERVAL_MS);
+
+  let previousAppState = AppState.currentState ?? "active";
+  const appStateSubscription = AppState.addEventListener("change", nextState => {
+    const returnedToForeground = nextState === "active" && previousAppState !== "active";
+    previousAppState = nextState;
+    if (returnedToForeground) {
+      recordSupabaseTraffic({ operation: "DISCOVERY_FOREGROUND_INVALIDATION", endpoint: "exercise_states.discovery_foreground" });
+      void refreshRemoteCurrentExercise("foreground");
+    }
+  });
+  stopDiscoveryAppState = () => appStateSubscription.remove();
   if (status.state === "connecting") setStatus({ state: "synced", syncedAt: new Date().toISOString() });
 
   stopLocalSubscription = subscribeToSync((source) => {
@@ -524,5 +579,7 @@ export async function startCloudSync(): Promise<() => void> {
     stopLocalSubscription = undefined;
     if (remotePollTimer) clearInterval(remotePollTimer);
     remotePollTimer = undefined;
+    stopDiscoveryConnectivity?.(); stopDiscoveryConnectivity = undefined;
+    stopDiscoveryAppState?.(); stopDiscoveryAppState = undefined;
   };
 }
