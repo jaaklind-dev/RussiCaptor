@@ -14,7 +14,7 @@ export default function LoginScreen() {
 
       <Text style={styles.title}>RussiCaptor</Text>
 
-      <Text style={styles.subtitle}>Botulismiõppus</Text>
+      <Text style={styles.subtitle}>Õppuste juhtimise platvorm</Text>
 
       <Text style={styles.version}>Versioon 0.2</Text>
 
