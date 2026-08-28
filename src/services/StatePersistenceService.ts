@@ -215,6 +215,16 @@ export function acceptAuthoritativeRuntimeCheckpoint(checkpoint: RuntimeCheckpoi
   // The resolver has already selected this valid remote envelope as canonical.
   // Replace a checkpoint from another exercise only after rehydration succeeds.
   localRuntimeCheckpointStore.restore(checkpoint);
+  const savedAt = new Date().toISOString();
+  pendingSnapshot = {
+    ...checkpoint.payload,
+    version: STATE_VERSION,
+    savedAt,
+    currentCaseManager: { ...getCurrentCaseManager() },
+    runtimeCheckpoint: checkpoint,
+  };
+  setLocalSaveStatus({ state: "saving", savedAt: localSaveStatus.savedAt });
+  void flushLatestSnapshot();
   setRuntimePersistenceFailure(undefined);
 }
 
@@ -379,6 +389,13 @@ export function startStatePersistence(): () => void {
         pipeline.request();
         return;
       }
+      // Remote discovery can request a save before authoritative Runtime
+      // rehydration finishes. Keep the validated checkpoint for this exercise
+      // instead of letting that transient projection erase the durable cache.
+      const acceptedCheckpoint = preparedCheckpoint ?? localRuntimeCheckpointStore.get();
+      const checkpointForSnapshot = acceptedCheckpoint?.exerciseId === shared.exerciseSession.exerciseId
+        ? acceptedCheckpoint
+        : undefined;
       // Commit and publication notification form one synchronous boundary so
       // a newer generation cannot make the committed checkpoint obsolete.
       const snapshot: PersistedState = {
@@ -386,7 +403,7 @@ export function startStatePersistence(): () => void {
         version: STATE_VERSION,
         savedAt: new Date().toISOString(),
         currentCaseManager: { ...getCurrentCaseManager() },
-        ...(preparedCheckpoint ? { runtimeCheckpoint: preparedCheckpoint } : {}),
+        ...(checkpointForSnapshot ? { runtimeCheckpoint: checkpointForSnapshot } : {}),
       };
       pendingSnapshot = snapshot;
       setLocalSaveStatus({ state: "saving", savedAt: localSaveStatus.savedAt });

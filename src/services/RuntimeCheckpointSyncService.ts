@@ -24,6 +24,7 @@ import { publishRuntimeCheckpointTerminal, type RuntimeCheckpointPublicationTerm
 import { isRemoteRuntimeLifecycleActive, waitForRemoteRuntimeLifecycleActive } from "@/services/CloudSyncService";
 import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
 import { parseRuntimeCheckpointMetadata, RuntimeCheckpointMetadataCoordinator } from "@/services/runtime/persistence/RuntimeCheckpointMetadataCoordinator";
+import { loadRuntimeCheckpointWithCache } from "@/services/runtime/persistence/RuntimeCheckpointHydrationService";
 
 const LEASE_SECONDS = 60;
 const RENEW_MS = 20_000;
@@ -81,6 +82,7 @@ type RuntimeCheckpointRecoveryRequest = Readonly<{
   repository: Pick<RuntimeCheckpointRepository, "loadLatest" | "loadLatestMetadata" | "releaseWriter">;
   acquire: (expectedRevision: number) => Promise<Awaited<ReturnType<typeof acquireRuntimeWriterTerminal>>>;
   validate?: (checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined) => checkpoint is RuntimeCheckpointEnvelope<SharedExerciseState>;
+  loadCheckpoint?: () => Promise<RuntimeCheckpointEnvelope<SharedExerciseState> | undefined>;
   adopt: (checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, lease: RuntimeWriterLease) => Promise<void> | void;
 }>;
 
@@ -98,7 +100,9 @@ export class RuntimeCheckpointRecoveryCoordinator {
 
   private async execute(request: RuntimeCheckpointRecoveryRequest): Promise<RuntimeCheckpointRecoveryResult> {
     const validate = request.validate ?? isValidRuntimeCheckpoint;
-    const inspected = await request.repository.loadLatest(request.exerciseId, "runtime_checkpoints.recovery_payload");
+    const inspected = request.loadCheckpoint
+      ? await request.loadCheckpoint()
+      : await request.repository.loadLatest(request.exerciseId, "runtime_checkpoints.recovery_payload");
     if (!inspected) return { state: "REJECTED", code: "CHECKPOINT_NOT_FOUND" };
     if (inspected.exerciseId !== request.exerciseId) return { state: "REJECTED", code: "REMOTE_SYNC_CONFLICT" };
     if (!validate(inspected)) return { state: "REJECTED", code: "CHECKPOINT_HASH_INVALID" };
@@ -397,7 +401,8 @@ export async function takeOverRuntimeWriter(): Promise<Status> {
     stopClockRunner();
     return setAndReturn({state:"DISABLED",code:"EXERCISE_NOT_ACTIVE"});
   }
-  const remote=await repository.loadLatest(exerciseId,"runtime_checkpoints.takeover_payload");
+  const localCheckpoint=checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId);
+  const remote=await loadRuntimeCheckpointWithCache(repository,exerciseId,localCheckpoint,"takeover");
   if (!remote) return setAndReturn({state:"CONFLICT",code:"CHECKPOINT_NOT_FOUND"});
   const resolved=resolveAgainstValidatedLocalCheckpoint(checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId),remote);
   if (resolved.status==="CONFLICT" || resolved.status==="NONE") return setAndReturn({state:"CONFLICT",code:resolved.status==="CONFLICT"?resolved.code:"CHECKPOINT_NOT_FOUND"});
@@ -443,6 +448,7 @@ async function reacquireRuntimeFromRemoteCheckpointForIntent(intentId: string): 
   }
   const writerId=await startupAwait(getRuntimeWriterInstanceId());
   const recovered = await runtimeCheckpointRecoveryCoordinator.recover({ intentId, exerciseId, writerInstanceId:writerId, repository,
+    loadCheckpoint:()=>loadRuntimeCheckpointWithCache(repository,exerciseId,checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId),"recovery"),
     acquire: expectedRevision => acquireRuntimeWriterTerminal(repository,exerciseId,writerId,expectedRevision,LEASE_SECONDS),
     adopt: checkpoint => {
       setRuntimeWriterAuthorityState("WRITER");
@@ -481,11 +487,11 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   const repository=new SupabaseRuntimeCheckpointRepository(client);
   const writerId=await getRuntimeWriterInstanceId();
   let stopped=false;
+  let local:RuntimeCheckpointEnvelope<SharedExerciseState>|undefined=checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId);
   let remote:RuntimeCheckpointEnvelope<SharedExerciseState>|undefined;
-  try { remote=await startupAwait(repository.loadLatest(exerciseId)); }
+  try { remote=await startupAwait(loadRuntimeCheckpointWithCache(repository,exerciseId,local,"startup")); }
   catch (error) { if (error instanceof Error && error.message === "AUTHORITY_STARTUP_TIMEOUT") throw error; setStatus({state:"OFFLINE"}); }
-  let local:RuntimeCheckpointEnvelope<SharedExerciseState>|undefined;
-  try { local=checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId); if(!remote && isActiveExercise())local=ensureLocalRuntimeCheckpoint(); }
+  try { if(!remote && isActiveExercise())local=ensureLocalRuntimeCheckpoint(); }
   catch (error) {
     if(error instanceof Error && error.message==="ACTIVE_RUNTIME_PERSISTENCE_MISSING"){
       setRuntimePersistenceFailure({code:"ACTIVE_RUNTIME_PERSISTENCE_MISSING",exerciseId});
@@ -541,7 +547,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         const echoAcknowledgement=new Promise<Awaited<ReturnType<typeof publishRuntimeCheckpointTerminal>>>(resolve=>{
           pendingWriterEcho={payloadHash:checkpoint.payloadHash,checkpoint,resolve};
         });
-        const result=await Promise.race([publishRuntimeCheckpointTerminal(repository,lease,remoteRevision,checkpoint),echoAcknowledgement]);
+        const result=await Promise.race([publishRuntimeCheckpointTerminal(repository,lease,remoteRevision,checkpoint,undefined,lastPublishedCheckpoint),echoAcknowledgement]);
         if(generationStopped())return;
         if(pendingWriterEcho?.payloadHash===checkpoint.payloadHash)pendingWriterEcho=undefined;
         if(result.state==="PUBLISHED") {
@@ -605,7 +611,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   ensureRenewal();
   let realtimeSubscribed=false;
   const metadataCoordinator=new RuntimeCheckpointMetadataCoordinator({exerciseId,current:getLocalRuntimeCheckpoint,
-    loadLatest:()=>repository.loadLatest(exerciseId,"runtime_checkpoints.conditional_payload"),
+    loadLatest:metadata=>loadRuntimeCheckpointWithCache(repository,exerciseId,checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId),"realtime",metadata),
     ignored:reason=>recordSupabaseTraffic({operation:"REALTIME_METADATA_IGNORED",endpoint:`runtime_checkpoint_notifications.${reason.toLowerCase()}`}),
     coalesced:()=>recordSupabaseTraffic({operation:"REALTIME_FETCH_COALESCED",endpoint:"runtime_checkpoint_notifications"}),
     accept:incoming=>{

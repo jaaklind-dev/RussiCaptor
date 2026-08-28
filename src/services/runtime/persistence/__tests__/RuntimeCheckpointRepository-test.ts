@@ -1,4 +1,11 @@
 import { loadCheckpointFreshness, SupabaseRuntimeCheckpointRepository } from "../RuntimeCheckpointRepository";
+import { createRuntimeCheckpoint } from "../RuntimeCheckpointAuthorityService";
+
+const sharedState = (time: number) => ({
+  exerciseSession: { exerciseId: "E", lifecycleState: "COMPLETED", simulationTimeSec: time },
+  patients: [], assignments: [], transfers: [], questions: [], labs: [], imagingStudies: [], orders: [], notes: [],
+  scenarioEvents: [], timelineEvents: [], persistedRuntimeStates: [],
+}) as never;
 
 function client(result:{data?:unknown;error?:{message:string}}){return {rpc:jest.fn(async()=>({data:result.data??null,error:result.error??null})),from:jest.fn(()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:result.data,error:result.error??null})})})}))} as never;}
 
@@ -33,6 +40,16 @@ describe("WP-44B Supabase repository diagnostics",()=>{
     await expect(repository.publish({leaseId:"L",exerciseId:"E",writerInstanceId:"W",userId:"U",expiresAt:"x"},4,checkpoint))
       .resolves.toEqual({status:"PUBLISHED",checkpoint});
     expect((mockClient as {rpc:jest.Mock}).rpc).toHaveBeenCalledWith("publish_runtime_checkpoint_metadata",expect.any(Object));
+  });
+  test("rollout without the delta RPC retries the same publication through the existing RPC",async()=>{
+    const base=createRuntimeCheckpoint(sharedState(1),4); const checkpoint=createRuntimeCheckpoint(sharedState(2),5);
+    const mockClient={rpc:jest.fn()
+      .mockResolvedValueOnce({data:null,error:{code:"PGRST202",message:"Could not find publish_runtime_checkpoint_delta"}})
+      .mockResolvedValueOnce({data:{checkpoint_revision:5,payload_hash:checkpoint.payloadHash,provenance_hash:checkpoint.provenanceHash},error:null})};
+    const repository=new SupabaseRuntimeCheckpointRepository(mockClient as never);
+    await expect(repository.publish({leaseId:"L",exerciseId:"E",writerInstanceId:"W",userId:"U",expiresAt:"x"},4,checkpoint,base))
+      .resolves.toMatchObject({status:"PUBLISHED"});
+    expect(mockClient.rpc.mock.calls.map(call=>call[0])).toEqual(["publish_runtime_checkpoint_delta","publish_runtime_checkpoint_metadata"]);
   });
   test("loads only checkpoint notification metadata for subscription reconciliation",async()=>{
     const mockClient=client({data:{exercise_id:"E",checkpoint_revision:5,payload_hash:"H",provenance_hash:"P",writer_instance_id:"W",updated_at:"2026-08-26T00:00:00Z"}}) as never;

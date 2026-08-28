@@ -14,7 +14,7 @@ type Checkpoint = RuntimeCheckpointEnvelope<SharedExerciseState>;
 type CoordinatorOptions = Readonly<{
   exerciseId: string;
   current: () => Checkpoint | undefined;
-  loadLatest: () => Promise<Checkpoint | undefined>;
+  loadLatest: (metadata: RuntimeCheckpointMetadata) => Promise<Checkpoint | undefined>;
   accept: (checkpoint: Checkpoint, metadata: RuntimeCheckpointMetadata) => Promise<void> | void;
   ignored?: (reason: "CURRENT" | "MALFORMED") => void;
   coalesced?: () => void;
@@ -86,7 +86,7 @@ export class RuntimeCheckpointMetadataCoordinator {
     while (this.desired) {
       const requested = this.desired;
       this.desired = undefined;
-      const checkpoint = await this.options.loadLatest();
+      const checkpoint = await this.options.loadLatest(requested);
       if (checkpoint) await this.options.accept(checkpoint, requested);
       if (checkpoint && checkpoint.checkpointRevision < requested.checkpointRevision && lagRetries < 1) {
         this.desired = later(this.desired, requested);

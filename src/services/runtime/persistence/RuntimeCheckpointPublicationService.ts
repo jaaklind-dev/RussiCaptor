@@ -34,8 +34,9 @@ export async function publishRuntimeCheckpointTerminal(
   expectedRevision: number,
   checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  baseCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>,
 ): Promise<RuntimeCheckpointPublicationTerminal> {
-  const rpc = await bounded(repository.publish(lease, expectedRevision, checkpoint), timeoutMs);
+  const rpc = await bounded(repository.publish(lease, expectedRevision, checkpoint, baseCheckpoint), timeoutMs);
   if (rpc.ok) {
     if (rpc.value.status === "PUBLISHED") return { state: "PUBLISHED", checkpoint: rpc.value.checkpoint, reconciled: false };
     return failure(rpc.value.code);

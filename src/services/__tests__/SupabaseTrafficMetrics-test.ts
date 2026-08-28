@@ -14,8 +14,8 @@ describe("development-only Supabase traffic metrics", () => {
   });
 
   test("records realtime reconnects independently of response rows", () => {
-    recordSupabaseTraffic({ operation: "REALTIME_SUBSCRIBE", endpoint: "runtime_checkpoints", reconnect: true });
-    expect(getSupabaseTrafficMetrics()[0]).toMatchObject({ requestCount: 1, rowsReceived: 0, reconnectCount: 1 });
+    recordSupabaseTraffic({ operation: "REALTIME_SUBSCRIBE", endpoint: "runtime_checkpoints", reconnect: true, estimatedBytesSaved: 2048 });
+    expect(getSupabaseTrafficMetrics()[0]).toMatchObject({ requestCount: 1, rowsReceived: 0, reconnectCount: 1, estimatedBytesSaved: 2048 });
   });
 
   test("does not classify a changed response as an identical repeat", () => {

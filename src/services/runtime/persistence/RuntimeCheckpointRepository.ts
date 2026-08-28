@@ -8,14 +8,16 @@ import type {
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
 import { parseRuntimeCheckpointMetadata, type RuntimeCheckpointMetadata } from "@/services/runtime/persistence/RuntimeCheckpointMetadataCoordinator";
+import { createRuntimeCheckpointDelta, type RuntimeCheckpointDelta } from "@/services/runtime/persistence/RuntimeCheckpointDeltaService";
 
 export interface RuntimeCheckpointRepository {
   loadLatest(exerciseId: string, trafficEndpoint?: string): Promise<RuntimeCheckpointEnvelope<SharedExerciseState> | undefined>;
   loadLatestMetadata(exerciseId: string, trafficEndpoint?: string): Promise<RuntimeCheckpointMetadata | undefined>;
+  loadDeltas(exerciseId: string, fromRevision: number, toRevision: number, limit: number): Promise<readonly RuntimeCheckpointDelta[]>;
   acquireWriter(exerciseId: string, writerInstanceId: string, expectedRevision: number, leaseSec: number): Promise<WriterAcquisitionResult>;
   renewWriter(lease: RuntimeWriterLease, leaseSec: number): Promise<WriterAcquisitionResult>;
   releaseWriter(lease: RuntimeWriterLease): Promise<void>;
-  publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>): Promise<CheckpointPublishResult<SharedExerciseState>>;
+  publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, baseCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>): Promise<CheckpointPublishResult<SharedExerciseState>>;
 }
 
 export type RuntimeCheckpointFreshness = Readonly<{
@@ -74,6 +76,15 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
     if (error) throw new Error("AUTHORITY_UNAVAILABLE");
     return parseRuntimeCheckpointMetadata(data);
   }
+  async loadDeltas(exerciseId: string, fromRevision: number, toRevision: number, limit: number): Promise<readonly RuntimeCheckpointDelta[]> {
+    const { data, error } = await this.client.from("runtime_checkpoint_deltas")
+      .select("delta_payload")
+      .eq("exercise_id", exerciseId).gte("to_revision", fromRevision + 1).lte("to_revision", toRevision)
+      .order("to_revision", { ascending: true }).limit(limit);
+    recordSupabaseTraffic({ operation: "SELECT", endpoint: "runtime_checkpoint_deltas.hydration", data });
+    if (error) throw new Error("CHECKPOINT_DELTA_UNAVAILABLE");
+    return Object.freeze((data ?? []).map(row => row.delta_payload as RuntimeCheckpointDelta));
+  }
   async loadWriterLease(exerciseId: string): Promise<RuntimeWriterLease | undefined> {
     const { data, error } = await this.client.from("runtime_writer_leases")
       .select("lease_id,exercise_id,writer_instance_id,writer_user_id,expires_at,released_at")
@@ -111,9 +122,17 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
     recordSupabaseTraffic({ operation: "RPC", endpoint: "release_runtime_writer" });
     if (error) throw new Error(code(error.message));
   }
-  async publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>): Promise<CheckpointPublishResult<SharedExerciseState>> {
-    const { data, error } = await this.client.rpc("publish_runtime_checkpoint_metadata", { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_expected_revision: expectedRevision, p_checkpoint: checkpoint });
-    recordSupabaseTraffic({ operation: "RPC", endpoint: "publish_runtime_checkpoint_metadata", data });
+  async publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, baseCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>): Promise<CheckpointPublishResult<SharedExerciseState>> {
+    const delta = baseCheckpoint?.checkpointRevision === expectedRevision ? createRuntimeCheckpointDelta(baseCheckpoint, checkpoint) : undefined;
+    let rpcName = delta && deltaRpcAvailable !== false ? "publish_runtime_checkpoint_delta" : "publish_runtime_checkpoint_metadata";
+    let response = await this.client.rpc(rpcName, { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_expected_revision: expectedRevision, p_checkpoint: checkpoint, ...(delta && rpcName === "publish_runtime_checkpoint_delta" ? { p_delta: delta } : {}) });
+    if (response.error && rpcName === "publish_runtime_checkpoint_delta" && (response.error.code === "PGRST202" || response.error.message.includes("publish_runtime_checkpoint_delta"))) {
+      deltaRpcAvailable = false;
+      rpcName = "publish_runtime_checkpoint_metadata";
+      response = await this.client.rpc(rpcName, { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_expected_revision: expectedRevision, p_checkpoint: checkpoint });
+    } else if (!response.error && rpcName === "publish_runtime_checkpoint_delta") deltaRpcAvailable = true;
+    const { data, error } = response;
+    recordSupabaseTraffic({ operation: "RPC", endpoint: rpcName, data });
     if (error) {
       const diagnostic = code(error.message);
       return { status: diagnostic === "STALE_WRITER" ? "STALE_CHECKPOINT_WRITER" : diagnostic === "CHECKPOINT_REVISION_CONFLICT" ? "REVISION_CONFLICT" : "AUTHORITY_UNAVAILABLE", code: diagnostic as never };
@@ -127,3 +146,5 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
     }) };
   }
 }
+
+let deltaRpcAvailable: boolean | undefined;

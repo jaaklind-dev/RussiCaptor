@@ -7,6 +7,7 @@ export type SupabaseTrafficMetric = Readonly<{
   repeatedRequestCount: number;
   fullSnapshotFetchCount: number;
   reconnectCount: number;
+  estimatedBytesSaved: number;
 }>;
 
 const metrics = new Map<string, SupabaseTrafficMetric>();
@@ -66,6 +67,7 @@ export function recordSupabaseTraffic(input: Readonly<{
   data?: unknown;
   fullSnapshot?: boolean;
   reconnect?: boolean;
+  estimatedBytesSaved?: number;
 }>): void {
   if (!enabled()) return;
   const key = `${input.operation}:${input.endpoint}`;
@@ -82,6 +84,7 @@ export function recordSupabaseTraffic(input: Readonly<{
     repeatedRequestCount: (previous?.repeatedRequestCount ?? 0) + (repeated ? 1 : 0),
     fullSnapshotFetchCount: (previous?.fullSnapshotFetchCount ?? 0) + (input.fullSnapshot ? 1 : 0),
     reconnectCount: (previous?.reconnectCount ?? 0) + (input.reconnect ? 1 : 0),
+    estimatedBytesSaved: (previous?.estimatedBytesSaved ?? 0) + Math.max(0, Math.floor(input.estimatedBytesSaved ?? 0)),
   });
   metrics.set(key, metric);
   if (debugLoggingEnabled()) console.info("SUPABASE_TRAFFIC_METRIC", JSON.stringify(metric));

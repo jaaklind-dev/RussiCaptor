@@ -9,6 +9,7 @@ import { createRuntimeCheckpoint, createRuntimeCheckpointAsync, localRuntimeChec
 import { stableJson, stableJsonAsync } from "@/utils/stableJson";
 import { sha256Text, sha256TextAsync } from "@/utils/sha256";
 import { BoundedObsoleteGenerationGate, LatestGenerationPipeline } from "../LatestGenerationPipeline";
+import { createRuntimeCheckpointDelta } from "../RuntimeCheckpointDeltaService";
 
 function fixture(pkg: ExercisePackage) {
   return structuredClone(packagePatientDatasetRegistry.resolve(pkg.patientDatasetId).patients[0].runtimeFixture!);
@@ -113,6 +114,16 @@ describe("WP-44B canonical persistence performance", () => {
     await timer;
     const timerDelayMs = timerFiredAt - timerStarted;
     const payloadBytes = new TextEncoder().encode(JSON.stringify(after.payload)).byteLength;
+    const sectionBytes = Object.fromEntries(Object.entries(after.payload).map(([key, value]) => [
+      key,
+      new TextEncoder().encode(JSON.stringify(value)).byteLength,
+    ]));
+    const nextState = { ...state, exerciseSession: { ...state.exerciseSession, simulationTimeSec: artifact.capturedAtSimulationTimeSec + 1 } } as SharedExerciseState;
+    const nextCheckpoint = createRuntimeCheckpoint(nextState, 2);
+    const deltaStarted = performance.now();
+    const representativeDelta = createRuntimeCheckpointDelta(after, nextCheckpoint);
+    const deltaMs = performance.now() - deltaStarted;
+    const deltaBytes = new TextEncoder().encode(JSON.stringify(representativeDelta)).byteLength;
 
     expect(after).toEqual(before);
     expect(after.payloadHash).toBe(before.payloadHash);
@@ -134,8 +145,11 @@ describe("WP-44B canonical persistence performance", () => {
       checkpointAfterMs: Number(afterMs.toFixed(2)), timerDelayMs: Number(timerDelayMs.toFixed(2)),
       canonicalizationAndSerializationMs: Number(canonicalizationAndSerializationMs.toFixed(2)),
       hashMs: Number(hashMs.toFixed(2)), plainSerializationMs: Number(plainSerializationMs.toFixed(2)),
+      deltaMs: Number(deltaMs.toFixed(2)), deltaBytes, sectionBytes,
     }));
     expect(payloadBytes).toBeGreaterThan(1_500_000);
     expect(payloadBytes).toBeLessThan(2_100_000);
+    expect(deltaBytes).toBeLessThan(payloadBytes / 100);
+    expect(deltaMs).toBeLessThan(250);
   });
 });

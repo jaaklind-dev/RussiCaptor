@@ -555,7 +555,8 @@ describe("WP-44B checkpoint startup coordination", () => {
   test("takeover second freshness check is metadata-only", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     const takeover = source.slice(source.indexOf("export async function takeOverRuntimeWriter"), source.indexOf("function setAndReturn"));
-    expect(takeover.match(/repository\.loadLatest\(exerciseId/g)).toHaveLength(1);
+    expect(takeover).toContain('loadRuntimeCheckpointWithCache(repository,exerciseId,localCheckpoint,"takeover")');
+    expect(takeover).not.toContain("repository.loadLatest(exerciseId)");
     expect(takeover).toContain('loadCheckpointFreshness(repository,exerciseId,"takeover")');
   });
 
@@ -566,7 +567,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(recovery).toContain("runtimeCheckpointRecoveryCoordinator.recover");
     expect(recovery).toContain("acquireRuntimeWriterTerminal(repository,exerciseId,writerId,expectedRevision");
     expect(recovery).toContain("acceptAuthoritativeRuntimeCheckpoint(checkpoint,true)");
-    expect(recovery).not.toContain("getLocalRuntimeCheckpoint()");
+    expect(recovery).toContain('loadRuntimeCheckpointWithCache(repository,exerciseId,checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId),"recovery")');
   });
 
   test("remote current-exercise discovery resolves before checkpoint authority startup", () => {
@@ -616,6 +617,27 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(ensure).toContain("localRuntimeCheckpointStore.capture(collectSharedExerciseState())");
   });
 
+  test("accepted authoritative checkpoint is queued unchanged for durable warm-restart cache", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/StatePersistenceService.ts"), "utf8");
+    const start = source.indexOf("export function acceptAuthoritativeRuntimeCheckpoint");
+    const end = source.indexOf("export function assertRuntimeCheckpointClockConsistency", start);
+    const accept = source.slice(start, end);
+    const restore = accept.indexOf("localRuntimeCheckpointStore.restore(checkpoint)");
+    const durable = accept.indexOf("runtimeCheckpoint: checkpoint", restore);
+    const flush = accept.indexOf("void flushLatestSnapshot()", durable);
+    expect(restore).toBeGreaterThan(-1);
+    expect(durable).toBeGreaterThan(restore);
+    expect(flush).toBeGreaterThan(durable);
+  });
+
+  test("transient discovery save cannot erase a validated same-exercise checkpoint cache", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/StatePersistenceService.ts"), "utf8");
+    const persistence = source.slice(source.indexOf("export function startStatePersistence"));
+    expect(persistence).toContain("const acceptedCheckpoint = preparedCheckpoint ?? localRuntimeCheckpointStore.get()");
+    expect(persistence).toContain("acceptedCheckpoint?.exerciseId === shared.exerciseSession.exerciseId");
+    expect(persistence).toContain("checkpointForSnapshot ? { runtimeCheckpoint: checkpointForSnapshot }");
+  });
+
   test("remote exercise discovery disposes unresolved live Runtime, including same-exercise stale state", () => {
     const statePersistence = fs.readFileSync(path.join(process.cwd(), "src/services/StatePersistenceService.ts"), "utf8");
     const restore = statePersistence.indexOf("export function restoreRemoteExerciseIdentity");
@@ -641,9 +663,10 @@ describe("WP-44B checkpoint startup coordination", () => {
 
   test("a replacement sync generation waits for the prior publication terminal state", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
-    const startup = source.slice(source.indexOf("async function startRuntimeCheckpointSyncForExercise"), source.indexOf("let local:", source.indexOf("async function startRuntimeCheckpointSyncForExercise")));
+    const startupStart = source.indexOf("async function startRuntimeCheckpointSyncForExercise");
+    const startup = source.slice(startupStart, source.indexOf("const resolved=", startupStart));
     expect(startup).toContain("await publicationBarrier;");
-    expect(startup.indexOf("await publicationBarrier;")).toBeLessThan(startup.indexOf("repository.loadLatest(exerciseId)"));
+    expect(startup.indexOf("await publicationBarrier;")).toBeLessThan(startup.indexOf("loadRuntimeCheckpointWithCache(repository"));
   });
 
   test("only the latest exercise sync generation may publish, renew or apply Realtime", () => {
@@ -694,7 +717,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(source).toContain("resolveRuntimeAuthSession(supabase.auth)");
     expect(source).toContain("startupAwait(auth.getSession())");
     expect(source).toContain("startupAwait(getRuntimeWriterInstanceId())");
-    expect(source).toContain("startupAwait(repository.loadLatest(exerciseId))");
+    expect(source).toContain("startupAwait(loadRuntimeCheckpointWithCache(repository,exerciseId,local,\"startup\"))");
     expect(source).toContain("acquireRuntimeWriterTerminal(repository,exerciseId,writerId,remoteRevision,LEASE_SECONDS)");
     expect(source).toContain('setStatus({state:"FAILED",code:error instanceof Error ? error.message');
   });

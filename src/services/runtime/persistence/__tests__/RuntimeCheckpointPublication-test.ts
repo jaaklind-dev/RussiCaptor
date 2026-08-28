@@ -12,6 +12,7 @@ function repository(remote: RuntimeCheckpointEnvelope<SharedExerciseState> | und
   return {
     publish: () => never,
     loadLatest: async () => remote,
+    loadDeltas: async () => [],
     loadLatestMetadata: async () => remote ? ({
       exerciseId: remote.exerciseId, checkpointRevision: remote.checkpointRevision,
       payloadHash: remote.payloadHash, provenanceHash: "P", writerInstanceId: "W",
