@@ -197,6 +197,21 @@ export function resolveAgainstValidatedLocalCheckpoint(
   return resolveAuthoritativeCheckpoint(local, remote);
 }
 
+/** A lease-free reader repairs a locally prepared, rejected same-revision
+ * checkpoint from the valid durable subscription payload. Writers retain the
+ * normal fail-closed divergence behavior. */
+export function resolveSubscribedCheckpoint(
+  local: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined,
+  remote: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined,
+  ownsWriterLease: boolean,
+): CheckpointResolution<SharedExerciseState> {
+  const resolved = resolveAuthoritativeCheckpoint(local, remote);
+  return !ownsWriterLease && remote && isValidRuntimeCheckpoint(remote) &&
+    resolved.status === "CONFLICT" && resolved.code === "CHECKPOINT_REVISION_DIVERGENCE"
+    ? { status: "REMOTE", checkpoint: remote }
+    : resolved;
+}
+
 class LocalRuntimeCheckpointStore {
   private checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined;
   get(): RuntimeCheckpointEnvelope<SharedExerciseState> | undefined { return this.checkpoint; }

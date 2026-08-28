@@ -12,7 +12,7 @@ import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { supabase } from "@/services/SupabaseService";
 import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
 import { subscribeToSync } from "@/services/SyncService";
-import { isValidRuntimeCheckpoint, localRuntimeCheckpointStore, resolveAgainstValidatedLocalCheckpoint, resolveAuthoritativeCheckpoint } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
+import { isValidRuntimeCheckpoint, localRuntimeCheckpointStore, resolveAgainstValidatedLocalCheckpoint, resolveAuthoritativeCheckpoint, resolveSubscribedCheckpoint } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 import {
   SupabaseRuntimeCheckpointRepository,
   loadCheckpointFreshness,
@@ -610,7 +610,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     coalesced:()=>recordSupabaseTraffic({operation:"REALTIME_FETCH_COALESCED",endpoint:"runtime_checkpoint_notifications"}),
     accept:incoming=>{
       if(generationStopped())return;
-      const decision=resolveAuthoritativeCheckpoint(getLocalRuntimeCheckpoint(),incoming);
+      const decision=resolveSubscribedCheckpoint(getLocalRuntimeCheckpoint(),incoming,Boolean(lease));
       if(decision.status==="CONFLICT") { stopClockRunner(); setStatus({state:"CONFLICT",code:decision.code}); }
       else if(decision.status==="REMOTE"){
         if(lease){lease=undefined;stopClockRunner();setStatus({state:"CONFLICT",code:"REMOTE_SYNC_CONFLICT",revision:decision.checkpoint.checkpointRevision});}

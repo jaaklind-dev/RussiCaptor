@@ -1,5 +1,5 @@
 import type { SharedExerciseState } from "@/services/StatePersistenceService";
-import { createRuntimeCheckpoint, isValidRuntimeCheckpoint, resolveAgainstValidatedLocalCheckpoint, resolveAuthoritativeCheckpoint } from "../RuntimeCheckpointAuthorityService";
+import { createRuntimeCheckpoint, isValidRuntimeCheckpoint, resolveAgainstValidatedLocalCheckpoint, resolveAuthoritativeCheckpoint, resolveSubscribedCheckpoint } from "../RuntimeCheckpointAuthorityService";
 import { sha256Text } from "@/utils/sha256";
 import { stableJson } from "@/utils/stableJson";
 import { assertRuntimeCheckpointClockConsistency } from "@/services/StatePersistenceService";
@@ -35,6 +35,14 @@ describe("WP-44B checkpoint authority resolver",()=>{
   test("same revision with different valid payload fails closed",()=>{
     const a=createRuntimeCheckpoint(state("EX-1",["PT-A"]),12); const b=createRuntimeCheckpoint(state("EX-1",["PT-B"]),12);
     expect(resolveAuthoritativeCheckpoint(a,b)).toEqual({status:"CONFLICT",code:"CHECKPOINT_REVISION_DIVERGENCE"});
+  });
+  test("lease-free reader repairs same-revision divergence from durable subscription",()=>{
+    const local=createRuntimeCheckpoint(state("EX-1",["PT-A"]),12); const remote=createRuntimeCheckpoint(state("EX-1",["PT-B"]),12);
+    expect(resolveSubscribedCheckpoint(local,remote,false)).toEqual({status:"REMOTE",checkpoint:remote});
+  });
+  test("writer keeps same-revision subscription divergence fail-closed",()=>{
+    const local=createRuntimeCheckpoint(state("EX-1",["PT-A"]),12); const remote=createRuntimeCheckpoint(state("EX-1",["PT-B"]),12);
+    expect(resolveSubscribedCheckpoint(local,remote,true)).toEqual({status:"CONFLICT",code:"CHECKPOINT_REVISION_DIVERGENCE"});
   });
   test("invalid higher revision cannot replace valid lower revision",()=>{
     const valid=createRuntimeCheckpoint(state(),10); const corrupt={...createRuntimeCheckpoint(state(),13),payloadHash:"corrupt"};
