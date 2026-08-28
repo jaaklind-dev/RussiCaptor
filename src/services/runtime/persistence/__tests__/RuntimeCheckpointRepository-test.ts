@@ -52,10 +52,22 @@ describe("WP-44B Supabase repository diagnostics",()=>{
     expect(mockClient.rpc.mock.calls.map(call=>call[0])).toEqual(["publish_runtime_checkpoint_delta","publish_runtime_checkpoint_metadata"]);
   });
   test("loads only checkpoint notification metadata for subscription reconciliation",async()=>{
-    const mockClient=client({data:{exercise_id:"E",checkpoint_revision:5,payload_hash:"H",provenance_hash:"P",writer_instance_id:"W",updated_at:"2026-08-26T00:00:00Z"}}) as never;
+    const mockClient=client({data:{exercise_id:"E",checkpoint_revision:5,payload_hash:"H",provenance_hash:"P",writer_instance_id:"W",updated_at:"2026-08-26T00:00:00Z",checkpoint_bytes:12345}}) as never;
     const repository=new SupabaseRuntimeCheckpointRepository(mockClient);
-    await expect(repository.loadLatestMetadata("E")).resolves.toEqual({exerciseId:"E",checkpointRevision:5,payloadHash:"H",provenanceHash:"P",writerInstanceId:"W",updatedAt:"2026-08-26T00:00:00Z"});
+    await expect(repository.loadLatestMetadata("E")).resolves.toEqual({exerciseId:"E",checkpointRevision:5,payloadHash:"H",provenanceHash:"P",writerInstanceId:"W",updatedAt:"2026-08-26T00:00:00Z",checkpointBytes:12345});
     expect((mockClient as {from:jest.Mock}).from).toHaveBeenCalledWith("runtime_checkpoint_notifications");
+  });
+  test("loads lightweight delta cost columns without delta payload JSON",async()=>{
+    const rows=[{from_revision:4,to_revision:5,base_hash:"B",target_hash:"T",provenance_hash:"P",delta_version:1,persisted_runtime_version:3,payload_bytes:456}];
+    const limit=jest.fn(async()=>({data:rows,error:null}));
+    const order=jest.fn(()=>({limit})); const lte=jest.fn(()=>({order})); const gte=jest.fn(()=>({lte})); const eq=jest.fn(()=>({gte}));
+    const select=jest.fn((columns:string)=>({eq})); const mockClient={from:jest.fn(()=>({select}))};
+    const repository=new SupabaseRuntimeCheckpointRepository(mockClient as never);
+    await expect(repository.loadDeltaMetadata("E",4,5,9)).resolves.toEqual([{
+      fromRevision:4,toRevision:5,baseHash:"B",targetHash:"T",provenanceHash:"P",deltaVersion:1,persistedRuntimeVersion:3,payloadBytes:456,
+    }]);
+    expect(select).toHaveBeenCalledWith("from_revision,to_revision,base_hash,target_hash,provenance_hash,delta_version,persisted_runtime_version,payload_bytes");
+    expect(select.mock.calls[0][0]).not.toContain("delta_payload");
   });
   test("freshness decisions avoid payload reads when atomic metadata exists",async()=>{
     const repository={loadLatestMetadata:jest.fn(async()=>({exerciseId:"E",checkpointRevision:5,payloadHash:"H",provenanceHash:"P",writerInstanceId:"W"})),loadLatest:jest.fn()};

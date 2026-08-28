@@ -14,11 +14,23 @@ export interface RuntimeCheckpointRepository {
   loadLatest(exerciseId: string, trafficEndpoint?: string): Promise<RuntimeCheckpointEnvelope<SharedExerciseState> | undefined>;
   loadLatestMetadata(exerciseId: string, trafficEndpoint?: string): Promise<RuntimeCheckpointMetadata | undefined>;
   loadDeltas(exerciseId: string, fromRevision: number, toRevision: number, limit: number): Promise<readonly RuntimeCheckpointDelta[]>;
+  loadDeltaMetadata(exerciseId: string, fromRevision: number, toRevision: number, limit: number): Promise<readonly RuntimeCheckpointDeltaMetadata[]>;
   acquireWriter(exerciseId: string, writerInstanceId: string, expectedRevision: number, leaseSec: number): Promise<WriterAcquisitionResult>;
   renewWriter(lease: RuntimeWriterLease, leaseSec: number): Promise<WriterAcquisitionResult>;
   releaseWriter(lease: RuntimeWriterLease): Promise<void>;
   publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, baseCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>): Promise<CheckpointPublishResult<SharedExerciseState>>;
 }
+
+export type RuntimeCheckpointDeltaMetadata = Readonly<{
+  fromRevision: number;
+  toRevision: number;
+  baseHash: string;
+  targetHash: string;
+  provenanceHash: string;
+  deltaVersion: number;
+  persistedRuntimeVersion: number;
+  payloadBytes: number;
+}>;
 
 export type RuntimeCheckpointFreshness = Readonly<{
   exerciseId: string;
@@ -70,11 +82,25 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
   }
   async loadLatestMetadata(exerciseId: string, trafficEndpoint = "runtime_checkpoint_notifications.metadata"): Promise<RuntimeCheckpointMetadata | undefined> {
     const { data, error } = await this.client.from("runtime_checkpoint_notifications")
-      .select("exercise_id,checkpoint_revision,payload_hash,provenance_hash,writer_instance_id,updated_at")
+      .select("exercise_id,checkpoint_revision,payload_hash,provenance_hash,writer_instance_id,updated_at,checkpoint_bytes")
       .eq("exercise_id", exerciseId).maybeSingle();
     recordSupabaseTraffic({ operation: "SELECT", endpoint: trafficEndpoint, data });
     if (error) throw new Error("AUTHORITY_UNAVAILABLE");
     return parseRuntimeCheckpointMetadata(data);
+  }
+  async loadDeltaMetadata(exerciseId: string, fromRevision: number, toRevision: number, limit: number): Promise<readonly RuntimeCheckpointDeltaMetadata[]> {
+    const { data, error } = await this.client.from("runtime_checkpoint_deltas")
+      .select("from_revision,to_revision,base_hash,target_hash,provenance_hash,delta_version,persisted_runtime_version,payload_bytes")
+      .eq("exercise_id", exerciseId).gte("to_revision", fromRevision + 1).lte("to_revision", toRevision)
+      .order("to_revision", { ascending: true }).limit(limit);
+    recordSupabaseTraffic({ operation: "DELTA_COST_METADATA_QUERY", endpoint: "runtime_checkpoint_deltas.cost", data });
+    if (error) throw new Error("CHECKPOINT_DELTA_COST_UNAVAILABLE");
+    return Object.freeze((data ?? []).map(row => Object.freeze({
+      fromRevision: Number(row.from_revision), toRevision: Number(row.to_revision),
+      baseHash: String(row.base_hash), targetHash: String(row.target_hash), provenanceHash: String(row.provenance_hash),
+      deltaVersion: Number(row.delta_version), persistedRuntimeVersion: Number(row.persisted_runtime_version),
+      payloadBytes: Number(row.payload_bytes),
+    })));
   }
   async loadDeltas(exerciseId: string, fromRevision: number, toRevision: number, limit: number): Promise<readonly RuntimeCheckpointDelta[]> {
     const { data, error } = await this.client.from("runtime_checkpoint_deltas")

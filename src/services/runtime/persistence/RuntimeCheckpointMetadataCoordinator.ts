@@ -8,6 +8,7 @@ export type RuntimeCheckpointMetadata = Readonly<{
   provenanceHash: string;
   writerInstanceId: string;
   updatedAt?: string;
+  checkpointBytes?: number;
 }>;
 
 type Checkpoint = RuntimeCheckpointEnvelope<SharedExerciseState>;
@@ -29,6 +30,7 @@ export function parseRuntimeCheckpointMetadata(value: unknown): RuntimeCheckpoin
   const provenanceHash = row.provenance_hash ?? row.provenanceHash;
   const writerInstanceId = row.writer_instance_id ?? row.writerInstanceId;
   const updatedAt = row.updated_at ?? row.updatedAt;
+  const checkpointBytes = Number(row.checkpoint_bytes ?? row.checkpointBytes);
   if (typeof exerciseId !== "string" || !exerciseId || !Number.isSafeInteger(revision) || revision <= 0 ||
       typeof payloadHash !== "string" || !payloadHash || typeof provenanceHash !== "string" || !provenanceHash ||
       typeof writerInstanceId !== "string" || !writerInstanceId) return undefined;
@@ -39,6 +41,7 @@ export function parseRuntimeCheckpointMetadata(value: unknown): RuntimeCheckpoin
     provenanceHash,
     writerInstanceId,
     ...(typeof updatedAt === "string" ? { updatedAt } : {}),
+    ...(Number.isSafeInteger(checkpointBytes) && checkpointBytes > 0 ? { checkpointBytes } : {}),
   });
 }
 
