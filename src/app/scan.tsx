@@ -7,13 +7,13 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 import AppHeader from "@/components/AppHeader";
 
 import {
-  assignPatientToMe,
+  assignPatientToMeConflictSafe,
   getPendingPatientTransfer,
-  requestPatientTakeover,
+  requestPatientTakeoverConflictSafe,
 } from "@/services/AssignmentRepository";
 import { findPatientByNationalId } from "@/repositories/PatientRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
-import { updatePatientLocationFromCurrentCm } from "@/services/PatientLocationService";
+import { updatePatientLocationFromCurrentCmConflictSafe } from "@/services/PatientLocationService";
 import QrScanner from "@/components/QrScanner";
 import { readQrCode } from "@/services/QrCodeService";
 import { getInstalledWorkbook } from "@/services/WorkbookImportService";
@@ -23,7 +23,7 @@ export default function ScanScreen() {
 
   const [nationalId, setNationalId] = useState("");
 
-  function handleFindPatient(value = nationalId) {
+  async function handleFindPatient(value = nationalId) {
 
     const qrResult = readQrCode(value, "patient");
 
@@ -56,7 +56,9 @@ export default function ScanScreen() {
 
     }
 
-const assignmentResult = assignPatientToMe(patient.id);
+const assignmentOutcome = await assignPatientToMeConflictSafe(patient.id);
+const assignmentResult = assignmentOutcome.value;
+if (!assignmentResult) { Alert.alert("Patsienti ei määratud", assignmentOutcome.message); return; }
 
 if (assignmentResult.status === "unavailable") {
   Alert.alert(
@@ -86,17 +88,17 @@ if (assignmentResult.status === "assigned-to-other") {
       { text: "Katkesta", style: "cancel" },
       {
         text: "Saada taotlus",
-        onPress: () => requestPatientTakeover(
+        onPress: () => void requestPatientTakeoverConflictSafe(
           patient.id,
           getCurrentCaseManager()
-        ),
+        ).then(outcome=>Alert.alert("Ülevõtmistaotlus",outcome.message)),
       },
     ]
   );
   return;
 }
 
-updatePatientLocationFromCurrentCm(patient.id);
+await updatePatientLocationFromCurrentCmConflictSafe(patient.id);
 
 router.push(`/patient/${patient.id}`);
 
@@ -128,7 +130,7 @@ router.push(`/patient/${patient.id}`);
           }
 
           setNationalId(result.value);
-          handleFindPatient(result.value);
+          void handleFindPatient(result.value);
         }}
       />
 
@@ -148,7 +150,7 @@ router.push(`/patient/${patient.id}`);
 
       />
 
-      <Pressable style={styles.button} onPress={() => handleFindPatient()}>
+      <Pressable style={styles.button} onPress={() => void handleFindPatient()}>
 
         <Text style={styles.buttonText}>Otsi patsienti</Text>
 

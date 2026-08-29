@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import OrdersTab from "@/components/patient/OrdersTab";
 import { getOrders } from "@/repositories/OrderRepository";
-import { placeOrder } from "@/services/OrderService";
+import { placeOrderConflictSafe } from "@/services/OrderService";
 import AppHeader from "@/components/AppHeader";
 import ImagingTab from "@/components/patient/ImagingTab";
 import LabsTab from "@/components/patient/LabsTab";
@@ -26,27 +26,27 @@ import {
   getMedicationOptions,
 } from "@/repositories/MedicationRepository";
 import {
-  openImagingImage,
-  openImagingReport,
+  openImagingImageConflictSafe,
+  openImagingReportConflictSafe,
 } from "@/services/ImagingService";
-import { openLabPanel } from "@/services/LabService";
-import { revealQuestion } from "@/services/RevealService";
+import { openLabPanelConflictSafe } from "@/services/LabService";
+import { revealQuestionConflictSafe } from "@/services/RevealService";
 import { subscribeToSync } from "@/services/SyncService";
-import { addPatientNote } from "@/services/NoteService";
-import { recordIntervention } from "@/services/InterventionService";
-import { administerMedication } from "@/services/MedicationService";
+import { addPatientNoteConflictSafe } from "@/services/NoteService";
+import { recordInterventionConflictSafe } from "@/services/InterventionService";
+import { administerMedicationConflictSafe } from "@/services/MedicationService";
 import {
   canCurrentCaseManagerEditPatient,
-  acceptPatientTransfer,
+  acceptPatientTransferConflictSafe,
   getPatientAssignment,
   getPendingPatientTransfer,
-  rejectPatientTransfer,
+  rejectPatientTransferConflictSafe,
 } from "@/services/AssignmentRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import VitalsTab from "@/components/patient/VitalsTab";
 import { getVitalSigns } from "@/repositories/VitalSignsRepository";
-import { recordVitalSigns } from "@/services/VitalSignsService";
+import { recordVitalSignsConflictSafe } from "@/services/VitalSignsService";
 import ResourceDeveloperCard from "@/components/patient/ResourceDeveloperCard";
 import ActiveInterventionsCard from "@/components/patient/ActiveInterventionsCard";
 import ClinicalAssessmentDeveloperCard from "@/components/patient/ClinicalAssessmentDeveloperCard";
@@ -69,6 +69,10 @@ export default function PatientWorkspaceScreen() {
 const [activeTab, setActiveTab] = useState<PatientTab>("overview");
 const [showMoreTabs, setShowMoreTabs] = useState(false);
 const [, setRefreshKey] = useState(0);
+const [workflowMessage,setWorkflowMessage]=useState<string>();
+const [workflowPending,setWorkflowPending]=useState(false);
+const runWorkflow=async <T extends {message:string}>(operation:()=>Promise<T>):Promise<T>=>{setWorkflowPending(true);setWorkflowMessage("Muudatus ootab serveri kinnitust…");
+  try{const outcome=await operation();setWorkflowMessage(outcome.message);return outcome;}finally{setWorkflowPending(false);}};
   const runtimeVersion = useSyncExternalStore(subscribeToRuntimeSnapshots, getRuntimeSnapshotVersion, getRuntimeSnapshotVersion);
   const patient = findPatientById(id ?? "");
 const isCompleted = patient?.status === "Completed";
@@ -141,6 +145,7 @@ useEffect(() => {
         <Text style={styles.cmLine}>
           Praegune juhtumikorraldaja: {assignment?.caseManagerName ?? "Määramata"}
         </Text>
+        {workflowMessage&&<Text accessibilityRole="alert" style={workflowPending?styles.pendingNotice:styles.workflowNotice}>{workflowMessage}</Text>}
 
         {isCompleted && (
           <Text style={styles.completedNotice}>
@@ -172,10 +177,10 @@ useEffect(() => {
                       {
                         text: "Keeldu",
                         style: "destructive",
-                        onPress: () => rejectPatientTransfer(
+                        onPress: () => void runWorkflow(()=>rejectPatientTransferConflictSafe(
                           patient.id,
                           getCurrentCaseManager()
-                        ),
+                        )),
                       },
                     ]
                   );
@@ -193,10 +198,10 @@ useEffect(() => {
                       { text: "Katkesta", style: "cancel" },
                       {
                         text: "Nõustu",
-                        onPress: () => acceptPatientTransfer(
+                        onPress: () => void runWorkflow(()=>acceptPatientTransferConflictSafe(
                           patient.id,
                           getCurrentCaseManager()
-                        ),
+                        )),
                       },
                     ]
                   );
@@ -264,7 +269,7 @@ useEffect(() => {
             measurements={getVitalSigns(patient.id)}
             canonicalRuntime={getCanonicalPatientRuntimeSnapshot(patient.id, runtimeVersion)}
             readOnly={isReadOnly}
-            onRecord={(values) => recordVitalSigns(patient.id, values)}
+            onRecord={async (values) => Boolean((await runWorkflow(()=>recordVitalSignsConflictSafe(patient.id, values))).value)}
           />
         )}
 
@@ -277,7 +282,7 @@ useEffect(() => {
            labs={getLabResults(patient.id)}
            readOnly={isReadOnly}
            onOpenPanel={(panel) => {
-             openLabPanel(patient.id, panel);
+             void runWorkflow(()=>openLabPanelConflictSafe(patient.id, panel));
            }}
          />
        )}
@@ -287,12 +292,10 @@ useEffect(() => {
     studies={imagingStudies}
     readOnly={isReadOnly}
     onOpenImage={(study) => {
-      openImagingImage(patient.id, study.id, study.title);
-      setImagingStudies(getImagingStudies(patient.id));
+      void runWorkflow(()=>openImagingImageConflictSafe(patient.id, study.id, study.title));
     }}
     onOpenReport={(study) => {
-      openImagingReport(patient.id, study.id, study.title);
-      setImagingStudies(getImagingStudies(patient.id));
+      void runWorkflow(()=>openImagingReportConflictSafe(patient.id, study.id, study.title));
     }}
   />
 )}
@@ -302,8 +305,7 @@ useEffect(() => {
    questions={questions}
    readOnly={isReadOnly}
    onReveal={(questionId) => {
-     revealQuestion(patient.id, questionId);
-     setQuestions(getQuestions(patient.id));
+     void runWorkflow(()=>revealQuestionConflictSafe(patient.id, questionId));
    }}
  />
 )}
@@ -312,8 +314,7 @@ useEffect(() => {
     orders={orders}
     readOnly={isReadOnly}
     onPlaceOrder={(order) => {
-      placeOrder(order);
-      setOrders(getOrders(patient.id));
+      void runWorkflow(()=>placeOrderConflictSafe(order));
     }}
   />
 )}
@@ -322,7 +323,7 @@ useEffect(() => {
           <NotesTab
             notes={getNotes(patient.id)}
             readOnly={isReadOnly}
-            onAddNote={(text) => addPatientNote(patient.id, text)}
+            onAddNote={async (text) => Boolean((await runWorkflow(()=>addPatientNoteConflictSafe(patient.id, text))).value)}
           />
         )}
 
@@ -334,9 +335,9 @@ useEffect(() => {
             medicationOptions={getMedicationOptions(patient.id)}
             medicationAdministrations={getMedicationAdministrations(patient.id)}
             readOnly={isReadOnly}
-            onRecord={(optionId) => recordIntervention(patient.id, optionId)}
-            onAdministerMedication={(optionId) =>
-              administerMedication(patient.id, optionId)
+            onRecord={async (optionId) => Boolean((await runWorkflow(()=>recordInterventionConflictSafe(patient.id, optionId))).value)}
+            onAdministerMedication={async (optionId) =>
+              Boolean((await runWorkflow(()=>administerMedicationConflictSafe(patient.id, optionId))).value)
             }
           />
         )}
@@ -528,6 +529,8 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
   },
+  pendingNotice: { color: "#92400e", backgroundColor: "#fffaeb", padding: 8, borderRadius: 8, marginTop: 8 },
+  workflowNotice: { color: "#344054", backgroundColor: "#f2f4f7", padding: 8, borderRadius: 8, marginTop: 8 },
 
   tabs: {
 

@@ -34,6 +34,8 @@ import {
   exerciseProjectionIdentity,
   type ExerciseProjectionCandidate,
 } from "@/services/exercise/ExerciseProjectionWriteCoordinator";
+import { getSharedWorkflowHead, observeSharedWorkflowHead, setSharedWorkflowConnectivity } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
+import { restorePatientSharedWorkflowState, type PatientSharedWorkflowState } from "@/services/sharedWorkflow/PatientSharedWorkflowState";
 
 export type CloudSyncStatus = {
   state: "disabled" | "connecting" | "synced" | "saving" | "offline" | "error";
@@ -104,6 +106,7 @@ let remotePollTimer: ReturnType<typeof setInterval> | undefined;
 let stopDiscoveryConnectivity: (() => void) | undefined;
 let stopDiscoveryAppState: (() => void) | undefined;
 let stopLocalSubscription: (() => void) | undefined;
+let stopSharedWorkflowRealtime: (() => void) | undefined;
 const remoteVersions = new Map<string, Readonly<{ revision: number; updatedAt: string }>>();
 let applyingRemoteState = false;
 let latestRemoteExercise: Readonly<{ exerciseId: string; lifecycleState: string }> | undefined;
@@ -260,6 +263,25 @@ function applyRemoteRow(row: ExerciseStateRow): void {
   notifySync("remote");
   applyingRemoteState = false;
   setStatus({ state: "synced", syncedAt: row.updated_at });
+}
+
+async function refreshSharedWorkflowPatients(cloudClient: NonNullable<typeof supabase>): Promise<boolean> {
+  if (remoteSelectionState !== "RESOLVED") return false;
+  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  const { data, error } = await cloudClient.from("shared_workflow_patient_states")
+    .select("exercise_id,patient_id,revision,owner_user_id,state")
+    .eq("exercise_id", exerciseId);
+  recordSupabaseTraffic({ operation: "SELECT", endpoint: "shared_workflow.patient_heads", data });
+  if (error || !data) return false;
+  for (const candidate of data) {
+    const authoritative = candidate as {exercise_id:string;patient_id:string;revision:number;owner_user_id?:string;state:PatientSharedWorkflowState};
+    const known = getSharedWorkflowHead(authoritative.exercise_id, authoritative.patient_id);
+    if (authoritative.revision < known.revision) continue;
+    observeSharedWorkflowHead(authoritative.exercise_id,authoritative.patient_id,authoritative.revision,authoritative.owner_user_id);
+    restorePatientSharedWorkflowState(authoritative.patient_id,authoritative.state);
+  }
+  notifySync("remote");
+  return true;
 }
 
 async function performRemoteCurrentExerciseRefresh(_trigger: ExerciseDiscoveryRefreshTrigger): Promise<void> {
@@ -533,12 +555,14 @@ export async function startCloudSync(): Promise<() => void> {
   const cloudClient = supabase;
 
   setStatus({ state: "connecting" });
+  setSharedWorkflowConnectivity(false);
   remoteSelectionState = "UNRESOLVED";
   conflictingRemoteExercises = [];
   explicitlySelectedExerciseId = undefined;
 
   projectionWriteCoordinator.reset();
   stopLocalSubscription?.(); stopLocalSubscription = undefined;
+  stopSharedWorkflowRealtime?.(); stopSharedWorkflowRealtime = undefined;
   if (remotePollTimer) { clearInterval(remotePollTimer); remotePollTimer = undefined; }
   stopDiscoveryConnectivity?.(); stopDiscoveryConnectivity = undefined;
   stopDiscoveryAppState?.(); stopDiscoveryAppState = undefined;
@@ -576,6 +600,27 @@ export async function startCloudSync(): Promise<() => void> {
   });
   stopDiscoveryConnectivity = () => { stopped = true; void cloudClient.removeChannel(connectivityChannel); };
 
+  // Realtime carries only patient/revision metadata. The authoritative patient
+  // payload is fetched on demand, avoiding a full exercise projection echo.
+  const workflowChannel=cloudClient.channel("shared-workflow-notifications")
+    .on("postgres_changes",{event:"*",schema:"public",table:"shared_workflow_notifications"},payload=>{
+      const row=payload.new as {exercise_id?:string;patient_id?:string;revision?:number};
+      if(!row.exercise_id||!row.patient_id||row.exercise_id!==getCanonicalExerciseSnapshot().exerciseId)return;
+      void cloudClient.from("shared_workflow_patient_states").select("exercise_id,patient_id,revision,owner_user_id,state")
+        .eq("exercise_id",row.exercise_id).eq("patient_id",row.patient_id).single().then(({data,error})=>{
+          recordSupabaseTraffic({operation:"SELECT",endpoint:"shared_workflow.patient_state",data});if(error||!data)return;
+          const authoritative=data as {exercise_id:string;patient_id:string;revision:number;owner_user_id?:string;state:PatientSharedWorkflowState};
+          observeSharedWorkflowHead(authoritative.exercise_id,authoritative.patient_id,authoritative.revision,authoritative.owner_user_id);
+          restorePatientSharedWorkflowState(authoritative.patient_id,authoritative.state);notifySync("remote");
+        });
+    }).subscribe(channelStatus=>{
+      if(channelStatus!=="SUBSCRIBED"){setSharedWorkflowConnectivity(false);return;}
+      // Subscribe first, then hydrate. This ordering closes the startup window:
+      // an update racing with hydration is either in the result or notified.
+      void refreshSharedWorkflowPatients(cloudClient).then(hydrated=>setSharedWorkflowConnectivity(hydrated));
+    });
+  stopSharedWorkflowRealtime=()=>{setSharedWorkflowConnectivity(false);void cloudClient.removeChannel(workflowChannel);};
+
   // A 60-second safety query bounds missed-event discovery while reducing the
   // previous stable cadence from 720 to 60 requests/hour (91.7%).
   remotePollTimer = setInterval(() => { void discoveryRefreshCoordinator.safetyPoll(); }, EXERCISE_DISCOVERY_SAFETY_INTERVAL_MS);
@@ -606,6 +651,7 @@ export async function startCloudSync(): Promise<() => void> {
     if (remotePollTimer) clearInterval(remotePollTimer);
     remotePollTimer = undefined;
     stopDiscoveryConnectivity?.(); stopDiscoveryConnectivity = undefined;
+    stopSharedWorkflowRealtime?.(); stopSharedWorkflowRealtime = undefined;
     stopDiscoveryAppState?.(); stopDiscoveryAppState = undefined;
   };
 }

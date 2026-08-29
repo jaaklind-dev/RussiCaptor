@@ -5,6 +5,7 @@ import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { getCurrentLocationZone } from "@/services/CurrentLocationService";
 import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
+import { executeAuthoritativePatientMutation } from "@/services/sharedWorkflow/AuthoritativePatientMutationService";
 
 export function updatePatientLocationFromCurrentCm(patientId: string): boolean {
   const patient = findPatientById(patientId);
@@ -34,4 +35,8 @@ export function updatePatientLocationFromCurrentCm(patientId: string): boolean {
 
   notifySync();
   return true;
+}
+
+export function updatePatientLocationFromCurrentCmConflictSafe(patientId:string){
+  return executeAuthoritativePatientMutation({patientId,commandId:createId("SW-LOCATION"),kind:"MUTABLE",mutate:()=>updatePatientLocationFromCurrentCm(patientId)});
 }

@@ -7,6 +7,7 @@ import { canCurrentCaseManagerEditPatient } from "@/services/AssignmentRepositor
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
+import { executeAuthoritativePatientMutation } from "@/services/sharedWorkflow/AuthoritativePatientMutationService";
 
 export type VitalSignsInput = Omit<
   VitalSigns,
@@ -48,4 +49,8 @@ export function recordVitalSigns(
   });
   notifySync();
   return true;
+}
+
+export function recordVitalSignsConflictSafe(patientId:string,values:VitalSignsInput){
+  return executeAuthoritativePatientMutation({patientId,commandId:createId("SW-VITAL"),kind:"APPEND",mutate:()=>recordVitalSigns(patientId,values)});
 }

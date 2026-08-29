@@ -4,9 +4,9 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { findPatientById } from "@/repositories/PatientRepository";
 import {
-  acceptPatientTransfer,
+  acceptPatientTransferConflictSafe,
   getMyIncomingTakeoverRequests,
-  rejectPatientTransfer,
+  rejectPatientTransferConflictSafe,
 } from "@/services/AssignmentRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { subscribeToSync } from "@/services/SyncService";
@@ -58,10 +58,10 @@ export default function TakeoverRequestsCard() {
                       {
                         text: "Keeldu",
                         style: "destructive",
-                        onPress: () => rejectPatientTransfer(
+                        onPress: () => void rejectPatientTransferConflictSafe(
                           request.patientId,
                           getCurrentCaseManager()
-                        ),
+                        ).then(outcome=>Alert.alert("Ülevõtmistaotlus",outcome.message)),
                       },
                     ]
                   );
@@ -79,10 +79,10 @@ export default function TakeoverRequestsCard() {
                       { text: "Katkesta", style: "cancel" },
                       {
                         text: "Nõustu",
-                        onPress: () => acceptPatientTransfer(
+                        onPress: () => void acceptPatientTransferConflictSafe(
                           request.patientId,
                           getCurrentCaseManager()
-                        ),
+                        ).then(outcome=>Alert.alert("Ülevõtmistaotlus",outcome.message)),
                       },
                     ]
                   );

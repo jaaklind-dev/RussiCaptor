@@ -19,7 +19,10 @@ describe("WP-EGRESS-05 CloudSync discovery integration", () => {
   });
 
   test("discovery never subscribes to the large exercise state row", () => {
-    const connectivity = source.slice(source.indexOf('channel("exercise-discovery-connectivity")'));
+    const connectivity = source.slice(
+      source.indexOf('channel("exercise-discovery-connectivity")'),
+      source.indexOf('channel("shared-workflow-notifications")'),
+    );
     expect(connectivity).not.toContain("postgres_changes");
     expect(source).not.toContain('table: "exercise_states"');
     expect(source).toContain("exercise_session:state->exerciseSession");

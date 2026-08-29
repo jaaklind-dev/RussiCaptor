@@ -8,7 +8,7 @@ import type { CanonicalPatientRuntimeSnapshot } from "@/services/RuntimeSnapshot
 type Props = {
   measurements: VitalSigns[];
   readOnly?: boolean;
-  onRecord: (values: VitalSignsInput) => boolean;
+  onRecord: (values: VitalSignsInput) => boolean | Promise<boolean>;
   canonicalRuntime?: CanonicalPatientRuntimeSnapshot;
 };
 
@@ -72,7 +72,7 @@ export default function VitalsTab({ measurements, readOnly = false, onRecord, ca
     [values]
   );
 
-  function save(): void {
+  async function save(): Promise<void> {
     const parsed: VitalSignsInput = {};
     fields.forEach((field) => {
       const raw = values[field.key]?.trim();
@@ -84,7 +84,7 @@ export default function VitalsTab({ measurements, readOnly = false, onRecord, ca
       return;
     }
 
-    if (onRecord(parsed)) {
+    if (await onRecord(parsed)) {
       setValues({});
     }
   }
@@ -135,7 +135,7 @@ export default function VitalsTab({ measurements, readOnly = false, onRecord, ca
           </View>
           <Pressable
             disabled={!requiredComplete}
-            onPress={save}
+            onPress={() => void save()}
             style={[styles.saveButton, !requiredComplete && styles.saveButtonDisabled]}
           >
             <Text style={styles.saveButtonText}>Salvesta mõõtmine</Text>

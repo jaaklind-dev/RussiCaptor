@@ -8,6 +8,7 @@ import { processOrder } from "@/services/WorkflowService";
 import { findPatientById } from "@/repositories/PatientRepository";
 import { canCurrentCaseManagerEditPatient } from "@/services/AssignmentRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
+import { executeAuthoritativePatientMutation } from "@/services/sharedWorkflow/AuthoritativePatientMutationService";
 export function placeOrder(
   order: Order
 ): void {
@@ -39,4 +40,8 @@ export function placeOrder(
 
   processOrder(order);
   notifySync();
+}
+
+export function placeOrderConflictSafe(order:Order){
+  return executeAuthoritativePatientMutation({patientId:order.patientId,commandId:createId("SW-ORDER"),kind:"MUTABLE",mutate:()=>placeOrder(order)});
 }

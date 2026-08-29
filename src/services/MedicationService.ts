@@ -9,6 +9,7 @@ import { canCurrentCaseManagerEditPatient } from "@/services/AssignmentRepositor
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
+import { executeAuthoritativePatientMutation } from "@/services/sharedWorkflow/AuthoritativePatientMutationService";
 
 export function administerMedication(
   patientId: string,
@@ -58,4 +59,8 @@ export function administerMedication(
 
   notifySync();
   return true;
+}
+
+export function administerMedicationConflictSafe(patientId:string,optionId:string){
+  return executeAuthoritativePatientMutation({patientId,commandId:createId("SW-MED"),kind:"APPEND",mutate:()=>administerMedication(patientId,optionId)});
 }

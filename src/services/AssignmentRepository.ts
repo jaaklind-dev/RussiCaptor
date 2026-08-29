@@ -11,6 +11,9 @@ import type { CaseManager } from "@/models/CaseManager";
 import type { PatientAssignment } from "@/models/PatientAssignment";
 import type { PatientTransfer } from "@/models/PatientTransfer";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
+import { executeAuthoritativePatientMutation } from "@/services/sharedWorkflow/AuthoritativePatientMutationService";
+import { getSharedWorkflowHead } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 
 let assignments: PatientAssignment[] = [];
 let transfers: PatientTransfer[] = [];
@@ -22,6 +25,27 @@ export type AssignmentResult =
 
 export function assignPatientToMe(patientId: string): AssignmentResult {
   return assignPatient(patientId, getCurrentCaseManager());
+}
+
+export function assignPatientToMeConflictSafe(patientId:string){
+  const operator=getCurrentCaseManager();
+  const existing=getPatientAssignment(patientId);
+  const exerciseId=getCanonicalExerciseSnapshot().exerciseId;
+  const head=getSharedWorkflowHead(exerciseId,patientId);
+  if(existing&&!existing.endedAt&&existing.caseManagerId!==operator.id){const value=assignPatient(patientId,operator);return Promise.resolve(Object.freeze({
+    result:Object.freeze({status:"ALREADY_OWNED" as const,revision:head.revision,ownerUserId:head.ownerUserId??existing.caseManagerId}),
+    value,message:"Patsient on juba teise CM-i vastutusel.",
+  }));}
+  if(existing&&!existing.endedAt&&existing.caseManagerId===operator.id&&head.revision===0){
+    return executeAuthoritativePatientMutation({patientId,commandId:createId("SW-REACQUIRE"),kind:"REACQUIRE",expectUnowned:true,nextOwnerUserId:operator.id,
+      mutate:()=>assignPatient(patientId,operator)});
+  }
+  if(existing&&!existing.endedAt){const value=assignPatient(patientId,operator);return Promise.resolve(Object.freeze({
+    result:Object.freeze({status:"IDEMPOTENT" as const,revision:head.revision,ownerUserId:head.ownerUserId}),value,
+    message:"Patsient on juba sinu vastutusel.",
+  }));}
+  return executeAuthoritativePatientMutation({patientId,commandId:createId("SW-CLAIM"),kind:"CLAIM",expectUnowned:true,nextOwnerUserId:operator.id,
+    mutate:()=>assignPatient(patientId,operator)});
 }
 
 export function assignPatient(
@@ -95,6 +119,11 @@ export function unassignPatient(
   }
 }
 
+export function releasePatientConflictSafe(patientId:string,endReason:PatientAssignment["endReason"]="completed"){
+  return executeAuthoritativePatientMutation({patientId,commandId:createId("SW-RELEASE"),kind:"RELEASE",expectedOwnerUserId:getPatientAssignment(patientId)?.caseManagerId,nextOwnerUserId:undefined,
+    mutate:()=>unassignPatient(patientId,endReason)});
+}
+
 export function requestPatientTakeover(
   patientId: string,
   requestingCaseManager: CaseManager
@@ -140,6 +169,12 @@ export function requestPatientTakeover(
 
   notifySync();
   return true;
+}
+
+export function requestPatientTakeoverConflictSafe(patientId:string,requestingCaseManager:CaseManager){
+  const owner=getPatientAssignment(patientId);
+  return executeAuthoritativePatientMutation({patientId,commandId:createId("SW-TRANSFER-REQUEST"),kind:"TRANSFER_REQUEST",
+    expectedOwnerUserId:owner&&!owner.endedAt?owner.caseManagerId:undefined,nextOwnerUserId:owner&&!owner.endedAt?owner.caseManagerId:undefined,mutate:()=>requestPatientTakeover(patientId,requestingCaseManager)});
 }
 
 export function acceptPatientTransfer(
@@ -194,6 +229,12 @@ export function acceptPatientTransfer(
   return true;
 }
 
+export function acceptPatientTransferConflictSafe(patientId:string,approvingCaseManager:CaseManager){
+  const transfer=getPendingPatientTransfer(patientId);
+  return executeAuthoritativePatientMutation({patientId,commandId:createId("SW-TRANSFER"),kind:"TRANSFER",
+    expectedOwnerUserId:getPatientAssignment(patientId)?.caseManagerId,nextOwnerUserId:transfer?.toCaseManagerId,mutate:()=>acceptPatientTransfer(patientId,approvingCaseManager)});
+}
+
 export function rejectPatientTransfer(
   patientId: string,
   rejectingCaseManager: CaseManager
@@ -230,6 +271,12 @@ export function rejectPatientTransfer(
 
   notifySync();
   return true;
+}
+
+export function rejectPatientTransferConflictSafe(patientId:string,rejectingCaseManager:CaseManager){
+  const owner=getPatientAssignment(patientId);
+  return executeAuthoritativePatientMutation({patientId,commandId:createId("SW-TRANSFER-REJECT"),kind:"MUTABLE",
+    expectedOwnerUserId:owner&&!owner.endedAt?owner.caseManagerId:undefined,nextOwnerUserId:owner&&!owner.endedAt?owner.caseManagerId:undefined,mutate:()=>rejectPatientTransfer(patientId,rejectingCaseManager)});
 }
 
 export function getPendingPatientTransfer(

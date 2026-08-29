@@ -6,6 +6,7 @@ import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { canCurrentCaseManagerEditPatient } from "@/services/AssignmentRepository";
+import { executeAuthoritativePatientMutation } from "@/services/sharedWorkflow/AuthoritativePatientMutationService";
 
 export function addPatientNote(patientId: string, text: string): boolean {
   const patient = findPatientById(patientId);
@@ -49,4 +50,8 @@ export function addPatientNote(patientId: string, text: string): boolean {
 
   notifySync();
   return true;
+}
+
+export function addPatientNoteConflictSafe(patientId:string,text:string){
+  return executeAuthoritativePatientMutation({patientId,commandId:createId("SW-NOTE"),kind:"APPEND",mutate:()=>addPatientNote(patientId,text)});
 }

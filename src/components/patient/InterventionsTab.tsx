@@ -18,8 +18,8 @@ type Props = {
   medicationOptions: MedicationOption[];
   medicationAdministrations: MedicationAdministration[];
   readOnly?: boolean;
-  onRecord: (optionId: string) => boolean;
-  onAdministerMedication: (optionId: string) => boolean;
+  onRecord: (optionId: string) => boolean | Promise<boolean>;
+  onAdministerMedication: (optionId: string) => boolean | Promise<boolean>;
 };
 
 export default function InterventionsTab({
@@ -50,7 +50,7 @@ export default function InterventionsTab({
             <Pressable
               key={option.id}
               style={styles.actionButton}
-              onPress={() => onRecord(option.id)}
+              onPress={() => void onRecord(option.id)}
             >
               <Text style={styles.actionButtonText}>{option.label}</Text>
             </Pressable>
@@ -68,7 +68,7 @@ export default function InterventionsTab({
             <Pressable
               key={option.id}
               style={styles.medicationButton}
-              onPress={() => onAdministerMedication(option.id)}
+              onPress={() => void onAdministerMedication(option.id)}
             >
               <Text style={styles.actionButtonText}>{option.name}</Text>
               <Text style={styles.medicationDetails}>

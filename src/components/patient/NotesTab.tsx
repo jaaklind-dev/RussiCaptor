@@ -6,14 +6,14 @@ import type { Note } from "@/models/Note";
 type Props = {
   notes: Note[];
   readOnly?: boolean;
-  onAddNote: (text: string) => boolean;
+  onAddNote: (text: string) => boolean | Promise<boolean>;
 };
 
 export default function NotesTab({ notes, readOnly = false, onAddNote }: Props) {
   const [draft, setDraft] = useState("");
 
-  function saveNote(): void {
-    if (onAddNote(draft)) {
+  async function saveNote(): Promise<void> {
+    if (await onAddNote(draft)) {
       setDraft("");
     }
   }
@@ -36,7 +36,7 @@ export default function NotesTab({ notes, readOnly = false, onAddNote }: Props) 
           <Pressable
             style={[styles.button, draft.trim().length === 0 && styles.buttonDisabled]}
             disabled={draft.trim().length === 0}
-            onPress={saveNote}
+            onPress={() => void saveNote()}
           >
             <Text style={styles.buttonText}>Salvesta märge</Text>
           </Pressable>
