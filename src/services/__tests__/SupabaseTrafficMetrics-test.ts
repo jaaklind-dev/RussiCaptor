@@ -18,6 +18,11 @@ describe("development-only Supabase traffic metrics", () => {
     expect(getSupabaseTrafficMetrics()[0]).toMatchObject({ requestCount: 1, rowsReceived: 0, reconnectCount: 1, avoidedRequestCount: 3, estimatedBytesSaved: 2048 });
   });
 
+  test("records aggregate request bytes without retaining payload contents", () => {
+    recordSupabaseTraffic({ operation: "UPSERT", endpoint: "exercise_states.projection", requestBytes: 1234 });
+    expect(getSupabaseTrafficMetrics()[0]).toMatchObject({ requestCount: 1, bytesSent: 1234, bytesReceived: 0 });
+  });
+
   test("does not classify a changed response as an identical repeat", () => {
     recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.discovery_active", data: [{ revision: 1 }] });
     recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.discovery_active", data: [{ revision: 2 }] });

@@ -4,6 +4,7 @@ export type SupabaseTrafficMetric = Readonly<{
   requestCount: number;
   rowsReceived: number;
   bytesReceived: number;
+  bytesSent: number;
   repeatedRequestCount: number;
   fullSnapshotFetchCount: number;
   reconnectCount: number;
@@ -66,6 +67,7 @@ export function recordSupabaseTraffic(input: Readonly<{
   operation: string;
   endpoint: string;
   data?: unknown;
+  requestBytes?: number;
   fullSnapshot?: boolean;
   reconnect?: boolean;
   avoidedRequests?: number;
@@ -83,6 +85,7 @@ export function recordSupabaseTraffic(input: Readonly<{
     requestCount: (previous?.requestCount ?? 0) + 1,
     rowsReceived: (previous?.rowsReceived ?? 0) + rowCount(input.data),
     bytesReceived: (previous?.bytesReceived ?? 0) + serializedBytes(input.data),
+    bytesSent: (previous?.bytesSent ?? 0) + Math.max(0, Math.floor(input.requestBytes ?? 0)),
     repeatedRequestCount: (previous?.repeatedRequestCount ?? 0) + (repeated ? 1 : 0),
     fullSnapshotFetchCount: (previous?.fullSnapshotFetchCount ?? 0) + (input.fullSnapshot ? 1 : 0),
     reconnectCount: (previous?.reconnectCount ?? 0) + (input.reconnect ? 1 : 0),

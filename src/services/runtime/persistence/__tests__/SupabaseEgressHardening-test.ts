@@ -45,9 +45,9 @@ describe("WP-47A Supabase egress hardening",()=>{
     expect(shouldFetchTerminalDiscoveryState({...row,revision:8},{revision:7,updatedAt:row.updated_at})).toBe(true);
   });
 
-  test("routine publication is bounded to five seconds and duplicate payloads are suppressed",()=>{
+  test("routine checkpoint publication remains five seconds while projection publication is coalesced",()=>{
     expect(ROUTINE_CHECKPOINT_PUBLICATION_MS).toBe(5_000);
-    expect(CLOUD_PROJECTION_INTERVAL_MS).toBe(5_000);
+    expect(CLOUD_PROJECTION_INTERVAL_MS).toBe(60_000);
     expect(isIdenticalCheckpointPayload(checkpoint({},"same"),checkpoint({},"same"))).toBe(true);
     expect(isIdenticalCheckpointPayload(checkpoint({},"one"),checkpoint({},"two"))).toBe(false);
   });

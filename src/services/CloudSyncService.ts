@@ -28,6 +28,12 @@ import {
   ExerciseDiscoveryRefreshCoordinator,
   type ExerciseDiscoveryRefreshTrigger,
 } from "@/services/exercise/ExerciseDiscoveryRefreshCoordinator";
+import {
+  EXERCISE_PROJECTION_COALESCE_INTERVAL_MS,
+  ExerciseProjectionWriteCoordinator,
+  exerciseProjectionIdentity,
+  type ExerciseProjectionCandidate,
+} from "@/services/exercise/ExerciseProjectionWriteCoordinator";
 
 export type CloudSyncStatus = {
   state: "disabled" | "connecting" | "synced" | "saving" | "offline" | "error";
@@ -98,7 +104,6 @@ let remotePollTimer: ReturnType<typeof setInterval> | undefined;
 let stopDiscoveryConnectivity: (() => void) | undefined;
 let stopDiscoveryAppState: (() => void) | undefined;
 let stopLocalSubscription: (() => void) | undefined;
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
 const remoteVersions = new Map<string, Readonly<{ revision: number; updatedAt: string }>>();
 let applyingRemoteState = false;
 let latestRemoteExercise: Readonly<{ exerciseId: string; lifecycleState: string }> | undefined;
@@ -107,7 +112,7 @@ type RemoteSelectionState = "UNRESOLVED" | "RESOLVED" | "CONFLICT";
 let remoteSelectionState: RemoteSelectionState = "UNRESOLVED";
 let conflictingRemoteExercises: CurrentExerciseCandidate[] = [];
 let explicitlySelectedExerciseId: string | undefined;
-export const CLOUD_PROJECTION_INTERVAL_MS = 5_000;
+export const CLOUD_PROJECTION_INTERVAL_MS = EXERCISE_PROJECTION_COALESCE_INTERVAL_MS;
 export { EXERCISE_DISCOVERY_SAFETY_INTERVAL_MS };
 
 function serializedBytes(value: unknown): number {
@@ -377,27 +382,39 @@ export async function publishExplicitlySelectedTerminalExercise(): Promise<boole
   return true;
 }
 
-async function saveToCloud(): Promise<void> {
-  if (!supabase || applyingRemoteState || !canPublishCloudProjection(remoteSelectionState)) return;
+type PreparedCloudProjection = Readonly<{
+  exerciseId: string;
+  lifecycleState: string;
+  savedSession: SharedExerciseState["exerciseSession"];
+  sharedProjection: SharedExerciseState;
+}>;
 
-  const { data: authData } = await supabase.auth.getUser();
-  const user = authData.user;
-  if (!user) return;
-
+function prepareCloudProjection(): ExerciseProjectionCandidate<PreparedCloudProjection> | undefined {
+  if (!supabase || applyingRemoteState || !canPublishCloudProjection(remoteSelectionState)) return undefined;
   const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
-  const nextRevision = (remoteVersions.get(exerciseId)?.revision ?? 0) + 1;
-  setStatus({ state: "saving", syncedAt: status.syncedAt });
-
   const baseProjection = compactActiveExerciseState(createSharedExerciseProjection());
   const savedSession = baseProjection.exerciseSession;
   const lifecycleState = "lifecycleState" in savedSession
     ? savedSession.lifecycleState
     : savedSession.state === "running" ? "RUNNING" : savedSession.state === "paused" ? "PAUSED" : "READY";
-  // A terminal exercise row owns exactly its own immutable derived archive.
-  // Active rows and Runtime checkpoints never carry archives from prior runs.
   const sharedProjection = lifecycleState === "COMPLETED"
     ? withTerminalExerciseArchive(baseProjection, captureCompletedExerciseArchive())
     : baseProjection;
+  const { identity, payloadBytes } = exerciseProjectionIdentity(sharedProjection);
+  return { identity, payloadBytes,
+    value: { exerciseId, lifecycleState, savedSession, sharedProjection } };
+}
+
+async function publishCloudProjection(candidate: ExerciseProjectionCandidate<PreparedCloudProjection>): Promise<boolean> {
+  if (!supabase) return false;
+
+  const { data: authData } = await supabase.auth.getUser();
+  const user = authData.user;
+  if (!user) return false;
+
+  const { exerciseId, lifecycleState, savedSession, sharedProjection } = candidate.value;
+  const nextRevision = (remoteVersions.get(exerciseId)?.revision ?? 0) + 1;
+  setStatus({ state: "saving", syncedAt: status.syncedAt });
   const { data, error } = await supabase
     .from("exercise_states")
     .upsert(
@@ -412,11 +429,12 @@ async function saveToCloud(): Promise<void> {
     )
     .select("exercise_id,revision,updated_at")
     .single();
-  recordSupabaseTraffic({ operation: "UPSERT", endpoint: "exercise_states.projection", data });
+  recordSupabaseTraffic({ operation: "UPSERT", endpoint: "exercise_states.projection", data,
+    requestBytes: candidate.payloadBytes });
 
   if (error) {
     setStatus({ state: "offline", syncedAt: status.syncedAt, message: error.message });
-    return;
+    return false;
   }
 
   const row = data as Pick<ExerciseStateRow, "exercise_id" | "revision" | "updated_at">;
@@ -429,7 +447,16 @@ async function saveToCloud(): Promise<void> {
       : savedSession.state === "running" ? "RUNNING" : savedSession.state === "paused" ? "PAUSED" : "READY",
   };
   setStatus({ state: "synced", syncedAt: row.updated_at });
+  return true;
 }
+
+const projectionWriteCoordinator = new ExerciseProjectionWriteCoordinator(
+  prepareCloudProjection,
+  publishCloudProjection,
+  metric => recordSupabaseTraffic(metric),
+);
+
+async function saveToCloud(): Promise<void> { await projectionWriteCoordinator.flush(); }
 
 /**
  * Moves legacy checkpoint-carried evidence to the historical row that owns it.
@@ -488,16 +515,10 @@ function scheduleCloudSave(): void {
     latestRemoteExercise.exerciseId !== snapshot.exerciseId ||
     latestRemoteExercise.lifecycleState !== snapshot.lifecycleState;
   if (lifecycleBoundary) {
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = undefined;
-    void saveToCloud();
+    projectionWriteCoordinator.schedule(true);
     return;
   }
-  if (saveTimer) return;
-  saveTimer = setTimeout(() => {
-    saveTimer = undefined;
-    void saveToCloud();
-  }, CLOUD_PROJECTION_INTERVAL_MS);
+  projectionWriteCoordinator.schedule();
 }
 
 export async function startCloudSync(): Promise<() => void> {
@@ -512,7 +533,7 @@ export async function startCloudSync(): Promise<() => void> {
   conflictingRemoteExercises = [];
   explicitlySelectedExerciseId = undefined;
 
-  if (saveTimer) { clearTimeout(saveTimer); saveTimer = undefined; }
+  projectionWriteCoordinator.reset();
   stopLocalSubscription?.(); stopLocalSubscription = undefined;
   if (remotePollTimer) { clearInterval(remotePollTimer); remotePollTimer = undefined; }
   stopDiscoveryConnectivity?.(); stopDiscoveryConnectivity = undefined;
@@ -544,6 +565,7 @@ export async function startCloudSync(): Promise<() => void> {
       if (subscribedOnce && reconnectPending) {
         recordSupabaseTraffic({ operation: "DISCOVERY_REALTIME_INVALIDATION", endpoint: "exercise_states.discovery_reconnect", reconnect: true });
         void refreshRemoteCurrentExercise("reconnect");
+        scheduleCloudSave();
       }
       subscribedOnce = true;
       reconnectPending = false;
@@ -564,6 +586,9 @@ export async function startCloudSync(): Promise<() => void> {
     if (returnedToForeground) {
       recordSupabaseTraffic({ operation: "DISCOVERY_FOREGROUND_INVALIDATION", endpoint: "exercise_states.discovery_foreground" });
       void refreshRemoteCurrentExercise("foreground");
+      scheduleCloudSave();
+    } else if (nextState !== "active") {
+      void projectionWriteCoordinator.flush();
     }
   });
   stopDiscoveryAppState = () => appStateSubscription.remove();
@@ -574,7 +599,7 @@ export async function startCloudSync(): Promise<() => void> {
   });
 
   return () => {
-    if (saveTimer) clearTimeout(saveTimer);
+    projectionWriteCoordinator.reset();
     stopLocalSubscription?.();
     stopLocalSubscription = undefined;
     if (remotePollTimer) clearInterval(remotePollTimer);
