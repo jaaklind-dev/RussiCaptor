@@ -544,12 +544,9 @@ export async function startCloudSync(): Promise<() => void> {
   stopDiscoveryAppState?.(); stopDiscoveryAppState = undefined;
 
   const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
-    const { error } = await supabase.auth.signInAnonymously();
-    if (error) {
-      setStatus({ state: "error", message: error.message });
-      return () => {};
-    }
+  if (!sessionData.session || sessionData.session.user.is_anonymous) {
+    setStatus({ state: "error", message: "Autenditud operaatori seanss puudub." });
+    return () => {};
   }
 
   const { data: authData } = await supabase.auth.getUser();

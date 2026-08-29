@@ -14,8 +14,11 @@ import { useEffect, useState } from "react";
 import { router } from "expo-router";
 
 import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
+import { useOperatorSession } from "@/hooks/useOperatorSession";
+import { hasActiveRole, signOutOperator } from "@/services/authorization/OperatorSessionService";
 
 export default function ExconScreen() {
+  const operator = useOperatorSession();
 
   const [snapshot, setSnapshot] = useState({
 
@@ -45,6 +48,10 @@ function refreshSession(): void {
 
   }, []);
 
+  useEffect(() => {
+    if (operator.state !== "LOADING" && !hasActiveRole(operator, "EXCON", snapshot.exerciseId)) router.replace("/");
+  }, [operator, snapshot.exerciseId]);
+
   return (
 
     <ScrollView contentContainerStyle={styles.container}>
@@ -52,6 +59,7 @@ function refreshSession(): void {
       <Text style={styles.title}>Õppuse juhtimine</Text>
 
       <Text style={styles.subtitle}>EXCON · Õppuse juhtimiskeskus</Text>
+      {operator.state === "AUTHENTICATED" && <Text style={styles.operator}>Operaator: {operator.profile.displayName}</Text>}
 
       <Pressable style={styles.instructorButton} onPress={() => router.push("/excon/dashboard")}>
         <Text style={styles.instructorButtonText}>Ava õppuse töölaud</Text>
@@ -77,6 +85,7 @@ function refreshSession(): void {
       >
         <Text style={styles.backButtonText}>Tagasi töölauale</Text>
       </Pressable>
+      <Pressable style={styles.logoutButton} onPress={() => void signOutOperator().then(() => router.replace("/"))}><Text style={styles.logoutButtonText}>Logi välja</Text></Pressable>
 
     </ScrollView>
 
@@ -113,6 +122,9 @@ const styles = StyleSheet.create({
     color: "#666",
 
   },
+  operator: { marginTop: 6, color: "#475467" },
+  logoutButton: { alignItems: "center", paddingVertical: 14 },
+  logoutButtonText: { color: "#B42318", fontWeight: "700" },
 
   backButton: {
     width: "100%",

@@ -16,6 +16,7 @@ export function updatePatientLocationFromCurrentCm(patientId: string): boolean {
 
   const timestamp = new Date().toISOString();
   const previousLocation = patient.location;
+  const operator = getCurrentCaseManager();
   setPatientLocation(patientId, zone.name);
 
   addTimelineEvent({
@@ -26,7 +27,8 @@ export function updatePatientLocationFromCurrentCm(patientId: string): boolean {
     type: "status",
     title: "Patsiendi asukoht muutus",
     description: `${previousLocation} → ${zone.name}`,
-    author: getCurrentCaseManager().name,
+    author: operator.name,
+    authorId: operator.id,
     visibility: "revealed",
   });
 

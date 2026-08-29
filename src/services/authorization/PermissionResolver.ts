@@ -1,7 +1,8 @@
 import type { AuthorizationContext, AuthorizationPermission, RoleAssignment } from "@/models/authorization/Authorization";
 
 const rolePermissions = Object.freeze({
-  EXCON: Object.freeze(["EXERCISE_RUNTIME_RECOVERY", "INSTRUCTOR_EVALUATION_READ", "INSTRUCTOR_EVALUATION_WRITE"] as const),
+  CM: Object.freeze(["EXERCISE_JOIN", "CM_WORKFLOW_WRITE"] as const),
+  EXCON: Object.freeze(["EXCON_EXERCISE_CONTROL", "EXERCISE_JOIN", "EXERCISE_RUNTIME_RECOVERY", "INSTRUCTOR_EVALUATION_READ", "INSTRUCTOR_EVALUATION_WRITE"] as const),
 }) satisfies Readonly<Record<RoleAssignment["role"], readonly AuthorizationPermission[]>>;
 
 export function assignmentMatchesContext(assignment: RoleAssignment, context: AuthorizationContext): boolean {

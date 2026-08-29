@@ -23,12 +23,14 @@ export function addPatientNote(patientId: string, text: string): boolean {
   const exerciseId = getCurrentExercise().id;
   const createdAt = new Date().toISOString();
 
+  const operator = getCurrentCaseManager();
   addNoteToRepository({
     id: createId("NOTE"),
     exerciseId,
     patientId,
     text: trimmedText,
-    author: getCurrentCaseManager().name,
+    author: operator.name,
+    authorId: operator.id,
     createdAt,
   });
 
@@ -40,7 +42,8 @@ export function addPatientNote(patientId: string, text: string): boolean {
     type: "note",
     title: "CM märge lisatud",
     description: trimmedText,
-    author: getCurrentCaseManager().name,
+    author: operator.name,
+    authorId: operator.id,
     visibility: "revealed",
   });
 

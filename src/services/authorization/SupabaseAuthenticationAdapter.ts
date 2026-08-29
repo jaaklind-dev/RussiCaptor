@@ -15,7 +15,8 @@ export class SupabaseAuthenticationAdapter {
       if (!sessionData.session) return Object.freeze({ state: "UNAUTHENTICATED" });
       const { data, error } = await this.client.auth.getUser();
       if (error || !data.user) return Object.freeze({ state: error ? "UNAVAILABLE" : "UNAUTHENTICATED" });
-      return Object.freeze({ state: "AUTHENTICATED", identity: Object.freeze({ userId: data.user.id, sessionExpiresAt: sessionData.session.expires_at ? new Date(sessionData.session.expires_at * 1000).toISOString() : undefined }) });
+      if (data.user.is_anonymous) return Object.freeze({ state: "UNAUTHENTICATED" });
+      return Object.freeze({ state: "AUTHENTICATED", identity: Object.freeze({ userId: data.user.id, email: data.user.email, isAnonymous: false, sessionExpiresAt: sessionData.session.expires_at ? new Date(sessionData.session.expires_at * 1000).toISOString() : undefined }) });
     } catch { return Object.freeze({ state: "UNAVAILABLE" }); }
   }
 }

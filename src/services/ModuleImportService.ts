@@ -252,12 +252,7 @@ type ImportPersistenceClient = NonNullable<typeof supabase>;
 async function ensureAuthenticatedUser(client: ImportPersistenceClient = supabase!): Promise<string> {
   if (!client) throw new Error("Supabase pole seadistatud.");
   let { data } = await client.auth.getUser();
-  if (!data.user) {
-    const signedIn = await client.auth.signInAnonymously();
-    if (signedIn.error) throw signedIn.error;
-    data = { user: signedIn.data.user };
-  }
-  if (!data.user) throw new Error("Supabase autentimine ebaõnnestus.");
+  if (!data.user || data.user.is_anonymous) throw new Error("Autenditud EXCON operaator on nõutud.");
   return data.user.id;
 }
 

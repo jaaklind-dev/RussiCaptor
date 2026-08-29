@@ -69,6 +69,7 @@ export function assignPatient(
     title: "Patsient määratud Case Managerile",
     description: `Patsient määrati Case Managerile ${caseManager.name}.`,
     author: caseManager.name,
+    authorId: caseManager.id,
     visibility: "revealed",
   });
 
@@ -133,6 +134,7 @@ export function requestPatientTakeover(
     title: "Ülevõtmistaotlus saadetud",
     description: `${requestingCaseManager.name} taotles patsiendi ülevõtmist CM-ilt ${currentAssignment.caseManagerName}.`,
     author: requestingCaseManager.name,
+    authorId: requestingCaseManager.id,
     visibility: "revealed",
   });
 
@@ -184,6 +186,7 @@ export function acceptPatientTransfer(
     title: "Patsiendi üleandmine vastu võetud",
     description: `Patsient anti üle: ${currentAssignment.caseManagerName} → ${transfer.toCaseManagerName}.`,
     author: approvingCaseManager.name,
+    authorId: approvingCaseManager.id,
     visibility: "revealed",
   });
 
@@ -221,6 +224,7 @@ export function rejectPatientTransfer(
     title: "Ülevõtmistaotlus tagasi lükatud",
     description: `${rejectingCaseManager.name} lükkas CM-i ${transfer.toCaseManagerName} ülevõtmistaotluse tagasi.`,
     author: rejectingCaseManager.name,
+    authorId: rejectingCaseManager.id,
     visibility: "revealed",
   });
 

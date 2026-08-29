@@ -1,7 +1,10 @@
-export const authorizationRoles = ["EXCON"] as const;
+export const authorizationRoles = ["CM", "EXCON"] as const;
 export type AuthorizationRole = (typeof authorizationRoles)[number];
 
 export const authorizationPermissions = [
+  "EXERCISE_JOIN",
+  "CM_WORKFLOW_WRITE",
+  "EXCON_EXERCISE_CONTROL",
   "INSTRUCTOR_EVALUATION_READ",
   "INSTRUCTOR_EVALUATION_WRITE",
   "EXERCISE_RUNTIME_RECOVERY",
@@ -24,7 +27,7 @@ export type RoleAssignment = Readonly<{
   issuedBy: string;
 }>;
 
-export type AuthenticatedIdentity = Readonly<{ userId: string; sessionExpiresAt?: string }>;
+export type AuthenticatedIdentity = Readonly<{ userId: string; email?: string; isAnonymous: boolean; sessionExpiresAt?: string }>;
 export type AuthorizationProvenance = Readonly<{
   authority: "SUPABASE_ROLE_ASSIGNMENTS";
   verifiedAt: string;

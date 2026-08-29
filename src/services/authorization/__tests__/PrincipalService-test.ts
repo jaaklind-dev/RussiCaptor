@@ -11,7 +11,7 @@ describe("PrincipalService", () => {
       { load: async () => undefined, store: async value => { stored = value; }, clear: async () => undefined },
     );
     const result = await service.resolve(); expect(result.state).toBe("AUTHENTICATED");
-    if (result.state === "AUTHENTICATED") { expect(result.principal.userId).toBe("USER-A"); expect(result.principal.permissions).toEqual(["EXERCISE_RUNTIME_RECOVERY", "INSTRUCTOR_EVALUATION_READ", "INSTRUCTOR_EVALUATION_WRITE"]); expect(Object.isFrozen(result.principal)).toBe(true); }
+    if (result.state === "AUTHENTICATED") { expect(result.principal.userId).toBe("USER-A"); expect(result.principal.permissions).toEqual(["EXCON_EXERCISE_CONTROL", "EXERCISE_JOIN", "EXERCISE_RUNTIME_RECOVERY", "INSTRUCTOR_EVALUATION_READ", "INSTRUCTOR_EVALUATION_WRITE"]); expect(Object.isFrozen(result.principal)).toBe(true); }
     expect(stored?.userId).toBe("USER-A");
   });
   it("uses only principal-bound cached state and cached state remains fail-closed", async () => {

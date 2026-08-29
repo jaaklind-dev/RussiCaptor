@@ -12,6 +12,8 @@ export type Intervention = {
   label: string;
   status: "completed";
   performedBy: string;
+  /** Immutable authenticated operator id. Missing only on legacy rows. */
+  performedById?: string;
   performedAt: string;
 };
 

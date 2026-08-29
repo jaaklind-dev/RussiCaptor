@@ -19,5 +19,7 @@ export type MedicationAdministration = {
   dose: string;
   route: string;
   administeredBy: string;
+  /** Immutable authenticated operator id. Missing only on legacy rows. */
+  administeredById?: string;
   administeredAt: string;
 };

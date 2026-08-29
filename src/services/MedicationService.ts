@@ -39,6 +39,7 @@ export function administerMedication(
     dose: option.dose,
     route: option.route,
     administeredBy: caseManager.name,
+    administeredById: caseManager.id,
     administeredAt,
   });
 
@@ -51,6 +52,7 @@ export function administerMedication(
     title: option.name,
     description: `${option.name} ${option.dose} ${option.route} manustatud.`,
     author: caseManager.name,
+    authorId: caseManager.id,
     visibility: "revealed",
   });
 

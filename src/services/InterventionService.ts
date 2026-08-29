@@ -39,6 +39,7 @@ export function recordIntervention(
     label,
     status: "completed",
     performedBy: caseManager.name,
+    performedById: caseManager.id,
     performedAt,
   });
 
@@ -51,6 +52,7 @@ export function recordIntervention(
     title: label,
     description: `${label} teostatud.`,
     author: caseManager.name,
+    authorId: caseManager.id,
     visibility: "revealed",
   });
 

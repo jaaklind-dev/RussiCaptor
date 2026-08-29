@@ -7,6 +7,8 @@ export type VitalSigns = {
   exerciseMinute: number;
   recordedAt?: string;
   recordedBy?: string;
+  /** Immutable authenticated operator id. Missing only on legacy rows. */
+  recordedById?: string;
   source: VitalSource;
   heartRate?: number;
   systolicBloodPressure?: number;

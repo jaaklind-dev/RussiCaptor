@@ -11,9 +11,7 @@ import {
   getMyIncomingTakeoverRequests,
 } from "@/services/AssignmentRepository";
 import {
-  demoCaseManagers,
   getCurrentCaseManager,
-  setCurrentCaseManager,
 } from "@/services/CurrentUserService";
 import { getSyncVersion, subscribeToSync } from "@/services/SyncService";
 import TakeoverRequestsCard from "@/components/dashboard/TakeoverRequestsCard";
@@ -22,8 +20,11 @@ import CloudSyncStatusCard from "@/components/dashboard/CloudSyncStatusCard";
 import { getCurrentLocationZone } from "@/services/CurrentLocationService";
 import ExerciseReadOnlyStatusCard from "@/components/dashboard/ExerciseReadOnlyStatusCard";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { useOperatorSession } from "@/hooks/useOperatorSession";
+import { hasActiveRole, signOutOperator } from "@/services/authorization/OperatorSessionService";
 
 export default function DashboardScreen() {
+  const operator = useOperatorSession();
 
   useSyncExternalStore(subscribeToSync, getSyncVersion, getSyncVersion);
 
@@ -43,6 +44,10 @@ export default function DashboardScreen() {
       setTakeoverRequestCount(getMyIncomingTakeoverRequests().length);
     });
   }, []);
+
+  useEffect(() => {
+    if (operator.state === "UNAUTHENTICATED" || operator.state === "UNAUTHORIZED") router.replace("/");
+  }, [operator]);
 
   useFocusEffect(
 
@@ -73,41 +78,7 @@ export default function DashboardScreen() {
 
       <ExerciseReadOnlyStatusCard snapshot={getCanonicalExerciseSnapshot()} />
 
-      <View style={styles.demoUserBlock}>
-        <Text style={styles.demoUserLabel}>Demo CM</Text>
-        <View style={styles.demoUserRow}>
-          {demoCaseManagers.map((caseManagerOption) => {
-            const isCurrent =
-              caseManagerOption.id === selectedCaseManager.id;
-            return (
-              <Pressable
-                key={caseManagerOption.id}
-                style={[
-                  styles.demoUserButton,
-                  isCurrent && styles.demoUserButtonActive,
-                ]}
-                onPress={() => {
-                  setCurrentCaseManager(caseManagerOption);
-                  setSelectedCaseManager({ ...caseManagerOption });
-                  setStats(getDashboardStats());
-                  setTakeoverRequestCount(
-                    getMyIncomingTakeoverRequests().length
-                  );
-                }}
-              >
-                <Text
-                  style={[
-                    styles.demoUserButtonText,
-                    isCurrent && styles.demoUserButtonTextActive,
-                  ]}
-                >
-                  {caseManagerOption.name}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
+      {operator.state === "AUTHENTICATED" && <Text style={styles.operatorId}>Operaator: {operator.profile.displayName}</Text>}
 
       <LocalSaveStatusCard />
 
@@ -156,12 +127,8 @@ export default function DashboardScreen() {
         <Text style={styles.secondaryButtonText}>Ajalugu</Text>
 
       </Pressable>
-      <Pressable
-        style={styles.secondaryButton}
-        onPress={() => router.push("/excon")}
-      >
-        <Text style={styles.secondaryButtonText}>EXCON</Text>
-      </Pressable>
+      {hasActiveRole(operator, "EXCON", getCanonicalExerciseSnapshot().exerciseId) && <Pressable style={styles.secondaryButton} onPress={() => router.push("/excon")}><Text style={styles.secondaryButtonText}>EXCON</Text></Pressable>}
+      <Pressable style={styles.logoutButton} onPress={() => void signOutOperator().then(() => router.replace("/"))}><Text style={styles.logoutButtonText}>Logi välja</Text></Pressable>
 
     </ScrollView>
 
@@ -216,6 +183,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#667085",
   },
+  operatorId: { fontSize: 14, color: "#475467", marginTop: 6 },
+  logoutButton: { marginTop: 20, padding: 14 },
+  logoutButtonText: { color: "#B42318", fontWeight: "700" },
 
   card: {
 

@@ -10,7 +10,7 @@ import { createId } from "@/utils/id";
 
 export type VitalSignsInput = Omit<
   VitalSigns,
-  "id" | "exerciseId" | "patientId" | "exerciseMinute" | "recordedAt" | "recordedBy" | "source"
+  "id" | "exerciseId" | "patientId" | "exerciseMinute" | "recordedAt" | "recordedBy" | "recordedById" | "source"
 >;
 
 export function recordVitalSigns(
@@ -29,6 +29,7 @@ export function recordVitalSigns(
     exerciseMinute: getExerciseSession().currentMinute,
     recordedAt: timestamp,
     recordedBy: caseManager.name,
+    recordedById: caseManager.id,
     source: "manual",
   };
 
@@ -42,6 +43,7 @@ export function recordVitalSigns(
     title: "Elulised näitajad mõõdetud",
     description: `HR ${values.heartRate ?? "–"}, RR ${values.respiratoryRate ?? "–"}, SpO₂ ${values.oxygenSaturation ?? "–"}%.`,
     author: caseManager.name,
+    authorId: caseManager.id,
     visibility: "revealed",
   });
   notifySync();

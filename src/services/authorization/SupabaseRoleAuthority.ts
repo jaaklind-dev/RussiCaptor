@@ -19,8 +19,8 @@ export class SupabaseRoleAuthority {
       recordSupabaseTraffic({ operation: "SELECT", endpoint: "authorization_role_assignments", data });
       if (error) return Object.freeze({ state: "UNAVAILABLE" });
       const rows = (data ?? []) as AssignmentRow[];
-      if (rows.some(row => row.user_id !== userId || row.role !== "EXCON" || !["GLOBAL", "EXERCISE"].includes(row.scope_type) || !["ACTIVE", "REVOKED"].includes(row.status))) return Object.freeze({ state: "UNAVAILABLE" });
-      const assignments = rows.map((row): RoleAssignment => deepFreeze({ assignmentId: row.id, userId: row.user_id, role: "EXCON", scope: row.scope_type === "GLOBAL" ? { scopeType: "GLOBAL" } : { scopeType: "EXERCISE", scopeId: row.scope_id! }, status: row.status as "ACTIVE" | "REVOKED", issuedAt: row.issued_at, expiresAt: row.expires_at ?? undefined, issuedBy: row.issued_by })).sort((a, b) => a.assignmentId.localeCompare(b.assignmentId));
+      if (rows.some(row => row.user_id !== userId || !["CM", "EXCON"].includes(row.role) || !["GLOBAL", "EXERCISE"].includes(row.scope_type) || !["ACTIVE", "REVOKED"].includes(row.status))) return Object.freeze({ state: "UNAVAILABLE" });
+      const assignments = rows.map((row): RoleAssignment => deepFreeze({ assignmentId: row.id, userId: row.user_id, role: row.role as RoleAssignment["role"], scope: row.scope_type === "GLOBAL" ? { scopeType: "GLOBAL" } : { scopeType: "EXERCISE", scopeId: row.scope_id! }, status: row.status as "ACTIVE" | "REVOKED", issuedAt: row.issued_at, expiresAt: row.expires_at ?? undefined, issuedBy: row.issued_by })).sort((a, b) => a.assignmentId.localeCompare(b.assignmentId));
       const now = this.now(); return deepFreeze({ state: "VERIFIED", assignments, verifiedAt: now.toISOString(), expiresAt: new Date(now.getTime() + this.validityMs).toISOString() });
     } catch { return Object.freeze({ state: "UNAVAILABLE" }); }
   }

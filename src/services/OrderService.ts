@@ -22,6 +22,7 @@ export function placeOrder(
   }
 
   setOrderStatus(order.patientId, order.id, "ordered");
+  const operator = getCurrentCaseManager();
 
   addTimelineEvent({
     id: createId("TL"),
@@ -31,7 +32,8 @@ export function placeOrder(
     type: "order",
     title: `${order.title} tellitud`,
     description: `Tellimus "${order.title}" esitati.`,
-    author: getCurrentCaseManager().name,
+    author: operator.name,
+    authorId: operator.id,
     visibility: "revealed",
   });
 

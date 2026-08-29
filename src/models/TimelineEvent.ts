@@ -30,6 +30,8 @@ export type TimelineEvent = {
   description: string;
 
   author: string;
+  /** Immutable authenticated operator id. Missing only on legacy rows. */
+  authorId?: string;
 
   visibility: Visibility;
 
