@@ -1,0 +1,50 @@
+name: Android field release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-latest
+    environment: field-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - run: npm run field-release:verify
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: git diff --check
+      - run: npx jest src/services/golden/__tests__/RuntimeHardening-test.ts --runInBand
+      - name: Prepare signing identity
+        env:
+          FIELD_RELEASE_KEYSTORE_BASE64: ${{ secrets.FIELD_RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$FIELD_RELEASE_KEYSTORE_BASE64"
+          printf '%s' "$FIELD_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/russicaptor-field-release.jks"
+      - name: Build signed APK and manifest
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          RUSSICAPTOR_RELEASE_KEYSTORE: ${{ runner.temp }}/russicaptor-field-release.jks
+          RUSSICAPTOR_RELEASE_STORE_PASSWORD: ${{ secrets.RUSSICAPTOR_RELEASE_STORE_PASSWORD }}
+          RUSSICAPTOR_RELEASE_KEY_ALIAS: ${{ secrets.RUSSICAPTOR_RELEASE_KEY_ALIAS }}
+          RUSSICAPTOR_RELEASE_KEY_PASSWORD: ${{ secrets.RUSSICAPTOR_RELEASE_KEY_PASSWORD }}
+        run: npm run field-release:android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: russicaptor-android-field-release
+          path: dist/field-release/
+          if-no-files-found: error
+          retention-days: 30

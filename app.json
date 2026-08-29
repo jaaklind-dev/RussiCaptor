@@ -19,7 +19,12 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.jaaklind.RussiCaptor"
+      "package": "com.jaaklind.RussiCaptor",
+      "versionCode": 1,
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "web": {
       "output": "static",
@@ -27,14 +32,6 @@
     },
     "plugins": [
       "expo-router",
-      [
-        "expo-dev-client",
-        {
-          "toolsButton": false,
-          "showMenuAtLaunch": false,
-          "skipOnboarding": true
-        }
-      ],
       "expo-camera",
       [
         "expo-splash-screen",

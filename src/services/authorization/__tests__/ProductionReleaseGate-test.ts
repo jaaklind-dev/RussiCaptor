@@ -27,4 +27,14 @@ describe("WP-NEXT-02 production release gate", () => {
     expect(read("app/_layout.tsx")).toContain('hasActiveRole(operator, "EXCON"');
     expect(read("app/_layout.tsx")).toContain('hasActiveRole(operator, "CM"');
   });
+
+  test("field release excludes dev client and uses external signing", () => {
+    expect(read("../package.json")).not.toContain('"expo-dev-client"');
+    expect(read("../app.json")).not.toContain('"expo-dev-client"');
+    expect(read("../app.json")).toContain('"android.permission.SYSTEM_ALERT_WINDOW"');
+    const nativeConfigurator = read("../scripts/configure-field-release-native.mjs");
+    expect(nativeConfigurator).toContain("RUSSICAPTOR_RELEASE_KEYSTORE");
+    expect(nativeConfigurator).toContain("releaseSigningConfigured ? signingConfigs.release : null");
+    expect(read("config/ReleaseConfig.ts")).toContain("EXPO_PUBLIC_RELEASE_ENVIRONMENT");
+  });
 });

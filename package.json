@@ -8,7 +8,6 @@
     "expo": "~57.0.4",
     "expo-camera": "~57.0.3",
     "expo-constants": "~57.0.3",
-    "expo-dev-client": "~57.0.5",
     "expo-device": "~57.0.0",
     "expo-document-picker": "~57.0.1",
     "expo-file-system": "~57.0.1",
@@ -53,7 +52,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "field-release:android": "node scripts/build-field-release.mjs",
+    "field-release:verify": "node scripts/verify-field-release-config.mjs"
   },
   "jest": {
     "preset": "jest-expo",

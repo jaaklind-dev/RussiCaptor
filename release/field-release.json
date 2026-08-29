@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "applicationVersion": "1.0.0",
+  "versionCode": 1,
+  "environment": "production",
+  "releaseChannel": "field",
+  "packageId": "com.jaaklind.RussiCaptor",
+  "artifactFilename": "RussiCaptor-1.0.0-1.apk",
+  "requiredSupabaseMigrations": [
+    {
+      "remoteVersion": "20260829124632",
+      "localFile": "20260829111354_production_operator_identity_authorization.sql"
+    },
+    {
+      "remoteVersion": "20260829124829",
+      "localFile": "20260829124726_production_operator_identity_authorization_hardening.sql"
+    },
+    {
+      "remoteVersion": "20260829135717",
+      "localFile": "20260829131400_conflict_safe_multi_cm_shared_workflow.sql"
+    }
+  ],
+  "releaseNotes": "docs/WP_NEXT_04_CONTROLLED_FIELD_RELEASE_DEPLOYMENT.md"
+}

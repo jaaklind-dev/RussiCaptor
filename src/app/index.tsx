@@ -1,12 +1,16 @@
 import { router } from "expo-router";
+import Constants from "expo-constants";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import AppHeader from "@/components/AppHeader";
+import { getBuildProvenance, getReleaseConfigurationError } from "@/config/ReleaseConfig";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { hasActiveRole, signInOperator } from "@/services/authorization/OperatorSessionService";
 
 export default function LoginScreen() {
+  const build = getBuildProvenance();
+  const releaseConfigurationError = getReleaseConfigurationError();
   const operator = useOperatorSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -19,6 +23,7 @@ export default function LoginScreen() {
   }, [operator]);
 
   async function submit(): Promise<void> {
+    if (releaseConfigurationError) { setError(releaseConfigurationError); return; }
     setSubmitting(true); setError(undefined);
     try {
       const result = await signInOperator(email, password);
@@ -38,12 +43,15 @@ export default function LoginScreen() {
 
       <Text style={styles.subtitle}>Õppuste juhtimise platvorm</Text>
 
-      <Text style={styles.version}>Versioon 1.0.0</Text>
+      <Text style={styles.version}>Versioon {Constants.expoConfig?.version ?? "tundmatu"} ({build.versionCode})</Text>
+      <Text style={styles.build}>Build {build.gitSha === "development" ? "arendus" : build.gitSha.slice(0, 12)} · {build.environment}</Text>
+      {build.supabaseProjectRef && <Text style={styles.build}>Supabase {build.supabaseProjectRef}</Text>}
+      {releaseConfigurationError && <Text accessibilityRole="alert" style={styles.error}>{releaseConfigurationError}</Text>}
       <TextInput accessibilityLabel="E-posti aadress" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder="E-post" style={styles.input} />
       <TextInput accessibilityLabel="Parool" autoCapitalize="none" autoComplete="current-password" secureTextEntry value={password} onChangeText={setPassword} placeholder="Parool" style={styles.input} />
       {operator.state === "LOADING" && <ActivityIndicator />}
       {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-      <Pressable accessibilityRole="button" disabled={submitting || !email.trim() || !password} style={[styles.button, (submitting || !email.trim() || !password) && styles.buttonDisabled]} onPress={() => void submit()}>
+      <Pressable accessibilityRole="button" disabled={Boolean(releaseConfigurationError) || submitting || !email.trim() || !password} style={[styles.button, (releaseConfigurationError || submitting || !email.trim() || !password) && styles.buttonDisabled]} onPress={() => void submit()}>
         <Text style={styles.buttonText}>{submitting ? "Kontrollin…" : "Logi sisse"}</Text>
       </Pressable>
 
@@ -95,9 +103,10 @@ const styles = StyleSheet.create({
 
     color: "#888",
 
-    marginBottom: 50,
+    marginBottom: 4,
 
   },
+  build: { fontSize: 12, color: "#667085", marginBottom: 4 },
 
   button: {
 
