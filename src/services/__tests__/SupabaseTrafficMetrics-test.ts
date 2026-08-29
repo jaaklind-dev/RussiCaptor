@@ -1,4 +1,4 @@
-import { getSupabaseTrafficMetrics, recordSupabaseTraffic, resetSupabaseTrafficMetrics, setSupabaseTrafficMetricsEnabledForTests } from "../SupabaseTrafficMetrics";
+import { classifySupabaseTraffic, getSupabaseTrafficMetrics, recordSupabaseTraffic, resetSupabaseTrafficMetrics, setSupabaseTrafficMetricsEnabledForTests } from "../SupabaseTrafficMetrics";
 
 describe("development-only Supabase traffic metrics", () => {
   beforeEach(() => { resetSupabaseTrafficMetrics(); setSupabaseTrafficMetricsEnabledForTests(true); });
@@ -20,7 +20,17 @@ describe("development-only Supabase traffic metrics", () => {
 
   test("records aggregate request bytes without retaining payload contents", () => {
     recordSupabaseTraffic({ operation: "UPSERT", endpoint: "exercise_states.projection", requestBytes: 1234 });
-    expect(getSupabaseTrafficMetrics()[0]).toMatchObject({ requestCount: 1, bytesSent: 1234, bytesReceived: 0 });
+    expect(getSupabaseTrafficMetrics()[0]).toMatchObject({ category: "PROJECTION_OUT", requestCount: 1, bytesSent: 1234, maxBytesSent: 1234, bytesReceived: 0 });
+  });
+
+  test("attributes dominant traffic paths and retains only aggregate maxima", () => {
+    expect(classifySupabaseTraffic("SELECT", "runtime_checkpoints.startup_fallback_payload")).toBe("CHECKPOINT_FULL_IN");
+    expect(classifySupabaseTraffic("SELECT", "runtime_checkpoint_deltas.hydration")).toBe("CHECKPOINT_DELTA_IN");
+    expect(classifySupabaseTraffic("RPC", "publish_runtime_checkpoint_delta")).toBe("CHECKPOINT_OUT");
+    expect(classifySupabaseTraffic("SELECT", "exercise_states.full_state")).toBe("DISCOVERY_IN");
+    recordSupabaseTraffic({ operation: "SELECT", endpoint: "runtime_checkpoint_deltas.hydration", data: { payload: "1234" } });
+    recordSupabaseTraffic({ operation: "SELECT", endpoint: "runtime_checkpoint_deltas.hydration", data: { payload: "12" } });
+    expect(getSupabaseTrafficMetrics()[0]).toMatchObject({ category: "CHECKPOINT_DELTA_IN", requestCount: 2, maxBytesReceived: 18 });
   });
 
   test("does not classify a changed response as an identical repeat", () => {

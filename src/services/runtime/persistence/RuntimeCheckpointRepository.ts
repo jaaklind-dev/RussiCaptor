@@ -6,7 +6,7 @@ import type {
   WriterAcquisitionResult,
 } from "@/models/RuntimeCheckpointAuthority";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
-import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
+import { estimateSupabasePayloadBytes, recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
 import { parseRuntimeCheckpointMetadata, type RuntimeCheckpointMetadata } from "@/services/runtime/persistence/RuntimeCheckpointMetadataCoordinator";
 import { createRuntimeCheckpointDelta, type RuntimeCheckpointDelta } from "@/services/runtime/persistence/RuntimeCheckpointDeltaService";
 
@@ -151,14 +151,16 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
   async publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, baseCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>): Promise<CheckpointPublishResult<SharedExerciseState>> {
     const delta = baseCheckpoint?.checkpointRevision === expectedRevision ? createRuntimeCheckpointDelta(baseCheckpoint, checkpoint) : undefined;
     let rpcName = delta && deltaRpcAvailable !== false ? "publish_runtime_checkpoint_delta" : "publish_runtime_checkpoint_metadata";
-    let response = await this.client.rpc(rpcName, { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_expected_revision: expectedRevision, p_checkpoint: checkpoint, ...(delta && rpcName === "publish_runtime_checkpoint_delta" ? { p_delta: delta } : {}) });
+    let rpcArgs = { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_expected_revision: expectedRevision, p_checkpoint: checkpoint, ...(delta && rpcName === "publish_runtime_checkpoint_delta" ? { p_delta: delta } : {}) };
+    let response = await this.client.rpc(rpcName, rpcArgs);
     if (response.error && rpcName === "publish_runtime_checkpoint_delta" && (response.error.code === "PGRST202" || response.error.message.includes("publish_runtime_checkpoint_delta"))) {
       deltaRpcAvailable = false;
       rpcName = "publish_runtime_checkpoint_metadata";
-      response = await this.client.rpc(rpcName, { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_expected_revision: expectedRevision, p_checkpoint: checkpoint });
+      rpcArgs = { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_expected_revision: expectedRevision, p_checkpoint: checkpoint };
+      response = await this.client.rpc(rpcName, rpcArgs);
     } else if (!response.error && rpcName === "publish_runtime_checkpoint_delta") deltaRpcAvailable = true;
     const { data, error } = response;
-    recordSupabaseTraffic({ operation: "RPC", endpoint: rpcName, data });
+    recordSupabaseTraffic({ operation: "RPC", endpoint: rpcName, data, requestBytes: estimateSupabasePayloadBytes(rpcArgs) });
     if (error) {
       const diagnostic = code(error.message);
       return { status: diagnostic === "STALE_WRITER" ? "STALE_CHECKPOINT_WRITER" : diagnostic === "CHECKPOINT_REVISION_CONFLICT" ? "REVISION_CONFLICT" : "AUTHORITY_UNAVAILABLE", code: diagnostic as never };

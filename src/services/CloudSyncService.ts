@@ -21,7 +21,7 @@ import {
   compactActiveExerciseState,
   withTerminalExerciseArchive,
 } from "@/services/runtime/persistence/ActiveCheckpointCompaction";
-import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
+import { estimateSupabasePayloadBytes, recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
 import { AppState } from "react-native";
 import {
   EXERCISE_DISCOVERY_SAFETY_INTERVAL_MS,
@@ -479,13 +479,17 @@ export async function migratePendingCompletedExerciseArchives(userId: string): P
     if (!existing) {
       const terminalState = withTerminalExerciseArchive(row.state, archive);
       if (!terminalState.completedExerciseArchives) continue;
-      const { error: writeError } = await supabase.from("exercise_states").upsert({
+      const archiveWrite = {
         exercise_id: row.exercise_id,
         revision: row.revision + 1,
         state: terminalState,
         updated_at: new Date().toISOString(),
         updated_by: userId,
-      }, { onConflict: "exercise_id" });
+      };
+      const { error: writeError } = await supabase.from("exercise_states").upsert(
+        archiveWrite, { onConflict: "exercise_id" });
+      recordSupabaseTraffic({ operation: "UPSERT", endpoint: "exercise_states.terminal_archive",
+        requestBytes: estimateSupabasePayloadBytes(archiveWrite) });
       if (writeError) continue;
     }
     markCompletedExerciseArchiveDurable(archive.exerciseId);
