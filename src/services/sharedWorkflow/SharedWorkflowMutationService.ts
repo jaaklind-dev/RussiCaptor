@@ -56,6 +56,12 @@ function updateMetrics(change: Partial<Record<keyof SharedWorkflowConflictMetric
 function publish(): void { listeners.forEach(listener => listener()); }
 
 export function getSharedWorkflowConflictMetrics(): SharedWorkflowConflictMetrics { return Object.freeze({ ...metrics }); }
+export function getSharedWorkflowOperationalState() {
+  let authoritativeRevision = 0;
+  patientHeads.forEach(head => { authoritativeRevision = Math.max(authoritativeRevision, head.revision); });
+  return Object.freeze({ online, reconnectPending, unresolvedConflictCount: unresolvedConflicts.size,
+    authoritativeRevision, pendingMutationCount: reconnectPending ? 1 : 0 });
+}
 export function resetSharedWorkflowConflictMetrics(): void { metrics = emptyMetrics(); patientHeads.clear(); unresolvedConflicts.clear(); reconnectPending=false; publish(); }
 export function subscribeToSharedWorkflowConflicts(listener: () => void): () => void { listeners.add(listener); return () => listeners.delete(listener); }
 export function setSharedWorkflowConnectivity(value: boolean): void {

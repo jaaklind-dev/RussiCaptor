@@ -69,6 +69,10 @@ function refreshSession(): void {
         <Text style={styles.instructorButtonText}>Ava õppuste kataloog</Text>
       </Pressable>
 
+      <Pressable style={styles.diagnosticsButton} onPress={() => router.push("/excon/diagnostics" as never)}>
+        <Text style={styles.instructorButtonText}>Diagnostika ja taastamine</Text>
+      </Pressable>
+
       <ExerciseStatusCard snapshot={snapshot} />
 
       <WorkbookImportCard onImported={refreshSession} />
@@ -148,6 +152,7 @@ const styles = StyleSheet.create({
     width: "100%", backgroundColor: "#005bbb", borderRadius: 12,
     paddingVertical: 14, alignItems: "center", marginTop: 10,
   },
+  diagnosticsButton: { width: "100%", backgroundColor: "#475467", borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 10, minHeight: 48, justifyContent: "center" },
 
   backButtonText: {
     color: "#005BBB",

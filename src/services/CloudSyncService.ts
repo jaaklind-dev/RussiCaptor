@@ -203,6 +203,17 @@ export function getCloudSyncStatus(): CloudSyncStatus {
   return { ...status };
 }
 
+export function getCloudSyncOperationalState(exerciseId = getCanonicalExerciseSnapshot().exerciseId) {
+  const remote = remoteVersions.get(exerciseId);
+  return Object.freeze({
+    ...status,
+    remoteSelectionState,
+    authoritativeProjectionRevision: remote?.revision,
+    authoritativeProjectionUpdatedAt: remote?.updatedAt,
+    realtimeConnected: status.state === "synced" || status.state === "saving",
+  });
+}
+
 export function subscribeToCloudSyncStatus(
   listener: CloudStatusListener
 ): () => void {

@@ -83,6 +83,7 @@ export default function ExerciseDashboardScreen() {
           <ExerciseInformationCard definition={exerciseDefinition} />
           <Pressable style={styles.timelineButton} onPress={() => router.push("/excon/timeline")}><Text style={styles.timelineButtonText}>Ava õppuse ajajoon</Text></Pressable>
           <Pressable style={styles.debriefButton} onPress={() => router.push("/excon/debrief")}><Text style={styles.timelineButtonText}>Ava debriif</Text></Pressable>
+          <Pressable style={styles.diagnosticsButton} onPress={() => router.push("/excon/diagnostics" as never)}><Text style={styles.timelineButtonText}>Diagnostika ja taastamine</Text></Pressable>
           <InstructorFilterBar
             filters={filters}
             options={options}
@@ -114,5 +115,6 @@ const styles = StyleSheet.create({
   backText: { color: "#005bbb", fontWeight: "800" },
   timelineButton: { backgroundColor: "#172b4d", borderRadius: 10, padding: 12, alignItems: "center", marginBottom: 14 },
   debriefButton: { backgroundColor: "#005bbb", borderRadius: 10, padding: 12, alignItems: "center", marginBottom: 14 },
+  diagnosticsButton: { minHeight: 48, justifyContent: "center", backgroundColor: "#475467", borderRadius: 10, padding: 12, alignItems: "center", marginBottom: 14 },
   timelineButtonText: { color: "#fff", fontWeight: "800" },
 });

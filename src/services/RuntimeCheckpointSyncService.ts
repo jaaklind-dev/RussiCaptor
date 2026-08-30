@@ -44,6 +44,8 @@ let publicationBarrier: Promise<void> = Promise.resolve();
 let exerciseSyncGeneration = 0;
 let ensureLeaseRenewalForCurrentWriter: (() => void) | undefined;
 let wakeCheckpointPublicationForCurrentWriter: (() => void) | undefined;
+let lastCheckpointPublicationAt: string | undefined;
+let lastRecoveryOutcome: Readonly<{ state: string; code?: string; occurredAt: string }> | undefined;
 
 async function startupAwait<T>(operation: Promise<T>, timeoutMs = STARTUP_TIMEOUT_MS): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -327,6 +329,15 @@ function setStatus(value: Status): void {
   listeners.forEach(listener=>listener(value));
 }
 export const getRuntimeCheckpointSyncStatus = (): Status => status;
+export function getRuntimeCheckpointOperationalState() {
+  return Object.freeze({
+    ...status,
+    writerInstanceId: lease?.writerInstanceId,
+    leaseExpiresAt: lease?.expiresAt,
+    lastCheckpointPublicationAt,
+    lastRecoveryOutcome: lastRecoveryOutcome ? Object.freeze({ ...lastRecoveryOutcome }) : undefined,
+  });
+}
 export function failRuntimeCheckpointStartup(error?: unknown): void {
   const code = error instanceof Error && error.message
     ? error.message
@@ -424,6 +435,7 @@ export async function takeOverRuntimeWriter(): Promise<Status> {
   // check reads only atomic metadata unless a rollout-safe fallback is needed.
   acceptAuthoritativeRuntimeCheckpoint(resolved.checkpoint, true);
   wakeCheckpointPublicationForCurrentWriter?.();
+  lastRecoveryOutcome=Object.freeze({state:"SUCCEEDED",code:"TAKEOVER",occurredAt:new Date().toISOString()});
   return status;
 }
 
@@ -456,14 +468,18 @@ async function reacquireRuntimeFromRemoteCheckpointForIntent(intentId: string): 
       catch (error) { setRuntimeWriterAuthorityState("UNRESOLVED"); throw error; }
     },
   });
-  if (recovered.state === "REJECTED") return setAndReturn({
+  if (recovered.state === "REJECTED") {
+    lastRecoveryOutcome=Object.freeze({state:"DENIED",code:recovered.code,occurredAt:new Date().toISOString()});
+    return setAndReturn({
     state: recovered.code === "WRITER_AUTHORITY_HELD" ? "READER" : "CONFLICT",
     code: recovered.code, revision: recovered.revision,
-  });
+    });
+  }
   lease=recovered.lease; remoteRevision=recovered.checkpoint.checkpointRevision;
   setStatus({state:"WRITER",revision:remoteRevision});
   ensureLeaseRenewalForCurrentWriter?.();
   wakeCheckpointPublicationForCurrentWriter?.();
+  lastRecoveryOutcome=Object.freeze({state:"SUCCEEDED",code:"CHECKPOINT_RECOVERY",occurredAt:new Date().toISOString()});
   return status;
 }
 
@@ -556,7 +572,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
           // Never replace that dirty canonical state with an older acknowledged
           // envelope; advance only the remote publication cursor.
           if(!currentLocal||currentLocal.checkpointRevision<=result.checkpoint.checkpointRevision||isIdenticalCheckpointPayload(currentLocal,result.checkpoint))localRuntimeCheckpointStore.accept(result.checkpoint);
-          lastPublishedCheckpoint=result.checkpoint;lastPublicationAt=Date.now();remoteRevision=result.checkpoint.checkpointRevision;
+          lastPublishedCheckpoint=result.checkpoint;lastPublicationAt=Date.now();lastCheckpointPublicationAt=new Date(lastPublicationAt).toISOString();remoteRevision=result.checkpoint.checkpointRevision;
           publicationDirty=Boolean(currentLocal&&!isIdenticalCheckpointPayload(result.checkpoint,currentLocal));
           setStatus({state:"WRITER",revision:remoteRevision});
         }
