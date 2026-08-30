@@ -59,6 +59,7 @@
   "jest": {
     "preset": "jest-expo",
     "moduleNameMapper": {
+      "^expo-sqlite/localStorage/install$": "<rootDir>/test/expo-sqlite-local-storage-install.ts",
       "^@/(.*)$": "<rootDir>/src/$1"
     }
   },
