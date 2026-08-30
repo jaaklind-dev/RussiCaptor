@@ -19,9 +19,9 @@ The previous native Gradle `release` path produced an APK with the debug keystor
 
 ## Canonical target
 
-The supported first field format is an APK: `RussiCaptor-<version>-<versionCode>.apk`. It is self-contained and works without Expo Go, Metro, a workstation, USB, or a local server. AAB/store publication is outside this WP.
+The supported first field format is an APK: `RussiCaptor-<version>-<versionCode>.apk`. It is self-contained and works without Expo Go, Metro, a workstation, USB, or a local server. AAB/store publication is outside this WP. WP-NEXT-07 provisions and pins the sole production signer; validation/debug signing is no longer an available release path.
 
-`npm run field-release:android` is the sole local build command. It performs a clean Expo 57 Android prebuild, applies the tracked external-signing configuration to the generated native project, and assembles the embedded release APK. `release/field-release.json` is its versioned release definition; the generated companion manifest adds Git SHA, UTC build time, dirty-tree state, artifact SHA-256/size, signing certificate SHA-256, and distributability. The script refuses a dirty tracked tree and missing external signing by default. A debug-signed validation artifact is possible only with explicit `RUSSICAPTOR_VALIDATION_SIGNING=debug`; its manifest is always `distributable: false`.
+`npm run field-release:android` is the sole local build command. It performs a clean Expo 57 Android prebuild, applies the tracked external-signing configuration to the generated native project, and assembles the embedded release APK. `release/field-release.json` is its versioned release definition; the generated companion manifest adds Git SHA, UTC build time, dirty-tree state, artifact SHA-256/size, signing certificate SHA-256, permissions/SDK metadata and distributability. The script refuses a dirty tracked tree, missing migration proof, missing signing credentials, debug keystores and a signer-fingerprint mismatch.
 
 ## Environment and startup boundary
 
@@ -33,7 +33,7 @@ Traffic instrumentation remains disabled by default outside `__DEV__` unless its
 
 The application ID is `com.jaaklind.RussiCaptor`. Production signing uses a stable external keystore referenced only through `RUSSICAPTOR_RELEASE_*` environment variables or protected GitHub environment secrets. Private material is ignored and must not enter Git. Every distributed build increments versionCode monotonically; semantic `applicationVersion` is user-facing. Changing or losing the signing key breaks upgrade compatibility and requires a new application identity or uninstall/reinstall.
 
-The existing repository debug keystore is allowed only to prove packaging/inspection in WP validation. It is not a field signing identity. Production keystore provisioning remains an operational prerequisite, not source-code work.
+The repository debug keystore is never accepted by the field build. The stable production certificate fingerprint and secure local/CI custody model are defined in `WP_NEXT_07_PRODUCTION_SIGNING_DISTRIBUTABLE_RELEASE.md`.
 
 ## Release gate
 

@@ -6,12 +6,22 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: android-field-release
+  cancel-in-progress: false
+
 jobs:
   validate-and-build:
     runs-on: ubuntu-latest
     environment: field-release
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require protected main source
+        run: |
+          test "$GITHUB_REF" = "refs/heads/main"
+          test -z "$(git status --porcelain)"
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -21,7 +31,11 @@ jobs:
           distribution: temurin
           java-version: 17
       - run: npm ci
-      - run: npm run field-release:verify
+      - name: Verify release and backend prerequisites
+        env:
+          RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS: "1"
+          RUSSICAPTOR_DEPLOYED_MIGRATIONS: ${{ vars.RUSSICAPTOR_DEPLOYED_MIGRATIONS }}
+        run: npm run field-release:verify
       - run: npm test
       - run: npm run typecheck
       - run: npm run lint
@@ -33,6 +47,7 @@ jobs:
         run: |
           test -n "$FIELD_RELEASE_KEYSTORE_BASE64"
           printf '%s' "$FIELD_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/russicaptor-field-release.jks"
+          chmod 600 "$RUNNER_TEMP/russicaptor-field-release.jks"
       - name: Build signed APK and manifest
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
@@ -41,6 +56,8 @@ jobs:
           RUSSICAPTOR_RELEASE_STORE_PASSWORD: ${{ secrets.RUSSICAPTOR_RELEASE_STORE_PASSWORD }}
           RUSSICAPTOR_RELEASE_KEY_ALIAS: ${{ secrets.RUSSICAPTOR_RELEASE_KEY_ALIAS }}
           RUSSICAPTOR_RELEASE_KEY_PASSWORD: ${{ secrets.RUSSICAPTOR_RELEASE_KEY_PASSWORD }}
+          RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS: "1"
+          RUSSICAPTOR_DEPLOYED_MIGRATIONS: ${{ vars.RUSSICAPTOR_DEPLOYED_MIGRATIONS }}
         run: npm run field-release:android
       - uses: actions/upload-artifact@v4
         with:

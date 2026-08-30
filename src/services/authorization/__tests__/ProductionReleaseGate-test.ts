@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { spawnSync } from "child_process";
 
 const root = path.resolve(__dirname, "../../..");
 const read = (file: string) => fs.readFileSync(path.join(root, file), "utf8");
@@ -34,7 +35,28 @@ describe("WP-NEXT-02 production release gate", () => {
     expect(read("../app.json")).toContain('"android.permission.SYSTEM_ALERT_WINDOW"');
     const nativeConfigurator = read("../scripts/configure-field-release-native.mjs");
     expect(nativeConfigurator).toContain("RUSSICAPTOR_RELEASE_KEYSTORE");
-    expect(nativeConfigurator).toContain("releaseSigningConfigured ? signingConfigs.release : null");
+    expect(nativeConfigurator).toContain("signingConfig signingConfigs.release");
+    expect(nativeConfigurator).not.toContain("releaseSigningConfigured ?");
+    expect(read("../scripts/build-field-release.mjs")).not.toContain("RUSSICAPTOR_VALIDATION_SIGNING");
+    expect(read("../release/field-release.json")).toContain("b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d30198980e59fcde96b");
     expect(read("config/ReleaseConfig.ts")).toContain("EXPO_PUBLIC_RELEASE_ENVIRONMENT");
+  });
+
+  test("release verification fails closed when a required remote migration is absent", () => {
+    const script = path.join(root, "../scripts/verify-field-release-config.mjs");
+    const rejected = spawnSync(process.execPath, [script], { encoding: "utf8", env: {
+      ...process.env,
+      RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS: "1",
+      RUSSICAPTOR_DEPLOYED_MIGRATIONS: "20260829135717",
+    }});
+    expect(rejected.status).not.toBe(0);
+    expect(rejected.stderr).toContain("required remote migration");
+
+    const accepted = spawnSync(process.execPath, [script], { encoding: "utf8", env: {
+      ...process.env,
+      RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS: "1",
+      RUSSICAPTOR_DEPLOYED_MIGRATIONS: "202608190001,20260826190508,20260828083146,20260828113258,20260829124632,20260829124829,20260829135717",
+    }});
+    expect(accepted.status).toBe(0);
   });
 });
