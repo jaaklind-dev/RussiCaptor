@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import OrdersTab from "@/components/patient/OrdersTab";
 import { getOrders } from "@/repositories/OrderRepository";
 import { placeOrderConflictSafe } from "@/services/OrderService";
@@ -51,6 +51,7 @@ import ResourceDeveloperCard from "@/components/patient/ResourceDeveloperCard";
 import ActiveInterventionsCard from "@/components/patient/ActiveInterventionsCard";
 import ClinicalAssessmentDeveloperCard from "@/components/patient/ClinicalAssessmentDeveloperCard";
 import { getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots } from "@/services/RuntimeSnapshotService";
+import { SingleFlightActionGate } from "@/services/ui/InteractionSafety";
 type PatientTab =
   | "overview"
   | "vitals"
@@ -71,8 +72,9 @@ const [showMoreTabs, setShowMoreTabs] = useState(false);
 const [, setRefreshKey] = useState(0);
 const [workflowMessage,setWorkflowMessage]=useState<string>();
 const [workflowPending,setWorkflowPending]=useState(false);
+const workflowGate=useRef(new SingleFlightActionGate()).current;
 const runWorkflow=async <T extends {message:string}>(operation:()=>Promise<T>):Promise<T>=>{setWorkflowPending(true);setWorkflowMessage("Muudatus ootab serveri kinnitust…");
-  try{const outcome=await operation();setWorkflowMessage(outcome.message);return outcome;}finally{setWorkflowPending(false);}};
+  try{const outcome=await workflowGate.run(operation);setWorkflowMessage(outcome.message);return outcome;}finally{setWorkflowPending(false);}};
   const runtimeVersion = useSyncExternalStore(subscribeToRuntimeSnapshots, getRuntimeSnapshotVersion, getRuntimeSnapshotVersion);
   const patient = findPatientById(id ?? "");
 const isCompleted = patient?.status === "Completed";
@@ -249,7 +251,7 @@ useEffect(() => {
         </View>
       )}
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
+      <ScrollView keyboardShouldPersistTaps="handled" style={styles.content} contentContainerStyle={styles.contentInner}>
 
         {activeTab === "overview" && (
           <>
@@ -517,12 +519,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 9,
+    minHeight: 48,
+    justifyContent: "center",
   },
   rejectButton: {
     backgroundColor: "#b42318",
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 9,
+    minHeight: 48,
+    justifyContent: "center",
   },
 
   transferButtonText: {
@@ -558,6 +564,9 @@ const styles = StyleSheet.create({
   },
 
   tabButton: {
+    minHeight: 48,
+    minWidth: 48,
+    justifyContent: "center",
 
     borderWidth: 2,
 

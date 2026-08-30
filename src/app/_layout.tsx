@@ -8,6 +8,7 @@ import { startAfterCurrentExerciseDiscovery } from "@/services/exercise/StartupO
 import { getOperatorSession, hasActiveRole, startOperatorSession, subscribeOperatorSession } from "@/services/authorization/OperatorSessionService";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 function ProductionRouteGate() {
   const segments = useSegments();
@@ -90,6 +91,8 @@ export default function RootLayout() {
     return <View style={{ flex: 1, backgroundColor: "#F6F8FB" }} />;
   }
 
-  return <><ProductionRouteGate /><Stack screenOptions={{ headerShown: false }} /></>;
+  return <SafeAreaProvider><SafeAreaView edges={["top", "right", "bottom", "left"]} style={{ flex: 1, backgroundColor: "#F6F8FB" }}>
+    <ProductionRouteGate /><Stack screenOptions={{ headerShown: false }} />
+  </SafeAreaView></SafeAreaProvider>;
 
 }

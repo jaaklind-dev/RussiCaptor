@@ -36,6 +36,7 @@ import {
 } from "@/services/exercise/ExerciseProjectionWriteCoordinator";
 import { getSharedWorkflowHead, observeSharedWorkflowHead, setSharedWorkflowConnectivity } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
 import { restorePatientSharedWorkflowState, type PatientSharedWorkflowState } from "@/services/sharedWorkflow/PatientSharedWorkflowState";
+import { getOperatorSession, hasActiveRole, type OperatorSessionState } from "@/services/authorization/OperatorSessionService";
 
 export type CloudSyncStatus = {
   state: "disabled" | "connecting" | "synced" | "saving" | "offline" | "error";
@@ -129,6 +130,18 @@ export function getConflictingRemoteExercises(): readonly CurrentExerciseCandida
 
 export function canPublishCloudProjection(selectionState: RemoteSelectionState): boolean {
   return selectionState === "RESOLVED";
+}
+
+/**
+ * The exercise projection is EXCON-owned. CM patient mutations are persisted
+ * exclusively through the shared-workflow RPC and must never be followed by a
+ * legacy whole-projection write from the CM client.
+ */
+export function canOperatorPublishCloudProjection(
+  operator: OperatorSessionState,
+  exerciseId: string,
+): boolean {
+  return hasActiveRole(operator, "EXCON", exerciseId);
 }
 
 export function isRemoteRuntimeLifecycleActive(exerciseId: string): boolean | undefined {
@@ -414,6 +427,7 @@ type PreparedCloudProjection = Readonly<{
 function prepareCloudProjection(): ExerciseProjectionCandidate<PreparedCloudProjection> | undefined {
   if (!supabase || applyingRemoteState || !canPublishCloudProjection(remoteSelectionState)) return undefined;
   const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  if (!canOperatorPublishCloudProjection(getOperatorSession(), exerciseId)) return undefined;
   const baseProjection = compactActiveExerciseState(createSharedExerciseProjection());
   const savedSession = baseProjection.exerciseSession;
   const lifecycleState = "lifecycleState" in savedSession

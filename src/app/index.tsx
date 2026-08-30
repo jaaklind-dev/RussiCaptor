@@ -6,7 +6,9 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import AppHeader from "@/components/AppHeader";
 import { getBuildProvenance, getReleaseConfigurationError } from "@/config/ReleaseConfig";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
-import { hasActiveRole, signInOperator } from "@/services/authorization/OperatorSessionService";
+import { signInOperator } from "@/services/authorization/OperatorSessionService";
+import { resolveOperatorLandingRoute } from "@/services/ui/OperatorRouteService";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 
 export default function LoginScreen() {
   const build = getBuildProvenance();
@@ -19,7 +21,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (operator.state !== "AUTHENTICATED") return;
-    router.replace(hasActiveRole(operator, "CM") ? "/dashboard" : "/excon");
+    router.replace(resolveOperatorLandingRoute(operator, getCanonicalExerciseSnapshot().exerciseId));
   }, [operator]);
 
   async function submit(): Promise<void> {

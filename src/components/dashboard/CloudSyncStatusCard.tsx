@@ -10,6 +10,7 @@ import { getRuntimeCheckpointSyncStatus, reacquireRuntimeFromRemoteCheckpoint, s
 import { authorityStateLabel } from "@/localization/et";
 import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
 import { router } from "expo-router";
+import { operatorSafeIssueMessage } from "@/services/ui/InteractionSafety";
 
 export async function resumeRuntime(
   resume: typeof takeOverRuntimeWriter = takeOverRuntimeWriter,
@@ -34,9 +35,9 @@ export function getRuntimeAuthorityPresentation(
   return Object.freeze({
     label: runtimeStatus.state === "WRITER" ? `${authorityStateLabel("WRITER")} · versioon ${runtimeStatus.revision ?? 0}`
       : runtimeStatus.state === "READER" ? "Simulatsioon töötab teises seadmes · ainult vaatamine"
-      : runtimeStatus.state === "CONFLICT" ? `Juhtimisõiguse konflikt: ${runtimeStatus.code ?? "tundmatu"}`
+      : runtimeStatus.state === "CONFLICT" ? operatorSafeIssueMessage(runtimeStatus.code)
       : runtimeStatus.state === "OFFLINE" ? "Simulatsiooni kontrollpunkti teenus pole saadaval"
-      : runtimeStatus.state === "FAILED" ? `Juhtimisõiguse käivitamine ebaõnnestus: ${runtimeStatus.code ?? "tundmatu"}`
+      : runtimeStatus.state === "FAILED" ? operatorSafeIssueMessage(runtimeStatus.code)
       : authorityStateLabel("CONNECTING"),
     takeoverVisible: runtimeStatus.state === "READER",
   });

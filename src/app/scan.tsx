@@ -1,8 +1,8 @@
 import { router } from "expo-router";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput } from "react-native";
 
 import AppHeader from "@/components/AppHeader";
 
@@ -18,12 +18,20 @@ import QrScanner from "@/components/QrScanner";
 import { readQrCode } from "@/services/QrCodeService";
 import { getInstalledWorkbook } from "@/services/WorkbookImportService";
 import { getPatientNotFoundMessage } from "@/services/PatientLookupFeedback";
+import { SingleFlightActionGate } from "@/services/ui/InteractionSafety";
 
 export default function ScanScreen() {
 
   const [nationalId, setNationalId] = useState("");
+  const [pending, setPending] = useState(false);
+  const gate = useRef(new SingleFlightActionGate()).current;
 
-  async function handleFindPatient(value = nationalId) {
+  function handleFindPatient(value = nationalId): Promise<void> {
+    setPending(true);
+    return gate.run(() => findAndClaimPatient(value)).finally(() => setPending(false));
+  }
+
+  async function findAndClaimPatient(value: string): Promise<void> {
 
     const qrResult = readQrCode(value, "patient");
 
@@ -106,7 +114,7 @@ router.push(`/patient/${patient.id}`);
 
   return (
 
-    <View style={styles.container}>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.container}>
 
       <AppHeader />
 
@@ -150,9 +158,9 @@ router.push(`/patient/${patient.id}`);
 
       />
 
-      <Pressable style={styles.button} onPress={() => void handleFindPatient()}>
+      <Pressable accessibilityRole="button" accessibilityState={{ busy: pending, disabled: pending }} disabled={pending} style={[styles.button, pending && styles.disabled]} onPress={() => void handleFindPatient()}>
 
-        <Text style={styles.buttonText}>Otsi patsienti</Text>
+        {pending ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Otsi patsienti</Text>}
 
       </Pressable>
 
@@ -162,7 +170,7 @@ router.push(`/patient/${patient.id}`);
 
       </Pressable>
 
-    </View>
+    </KeyboardAvoidingView>
 
   );
 
@@ -183,6 +191,7 @@ const styles = StyleSheet.create({
     padding: 24,
 
   },
+  disabled: { opacity: 0.6 },
 
   title: {
 

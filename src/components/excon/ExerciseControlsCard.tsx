@@ -2,6 +2,8 @@ import type { ExerciseControlCommandType } from "@/models/exercise/ExerciseContr
 import type { CanonicalExerciseSnapshot, CanonicalExerciseSpeed } from "@/models/exercise/CanonicalExerciseSnapshot";
 import { prepareExerciseControlSubmission } from "@/services/runtime/exercise/ExerciseControlSubmission";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { useRef, useState } from "react";
+import { SingleFlightActionGate } from "@/services/ui/InteractionSafety";
 
 const SPEEDS: readonly CanonicalExerciseSpeed[] = [1, 2, 4];
 export function getExerciseControlAvailability(state: CanonicalExerciseSnapshot["lifecycleState"]) {
@@ -11,10 +13,14 @@ export function getExerciseControlAvailability(state: CanonicalExerciseSnapshot[
 
 export default function ExerciseControlsCard({ snapshot, onApplied }: { snapshot: CanonicalExerciseSnapshot; onApplied?: () => void }) {
   const enabled = getExerciseControlAvailability(snapshot.lifecycleState);
+  const [pending, setPending] = useState(false);
+  const gate = useRef(new SingleFlightActionGate()).current;
   const apply = (submit: () => ReturnType<ReturnType<typeof prepareExerciseControlSubmission>>) => {
-    const result = submit();
+    setPending(true);
+    void gate.run(submit).then(result => {
     if (!result.ok) Alert.alert("Käsk lükati tagasi", result.message);
     else onApplied?.();
+    }).finally(() => setPending(false));
   };
   const issue = (commandType: ExerciseControlCommandType, speed?: CanonicalExerciseSpeed) => apply(prepareExerciseControlSubmission(commandType, speed));
   const confirmComplete = () => {
@@ -29,12 +35,12 @@ export default function ExerciseControlsCard({ snapshot, onApplied }: { snapshot
   return <View style={styles.card}>
     <Text style={styles.title}>Õppuse juhtimine</Text>
     <View style={styles.row}>
-      <Pressable disabled={!action.enabled} style={[styles.button, !action.enabled && styles.disabled]} onPress={() => issue(action.type)}><Text style={styles.buttonText}>{action.label}</Text></Pressable>
-      <Pressable disabled={!enabled.complete} style={[styles.complete, !enabled.complete && styles.disabled]} onPress={confirmComplete}><Text style={styles.buttonText}>✓ Lõpeta õppus</Text></Pressable>
+      <Pressable accessibilityState={{ busy: pending }} disabled={pending || !action.enabled} style={[styles.button, (pending || !action.enabled) && styles.disabled]} onPress={() => issue(action.type)}><Text style={styles.buttonText}>{pending ? "Töötlen…" : action.label}</Text></Pressable>
+      <Pressable disabled={pending || !enabled.complete} style={[styles.complete, (pending || !enabled.complete) && styles.disabled]} onPress={confirmComplete}><Text style={styles.buttonText}>✓ Lõpeta õppus</Text></Pressable>
     </View>
     <Text style={styles.label}>Simulatsiooni kiirus</Text>
-    <View style={styles.row}>{SPEEDS.map(speed => <Pressable key={speed} disabled={!enabled.speed}
-      style={[styles.speed, snapshot.speed === speed && styles.active, !enabled.speed && styles.disabled]}
+    <View style={styles.row}>{SPEEDS.map(speed => <Pressable key={speed} disabled={pending || !enabled.speed}
+      style={[styles.speed, snapshot.speed === speed && styles.active, (pending || !enabled.speed) && styles.disabled]}
       onPress={() => issue("SET_EXERCISE_SPEED", speed)}><Text style={styles.buttonText}>×{speed}</Text></Pressable>)}</View>
   </View>;
 }
@@ -42,6 +48,6 @@ export default function ExerciseControlsCard({ snapshot, onApplied }: { snapshot
 const styles = StyleSheet.create({
   card: { backgroundColor: "#f2f4f7", borderRadius: 14, padding: 14, marginBottom: 14 }, title: { fontSize: 18, fontWeight: "800", color: "#172b4d", marginBottom: 10 },
   label: { color: "#42526e", fontWeight: "700", marginTop: 12, marginBottom: 7 }, row: { flexDirection: "row", gap: 8 },
-  button: { flex: 1, backgroundColor: "#005bbb", padding: 12, borderRadius: 10, alignItems: "center" }, complete: { flex: 1, backgroundColor: "#9b1c1c", padding: 12, borderRadius: 10, alignItems: "center" },
-  speed: { flex: 1, backgroundColor: "#5e6c84", padding: 10, borderRadius: 10, alignItems: "center" }, active: { backgroundColor: "#2e7d32" }, disabled: { opacity: 0.35 }, buttonText: { color: "white", fontWeight: "800" },
+  button: { flex: 1, minHeight: 48, justifyContent: "center", backgroundColor: "#005bbb", padding: 12, borderRadius: 10, alignItems: "center" }, complete: { flex: 1, minHeight: 48, justifyContent: "center", backgroundColor: "#9b1c1c", padding: 12, borderRadius: 10, alignItems: "center" },
+  speed: { flex: 1, minHeight: 48, justifyContent: "center", backgroundColor: "#5e6c84", padding: 10, borderRadius: 10, alignItems: "center" }, active: { backgroundColor: "#2e7d32" }, disabled: { opacity: 0.35 }, buttonText: { color: "white", fontWeight: "800" },
 });

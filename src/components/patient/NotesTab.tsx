@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import type { Note } from "@/models/Note";
@@ -11,11 +11,22 @@ type Props = {
 
 export default function NotesTab({ notes, readOnly = false, onAddNote }: Props) {
   const [draft, setDraft] = useState("");
+  const submittedDraft = useRef<string | undefined>(undefined);
 
   async function saveNote(): Promise<void> {
-    if (await onAddNote(draft)) {
+    const normalizedDraft = draft.trim();
+    if (!normalizedDraft || submittedDraft.current === normalizedDraft) return;
+    submittedDraft.current = normalizedDraft;
+    if (await onAddNote(normalizedDraft)) {
       setDraft("");
+    } else {
+      submittedDraft.current = undefined;
     }
+  }
+
+  function updateDraft(value: string): void {
+    if (value.trim() !== submittedDraft.current) submittedDraft.current = undefined;
+    setDraft(value);
   }
 
   return (
@@ -28,12 +39,14 @@ export default function NotesTab({ notes, readOnly = false, onAddNote }: Props) 
           <TextInput
             style={styles.input}
             value={draft}
-            onChangeText={setDraft}
+            onChangeText={updateDraft}
             placeholder="Lisa märge..."
             multiline
             textAlignVertical="top"
           />
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Salvesta märge"
             style={[styles.button, draft.trim().length === 0 && styles.buttonDisabled]}
             disabled={draft.trim().length === 0}
             onPress={() => void saveNote()}

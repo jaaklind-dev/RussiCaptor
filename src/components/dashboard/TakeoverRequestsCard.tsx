@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { findPatientById } from "@/repositories/PatientRepository";
@@ -10,9 +10,17 @@ import {
 } from "@/services/AssignmentRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { subscribeToSync } from "@/services/SyncService";
+import { SingleFlightActionGate } from "@/services/ui/InteractionSafety";
 
 export default function TakeoverRequestsCard() {
   const [, setRefreshKey] = useState(0);
+  const [pendingRequestId, setPendingRequestId] = useState<string>();
+  const gate = useRef(new SingleFlightActionGate()).current;
+  const settle = (requestId: string, operation: () => Promise<{ message: string }>) => {
+    setPendingRequestId(requestId);
+    void gate.run(operation).then(outcome => Alert.alert("Ülevõtmistaotlus", outcome.message))
+      .finally(() => setPendingRequestId(undefined));
+  };
 
   useEffect(
     () => subscribeToSync(() => setRefreshKey((value) => value + 1)),
@@ -48,7 +56,8 @@ export default function TakeoverRequestsCard() {
                 <Text style={styles.viewButtonText}>Vaata</Text>
               </Pressable>
               <Pressable
-                style={styles.rejectButton}
+                disabled={Boolean(pendingRequestId)}
+                style={[styles.rejectButton, pendingRequestId && styles.disabled]}
                 onPress={() => {
                   Alert.alert(
                     "Keeldu ülevõtmisest?",
@@ -58,10 +67,10 @@ export default function TakeoverRequestsCard() {
                       {
                         text: "Keeldu",
                         style: "destructive",
-                        onPress: () => void rejectPatientTransferConflictSafe(
+                        onPress: () => settle(request.id, () => rejectPatientTransferConflictSafe(
                           request.patientId,
                           getCurrentCaseManager()
-                        ).then(outcome=>Alert.alert("Ülevõtmistaotlus",outcome.message)),
+                        )),
                       },
                     ]
                   );
@@ -70,7 +79,8 @@ export default function TakeoverRequestsCard() {
                 <Text style={styles.actionButtonText}>Keeldu</Text>
               </Pressable>
               <Pressable
-                style={styles.acceptButton}
+                disabled={Boolean(pendingRequestId)}
+                style={[styles.acceptButton, pendingRequestId && styles.disabled]}
                 onPress={() => {
                   Alert.alert(
                     "Nõustu ülevõtmisega?",
@@ -79,10 +89,10 @@ export default function TakeoverRequestsCard() {
                       { text: "Katkesta", style: "cancel" },
                       {
                         text: "Nõustu",
-                        onPress: () => void acceptPatientTransferConflictSafe(
+                        onPress: () => settle(request.id, () => acceptPatientTransferConflictSafe(
                           request.patientId,
                           getCurrentCaseManager()
-                        ).then(outcome=>Alert.alert("Ülevõtmistaotlus",outcome.message)),
+                        )),
                       },
                     ]
                   );
@@ -140,6 +150,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    minHeight: 48,
+    justifyContent: "center",
   },
   viewButtonText: {
     color: "#005BBB",
@@ -150,15 +162,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    minHeight: 48,
+    justifyContent: "center",
   },
   acceptButton: {
     backgroundColor: "#166534",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    minHeight: 48,
+    justifyContent: "center",
   },
   actionButtonText: {
     color: "#fff",
     fontWeight: "bold",
   },
+  disabled: { opacity: 0.55 },
 });
