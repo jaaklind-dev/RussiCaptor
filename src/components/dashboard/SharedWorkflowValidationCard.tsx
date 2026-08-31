@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { assignPatientToMeConflictSafe, releasePatientConflictSafe } from "@/services/AssignmentRepository";
 import {
@@ -7,10 +7,12 @@ import {
   submitPreparedPhysicalValidationMutation,
   type PreparedPhysicalValidationMutation,
 } from "@/services/sharedWorkflow/PhysicalValidationHarnessService";
+import { getSharedWorkflowOperationalState, subscribeToSharedWorkflowConflicts } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
 
 const patientId = "PT-PELVIC-001";
 
 export default function SharedWorkflowValidationCard() {
+  const workflow = useSyncExternalStore(subscribeToSharedWorkflowConflicts, getSharedWorkflowOperationalState, getSharedWorkflowOperationalState);
   const [prepared, setPrepared] = useState<PreparedPhysicalValidationMutation>();
   const [message, setMessage] = useState("Valideerimisrada on valmis.");
   const [pending, setPending] = useState(false);
@@ -31,6 +33,7 @@ export default function SharedWorkflowValidationCard() {
   return <View style={styles.card}>
     <Text style={styles.title}>Ainult validation-build: jagatud töövoo race-test</Text>
     <Text style={styles.description}>Kasutab tavapärast autentitud kliendi RPC/CAS rada. Canonical release’is seda kaarti ei ole.</Text>
+    <Text style={styles.message}>Workflow Realtime: {workflow.realtimeLifecycle} · hüdreeritud: {workflow.online ? "jah" : "ei"}</Text>
     <Pressable accessibilityLabel="Validation simultaneous claim" disabled={pending} style={styles.primary} onPress={() => void run(() => assignPatientToMeConflictSafe(patientId))}>
       <Text style={styles.primaryText}>Saada samaaegne CLAIM</Text>
     </Pressable>

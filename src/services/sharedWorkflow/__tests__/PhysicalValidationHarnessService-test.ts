@@ -2,7 +2,7 @@ import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepo
 import { setCurrentCaseManager } from "@/services/CurrentUserService";
 import { assignPatient, clearAssignments } from "@/services/AssignmentRepository";
 import { resetPatients } from "@/repositories/PatientRepository";
-import { observeSharedWorkflowHead, resetSharedWorkflowConflictMetrics, setSharedWorkflowConnectivity, setSharedWorkflowGateway } from "../SharedWorkflowMutationService";
+import { getSharedWorkflowOperationalState, observeSharedWorkflowHead, resetSharedWorkflowConflictMetrics, setSharedWorkflowConnectivity, setSharedWorkflowGateway, setSharedWorkflowRealtimeLifecycle } from "../SharedWorkflowMutationService";
 import { InMemorySharedWorkflowGateway } from "../InMemorySharedWorkflowGateway";
 import { prepareSameBaseMutableMutation, submitPreparedPhysicalValidationMutation } from "../PhysicalValidationHarnessService";
 
@@ -24,5 +24,13 @@ describe("physical shared-workflow validation harness", () => {
     expect(first.commandId).not.toBe(second.commandId);
     const outcomes = await Promise.all([submitPreparedPhysicalValidationMutation(first), submitPreparedPhysicalValidationMutation(second)]);
     expect(outcomes.map(item => item.result.status).sort()).toEqual(["APPLIED", "STALE_VERSION"]);
+  });
+
+  it("keeps workflow unavailable until the subscribed channel has hydrated patient heads", () => {
+    setSharedWorkflowConnectivity(false);
+    setSharedWorkflowRealtimeLifecycle("SUBSCRIBED");
+    expect(getSharedWorkflowOperationalState()).toMatchObject({ realtimeLifecycle: "SUBSCRIBED", online: false });
+    setSharedWorkflowConnectivity(true);
+    expect(getSharedWorkflowOperationalState()).toMatchObject({ realtimeLifecycle: "SUBSCRIBED", online: true });
   });
 });

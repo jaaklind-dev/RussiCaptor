@@ -1,5 +1,6 @@
 import "react-native-url-polyfill/auto";
 import "expo-sqlite/localStorage/install";
+import { AppState, Platform } from "react-native";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getReleaseConfigurationError } from "@/config/ReleaseConfig";
@@ -22,3 +23,25 @@ export const supabase: SupabaseClient | undefined = isSupabaseConfigured
       },
     })
   : undefined;
+
+/**
+ * Realtime joins are authorized separately from REST requests.  On native
+ * startup, make the restored authenticated session explicit before a channel
+ * is created; the token itself never leaves the Supabase client.
+ */
+export async function synchronizeRealtimeAuthorization(): Promise<boolean> {
+  if (!supabase) return false;
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session?.access_token || data.session.user.is_anonymous) return false;
+  await supabase.realtime.setAuth(data.session.access_token);
+  return true;
+}
+
+// React Native does not manage Supabase Auth refresh from document visibility.
+// Register one native lifecycle listener for this singleton client.
+if (supabase && Platform.OS !== "web") {
+  AppState.addEventListener("change", state => {
+    if (state === "active") void supabase.auth.startAutoRefresh();
+    else void supabase.auth.stopAutoRefresh();
+  });
+}

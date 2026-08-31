@@ -46,6 +46,7 @@ let online = false;
 const patientHeads = new Map<string, Readonly<{ revision: number; ownerUserId?: string }>>();
 const unresolvedConflicts = new Set<string>();
 let reconnectPending = false;
+let realtimeLifecycle = "IDLE";
 const listeners = new Set<() => void>();
 
 function key(exerciseId: string, patientId: string): string { return `${exerciseId}\u0000${patientId}`; }
@@ -60,15 +61,16 @@ export function getSharedWorkflowOperationalState() {
   let authoritativeRevision = 0;
   patientHeads.forEach(head => { authoritativeRevision = Math.max(authoritativeRevision, head.revision); });
   return Object.freeze({ online, reconnectPending, unresolvedConflictCount: unresolvedConflicts.size,
-    authoritativeRevision, pendingMutationCount: reconnectPending ? 1 : 0 });
+    authoritativeRevision, pendingMutationCount: reconnectPending ? 1 : 0, realtimeLifecycle });
 }
-export function resetSharedWorkflowConflictMetrics(): void { metrics = emptyMetrics(); patientHeads.clear(); unresolvedConflicts.clear(); reconnectPending=false; publish(); }
+export function resetSharedWorkflowConflictMetrics(): void { metrics = emptyMetrics(); patientHeads.clear(); unresolvedConflicts.clear(); reconnectPending=false; realtimeLifecycle="IDLE"; publish(); }
 export function subscribeToSharedWorkflowConflicts(listener: () => void): () => void { listeners.add(listener); return () => listeners.delete(listener); }
 export function setSharedWorkflowConnectivity(value: boolean): void {
   if(!value&&online)reconnectPending=true;
   if(value&&reconnectPending){updateMetrics({reconnectConflictResolutions:unresolvedConflicts.size});reconnectPending=false;}
   online = value; publish();
 }
+export function setSharedWorkflowRealtimeLifecycle(value: string): void { realtimeLifecycle = value; publish(); }
 export function setSharedWorkflowGateway(value: SharedWorkflowGateway | undefined): void { gateway = value; }
 export function getSharedWorkflowHead(exerciseId: string, patientId: string): Readonly<{ revision: number; ownerUserId?: string }> {
   return patientHeads.get(key(exerciseId,patientId)) ?? Object.freeze({ revision: 0 });

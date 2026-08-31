@@ -4,7 +4,7 @@ import {
   restoreSharedExerciseState,
   type SharedExerciseState,
 } from "@/services/StatePersistenceService";
-import { isSupabaseConfigured, supabase } from "@/services/SupabaseService";
+import { isSupabaseConfigured, supabase, synchronizeRealtimeAuthorization } from "@/services/SupabaseService";
 import { notifySync, subscribeToSync } from "@/services/SyncService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
@@ -34,7 +34,7 @@ import {
   exerciseProjectionIdentity,
   type ExerciseProjectionCandidate,
 } from "@/services/exercise/ExerciseProjectionWriteCoordinator";
-import { getSharedWorkflowHead, observeSharedWorkflowHead, setSharedWorkflowConnectivity } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
+import { getSharedWorkflowHead, observeSharedWorkflowHead, setSharedWorkflowConnectivity, setSharedWorkflowRealtimeLifecycle } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
 import { restorePatientSharedWorkflowState, type PatientSharedWorkflowState } from "@/services/sharedWorkflow/PatientSharedWorkflowState";
 import { getOperatorSession, hasActiveRole, type OperatorSessionState } from "@/services/authorization/OperatorSessionService";
 
@@ -597,6 +597,10 @@ export async function startCloudSync(): Promise<() => void> {
     setStatus({ state: "error", message: "Autenditud operaatori seanss puudub." });
     return () => {};
   }
+  if (!await synchronizeRealtimeAuthorization()) {
+    setStatus({ state: "error", message: "Realtime’i autentimine ebaõnnestus." });
+    return () => {};
+  }
 
   const { data: authData } = await supabase.auth.getUser();
   if (authData.user) await migratePendingCompletedExerciseArchives(authData.user.id);
@@ -639,12 +643,13 @@ export async function startCloudSync(): Promise<() => void> {
           restorePatientSharedWorkflowState(authoritative.patient_id,authoritative.state);notifySync("remote");
         });
     }).subscribe(channelStatus=>{
+      setSharedWorkflowRealtimeLifecycle(channelStatus);
       if(channelStatus!=="SUBSCRIBED"){setSharedWorkflowConnectivity(false);return;}
       // Subscribe first, then hydrate. This ordering closes the startup window:
       // an update racing with hydration is either in the result or notified.
       void refreshSharedWorkflowPatients(cloudClient).then(hydrated=>setSharedWorkflowConnectivity(hydrated));
     });
-  stopSharedWorkflowRealtime=()=>{setSharedWorkflowConnectivity(false);void cloudClient.removeChannel(workflowChannel);};
+  stopSharedWorkflowRealtime=()=>{setSharedWorkflowRealtimeLifecycle("CLOSED");setSharedWorkflowConnectivity(false);void cloudClient.removeChannel(workflowChannel);};
 
   // A 60-second safety query bounds missed-event discovery while reducing the
   // previous stable cadence from 720 to 60 requests/hour (91.7%).
