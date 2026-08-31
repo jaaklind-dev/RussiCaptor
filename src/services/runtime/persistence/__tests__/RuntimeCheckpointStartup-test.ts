@@ -580,6 +580,14 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(layout).toContain("startAfterCurrentExerciseDiscovery");
   });
 
+  test("local checkpoint restoration keeps a visible startup state instead of a blank root", () => {
+    const layout = fs.readFileSync(path.join(process.cwd(), "src/app/_layout.tsx"), "utf8");
+    expect(layout).toContain('accessibilityLabel="Rakenduse käivitamine"');
+    expect(layout).toContain("RussiCaptor käivitub");
+    expect(layout).toContain("Taastan turvaliselt seadme kohalikku seisundit…");
+    expect(layout).not.toContain('return <View style={{ flex: 1, backgroundColor: "#F6F8FB" }} />;');
+  });
+
   test("cold persisted Runtime remains stopped until discovery and authority resolve", () => {
     const persistence = fs.readFileSync(path.join(process.cwd(), "src/services/StatePersistenceService.ts"), "utf8");
     const loadStart = persistence.indexOf("export async function loadPersistedState");

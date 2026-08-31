@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { Stack, router, useSegments } from "expo-router";
 import { loadPersistedState, startStatePersistence } from "@/services/StatePersistenceService";
 import { getCloudSyncStatus, startCloudSync } from "@/services/CloudSyncService";
@@ -88,7 +88,14 @@ export default function RootLayout() {
   }, []);
 
   if (!isReady) {
-    return <View style={{ flex: 1, backgroundColor: "#F6F8FB" }} />;
+    // Local state can contain a large, durable Runtime checkpoint.  Keep the
+    // startup gate fail-closed, but never make that bounded restoration look
+    // like a dead React Native root to the operator.
+    return <View accessibilityLabel="Rakenduse käivitamine" style={styles.startup}>
+      <ActivityIndicator size="large" color="#005BBB" />
+      <Text style={styles.startupTitle}>RussiCaptor käivitub</Text>
+      <Text style={styles.startupMessage}>Taastan turvaliselt seadme kohalikku seisundit…</Text>
+    </View>;
   }
 
   return <SafeAreaProvider><SafeAreaView edges={["top", "right", "bottom", "left"]} style={{ flex: 1, backgroundColor: "#F6F8FB" }}>
@@ -96,3 +103,16 @@ export default function RootLayout() {
   </SafeAreaView></SafeAreaProvider>;
 
 }
+
+const styles = StyleSheet.create({
+  startup: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+    padding: 24,
+    backgroundColor: "#F6F8FB",
+  },
+  startupTitle: { color: "#101828", fontSize: 22, fontWeight: "700" },
+  startupMessage: { color: "#475467", fontSize: 16, textAlign: "center" },
+});
