@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { assignPatientToMeConflictSafe, releasePatientConflictSafe } from "@/services/AssignmentRepository";
 import {
@@ -12,7 +12,8 @@ import { getSharedWorkflowOperationalState, subscribeToSharedWorkflowConflicts }
 const patientId = "PT-PELVIC-001";
 
 export default function SharedWorkflowValidationCard() {
-  const workflow = useSyncExternalStore(subscribeToSharedWorkflowConflicts, getSharedWorkflowOperationalState, getSharedWorkflowOperationalState);
+  const [workflow, setWorkflow] = useState(getSharedWorkflowOperationalState);
+  useEffect(() => subscribeToSharedWorkflowConflicts(() => setWorkflow(getSharedWorkflowOperationalState())), []);
   const [prepared, setPrepared] = useState<PreparedPhysicalValidationMutation>();
   const [message, setMessage] = useState("Valideerimisrada on valmis.");
   const [pending, setPending] = useState(false);
