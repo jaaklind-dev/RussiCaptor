@@ -19,6 +19,8 @@ import LocalSaveStatusCard from "@/components/dashboard/LocalSaveStatusCard";
 import CloudSyncStatusCard from "@/components/dashboard/CloudSyncStatusCard";
 import { getCurrentLocationZone } from "@/services/CurrentLocationService";
 import ExerciseReadOnlyStatusCard from "@/components/dashboard/ExerciseReadOnlyStatusCard";
+import SharedWorkflowValidationCard from "@/components/dashboard/SharedWorkflowValidationCard";
+import { isSharedWorkflowValidationHarnessEnabled } from "@/config/SharedWorkflowValidationHarness";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { hasActiveRole, signOutOperator } from "@/services/authorization/OperatorSessionService";
@@ -97,6 +99,8 @@ export default function DashboardScreen() {
         <Text style={styles.row}>✅ Lõpetatud: {stats.completed}</Text>
 
       </View>
+
+      {isSharedWorkflowValidationHarnessEnabled() && <SharedWorkflowValidationCard />}
 
       <Pressable style={styles.button} onPress={() => router.push("/scan")}>
 

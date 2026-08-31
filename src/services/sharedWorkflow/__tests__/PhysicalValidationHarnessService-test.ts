@@ -1,0 +1,28 @@
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { setCurrentCaseManager } from "@/services/CurrentUserService";
+import { assignPatient, clearAssignments } from "@/services/AssignmentRepository";
+import { resetPatients } from "@/repositories/PatientRepository";
+import { observeSharedWorkflowHead, resetSharedWorkflowConflictMetrics, setSharedWorkflowConnectivity, setSharedWorkflowGateway } from "../SharedWorkflowMutationService";
+import { InMemorySharedWorkflowGateway } from "../InMemorySharedWorkflowGateway";
+import { prepareSameBaseMutableMutation, submitPreparedPhysicalValidationMutation } from "../PhysicalValidationHarnessService";
+
+describe("physical shared-workflow validation harness", () => {
+  beforeEach(() => {
+    resetPatients(); clearAssignments(); resetSharedWorkflowConflictMetrics(); setSharedWorkflowConnectivity(true);
+    setCurrentCaseManager({ id: "CM-001", name: "Jaak" });
+    assignPatient("PT-001", { id: "CM-001", name: "Jaak" });
+    const gateway = new InMemorySharedWorkflowGateway(() => ({ userId: "CM-001", role: "CM", exerciseIds: [getCanonicalExerciseSnapshot().exerciseId] }));
+    gateway.seed(getCanonicalExerciseSnapshot().exerciseId, "PT-001", { patient: { id: "PT-001" }, assignments: [], transfers: [], questions: [], labs: [], imagingStudies: [], orders: [], notes: [], timelineEvents: [], interventions: [], medicationAdministrations: [], vitalSigns: [] }, "CM-001", 1);
+    observeSharedWorkflowHead(getCanonicalExerciseSnapshot().exerciseId, "PT-001", 1, "CM-001");
+    setSharedWorkflowGateway(gateway);
+  });
+  afterEach(() => setSharedWorkflowGateway(undefined));
+
+  it("submits staged same-base proposals through normal CAS and accepts only one", async () => {
+    const first = prepareSameBaseMutableMutation("PT-001")!;
+    const second = prepareSameBaseMutableMutation("PT-001")!;
+    expect(first.commandId).not.toBe(second.commandId);
+    const outcomes = await Promise.all([submitPreparedPhysicalValidationMutation(first), submitPreparedPhysicalValidationMutation(second)]);
+    expect(outcomes.map(item => item.result.status).sort()).toEqual(["APPLIED", "STALE_VERSION"]);
+  });
+});

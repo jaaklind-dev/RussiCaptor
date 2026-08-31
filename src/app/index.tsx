@@ -1,19 +1,21 @@
 import { router } from "expo-router";
 import Constants from "expo-constants";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import AppHeader from "@/components/AppHeader";
 import { getBuildProvenance, getReleaseConfigurationError } from "@/config/ReleaseConfig";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { signInOperator } from "@/services/authorization/OperatorSessionService";
-import { resolveOperatorLandingRoute } from "@/services/ui/OperatorRouteService";
+import { resolveOperatorLandingNavigationTarget } from "@/services/ui/OperatorRouteService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { getSyncVersion, subscribeToSync } from "@/services/SyncService";
 
 export default function LoginScreen() {
   const build = getBuildProvenance();
   const releaseConfigurationError = getReleaseConfigurationError();
   const operator = useOperatorSession();
+  const syncVersion = useSyncExternalStore(subscribeToSync, getSyncVersion, getSyncVersion);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>();
@@ -21,8 +23,9 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (operator.state !== "AUTHENTICATED") return;
-    router.replace(resolveOperatorLandingRoute(operator, getCanonicalExerciseSnapshot().exerciseId));
-  }, [operator]);
+    const target = resolveOperatorLandingNavigationTarget(operator, getCanonicalExerciseSnapshot().exerciseId);
+    if (target) router.replace(target);
+  }, [operator, syncVersion]);
 
   async function submit(): Promise<void> {
     if (releaseConfigurationError) { setError(releaseConfigurationError); return; }

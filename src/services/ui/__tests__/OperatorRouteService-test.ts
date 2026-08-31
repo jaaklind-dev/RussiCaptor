@@ -1,5 +1,5 @@
 import type { OperatorSessionState } from "@/services/authorization/OperatorSessionService";
-import { resolveOperatorLandingRoute } from "../OperatorRouteService";
+import { resolveOperatorLandingNavigationTarget, resolveOperatorLandingRoute } from "../OperatorRouteService";
 
 function authenticated(role: "CM" | "EXCON", scopeId?: string): OperatorSessionState {
   return {
@@ -25,5 +25,11 @@ describe("operator landing route", () => {
   });
   test("fails closed for a role scoped to another exercise", () => {
     expect(resolveOperatorLandingRoute(authenticated("CM", "EX-2"), "EX-1")).toBe("/");
+  });
+  test("does not replace the login route with itself while scoped exercise discovery is pending", () => {
+    expect(resolveOperatorLandingNavigationTarget(authenticated("CM", "EX-2"), "EX-1")).toBeUndefined();
+    expect(resolveOperatorLandingNavigationTarget(authenticated("CM", "EX-1"), "EX-1")).toBe("/dashboard");
+    expect(resolveOperatorLandingNavigationTarget(authenticated("EXCON", "EX-1"), "EX-1")).toBe("/excon");
+    expect(resolveOperatorLandingNavigationTarget(authenticated("EXCON", "EX-1"), "EX-1", "/excon")).toBeUndefined();
   });
 });

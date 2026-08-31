@@ -11,3 +11,12 @@ export function resolveOperatorLandingRoute(
   if (hasActiveRole(operator, "EXCON", exerciseId)) return "/excon";
   return "/";
 }
+
+export function resolveOperatorLandingNavigationTarget(
+  operator: OperatorSessionState,
+  exerciseId: string,
+  currentRoute = "/",
+): "/dashboard" | "/excon" | "/" | undefined {
+  const target = resolveOperatorLandingRoute(operator, exerciseId);
+  return target === currentRoute ? undefined : target;
+}
