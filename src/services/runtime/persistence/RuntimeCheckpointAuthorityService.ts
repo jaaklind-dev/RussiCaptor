@@ -8,6 +8,7 @@ import { sha256Text, sha256TextAsync } from "@/utils/sha256";
 import { stableJson, stableJsonAsync } from "@/utils/stableJson";
 import { isCapturedCanonicalRuntimeArtifact } from "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
 const validatedImmutableCheckpoints = new WeakSet<object>();
 
@@ -114,15 +115,25 @@ export async function createRuntimeCheckpointAsync(
   checkpointRevision: number,
   yieldControl: PipelineYield,
 ): Promise<RuntimeCheckpointEnvelope<SharedExerciseState>> {
+  const endCheckpoint = startRuntimeWorkTrace("CHECKPOINT_PREPARATION", {
+    persistedRuntimeCount: payload.persistedRuntimeStates?.length ?? 0,
+    scenarioEventCount: payload.scenarioEvents?.length ?? 0,
+  });
   if (!Number.isSafeInteger(checkpointRevision) || checkpointRevision < 1) throw new Error("CHECKPOINT_REVISION_CONFLICT");
   if (!hasValidActiveRuntimeCoverage(payload) || !await hasValidRuntimeItemsAsync(payload, yieldControl)) {
     throw new Error("ACTIVE_RUNTIME_PERSISTENCE_MISSING");
   }
   await yieldControl();
+  const endClone = startRuntimeWorkTrace("CHECKPOINT_STRUCTURED_CLONE");
   const frozenPayload = structuredClone(payload);
+  endClone();
   await yieldControl();
+  const endSerialization = startRuntimeWorkTrace("CHECKPOINT_SERIALIZATION");
   const canonical = await stableJsonAsync(frozenPayload, { yieldControl });
+  endSerialization({ serializedBytes: canonical.length });
+  const endHash = startRuntimeWorkTrace("CHECKPOINT_HASH");
   const payloadHash = await sha256TextAsync(canonical, { yieldControl });
+  endHash({ serializedBytes: canonical.length });
   const checkpoint = {
     envelopeVersion: RUNTIME_CHECKPOINT_ENVELOPE_VERSION,
     exerciseId: exerciseIdOf(frozenPayload),
@@ -132,7 +143,11 @@ export async function createRuntimeCheckpointAsync(
     payloadHash,
     provenanceHash: provenanceHashOf(frozenPayload),
   };
-  return markCheckpointValidatedAsync(checkpoint, yieldControl);
+  const endFreeze = startRuntimeWorkTrace("CHECKPOINT_FREEZE");
+  const validated = await markCheckpointValidatedAsync(checkpoint, yieldControl);
+  endFreeze();
+  endCheckpoint({ serializedBytes: canonical.length });
+  return validated;
 }
 
 export function isValidRuntimeCheckpoint(

@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const gradlePath = path.join(root, "android/app/build.gradle");
+const nativeSource = path.join(root, "native/android");
+const nativeTarget = path.join(root, "android/app/src/main/java/com/jaaklind/RussiCaptor");
 let gradle = fs.readFileSync(gradlePath, "utf8");
 const versionName = process.env.RUSSICAPTOR_VERSION_NAME;
 const versionCode = process.env.RUSSICAPTOR_VERSION_CODE;
@@ -57,4 +59,15 @@ gradle = beforeBuildTypes + buildTypes;
 if (!gradle.includes("debug {\n            signingConfig signingConfigs.debug")) throw new Error("Debug build signing was unexpectedly changed.");
 if (!gradle.includes("signingConfig signingConfigs.release")) throw new Error("Release build does not use the production signing config.");
 fs.writeFileSync(gradlePath, gradle);
+for (const filename of ["RuntimeNativeLeaseHeartbeatModule.kt", "RuntimeNativeLeaseHeartbeatPackage.kt"]) {
+  fs.copyFileSync(path.join(nativeSource, filename), path.join(nativeTarget, filename));
+}
+const applicationPath = path.join(nativeTarget, "MainApplication.kt");
+let application = fs.readFileSync(applicationPath, "utf8");
+const marker = "PackageList(this).packages.apply {";
+if (!application.includes(marker)) throw new Error("Generated MainApplication package list was not recognized.");
+if (!application.includes("add(RuntimeNativeLeaseHeartbeatPackage())")) {
+  application = application.replace(marker, `${marker}\n          add(RuntimeNativeLeaseHeartbeatPackage())`);
+}
+fs.writeFileSync(applicationPath, application);
 console.log("FIELD_RELEASE_NATIVE_CONFIGURED");

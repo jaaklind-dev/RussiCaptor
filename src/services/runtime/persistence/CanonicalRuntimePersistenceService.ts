@@ -9,6 +9,7 @@ import type { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
 import { sha256Text, sha256TextAsync } from "@/utils/sha256";
 import { stableJson, stableJsonAsync } from "@/utils/stableJson";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
 const capturedCanonicalArtifacts = new WeakSet<object>();
 
@@ -64,10 +65,18 @@ export class CanonicalRuntimePersistenceService {
     provenance: RuntimeProvenance,
     yieldControl: PipelineYield,
   ): Promise<PersistedRuntimeState> {
+    const endCapture = startRuntimeWorkTrace("RUNTIME_PAYLOAD_CANONICAL_CAPTURE", {
+      simulationTimeSec: payload.simulationTimeSec,
+    });
     await yieldControl();
+    const endSerialization = startRuntimeWorkTrace("RUNTIME_PAYLOAD_SERIALIZATION");
     const canonical = await stableJsonAsync(payload, { yieldControl });
+    endSerialization({ serializedBytes: canonical.length });
+    const endHash = startRuntimeWorkTrace("RUNTIME_PAYLOAD_HASH");
     const payloadHash = await sha256TextAsync(canonical, { yieldControl });
+    endHash({ serializedBytes: canonical.length });
     await yieldControl();
+    const endFreeze = startRuntimeWorkTrace("RUNTIME_PAYLOAD_FREEZE");
     const artifact = await deepFreezeAsync({
       schemaVersion: PERSISTED_RUNTIME_SCHEMA_VERSION,
       provenance: structuredClone(provenance),
@@ -75,6 +84,8 @@ export class CanonicalRuntimePersistenceService {
       payload,
       payloadHash,
     }, yieldControl);
+    endFreeze();
+    endCapture({ serializedBytes: canonical.length });
     capturedCanonicalArtifacts.add(artifact);
     return artifact;
   }

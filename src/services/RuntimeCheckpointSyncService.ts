@@ -1,5 +1,5 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
 import type { RuntimeCheckpointEnvelope, RuntimeWriterLease } from "@/models/RuntimeCheckpointAuthority";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { stopClockRunner } from "@/services/ClockRunner";
@@ -27,7 +27,9 @@ import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/Run
 import { parseRuntimeCheckpointMetadata, RuntimeCheckpointMetadataCoordinator } from "@/services/runtime/persistence/RuntimeCheckpointMetadataCoordinator";
 import { loadRuntimeCheckpointWithCache } from "@/services/runtime/persistence/RuntimeCheckpointHydrationService";
 import { isSharedWorkflowValidationHarnessEnabled } from "@/config/SharedWorkflowValidationHarness";
-import { getRuntimeLeaseLifecycleTrace, nextRuntimeLeaseTraceLabel, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { getRuntimeLeaseLifecycleTrace, nextRuntimeLeaseTraceLabel, startRuntimeWorkTrace, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { isNativeLeaseHeartbeatAvailable } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeat";
+import { RuntimeNativeLeaseHeartbeatController, type NativeLeaseHeartbeatSession } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeatController";
 
 const LEASE_SECONDS = 60;
 const RENEW_MS = 20_000;
@@ -50,6 +52,7 @@ let wakeCheckpointPublicationForCurrentWriter: (() => void) | undefined;
 let manualRenewLeaseForValidation: (() => Promise<boolean>) | undefined;
 let lastCheckpointPublicationAt: string | undefined;
 let lastRecoveryOutcome: Readonly<{ state: string; code?: string; occurredAt: string }> | undefined;
+let updateNativeHeartbeatTokenForCurrentWriter: ((accessToken: string) => void) | undefined;
 type RenewalDiagnosticEvent = Readonly<{
   event: "LEASE_ACQUIRED" | "RENEWAL_SCHEDULER_STARTED" | "RENEWAL_ATTEMPT" | "RENEWAL_SUCCESS" | "RENEWAL_FAILURE" | "RENEWAL_SCHEDULER_STOPPED" | "AUTHORITY_TRANSITION";
   occurredAt: string;
@@ -222,7 +225,9 @@ export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopO
       if (stopped || options.getLease()?.leaseId !== renewingLease.leaseId) return;
       if ("lease" in result) {
         traceRuntimeLeaseLifecycle("RENEW_RPC_RESULT", { scheduler, detail: { result: "SUCCESS", latencyMs: Date.now() - renewalStartedAt } });
+        traceRuntimeLeaseLifecycle("RENEW_SUCCESS_DOWNSTREAM_BEGIN", { scheduler, detail: {} });
         options.onRenewed(renewingLease, result.lease);
+        traceRuntimeLeaseLifecycle("RENEW_SUCCESS_DOWNSTREAM_END", { scheduler, detail: {} });
       } else if (renewalFailureRevokesWriter(result, renewingLease, options.now?.() ?? Date.now())) {
         traceRuntimeLeaseLifecycle("RENEW_RPC_RESULT", { scheduler, detail: { result: result.code, latencyMs: Date.now() - renewalStartedAt } });
         options.onRevoked(renewingLease, result.code);
@@ -653,11 +658,14 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         publishQueued=false;
         const checkpoint=getLocalRuntimeCheckpoint(); if(!checkpoint||!lease||status.state!=="WRITER"||checkpoint.checkpointRevision<=remoteRevision||isIdenticalCheckpointPayload(lastPublishedCheckpoint,checkpoint)) return;
         publicationDirty=true;
+        const endPublish = startRuntimeWorkTrace("CHECKPOINT_REMOTE_PUBLICATION", {
+          checkpointRevision: checkpoint.checkpointRevision,
+        });
         const echoAcknowledgement=new Promise<Awaited<ReturnType<typeof publishRuntimeCheckpointTerminal>>>(resolve=>{
           pendingWriterEcho={payloadHash:checkpoint.payloadHash,checkpoint,resolve};
         });
         const result=await Promise.race([publishRuntimeCheckpointTerminal(repository,lease,remoteRevision,checkpoint,undefined,lastPublishedCheckpoint),echoAcknowledgement]);
-        if(generationStopped())return;
+        if(generationStopped()) { endPublish({ outcome: "GENERATION_STOPPED" }); return; }
         if(pendingWriterEcho?.payloadHash===checkpoint.payloadHash)pendingWriterEcho=undefined;
         if(result.state==="PUBLISHED") {
           const currentLocal=getLocalRuntimeCheckpoint();
@@ -668,9 +676,10 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
           lastPublishedCheckpoint=result.checkpoint;lastPublicationAt=Date.now();lastCheckpointPublicationAt=new Date(lastPublicationAt).toISOString();remoteRevision=result.checkpoint.checkpointRevision;
           publicationDirty=Boolean(currentLocal&&!isIdenticalCheckpointPayload(result.checkpoint,currentLocal));
           setStatus({state:"WRITER",revision:remoteRevision});
+          endPublish({ outcome: "PUBLISHED" });
         }
-        else if(publicationResultRevokesWriter(result.state)) { lease=undefined; stopClockRunner(); setStatus({state:"CONFLICT",code:result.code}); return; }
-        else { publicationDirty=true;setStatus({state:"WRITER",code:result.code,revision:remoteRevision});schedulePublicationRetry(); }
+        else if(publicationResultRevokesWriter(result.state)) { endPublish({ outcome: result.state }); lease=undefined; stopClockRunner(); setStatus({state:"CONFLICT",code:result.code}); return; }
+        else { endPublish({ outcome: result.state }); publicationDirty=true;setStatus({state:"WRITER",code:result.code,revision:remoteRevision});schedulePublicationRetry(); }
       } while(publishQueued);
     } catch {
       publicationDirty=true;schedulePublicationRetry();
@@ -698,9 +707,54 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   // Listening to SyncService here duplicated every trigger before capture.
   const stopPrepared=subscribeToLocalRuntimeCheckpointPrepared(requestPublish);
   let renewalLoop: RuntimeWriterRenewalLoop | undefined;
+  let nativeHeartbeat: RuntimeNativeLeaseHeartbeatController | undefined;
+  let nativeHeartbeatStarting = false;
+  const nativeHeartbeatEnabled = Platform.OS === "android" && isNativeLeaseHeartbeatAvailable();
+  const stopNativeHeartbeat = (reason: string) => {
+    const controller = nativeHeartbeat;
+    nativeHeartbeat = undefined;
+    nativeHeartbeatStarting = false;
+    if (updateNativeHeartbeatTokenForCurrentWriter) updateNativeHeartbeatTokenForCurrentWriter = undefined;
+    if (controller) void controller.stop(reason);
+  };
+  const startNativeHeartbeat = (): boolean => {
+    if (!nativeHeartbeatEnabled || nativeHeartbeat || nativeHeartbeatStarting || !lease) return Boolean(nativeHeartbeat);
+    const currentLease = lease;
+    nativeHeartbeatStarting = true;
+    const controller = new RuntimeNativeLeaseHeartbeatController(diagnostic => {
+      if (generationStopped() || lease?.leaseId !== currentLease.leaseId) return;
+      if (diagnostic.lastSuccessExpiresAt) {
+        lease = Object.freeze({ ...currentLease, expiresAt: diagnostic.lastSuccessExpiresAt });
+      }
+      if (diagnostic.state === "STOPPED" && diagnostic.lastFailure && diagnostic.lastFailure !== "NETWORK_FAILURE") {
+        traceRuntimeLeaseLifecycle("AUTHORITY_LOSS", { generation: traceGeneration, detail: { priorAuthority: status.state, nextAuthority: "READER", code: diagnostic.lastFailure } });
+        lease = undefined;
+        stopClockRunner();
+        setStatus({ state: "READER", code: diagnostic.lastFailure });
+      }
+    });
+    void client.auth.getSession().then(async ({ data, error }) => {
+      const accessToken = data.session?.access_token;
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+      if (error || !accessToken || !supabaseUrl || !supabasePublishableKey || generationStopped() || lease?.leaseId !== currentLease.leaseId) {
+        traceRuntimeLeaseLifecycle("NATIVE_RENEW_RPC_FAILURE", { generation: traceGeneration, detail: { result: "SESSION_UNAVAILABLE" } });
+        return;
+      }
+      const session: NativeLeaseHeartbeatSession = { accessToken, supabaseUrl, supabasePublishableKey };
+      await controller.start(currentLease, LEASE_SECONDS, session);
+      if (generationStopped() || lease?.leaseId !== currentLease.leaseId) { await controller.stop("STALE_START"); return; }
+      nativeHeartbeat = controller;
+      updateNativeHeartbeatTokenForCurrentWriter = token => { void controller.updateToken({ ...session, accessToken: token }); };
+    }).catch(() => {
+      traceRuntimeLeaseLifecycle("NATIVE_RENEW_RPC_FAILURE", { generation: traceGeneration, detail: { result: "NATIVE_START_FAILED" } });
+    }).finally(() => { nativeHeartbeatStarting = false; });
+    return true;
+  };
   const ensureRenewal=()=>{
     if (renewalLoop && !renewalLoop.isActive()) renewalLoop=undefined;
-    if(generationStopped() || !lease || (status.state!=="WRITER" && status.state!=="ACQUIRING"))return Boolean(renewalLoop?.isActive());
+    if(generationStopped() || !lease || (status.state!=="WRITER" && status.state!=="ACQUIRING"))return Boolean(renewalLoop?.isActive() || nativeHeartbeat);
+    if (nativeHeartbeatEnabled) { startNativeHeartbeat(); return true; }
     if(renewalLoop)return renewalLoop.isActive();
     renewalLoop=startRuntimeWriterRenewalLoop({
       getLease:()=>lease,
@@ -714,7 +768,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         if(lease?.leaseId!==currentLease.leaseId)return;
         recordRenewalDiagnostic("RENEWAL_FAILURE", code);
         traceRuntimeLeaseLifecycle("AUTHORITY_LOSS", { generation: traceGeneration, detail: { priorAuthority: status.state, nextAuthority: "READER", code } });
-        renewalLoop?.stop("AUTHORITY_LOSS");renewalLoop=undefined;
+        renewalLoop?.stop("AUTHORITY_LOSS");renewalLoop=undefined;stopNativeHeartbeat("AUTHORITY_LOSS");
         lease=undefined;stopClockRunner();setStatus({state:"READER",code});
       },
       onAttempt:()=>recordRenewalDiagnostic("RENEWAL_ATTEMPT", "current-generation"),
@@ -784,7 +838,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     traceRuntimeLeaseLifecycle("APP_STATE_CHANGED", { generation: traceGeneration, detail: { nextState } });
     if(nextState!=="active"&&lease&&(status.state==="WRITER"||status.state==="ACQUIRING")){
       const releasedLease=lease;
-      renewalLoop?.stop("APP_BACKGROUND");renewalLoop=undefined;lease=undefined;stopClockRunner();
+      renewalLoop?.stop("APP_BACKGROUND");renewalLoop=undefined;stopNativeHeartbeat("APP_BACKGROUND");lease=undefined;stopClockRunner();
       recordRenewalDiagnostic("RENEWAL_SCHEDULER_STOPPED", "APP_BACKGROUND");
       setStatus({state:"READER",code:"WRITER_BACKGROUND_RELINQUISHED",revision:remoteRevision});
       void repository.releaseWriter(releasedLease);
@@ -809,7 +863,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     }
     if(channelStatus==="SUBSCRIBED"&&!generationStopped()){renewalLoop?.wake();requestPublish();}
   });
-  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });stopped=true;appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();renewalLoop?.stop("GENERATION_CLEANUP");if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration)lease=undefined;};
+  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });stopped=true;appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration)lease=undefined;};
 }
 
 async function startRuntimeCheckpointSyncOnce(): Promise<()=>void> {
@@ -824,6 +878,7 @@ async function startRuntimeCheckpointSyncOnce(): Promise<()=>void> {
   let activeExerciseId=getCanonicalExerciseSnapshot().exerciseId;
   let activeLifecycle=isActiveExercise();
   const { data: authSubscription }=supabase.auth.onAuthStateChange((_event,session)=>{
+    if (session?.access_token) updateNativeHeartbeatTokenForCurrentWriter?.(session.access_token);
     const nextPrincipal=session?.user.id;
     if(!shouldResetRuntimeCheckpointSyncForPrincipal(principalId,nextPrincipal))return;
     principalId=nextPrincipal??"";

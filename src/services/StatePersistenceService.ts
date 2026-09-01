@@ -38,6 +38,7 @@ import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/Run
 import { BoundedObsoleteGenerationGate, LatestGenerationPipeline } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { capturePatientTransportRuntime, preparePatientTransportRuntime } from "@/services/runtime/exercise/PatientTransportRuntimeService";
 import { compactActiveExerciseState } from "@/services/runtime/persistence/ActiveCheckpointCompaction";
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
@@ -143,7 +144,13 @@ function collectSharedExerciseState(): SharedExerciseState {
 }
 
 async function collectSharedExerciseStateAsync(yieldControl: () => Promise<void>): Promise<SharedExerciseState> {
+  const endCollection = startRuntimeWorkTrace("CHECKPOINT_PROJECTION_COLLECTION");
   const shared = collectSharedExerciseProjection();
+  endCollection({
+    patientCount: shared.patients.length,
+    scenarioEventCount: shared.scenarioEvents.length,
+    timelineEventCount: shared.timelineEvents.length,
+  });
   const simulationTimeSec = "simulationTimeSec" in shared.exerciseSession
     ? shared.exerciseSession.simulationTimeSec : shared.exerciseSession.currentMinute * 60;
   const persistedRuntimeStates = await captureActiveClinicalReferenceRuntimesAsync(
@@ -379,9 +386,14 @@ export function startStatePersistence(): () => void {
       if (stopped) return;
       await yieldControl();
       const hasCanonicalRuntime = (shared.persistedRuntimeStates?.length ?? 0) > 0;
+      const endPreparation = startRuntimeWorkTrace("CHECKPOINT_ENVELOPE_PREPARATION", {
+        generation,
+        persistedRuntimeCount: shared.persistedRuntimeStates?.length ?? 0,
+      });
       const preparedCheckpoint = hasCanonicalRuntime
         ? await localRuntimeCheckpointStore.prepareCaptureAsync(shared, yieldControl)
         : undefined;
+      endPreparation({ prepared: Boolean(preparedCheckpoint) });
       // Drop one obsolete preparation, but force the next one through CAS so a
       // continuously ticking Runtime cannot starve checkpoint publication.
       if (stopped || obsoleteGate.shouldDrop(pipeline.isCurrent(generation))) return;
@@ -428,8 +440,13 @@ async function flushLatestSnapshot(): Promise<void> {
     while (pendingSnapshot) {
       const snapshot = pendingSnapshot;
       pendingSnapshot = undefined;
-      await FileSystem.writeAsStringAsync(stateTempFileUri, JSON.stringify(snapshot));
+      const endSerialization = startRuntimeWorkTrace("LOCAL_SNAPSHOT_SERIALIZATION");
+      const serialized = JSON.stringify(snapshot);
+      endSerialization({ serializedBytes: serialized.length });
+      const endWrite = startRuntimeWorkTrace("LOCAL_SNAPSHOT_WRITE", { serializedBytes: serialized.length });
+      await FileSystem.writeAsStringAsync(stateTempFileUri, serialized);
       await FileSystem.moveAsync({ from: stateTempFileUri, to: stateFileUri });
+      endWrite();
       if (!pendingSnapshot) setLocalSaveStatus({ state: "saved", savedAt: snapshot.savedAt });
     }
   } catch (error) {

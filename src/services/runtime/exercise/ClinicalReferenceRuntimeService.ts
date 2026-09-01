@@ -13,6 +13,7 @@ import { canonicalRuntimePersistenceService, moduleCompositionHash } from "@/ser
 import { registerExerciseClockTarget } from "@/services/runtime/exercise/ExerciseClockTargetRegistry";
 import { createScenarioEngineExerciseClockTarget } from "@/services/runtime/exercise/ScenarioEngineExerciseClockTarget";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { clearPatientTransportRuntime, preparePatientTransportRuntime } from "./PatientTransportRuntimeService";
 
 let active: Readonly<{ exerciseId: string; patientId: string; engine: ClinicalScenarioEngine; dispose: () => void }>[] = [];
@@ -123,10 +124,12 @@ export async function captureActiveClinicalReferenceRuntimesAsync(
   if (expectedExerciseId !== undefined) assertActiveRuntimeExerciseIdentity(active, expectedExerciseId);
   // Detach every patient payload before yielding. This preserves one logical
   // clock boundary while expensive canonicalization proceeds cooperatively.
+  const endDetach = startRuntimeWorkTrace("RUNTIME_PAYLOAD_DETACH", { runtimeCount: active.length });
   const detached = active.slice().sort((a, b) => a.patientId.localeCompare(b.patientId)).map(item => ({
     payload: item.engine.captureRuntimePayload(),
     provenance: provenance(item.exerciseId, item.patientId, getExercisePackage(item.exerciseId)),
   }));
+  endDetach({ runtimeCount: detached.length });
   if (expectedSimulationTimeSec !== undefined && detached.some(item => item.payload.simulationTimeSec !== expectedSimulationTimeSec)) {
     throw new Error("RUNTIME_CHECKPOINT_CLOCK_MISMATCH");
   }

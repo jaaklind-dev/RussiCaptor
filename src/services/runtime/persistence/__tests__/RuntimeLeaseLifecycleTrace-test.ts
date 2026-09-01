@@ -13,6 +13,7 @@ describe("Runtime lease validation trace", () => {
   };
 
   beforeEach(() => {
+    jest.spyOn(console, "info").mockImplementation(() => undefined);
     process.env.EXPO_PUBLIC_RELEASE_ENVIRONMENT = "production";
     process.env.EXPO_PUBLIC_SHARED_WORKFLOW_VALIDATION_HARNESS = "1";
     clearRuntimeLeaseTraceForValidation();
@@ -23,6 +24,10 @@ describe("Runtime lease validation trace", () => {
     process.env.EXPO_PUBLIC_SHARED_WORKFLOW_VALIDATION_HARNESS = environment.enabled;
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   test("keeps chronological bounded, payload-free validation evidence", () => {
     traceRuntimeLeaseLifecycle("FIRST", { generation: "generation-1", detail: { reason: "VALID_WRITER" } });
     traceRuntimeLeaseLifecycle("SECOND", { scheduler: "scheduler-1", detail: { latencyMs: 4 } });
@@ -31,10 +36,10 @@ describe("Runtime lease validation trace", () => {
     expect(trace.map(item => item.event)).toEqual(["LEASE_TRACE_CLEARED", "FIRST", "SECOND"]);
     expect(JSON.stringify(trace)).not.toMatch(/token|password|patient|payload/i);
 
-    for (let index = 0; index < 100; index += 1) {
+    for (let index = 0; index < 250; index += 1) {
       traceRuntimeLeaseLifecycle("BOUNDED", { detail: { index } });
     }
-    expect(getRuntimeLeaseLifecycleTrace()).toHaveLength(96);
+    expect(getRuntimeLeaseLifecycleTrace()).toHaveLength(192);
   });
 
   test("reset changes trace evidence only", () => {

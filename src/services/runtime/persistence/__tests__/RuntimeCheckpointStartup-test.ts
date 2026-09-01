@@ -751,10 +751,12 @@ describe("WP-44B checkpoint startup coordination", () => {
 
   test("renewal attachment is idempotent and stale generation cleanup cannot clear its replacement", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
-    expect(source).toContain('if(generationStopped() || !lease || (status.state!=="WRITER" && status.state!=="ACQUIRING"))return Boolean(renewalLoop?.isActive());');
+    expect(source).toContain('const nativeHeartbeatEnabled = Platform.OS === "android" && isNativeLeaseHeartbeatAvailable();');
+    expect(source).toContain('if (nativeHeartbeatEnabled) { startNativeHeartbeat(); return true; }');
     expect(source.match(/startRuntimeWriterRenewalLoop\(/g)).toHaveLength(2);
     expect(source).toContain("if (renewalLoop && !renewalLoop.isActive()) renewalLoop=undefined;");
     expect(source).toContain("if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined");
+    expect(source).toContain('stopNativeHeartbeat("GENERATION_CLEANUP")');
   });
 
   test("native background deliberately relinquishes the lease instead of leaving a phantom writer", () => {
