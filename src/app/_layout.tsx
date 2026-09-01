@@ -9,6 +9,7 @@ import { getOperatorSession, hasActiveRole, startOperatorSession, subscribeOpera
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { startRuntimeLeaseTimerProbe } from "@/services/runtime/persistence/RuntimeLeaseTimerProbe";
 
 function ProductionRouteGate() {
   const segments = useSegments();
@@ -34,6 +35,7 @@ export default function RootLayout() {
     let unsubscribeRuntimeCheckpoint = () => {};
     let unsubscribeOperator = () => {};
     let unsubscribeOperatorState = () => {};
+    const stopLeaseTimerProbe = startRuntimeLeaseTimerProbe();
     let applicationStarted = false;
     let mounted = true;
 
@@ -84,6 +86,7 @@ export default function RootLayout() {
       unsubscribeRuntimeCheckpoint();
       unsubscribeOperatorState();
       unsubscribeOperator();
+      stopLeaseTimerProbe();
     };
   }, []);
 

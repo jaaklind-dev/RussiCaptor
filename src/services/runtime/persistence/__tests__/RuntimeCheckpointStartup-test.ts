@@ -15,6 +15,7 @@ import {
 } from "@/services/RuntimeCheckpointSyncService";
 import type { RuntimeCheckpointEnvelope, RuntimeWriterLease } from "@/models/RuntimeCheckpointAuthority";
 import { isRemoteRuntimeLifecycleActive } from "@/services/CloudSyncService";
+import { clearRuntimeLeaseTraceForValidation, getRuntimeLeaseLifecycleTrace } from "../RuntimeLeaseLifecycleTrace";
 
 describe("WP-44B checkpoint startup coordination", () => {
   const writerLease: RuntimeWriterLease = Object.freeze({
@@ -168,7 +169,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     );
     expect(lifecycle.match(/startRuntimeWriterRenewalLoop\(/g)).toHaveLength(1);
     expect(lifecycle).toContain("renewRuntimeWriterTerminal(repository,currentLease,LEASE_SECONDS)");
-    expect(lifecycle).toContain("renewalLoop?.stop()");
+    expect(lifecycle).toContain('renewalLoop?.stop("GENERATION_CLEANUP")');
     expect(source).toContain("interval = setInterval(() => {");
     expect(source).toContain("renewalDueInMs -= heartbeatMs");
   });
@@ -211,6 +212,29 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(activeLease).toBe(renewedLease);
     loop.stop();
     jest.useRealTimers();
+  });
+
+  test("validation trace attributes explicit scheduler stop without changing the persistent interval", () => {
+    const savedEnvironment = process.env.EXPO_PUBLIC_RELEASE_ENVIRONMENT;
+    const savedHarness = process.env.EXPO_PUBLIC_SHARED_WORKFLOW_VALIDATION_HARNESS;
+    process.env.EXPO_PUBLIC_RELEASE_ENVIRONMENT = "production";
+    process.env.EXPO_PUBLIC_SHARED_WORKFLOW_VALIDATION_HARNESS = "1";
+    clearRuntimeLeaseTraceForValidation();
+    const loop = startRuntimeWriterRenewalLoop({
+      getLease: () => writerLease,
+      isWriter: () => true,
+      renew: jest.fn(),
+      onRenewed: jest.fn(),
+      onTransientFailure: jest.fn(),
+      onRevoked: jest.fn(),
+      intervalMs: 20_000,
+    });
+    loop.stop();
+    expect(getRuntimeLeaseLifecycleTrace()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: "LEASE_SCHEDULER_STOPPED", detail: expect.objectContaining({ reason: "EXPLICIT_STOP" }) }),
+    ]));
+    process.env.EXPO_PUBLIC_RELEASE_ENVIRONMENT = savedEnvironment;
+    process.env.EXPO_PUBLIC_SHARED_WORKFLOW_VALIDATION_HARNESS = savedHarness;
   });
 
   test("sustained foreground activity renews the same writer for at least three intervals", async () => {
@@ -709,7 +733,8 @@ describe("WP-44B checkpoint startup coordination", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     expect(source).toContain("let stopped=false;");
     expect(source).toContain("if(stopped)return;");
-    expect(source).toContain("return()=>{stopped=true;appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();renewalLoop?.stop()");
+    expect(source).toContain('return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED"');
+    expect(source).toContain('stopPrepared();renewalLoop?.stop("GENERATION_CLEANUP")');
   });
 
   test("explicit Resume attaches the acquired writer to the canonical renewal lifecycle", () => {

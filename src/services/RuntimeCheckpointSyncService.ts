@@ -27,6 +27,7 @@ import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/Run
 import { parseRuntimeCheckpointMetadata, RuntimeCheckpointMetadataCoordinator } from "@/services/runtime/persistence/RuntimeCheckpointMetadataCoordinator";
 import { loadRuntimeCheckpointWithCache } from "@/services/runtime/persistence/RuntimeCheckpointHydrationService";
 import { isSharedWorkflowValidationHarnessEnabled } from "@/config/SharedWorkflowValidationHarness";
+import { getRuntimeLeaseLifecycleTrace, nextRuntimeLeaseTraceLabel, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
 const LEASE_SECONDS = 60;
 const RENEW_MS = 20_000;
@@ -46,6 +47,7 @@ let publicationBarrier: Promise<void> = Promise.resolve();
 let exerciseSyncGeneration = 0;
 let ensureLeaseRenewalForCurrentWriter: (() => boolean) | undefined;
 let wakeCheckpointPublicationForCurrentWriter: (() => void) | undefined;
+let manualRenewLeaseForValidation: (() => Promise<boolean>) | undefined;
 let lastCheckpointPublicationAt: string | undefined;
 let lastRecoveryOutcome: Readonly<{ state: string; code?: string; occurredAt: string }> | undefined;
 type RenewalDiagnosticEvent = Readonly<{
@@ -188,10 +190,12 @@ type RuntimeWriterRenewalLoopOptions = Readonly<{
 type RuntimeWriterRenewalLoop = Readonly<{
   isActive: () => boolean;
   wake: () => void;
-  stop: () => void;
+  stop: (reason?: "GENERATION_CLEANUP" | "APP_BACKGROUND" | "AUTHORITY_LOSS" | "EXPLICIT_STOP") => void;
 }>;
 
 export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopOptions): RuntimeWriterRenewalLoop {
+  const scheduler = nextRuntimeLeaseTraceLabel("scheduler");
+  traceRuntimeLeaseLifecycle("LEASE_SCHEDULER_CREATED", { scheduler, detail: { intervalMs: options.intervalMs ?? RENEW_MS } });
   let interval: ReturnType<typeof setInterval> | undefined;
   let inFlight = false;
   let stopped = false;
@@ -199,26 +203,35 @@ export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopO
   const heartbeatMs = Math.min(1_000, renewalIntervalMs);
   let renewalDueInMs = renewalIntervalMs;
   const runAttempt = () => {
+    traceRuntimeLeaseLifecycle("RENEW_TIMER_CALLBACK_ENTER", { scheduler, detail: {} });
     const renewingLease = options.getLease();
-    if (stopped || inFlight) return;
+    traceRuntimeLeaseLifecycle("RENEW_GUARD_EVALUATED", { scheduler, detail: { stopped, inFlight, writer: options.isWriter(), leasePresent: Boolean(renewingLease) } });
+    if (stopped || inFlight) { traceRuntimeLeaseLifecycle("RENEW_SKIPPED", { scheduler, detail: { reason: stopped ? "SYNC_STOPPED" : "RENEWAL_IN_FLIGHT" } }); traceRuntimeLeaseLifecycle("RENEW_TIMER_CALLBACK_EXIT", { scheduler, detail: { outcome: "SKIPPED" } }); return; }
     if (!renewingLease || !options.isWriter()) {
+      traceRuntimeLeaseLifecycle("RENEW_SKIPPED", { scheduler, detail: { reason: !renewingLease ? "LEASE_MISSING" : "NOT_WRITER" } });
       stopped = true;
       options.onStopped?.("NO_WRITER");
-      return;
+      traceRuntimeLeaseLifecycle("RENEW_TIMER_CALLBACK_EXIT", { scheduler, detail: { outcome: "SKIPPED" } }); return;
     }
     inFlight = true;
     renewalDueInMs = renewalIntervalMs;
     options.onAttempt?.();
+    const renewalStartedAt = Date.now();
+    traceRuntimeLeaseLifecycle("RENEW_RPC_START", { scheduler, detail: {} });
     void options.renew(renewingLease).then(result => {
       if (stopped || options.getLease()?.leaseId !== renewingLease.leaseId) return;
       if ("lease" in result) {
+        traceRuntimeLeaseLifecycle("RENEW_RPC_RESULT", { scheduler, detail: { result: "SUCCESS", latencyMs: Date.now() - renewalStartedAt } });
         options.onRenewed(renewingLease, result.lease);
       } else if (renewalFailureRevokesWriter(result, renewingLease, options.now?.() ?? Date.now())) {
+        traceRuntimeLeaseLifecycle("RENEW_RPC_RESULT", { scheduler, detail: { result: result.code, latencyMs: Date.now() - renewalStartedAt } });
         options.onRevoked(renewingLease, result.code);
       } else {
+        traceRuntimeLeaseLifecycle("RENEW_RPC_RESULT", { scheduler, detail: { result: result.code, latencyMs: Date.now() - renewalStartedAt } });
         options.onTransientFailure(renewingLease, result.code);
       }
     }).catch(() => {
+      traceRuntimeLeaseLifecycle("RENEW_RPC_ERROR", { scheduler, detail: { latencyMs: Date.now() - renewalStartedAt } });
       if (stopped || options.getLease()?.leaseId !== renewingLease.leaseId) return;
       const transient = {
         status: "AUTHORITY_UNAVAILABLE" as const,
@@ -231,12 +244,15 @@ export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopO
       }
     }).finally(() => {
       inFlight = false;
+      traceRuntimeLeaseLifecycle("RENEW_TIMER_CALLBACK_EXIT", { scheduler, detail: { outcome: "SETTLED" } });
+      traceRuntimeLeaseLifecycle("RENEW_NOT_RESCHEDULED", { scheduler, detail: { reason: "PERSISTENT_INTERVAL" } });
     });
   };
   if (!options.getLease() || !options.isWriter()) {
     stopped = true;
     options.onStopped?.("NO_WRITER");
   } else {
+    traceRuntimeLeaseLifecycle("RENEW_TIMER_SCHEDULED", { scheduler, detail: { delayMs: heartbeatMs } });
     // Use the same one-second native heartbeat as ClockRunner, but retain the
     // 20-second network renewal cadence. Some release Android builds defer a
     // long idle timer even while the foreground Runtime clock is executing.
@@ -246,14 +262,17 @@ export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopO
       const currentLease = options.getLease();
       if (currentLease && !inFlight && Date.parse(currentLease.expiresAt) <= Date.now()) {
         stopped = true;
+        traceRuntimeLeaseLifecycle("LEASE_SCHEDULER_STOP_REQUESTED", { scheduler, detail: { reason: "AUTHORITY_LOSS", timerPresent: true } });
         clearInterval(interval);
         interval = undefined;
+        traceRuntimeLeaseLifecycle("LEASE_SCHEDULER_STOPPED", { scheduler, detail: { reason: "AUTHORITY_LOSS" } });
         options.onRevoked(currentLease, "WRITER_LEASE_EXPIRED");
         return;
       }
       renewalDueInMs -= heartbeatMs;
       if (renewalDueInMs <= 0) runAttempt();
     }, heartbeatMs);
+    traceRuntimeLeaseLifecycle("LEASE_SCHEDULER_STARTED", { scheduler, detail: {} });
   }
   return {
     isActive: () => !stopped,
@@ -261,11 +280,13 @@ export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopO
       if (stopped || inFlight) return;
       runAttempt();
     },
-    stop: () => {
+    stop: (reason = "EXPLICIT_STOP") => {
+      traceRuntimeLeaseLifecycle("LEASE_SCHEDULER_STOP_REQUESTED", { scheduler, detail: { reason, timerPresent: Boolean(interval) } });
       stopped = true;
       options.onStopped?.("STOPPED");
       if (interval) clearInterval(interval);
       interval = undefined;
+      traceRuntimeLeaseLifecycle("LEASE_SCHEDULER_STOPPED", { scheduler, detail: { reason } });
     },
   };
 }
@@ -361,6 +382,17 @@ function setStatus(value: Status): void {
   listeners.forEach(listener=>listener(value));
 }
 export const getRuntimeCheckpointSyncStatus = (): Status => status;
+export async function renewRuntimeLeaseNowForValidation(): Promise<boolean> {
+  if (!isSharedWorkflowValidationHarnessEnabled()) {
+    traceRuntimeLeaseLifecycle("MANUAL_RENEW_GUARD", { detail: { reason: "VALIDATION_DISABLED" } });
+    return false;
+  }
+  if (!manualRenewLeaseForValidation) {
+    traceRuntimeLeaseLifecycle("MANUAL_RENEW_GUARD", { detail: { reason: "GENERATION_STALE" } });
+    return false;
+  }
+  return manualRenewLeaseForValidation();
+}
 export function getRuntimeCheckpointOperationalState() {
   return Object.freeze({
     ...status,
@@ -369,6 +401,7 @@ export function getRuntimeCheckpointOperationalState() {
     lastCheckpointPublicationAt,
     lastRecoveryOutcome: lastRecoveryOutcome ? Object.freeze({ ...lastRecoveryOutcome }) : undefined,
     renewalDiagnostics: Object.freeze(renewalDiagnostics.map(item => Object.freeze({ ...item }))),
+    leaseLifecycleTrace: getRuntimeLeaseLifecycleTrace(),
   });
 }
 export function failRuntimeCheckpointStartup(error?: unknown): void {
@@ -546,6 +579,8 @@ async function confirmAcquiredRuntimeWriter(repository: RuntimeWriterRenewal & P
 async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promise<()=>void> {
   if (!supabase) { setStatus({state:"DISABLED"}); return()=>{}; }
   const generation = ++exerciseSyncGeneration;
+  const traceGeneration = `exercise-gen-${generation}`;
+  traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_CREATED", { generation: traceGeneration, detail: { exerciseId } });
   await publicationBarrier;
   const generationStopped = () => stopped || generation !== exerciseSyncGeneration;
   let remoteLifecycleActive = isRemoteRuntimeLifecycleActive(exerciseId);
@@ -678,7 +713,8 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
       onRevoked:(currentLease,code)=>{
         if(lease?.leaseId!==currentLease.leaseId)return;
         recordRenewalDiagnostic("RENEWAL_FAILURE", code);
-        renewalLoop?.stop();renewalLoop=undefined;
+        traceRuntimeLeaseLifecycle("AUTHORITY_LOSS", { generation: traceGeneration, detail: { priorAuthority: status.state, nextAuthority: "READER", code } });
+        renewalLoop?.stop("AUTHORITY_LOSS");renewalLoop=undefined;
         lease=undefined;stopClockRunner();setStatus({state:"READER",code});
       },
       onAttempt:()=>recordRenewalDiagnostic("RENEWAL_ATTEMPT", "current-generation"),
@@ -688,6 +724,25 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     return renewalLoop.isActive();
   };
   ensureLeaseRenewalForCurrentWriter=ensureRenewal;
+  let manualRenewInFlight=false;
+  const manualRenew=async()=>{
+    const guardReason = generationStopped() ? "GENERATION_STALE" : !lease ? "LEASE_MISSING" : status.state!=="WRITER" ? "NOT_WRITER" : manualRenewInFlight ? "RENEWAL_IN_FLIGHT" : "VALID_WRITER";
+    traceRuntimeLeaseLifecycle("MANUAL_RENEW_GUARD", { generation: traceGeneration, detail: { reason: guardReason } });
+    if (guardReason!=="VALID_WRITER") return false;
+    manualRenewInFlight=true;
+    traceRuntimeLeaseLifecycle("MANUAL_RENEW_INVOKED", { generation: traceGeneration, detail: {} });
+    const currentLease=lease;
+    if (!currentLease) { manualRenewInFlight=false; return false; }
+    try {
+      const result=await renewRuntimeWriterTerminal(repository,currentLease,LEASE_SECONDS);
+      if ("lease" in result && lease?.leaseId===currentLease.leaseId && !generationStopped()) { lease=result.lease; traceRuntimeLeaseLifecycle("MANUAL_RENEW_RESULT", { generation: traceGeneration, detail: { result:"SUCCESS" } }); return true; }
+      traceRuntimeLeaseLifecycle("MANUAL_RENEW_RESULT", { generation: traceGeneration, detail: { result:"DENIED" } }); return false;
+    } catch {
+      traceRuntimeLeaseLifecycle("MANUAL_RENEW_RESULT", { generation: traceGeneration, detail: { result:"FAILED" } });
+      return false;
+    } finally { manualRenewInFlight=false; }
+  };
+  manualRenewLeaseForValidation=manualRenew;
   ensureRenewal();
   let realtimeSubscribed=false;
   const metadataCoordinator=new RuntimeCheckpointMetadataCoordinator({exerciseId,current:getLocalRuntimeCheckpoint,
@@ -726,15 +781,17 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   // reconciliation/takeover. UI routes do not own this listener.
   const appStateSubscription=AppState.addEventListener("change",nextState=>{
     if(generationStopped())return;
+    traceRuntimeLeaseLifecycle("APP_STATE_CHANGED", { generation: traceGeneration, detail: { nextState } });
     if(nextState!=="active"&&lease&&(status.state==="WRITER"||status.state==="ACQUIRING")){
       const releasedLease=lease;
-      renewalLoop?.stop();renewalLoop=undefined;lease=undefined;stopClockRunner();
+      renewalLoop?.stop("APP_BACKGROUND");renewalLoop=undefined;lease=undefined;stopClockRunner();
       recordRenewalDiagnostic("RENEWAL_SCHEDULER_STOPPED", "APP_BACKGROUND");
       setStatus({state:"READER",code:"WRITER_BACKGROUND_RELINQUISHED",revision:remoteRevision});
       void repository.releaseWriter(releasedLease);
       return;
     }
     if(nextState==="active") {
+      traceRuntimeLeaseLifecycle("APP_FOREGROUND_RECONCILIATION", { generation: traceGeneration, detail: {} });
       void repository.loadLatestMetadata(exerciseId,"runtime_checkpoint_notifications.app_foreground_metadata").then(handleMetadata).catch(()=>setStatus({state:"OFFLINE",code:"AUTHORITY_UNAVAILABLE"}));
     }
   });
@@ -752,7 +809,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     }
     if(channelStatus==="SUBSCRIBED"&&!generationStopped()){renewalLoop?.wake();requestPublish();}
   });
-  return()=>{stopped=true;appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();renewalLoop?.stop();if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration)lease=undefined;};
+  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });stopped=true;appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();renewalLoop?.stop("GENERATION_CLEANUP");if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration)lease=undefined;};
 }
 
 async function startRuntimeCheckpointSyncOnce(): Promise<()=>void> {

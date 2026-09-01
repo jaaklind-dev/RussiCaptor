@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 
 import { refreshRemoteCurrentExercise, subscribeToCloudSyncStatus } from "@/services/CloudSyncService";
-import { reacquireRuntimeFromRemoteCheckpoint, subscribeToRuntimeCheckpointSync, takeOverRuntimeWriter } from "@/services/RuntimeCheckpointSyncService";
+import { reacquireRuntimeFromRemoteCheckpoint, renewRuntimeLeaseNowForValidation, subscribeToRuntimeCheckpointSync, takeOverRuntimeWriter } from "@/services/RuntimeCheckpointSyncService";
+import { isSharedWorkflowValidationHarnessEnabled } from "@/config/SharedWorkflowValidationHarness";
 import { subscribeOperatorSession } from "@/services/authorization/OperatorSessionService";
 import { captureOperationalDiagnosticSnapshot, exportOperationalDiagnostics, type OperationalSeverity } from "@/services/operations/LiveOperationsDiagnostics";
 import { subscribeToSharedWorkflowConflicts } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
@@ -14,6 +15,7 @@ const severityLabel: Readonly<Record<OperationalSeverity,string>> = {INFO:"INFO"
 export default function LiveOperationsDiagnosticsScreen() {
   const [snapshot,setSnapshot]=useState(captureOperationalDiagnosticSnapshot);
   const [pending,setPending]=useState<string>();
+  const [validationRenewal,setValidationRenewal]=useState<string>();
   const refresh=()=>setSnapshot(captureOperationalDiagnosticSnapshot());
   useEffect(()=>{
     const stops=[subscribeToCloudSyncStatus(refresh),subscribeToRuntimeCheckpointSync(refresh),subscribeOperatorSession(refresh),subscribeToSharedWorkflowConflicts(refresh)];
@@ -38,6 +40,7 @@ export default function LiveOperationsDiagnosticsScreen() {
       const result=await terminateStaleRuntimeAfterExpiredLease(snapshot.exercise.exerciseId);
       if (result.code!=="STALE_RUNTIME_TERMINATED"&&result.code!=="ALREADY_TERMINAL") throw new Error(result.code);
     })}/></>}
+    {isSharedWorkflowValidationHarnessEnabled()&&snapshot.runtime.state==="WRITER"&&<><Action label={pending==="validation-renew"?"Uuendan lease’i…":"Uuenda lease kohe (validation)"} disabled={Boolean(pending)} onPress={()=>void run("validation-renew",async()=>{const renewed=await renewRuntimeLeaseNowForValidation();setValidationRenewal(renewed?"Lease uuendati.":"Lease’i uuendamine keelati.");})}/>{validationRenewal&&<Text style={styles.warning}>{validationRenewal}</Text>}</>}
     {snapshot.runtime.durableCache==="MISSING_OR_DIFFERENT_EXERCISE"&&<Text style={styles.warning}>Puuduva kontrollpunktiga RUNNING õppust ei taastata lokaalselt. Kasuta töölaua auditeeritud lõpetamist, kui recovery õigus on olemas.</Text>}
     <Action label="Jaga ohutu diagnostikasnapshot" disabled={Boolean(pending)} onPress={()=>void Share.share({title:"RussiCaptor operatsioonidiagnostika",message:exportOperationalDiagnostics(captureOperationalDiagnosticSnapshot())})}/>
     <Pressable style={styles.back} onPress={()=>router.back()}><Text style={styles.backText}>Tagasi</Text></Pressable>

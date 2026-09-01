@@ -9,6 +9,11 @@ describe("WP-NEXT-06 EXCON diagnostics integration",()=>{
     expect(screen).toContain("takeOverRuntimeWriter");
     expect(screen).toContain("reacquireRuntimeFromRemoteCheckpoint");
     expect(screen).toContain("terminateStaleRuntimeAfterExpiredLease");
+    expect(screen).toContain("isSharedWorkflowValidationHarnessEnabled");
+    expect(screen).toContain("renewRuntimeLeaseNowForValidation");
+    expect(screen).toContain("Uuenda lease kohe (validation)");
+    expect(screen).toContain('snapshot.runtime.state==="WRITER"');
+    expect(screen).toContain("if(pending)return");
     expect(screen).toContain("Lõpeta aegunud Runtime’i õppus turvaliselt");
     expect(screen).toContain("kontrollpunkt on aegunud");
     expect(screen).not.toMatch(/delete\(|service_role|access_token|from\("exercise_states"\)/);
