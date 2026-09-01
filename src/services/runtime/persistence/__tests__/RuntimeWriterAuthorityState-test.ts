@@ -1,6 +1,6 @@
 import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
 import { createScenarioEngineInstructorRuntimeOwner } from "@/services/runtime/instructor/ScenarioEngineInstructorRuntimeOwner";
-import { setRuntimeWriterAuthorityState } from "../RuntimeWriterAuthorityState";
+import { runtimeWritesAllowed, setRuntimeWriterAuthorityState } from "../RuntimeWriterAuthorityState";
 
 describe("WP-44B read-only runtime boundary",()=>{
   afterEach(()=>setRuntimeWriterAuthorityState("UNRESOLVED"));
@@ -14,5 +14,9 @@ describe("WP-44B read-only runtime boundary",()=>{
     const engine=new ClinicalScenarioEngine(); const owner=createScenarioEngineInstructorRuntimeOwner(engine,"EX","PT");
     setRuntimeWriterAuthorityState("WRITER");
     expect(owner.advanceRuntime?.("ADV",60)).not.toEqual({ok:false,reason:"Runtime active on another device"});
+  });
+  test("provisional takeover authority cannot write before renewal confirmation",()=>{
+    setRuntimeWriterAuthorityState("ACQUIRING");
+    expect(runtimeWritesAllowed()).toBe(false);
   });
 });

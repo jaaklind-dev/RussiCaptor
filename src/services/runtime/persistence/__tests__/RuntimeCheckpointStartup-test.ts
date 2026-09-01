@@ -171,6 +171,16 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(lifecycle).toContain("renewalLoop?.stop()");
   });
 
+  test("takeover and recovery confirm a lease and start the service-owned renewal loop before stable WRITER", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const takeover = source.slice(source.indexOf("export async function takeOverRuntimeWriter"), source.indexOf("/** Explicit user recovery"));
+    const recovery = source.slice(source.indexOf("async function reacquireRuntimeFromRemoteCheckpointForIntent"), source.indexOf("function setAndReturn"));
+    expect(takeover.indexOf("confirmAcquiredRuntimeWriter")).toBeLessThan(takeover.indexOf('setStatus({state:"WRITER"'));
+    expect(recovery.indexOf("confirmAcquiredRuntimeWriter")).toBeLessThan(recovery.indexOf('setStatus({state:"WRITER"'));
+    expect(takeover).toContain("WRITER_RENEWAL_NOT_READY");
+    expect(recovery).toContain("WRITER_RENEWAL_NOT_READY");
+  });
+
   test("transient renewal failure retains writer and rearms the single loop", async () => {
     jest.useFakeTimers();
     let activeLease = writerLease;
@@ -542,13 +552,12 @@ describe("WP-44B checkpoint startup coordination", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     const takeover = source.slice(source.indexOf("export async function takeOverRuntimeWriter"), source.indexOf("function setAndReturn"));
     const lease = takeover.indexOf("lease=acquired.lease");
-    const authority = takeover.indexOf('setRuntimeWriterAuthorityState("WRITER")');
+    const acquiring = takeover.indexOf('setStatus({state:"ACQUIRING"');
     const writer = takeover.indexOf('setStatus({state:"WRITER"');
     const restore = takeover.indexOf("acceptAuthoritativeRuntimeCheckpoint(resolved.checkpoint, true)");
     expect(lease).toBeGreaterThan(-1);
-    expect(authority).toBeGreaterThan(lease);
-    expect(authority).toBeGreaterThan(-1);
-    expect(writer).toBeGreaterThan(authority);
+    expect(acquiring).toBeGreaterThan(lease);
+    expect(writer).toBeGreaterThan(acquiring);
     expect(restore).toBeGreaterThan(writer);
   });
 
@@ -566,7 +575,8 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(recovery).toContain("if (activeRecovery) return activeRecovery");
     expect(recovery).toContain("runtimeCheckpointRecoveryCoordinator.recover");
     expect(recovery).toContain("acquireRuntimeWriterTerminal(repository,exerciseId,writerId,expectedRevision");
-    expect(recovery).toContain("acceptAuthoritativeRuntimeCheckpoint(checkpoint,true)");
+    expect(recovery).toContain("adopt: () => {}");
+    expect(recovery).toContain("acceptAuthoritativeRuntimeCheckpoint(recovered.checkpoint,true)");
     expect(recovery).toContain('loadRuntimeCheckpointWithCache(repository,exerciseId,checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId),"recovery")');
   });
 
@@ -697,7 +707,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     expect(source).toContain("let stopped=false;");
     expect(source).toContain("if(stopped)return;");
-    expect(source).toContain("return()=>{stopped=true;if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();renewalLoop?.stop()");
+    expect(source).toContain("return()=>{stopped=true;appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();renewalLoop?.stop()");
   });
 
   test("explicit Resume attaches the acquired writer to the canonical renewal lifecycle", () => {
@@ -705,18 +715,27 @@ describe("WP-44B checkpoint startup coordination", () => {
     const takeover = source.slice(source.indexOf("export async function takeOverRuntimeWriter"), source.indexOf("function setAndReturn"));
     const installLease = takeover.indexOf("lease=acquired.lease");
     const writer = takeover.indexOf('setStatus({state:"WRITER"');
-    const ensure = takeover.indexOf("ensureLeaseRenewalForCurrentWriter?.()", writer);
+    const ensure = takeover.indexOf("ensureLeaseRenewalForCurrentWriter?.()", installLease);
     expect(installLease).toBeGreaterThan(-1);
     expect(writer).toBeGreaterThan(installLease);
-    expect(ensure).toBeGreaterThan(writer);
+    expect(ensure).toBeGreaterThan(installLease);
+    expect(ensure).toBeLessThan(writer);
   });
 
   test("renewal attachment is idempotent and stale generation cleanup cannot clear its replacement", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
-    expect(source).toContain('if(generationStopped() || renewalLoop || !lease || status.state!=="WRITER")return;');
+    expect(source).toContain('if(generationStopped() || !lease || (status.state!=="WRITER" && status.state!=="ACQUIRING"))return Boolean(renewalLoop?.isActive());');
     expect(source.match(/startRuntimeWriterRenewalLoop\(/g)).toHaveLength(2);
     expect(source).toContain("if (renewalLoop && !renewalLoop.isActive()) renewalLoop=undefined;");
     expect(source).toContain("if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined");
+  });
+
+  test("native background deliberately relinquishes the lease instead of leaving a phantom writer", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    expect(source).toContain('AppState.addEventListener("change",nextState=>');
+    expect(source).toContain('code:"WRITER_BACKGROUND_RELINQUISHED"');
+    expect(source).toContain('runtime_checkpoint_notifications.app_foreground_metadata');
+    expect(source).toContain("appStateSubscription.remove()");
   });
 
   test("cold-start authority awaits terminate with a typed timeout instead of permanent CONNECTING", () => {

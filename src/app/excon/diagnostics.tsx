@@ -7,6 +7,7 @@ import { reacquireRuntimeFromRemoteCheckpoint, subscribeToRuntimeCheckpointSync,
 import { subscribeOperatorSession } from "@/services/authorization/OperatorSessionService";
 import { captureOperationalDiagnosticSnapshot, exportOperationalDiagnostics, type OperationalSeverity } from "@/services/operations/LiveOperationsDiagnostics";
 import { subscribeToSharedWorkflowConflicts } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
+import { terminateStaleRuntimeAfterExpiredLease } from "@/services/ExerciseRuntimeRecoveryFoundationService";
 
 const severityLabel: Readonly<Record<OperationalSeverity,string>> = {INFO:"INFO",DEGRADED:"HÄIRITUD",ACTION_REQUIRED:"VAJAB TEGEVUST",EXERCISE_BLOCKING:"ÕPPUST BLOKEERIV"};
 
@@ -27,12 +28,16 @@ export default function LiveOperationsDiagnosticsScreen() {
       <Text style={styles.severity}>{severityLabel[item.severity]} · {item.title}</Text><Text style={styles.text}>{item.explanation}</Text><Text style={styles.action}>Järgmine samm: {item.nextAction}</Text>
     </View>)}
     <Section title="Identiteet ja backend" rows={[["Sessioon",snapshot.session.state],["EXCON scope",snapshot.session.exconScope],["Recovery õigus",snapshot.session.recoveryPermission],["Supabase",snapshot.app.supabaseProjectRef??"puudub"],["Realtime",snapshot.sync.realtimeConnected?"ÜHENDATUD":snapshot.sync.state.toUpperCase()]]}/>
-    <Section title="Õppus ja Runtime" rows={[["Õppus",snapshot.exercise.exerciseId],["Lifecycle",snapshot.exercise.lifecycle],["Runtime",snapshot.runtime.state],["Kontrollpunkt",`${snapshot.runtime.localCheckpointRevision??"puudub"}`],["Lease / writer",snapshot.runtime.writerInstanceId?`aktiivne · ${snapshot.runtime.writerInstanceId}`:"aktiivne lease puudub"],["Lease aegub",snapshot.runtime.leaseExpiresAt??"–"],["Viimane publication",snapshot.runtime.lastCheckpointPublicationAt??"–"]]}/>
+    <Section title="Õppus ja Runtime" rows={[["Õppus",snapshot.exercise.exerciseId],["Lifecycle",snapshot.exercise.lifecycle],["Runtime",snapshot.runtime.state],["Kontrollpunkt",`${snapshot.runtime.localCheckpointRevision??"puudub"}`],["Lease",snapshot.runtime.writerInstanceId?"aktiivne":"aktiivne lease puudub"],["Lease aegub",snapshot.runtime.leaseExpiresAt??"–"],["Viimane renewal",snapshot.runtime.renewalDiagnostics.at(-1)?.event??"–"],["Viimane publication",snapshot.runtime.lastCheckpointPublicationAt??"–"]]}/>
     <Section title="Sünkroniseerimine" rows={[["Projection revision",`${snapshot.sync.authoritativeProjectionRevision??"–"}`],["Workflow revision",`${snapshot.exercise.authoritativeWorkflowRevision}`],["Lokaalne durable cache",snapshot.runtime.durableCache],["Viimane sync",snapshot.sync.syncedAt??"–"],["Ootel mutatsioonid",`${snapshot.sync.pendingMutationCount}`],["Lahendamata konfliktid",`${snapshot.sync.unresolvedConflictCount}`]]}/>
     <Text style={styles.sectionTitle}>Toetatud toimingud</Text>
     <Action label={pending==="refresh"?"Värskendan…":"Värskenda autoriteetne seis"} disabled={Boolean(pending)} onPress={()=>void run("refresh",()=>refreshRemoteCurrentExercise("manual"))}/>
     {snapshot.runtime.state==="READER"&&<Action label={pending==="takeover"?"Võtan üle…":"Võta Runtime üle"} disabled={Boolean(pending)||!canRecover} onPress={()=>void run("takeover",takeOverRuntimeWriter)}/>}
     {snapshot.runtime.state==="CONFLICT"&&<Action label={pending==="recover"?"Taastan…":"Taasta pilve kontrollpunktist"} disabled={Boolean(pending)||!canRecover} onPress={()=>void run("recover",reacquireRuntimeFromRemoteCheckpoint)}/>}
+    {(snapshot.runtime.state==="READER"||snapshot.runtime.state==="CONFLICT")&&snapshot.exercise.lifecycle!=="COMPLETED"&&<><Text style={styles.warning}>Runtime’i jätkamine ei ole selles seadmes turvaline. EXCONi toiming kontrollib serveris, et writer puudub ja kontrollpunkt on aegunud, enne kui õppuse lõpetab.</Text><Action label={pending==="stale-terminalize"?"Kontrollin ja lõpetan…":"Lõpeta aegunud Runtime’i õppus turvaliselt"} disabled={Boolean(pending)||!canRecover} onPress={()=>void run("stale-terminalize",async()=>{
+      const result=await terminateStaleRuntimeAfterExpiredLease(snapshot.exercise.exerciseId);
+      if (result.code!=="STALE_RUNTIME_TERMINATED"&&result.code!=="ALREADY_TERMINAL") throw new Error(result.code);
+    })}/></>}
     {snapshot.runtime.durableCache==="MISSING_OR_DIFFERENT_EXERCISE"&&<Text style={styles.warning}>Puuduva kontrollpunktiga RUNNING õppust ei taastata lokaalselt. Kasuta töölaua auditeeritud lõpetamist, kui recovery õigus on olemas.</Text>}
     <Action label="Jaga ohutu diagnostikasnapshot" disabled={Boolean(pending)} onPress={()=>void Share.share({title:"RussiCaptor operatsioonidiagnostika",message:exportOperationalDiagnostics(captureOperationalDiagnosticSnapshot())})}/>
     <Pressable style={styles.back} onPress={()=>router.back()}><Text style={styles.backText}>Tagasi</Text></Pressable>

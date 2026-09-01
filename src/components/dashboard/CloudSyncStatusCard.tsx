@@ -34,6 +34,7 @@ export function getRuntimeAuthorityPresentation(
   }
   return Object.freeze({
     label: runtimeStatus.state === "WRITER" ? `${authorityStateLabel("WRITER")} · versioon ${runtimeStatus.revision ?? 0}`
+      : runtimeStatus.state === "ACQUIRING" ? "Võtan Runtime’i üle ja kinnitan kirjutusõigust…"
       : runtimeStatus.state === "READER" ? "Simulatsioon töötab teises seadmes · ainult vaatamine"
       : runtimeStatus.state === "CONFLICT" ? operatorSafeIssueMessage(runtimeStatus.code)
       : runtimeStatus.state === "OFFLINE" ? "Simulatsiooni kontrollpunkti teenus pole saadaval"

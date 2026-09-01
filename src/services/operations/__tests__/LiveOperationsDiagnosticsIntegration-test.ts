@@ -8,6 +8,9 @@ describe("WP-NEXT-06 EXCON diagnostics integration",()=>{
     expect(screen).toContain("refreshRemoteCurrentExercise");
     expect(screen).toContain("takeOverRuntimeWriter");
     expect(screen).toContain("reacquireRuntimeFromRemoteCheckpoint");
+    expect(screen).toContain("terminateStaleRuntimeAfterExpiredLease");
+    expect(screen).toContain("Lõpeta aegunud Runtime’i õppus turvaliselt");
+    expect(screen).toContain("kontrollpunkt on aegunud");
     expect(screen).not.toMatch(/delete\(|service_role|access_token|from\("exercise_states"\)/);
   });
   test("missing Runtime termination stays permission-gated and audited",()=>{

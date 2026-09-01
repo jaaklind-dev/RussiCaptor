@@ -8,6 +8,7 @@ import { setRuntimeWriterAuthorityState } from "@/services/runtime/persistence/R
 import { restoreSharedExerciseState } from "@/services/StatePersistenceService";
 import { notifySync } from "@/services/SyncService";
 import { supabase } from "@/services/SupabaseService";
+import { terminateStaleRuntimeAfterLeaseExpiry, type StaleRuntimeTerminalizationCode } from "@/services/runtime/exercise/StaleRuntimeTerminalizationService";
 
 const repository = supabase ? new SupabaseExerciseRuntimeRecoveryRepository(supabase, state => {
   clearActiveClinicalReferenceRuntime();
@@ -32,3 +33,18 @@ export async function terminateCurrentExerciseWithMissingRuntime() {
 }
 
 export function getCurrentRecoveryPrincipal() { return getAuthorizationPrincipal(); }
+
+export async function terminateStaleRuntimeAfterExpiredLease(exerciseId: string): Promise<Readonly<{ code: StaleRuntimeTerminalizationCode; auditId?: string }>> {
+  if (!supabase) return Object.freeze({ code: "RECOVERY_BACKEND_FAILED" });
+  const authorization = await authorizeCurrentPrincipal("EXERCISE_RUNTIME_RECOVERY", { exerciseId });
+  if (authorization.status !== "AUTHORIZED") return Object.freeze({ code: "AUTHORIZATION_DENIED" });
+  const result = await terminateStaleRuntimeAfterLeaseExpiry(supabase, exerciseId);
+  if (result.state) {
+    clearActiveClinicalReferenceRuntime();
+    restoreSharedExerciseState(result.state, false);
+    setRuntimeWriterAuthorityState("UNRESOLVED");
+    setRuntimePersistenceFailure(undefined);
+    notifySync("remote");
+  }
+  return Object.freeze({ code: result.code, ...(result.auditId ? { auditId: result.auditId } : {}) });
+}
