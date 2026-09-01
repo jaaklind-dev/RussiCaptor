@@ -192,7 +192,7 @@ type RuntimeWriterRenewalLoop = Readonly<{
 }>;
 
 export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopOptions): RuntimeWriterRenewalLoop {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let interval: ReturnType<typeof setInterval> | undefined;
   let inFlight = false;
   let stopped = false;
   const runAttempt = () => {
@@ -227,35 +227,29 @@ export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopO
       }
     }).finally(() => {
       inFlight = false;
-      schedule();
     });
   };
-  const schedule = () => {
-    if (stopped || timer || inFlight) return;
-    if (!options.getLease() || !options.isWriter()) {
-      stopped = true;
-      options.onStopped?.("NO_WRITER");
-      return;
-    }
-    timer = setTimeout(() => {
-      timer = undefined;
-      runAttempt();
-    }, options.intervalMs ?? RENEW_MS);
-  };
-  schedule();
+  if (!options.getLease() || !options.isWriter()) {
+    stopped = true;
+    options.onStopped?.("NO_WRITER");
+  } else {
+    // A persistent native interval mirrors the canonical ClockRunner. On
+    // release Android a chained one-shot timeout can be lost across a route
+    // render while the Runtime is still foregrounded; interval ownership stays
+    // in this service and `inFlight` retains the single-request invariant.
+    interval = setInterval(runAttempt, options.intervalMs ?? RENEW_MS);
+  }
   return {
     isActive: () => !stopped,
     wake: () => {
       if (stopped || inFlight) return;
-      if (timer) clearTimeout(timer);
-      timer = undefined;
       runAttempt();
     },
     stop: () => {
       stopped = true;
       options.onStopped?.("STOPPED");
-      if (timer) clearTimeout(timer);
-      timer = undefined;
+      if (interval) clearInterval(interval);
+      interval = undefined;
     },
   };
 }
