@@ -195,6 +195,9 @@ export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopO
   let interval: ReturnType<typeof setInterval> | undefined;
   let inFlight = false;
   let stopped = false;
+  const renewalIntervalMs = options.intervalMs ?? RENEW_MS;
+  const heartbeatMs = Math.min(1_000, renewalIntervalMs);
+  let renewalDueInMs = renewalIntervalMs;
   const runAttempt = () => {
     const renewingLease = options.getLease();
     if (stopped || inFlight) return;
@@ -204,6 +207,7 @@ export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopO
       return;
     }
     inFlight = true;
+    renewalDueInMs = renewalIntervalMs;
     options.onAttempt?.();
     void options.renew(renewingLease).then(result => {
       if (stopped || options.getLease()?.leaseId !== renewingLease.leaseId) return;
@@ -233,11 +237,23 @@ export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopO
     stopped = true;
     options.onStopped?.("NO_WRITER");
   } else {
-    // A persistent native interval mirrors the canonical ClockRunner. On
-    // release Android a chained one-shot timeout can be lost across a route
-    // render while the Runtime is still foregrounded; interval ownership stays
-    // in this service and `inFlight` retains the single-request invariant.
-    interval = setInterval(runAttempt, options.intervalMs ?? RENEW_MS);
+    // Use the same one-second native heartbeat as ClockRunner, but retain the
+    // 20-second network renewal cadence. Some release Android builds defer a
+    // long idle timer even while the foreground Runtime clock is executing.
+    // The service-owned heartbeat makes the due renewal observable without
+    // increasing RPC frequency; `inFlight` preserves the single-request rule.
+    interval = setInterval(() => {
+      const currentLease = options.getLease();
+      if (currentLease && !inFlight && Date.parse(currentLease.expiresAt) <= Date.now()) {
+        stopped = true;
+        clearInterval(interval);
+        interval = undefined;
+        options.onRevoked(currentLease, "WRITER_LEASE_EXPIRED");
+        return;
+      }
+      renewalDueInMs -= heartbeatMs;
+      if (renewalDueInMs <= 0) runAttempt();
+    }, heartbeatMs);
   }
   return {
     isActive: () => !stopped,

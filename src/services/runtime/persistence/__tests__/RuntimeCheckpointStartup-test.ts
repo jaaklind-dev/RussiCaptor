@@ -169,7 +169,8 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(lifecycle.match(/startRuntimeWriterRenewalLoop\(/g)).toHaveLength(1);
     expect(lifecycle).toContain("renewRuntimeWriterTerminal(repository,currentLease,LEASE_SECONDS)");
     expect(lifecycle).toContain("renewalLoop?.stop()");
-    expect(source).toContain("interval = setInterval(runAttempt");
+    expect(source).toContain("interval = setInterval(() => {");
+    expect(source).toContain("renewalDueInMs -= heartbeatMs");
   });
 
   test("takeover and recovery confirm a lease and start the service-owned renewal loop before stable WRITER", () => {
