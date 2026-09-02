@@ -1,6 +1,6 @@
 import type { ExercisePackage } from "@/models/exercise/ExercisePackage";
 import type { GoldenFixture, GoldenInputEvent } from "@/models/GoldenTest";
-import { RuntimePersistenceError, type RuntimeProvenance } from "@/models/PersistedRuntimeState";
+import { RuntimePersistenceError, type PersistedRuntimePayload, type RuntimeProvenance } from "@/models/PersistedRuntimeState";
 import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
 import { PELVIC_INJURY_EXERCISE_PACKAGE, PLEURAL_INJURY_EXERCISE_PACKAGE } from "@/services/exercise/CanonicalExercisePackages";
 import { packagePatientDatasetRegistry } from "@/services/exercise/CanonicalPatientDatasets";
@@ -50,6 +50,64 @@ describe("WP-44A canonical runtime persistence", () => {
     const yielding = await canonicalRuntimePersistenceService.captureAsync(source, identity, async () => Promise.resolve());
     expect(yielding).toEqual(synchronous);
     expect(yielding.payloadHash).toBe(synchronous.payloadHash);
+  });
+
+  test("cooperative production rehydrate is final-state equivalent and publishes once", async () => {
+    const pkg = PELVIC_INJURY_EXERCISE_PACKAGE; const sourceFixture = fixture(pkg);
+    const identity = provenance(pkg, sourceFixture.patientId!);
+    const source = new ClinicalScenarioEngine(); source.reset(sourceFixture); source.advanceTo(60);
+    const artifact = canonicalRuntimePersistenceService.capture(source, identity);
+    const synchronous = new ClinicalScenarioEngine(); canonicalRuntimePersistenceService.rehydrate(synchronous, artifact, identity);
+    const cooperative = new ClinicalScenarioEngine();
+    await canonicalRuntimePersistenceService.rehydrateAsync(cooperative, artifact, identity, async () => Promise.resolve());
+    expect(cooperative.captureRuntimePayload()).toEqual(synchronous.captureRuntimePayload());
+    expect(cooperative.getAssessmentSnapshot()).toEqual(synchronous.getAssessmentSnapshot());
+    expect(cooperative.getHashes()).toEqual(synchronous.getHashes());
+    expect(cooperative.getAssessmentPublicationDiagnostics()).toEqual(expect.objectContaining({
+      generation: 1, publishedGeneration: 1, buildCount: 1, staleDiscardCount: 0, publicationCount: 1,
+    }));
+  });
+
+  test("newer cooperative rehydrate generation discards an older in-flight build", async () => {
+    const sourceFixture = fixture(PELVIC_INJURY_EXERCISE_PACKAGE);
+    const source = new ClinicalScenarioEngine(); source.reset(sourceFixture);
+    const basePayload = structuredClone(source.captureRuntimePayload());
+    const firstPayload: PersistedRuntimePayload = { ...basePayload, eventLog: Array.from({ length: 400 }, (_, index) => ({
+      eventType: "GEN-1", sourceModule: "TEST", target: sourceFixture.patientId!, simulationTime: 0,
+      enginePhase: 1, sequence: index + 1, payload: { index },
+    })), sequence: 400 };
+    const secondPayload: PersistedRuntimePayload = { ...structuredClone(firstPayload),
+      eventLog: firstPayload.eventLog.map(event => ({ ...event, eventType: "GEN-2" })) };
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let firstYield = true;
+    const yieldControl = async () => { if (firstYield) { firstYield = false; await gate; } };
+    const target = new ClinicalScenarioEngine();
+    const stale = target.rehydrateRuntimePayloadAsync(firstPayload, yieldControl);
+    await Promise.resolve();
+    const current = target.rehydrateRuntimePayloadAsync(secondPayload, yieldControl);
+    release();
+    await expect(stale).rejects.toThrow("superseded");
+    await expect(current).resolves.toBeUndefined();
+    expect(target.getEventLog().every(event => event.eventType === "GEN-2")).toBe(true);
+    expect(target.getAssessmentPublicationDiagnostics()).toEqual(expect.objectContaining({
+      generation: 2, publishedGeneration: 2, staleDiscardCount: 1, publicationCount: 1,
+    }));
+  });
+
+  test("cooperative publication failure does not publish or report readiness", async () => {
+    const sourceFixture = fixture(PLEURAL_INJURY_EXERCISE_PACKAGE);
+    const source = new ClinicalScenarioEngine(); source.reset(sourceFixture);
+    const base = structuredClone(source.captureRuntimePayload());
+    const payload: PersistedRuntimePayload = { ...base, sequence: 300,
+      eventLog: Array.from({ length: 300 }, (_, index) => ({ eventType: "FAIL-COPY", sourceModule: "TEST",
+        target: sourceFixture.patientId!, simulationTime: 0, enginePhase: 1, sequence: index + 1, payload: { index } })) };
+    const target = new ClinicalScenarioEngine();
+    await expect(target.rehydrateRuntimePayloadAsync(payload, async () => { throw new Error("CANCELLED"); }))
+      .rejects.toThrow("CANCELLED");
+    expect(target.getAssessmentPublicationDiagnostics()).toEqual(expect.objectContaining({
+      publishedGeneration: 0, publicationCount: 0,
+    }));
   });
 
   test("pelvic continuous and rehydrated execution are bit-identical", () => equivalence(PELVIC_INJURY_EXERCISE_PACKAGE));

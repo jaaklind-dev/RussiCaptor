@@ -120,6 +120,20 @@ export class CanonicalRuntimePersistenceService {
     endEngine();
   }
 
+  async rehydrateAsync(
+    engine: ClinicalScenarioEngine,
+    artifact: PersistedRuntimeState,
+    expected: RuntimeProvenance,
+    yieldControl: PipelineYield,
+  ): Promise<void> {
+    const endValidate = startRuntimeWorkTrace("STARTUP_RUNTIME_ARTIFACT_VALIDATE");
+    this.validate(artifact, expected);
+    endValidate();
+    const endEngine = startRuntimeWorkTrace("STARTUP_RUNTIME_PAYLOAD_REHYDRATE");
+    await engine.rehydrateRuntimePayloadAsync(artifact.payload, yieldControl);
+    endEngine();
+  }
+
   validate(artifact: PersistedRuntimeState, expected: RuntimeProvenance): void {
     const endShape = startRuntimeWorkTrace("STARTUP_RUNTIME_ARTIFACT_SHAPE");
     if (!artifact || typeof artifact !== "object" || !artifact.payload || !artifact.provenance) {

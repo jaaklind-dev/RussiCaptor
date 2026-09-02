@@ -91,6 +91,25 @@ describe("WP-12 data-driven rule evaluation", () => {
     expect(first.debrief.strengths).toContain("Airway secured");
     expect(input).toEqual(before);
   });
+
+  test("cooperative snapshot is deeply equivalent, stably ordered and detached", async () => {
+    const input = source({ timeline: [
+      { eventType: "Z", simulationTime: 20, sequence: 2, payload: { nested: "z" } },
+      { eventType: "B", simulationTime: 10, sequence: 1, payload: { nested: "b" } },
+      { eventType: "A", simulationTime: 10, sequence: 1, payload: { nested: "a" } },
+    ] });
+    const baseline = new ClinicalAssessmentEngine().evaluate(rules, structuredClone(input));
+    const yields = jest.fn(async () => Promise.resolve());
+    const cooperative = await new ClinicalAssessmentEngine().evaluateCooperatively(rules, input, yields);
+    expect(cooperative.snapshot).toEqual(baseline);
+    expect(cooperative.snapshot.debrief.timeline.map(item => item.eventType)).toEqual(
+      baseline.debrief.timeline.map(item => item.eventType)
+    );
+    expect(cooperative.snapshot.debrief.timeline).not.toBe(input.timeline);
+    expect(cooperative.snapshot.debrief.timeline[0]).not.toBe(input.timeline[1]);
+    cooperative.snapshot.debrief.timeline[0].eventType = "MUTATED";
+    expect(input.timeline.some(item => item.eventType === "MUTATED")).toBe(false);
+  });
 });
 
 const fixture: GoldenFixture = {

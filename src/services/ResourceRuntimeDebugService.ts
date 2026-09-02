@@ -7,6 +7,8 @@ import type { ClinicalEffect } from "@/models/ClinicalIntegration";
 import type { MedicationInstance, MedicationRuntimeEvent } from "@/models/MedicationRuntime";
 import type { VitalSignState } from "@/models/VitalSign";
 import type { ResourceAllocationRuntimeState } from "@/models/ResourceAllocation";
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { publishDerivedSnapshotNotification } from "@/services/runtime/RuntimeDerivedSnapshotTransaction";
 
 export type ResourceRuntimeDebugSnapshot = {
   resources: RuntimeResource[];
@@ -31,10 +33,14 @@ let version = 0;
 const listeners = new Set<Listener>();
 
 export function publishResourceRuntimeDebugSnapshot(next: ResourceRuntimeDebugSnapshot, patientId?: string): void {
+  const endGlobalClone = startRuntimeWorkTrace("ENGINE_RESOURCE_DEBUG_GLOBAL_CLONE", { eventCount: next.recentEvents.length });
   snapshot = structuredClone(next);
+  endGlobalClone();
+  const endPatientClone = startRuntimeWorkTrace("ENGINE_RESOURCE_DEBUG_PATIENT_CLONE", { patientScoped: Boolean(patientId) });
   if (patientId) patientSnapshots.set(patientId, structuredClone(next));
+  endPatientClone();
   version += 1;
-  listeners.forEach(listener => listener());
+  publishDerivedSnapshotNotification("resource", () => listeners.forEach(listener => listener()));
 }
 
 export function getResourceRuntimeDebugVersion(): number {

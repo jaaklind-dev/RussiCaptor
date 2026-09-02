@@ -565,7 +565,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const lease = startup.indexOf("lease=acquired.lease", acquisition);
     const authority = startup.indexOf('setRuntimeWriterAuthorityState("WRITER")', acquisition);
     const writer = startup.indexOf('setStatus({state:"WRITER"', authority);
-    const restore = startup.indexOf("acceptAuthoritativeRuntimeCheckpoint(resolved.checkpoint, true)", acquisition);
+    const restore = startup.indexOf("acceptAuthoritativeRuntimeCheckpointAsync(resolved.checkpoint, true", acquisition);
     expect(acquisition).toBeGreaterThan(-1);
     expect(lease).toBeGreaterThan(acquisition);
     expect(authority).toBeGreaterThan(lease);
@@ -580,7 +580,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const lease = takeover.indexOf("lease=acquired.lease");
     const acquiring = takeover.indexOf('setStatus({state:"ACQUIRING"');
     const writer = takeover.indexOf('setStatus({state:"WRITER"');
-    const restore = takeover.indexOf("acceptAuthoritativeRuntimeCheckpoint(resolved.checkpoint, true)");
+    const restore = takeover.indexOf("acceptAuthoritativeRuntimeCheckpointAsync(resolved.checkpoint, true");
     expect(lease).toBeGreaterThan(-1);
     expect(acquiring).toBeGreaterThan(lease);
     expect(writer).toBeGreaterThan(acquiring);
@@ -602,7 +602,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(recovery).toContain("runtimeCheckpointRecoveryCoordinator.recover");
     expect(recovery).toContain("acquireRuntimeWriterTerminal(repository,exerciseId,writerId,expectedRevision");
     expect(recovery).toContain("adopt: () => {}");
-    expect(recovery).toContain("acceptAuthoritativeRuntimeCheckpoint(recovered.checkpoint,true)");
+    expect(recovery).toContain("acceptAuthoritativeRuntimeCheckpointAsync(recovered.checkpoint,true");
     expect(recovery).toContain('loadRuntimeCheckpointWithCache(repository,exerciseId,checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId),"recovery")');
   });
 
@@ -629,7 +629,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const loadStart = persistence.indexOf("export async function loadPersistedState");
     const restoreStart = persistence.indexOf("function restoreCanonicalRuntime", loadStart);
     const load = persistence.slice(loadStart, restoreStart);
-    expect(load).toContain("restoreCanonicalRuntime(runtimeRestore, false)");
+    expect(load).toContain("restoreCanonicalRuntimeAsync(runtimeRestore, false");
     expect(load).not.toContain("restoreCanonicalRuntime(restored, true)");
   });
 

@@ -8,8 +8,14 @@ import type {
   AssessmentSourceSnapshot,
   DebriefReport,
 } from "@/models/ClinicalAssessment";
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
+import { cooperativeSortedDetachedCopy, type CooperativeWorkMetrics } from "./CooperativeAssessmentSnapshot";
 
 type Evaluation = { passed: boolean; evidence: string[] };
+export type CooperativeAssessmentMetrics = { debrief: CooperativeWorkMetrics };
+export const compareAssessmentTimeline = (a: AssessmentSourceSnapshot["timeline"][number], b: AssessmentSourceSnapshot["timeline"][number]): number =>
+  Number(a.simulationTime ?? 0) - Number(b.simulationTime ?? 0) || Number(a.sequence ?? 0) - Number(b.sequence ?? 0);
 
 function eventRows(source: AssessmentSourceSnapshot): { eventType: string; timestamp: number; sequence: number; evidence: string }[] {
   const mergedRuntime = [...source.eventLog, ...source.timeline];
@@ -100,6 +106,7 @@ function statusFor(rule: AssessmentRule, passed: boolean): AssessmentResultStatu
 
 export class ClinicalAssessmentEngine {
   evaluate(rules: AssessmentRule[], source: AssessmentSourceSnapshot): AssessmentSnapshot {
+    const endRules = startRuntimeWorkTrace("ENGINE_ASSESSMENT_RULES", { ruleCount: rules.length });
     const orderedRules = [...rules].sort((a, b) => a.ruleId.localeCompare(b.ruleId));
     const results: AssessmentResult[] = orderedRules.map(rule => {
       if (rule.applicability && !evaluateCondition(rule.applicability, source).passed) {
@@ -117,7 +124,45 @@ export class ClinicalAssessmentEngine {
       };
     });
     const events = results.flatMap(result => this.resultEvent(result));
-    return { results, events, debrief: this.debrief(source, results) };
+    endRules({ resultCount: results.length });
+    const endDebrief = startRuntimeWorkTrace("ENGINE_ASSESSMENT_DEBRIEF", { timelineCount: source.timeline.length });
+    const debrief = this.debrief(source, results);
+    endDebrief();
+    return { results, events, debrief };
+  }
+
+  async evaluateCooperatively(rules: AssessmentRule[], source: AssessmentSourceSnapshot, yieldControl: PipelineYield): Promise<{
+    snapshot: AssessmentSnapshot; metrics: CooperativeAssessmentMetrics;
+  }> {
+    const orderedRules = [...rules].sort((a, b) => a.ruleId.localeCompare(b.ruleId));
+    const results: AssessmentResult[] = orderedRules.map(rule => {
+      if (rule.applicability && !evaluateCondition(rule.applicability, source).passed) return {
+        ruleId: rule.ruleId, name: rule.name, category: rule.category, severity: rule.severity,
+        status: "NOT_APPLICABLE", expectedBehaviour: rule.expectedBehaviour, evaluatedAt: source.timestamp, evidence: [],
+      };
+      const evaluation = evaluateCondition(rule.condition, source);
+      return { ruleId: rule.ruleId, name: rule.name, category: rule.category, severity: rule.severity,
+        status: statusFor(rule, evaluation.passed), expectedBehaviour: rule.expectedBehaviour,
+        evaluatedAt: source.timestamp, evidence: evaluation.evidence };
+    });
+    const events = results.flatMap(result => this.resultEvent(result));
+    const warnings = results.filter(item => item.status === "WARNING");
+    const failedRules = results.filter(item => item.status === "FAIL");
+    const completedInterventions = source.interventionInstances.filter(item =>
+      item.status === "COMPLETED" || item.status === "CANCELLED"
+    ).sort((a, b) => a.startedAt - b.startedAt || a.instanceId.localeCompare(b.instanceId)).map(item => structuredClone(item));
+    const endDebrief = startRuntimeWorkTrace("ENGINE_ASSESSMENT_DEBRIEF_BUILD", { timelineCount: source.timeline.length });
+    const timeline = await cooperativeSortedDetachedCopy(source.timeline, compareAssessmentTimeline, yieldControl);
+    endDebrief({ yieldCount: timeline.metrics.yieldCount, maxBatchDurationMs: timeline.metrics.maxBatchDurationMs });
+    return { snapshot: { results, events, debrief: {
+      generatedAt: source.timestamp,
+      simulationSummary: { encounterId: source.runtimeState.encounterId, globalStatus: source.runtimeState.globalStatus,
+        durationSec: source.runtimeState.exerciseTimeSec },
+      completedInterventions, timeline: timeline.value,
+      assessmentFindings: structuredClone(results), warnings: structuredClone(warnings), failedRules: structuredClone(failedRules),
+      strengths: results.filter(item => item.status === "PASS").map(item => item.name),
+      improvementOpportunities: [...warnings, ...failedRules].map(item => item.expectedBehaviour),
+    } }, metrics: { debrief: timeline.metrics } };
   }
 
   private resultEvent(result: AssessmentResult): AssessmentEvent[] {
@@ -131,8 +176,27 @@ export class ClinicalAssessmentEngine {
   }
 
   private debrief(source: AssessmentSourceSnapshot, results: AssessmentResult[]): DebriefReport {
+    const endFindings = startRuntimeWorkTrace("ENGINE_ASSESSMENT_DEBRIEF_FINDINGS", { resultCount: results.length });
     const warnings = results.filter(item => item.status === "WARNING");
     const failedRules = results.filter(item => item.status === "FAIL");
+    endFindings({ warningCount: warnings.length, failedRuleCount: failedRules.length });
+    const endInterventions = startRuntimeWorkTrace("ENGINE_ASSESSMENT_DEBRIEF_INTERVENTIONS", {
+      interventionCount: source.interventionInstances.length,
+    });
+    const completedInterventions = source.interventionInstances.filter(item =>
+      item.status === "COMPLETED" || item.status === "CANCELLED"
+    ).sort((a, b) => a.startedAt - b.startedAt || a.instanceId.localeCompare(b.instanceId)).map(item => structuredClone(item));
+    endInterventions({ completedInterventionCount: completedInterventions.length });
+    const endTimeline = startRuntimeWorkTrace("ENGINE_ASSESSMENT_DEBRIEF_TIMELINE", { timelineCount: source.timeline.length });
+    const timeline = [...source.timeline].sort(compareAssessmentTimeline).map(item => structuredClone(item));
+    endTimeline({ debriefTimelineCount: timeline.length });
+    const endAssembly = startRuntimeWorkTrace("ENGINE_ASSESSMENT_DEBRIEF_ASSEMBLY");
+    const assessmentFindings = structuredClone(results);
+    const clonedWarnings = structuredClone(warnings);
+    const clonedFailedRules = structuredClone(failedRules);
+    const strengths = results.filter(item => item.status === "PASS").map(item => item.name);
+    const improvementOpportunities = [...warnings, ...failedRules].map(item => item.expectedBehaviour);
+    endAssembly({ strengthCount: strengths.length, improvementOpportunityCount: improvementOpportunities.length });
     return {
       generatedAt: source.timestamp,
       simulationSummary: {
@@ -140,17 +204,13 @@ export class ClinicalAssessmentEngine {
         globalStatus: source.runtimeState.globalStatus,
         durationSec: source.runtimeState.exerciseTimeSec,
       },
-      completedInterventions: source.interventionInstances.filter(item =>
-        item.status === "COMPLETED" || item.status === "CANCELLED"
-      ).sort((a, b) => a.startedAt - b.startedAt || a.instanceId.localeCompare(b.instanceId)).map(item => structuredClone(item)),
-      timeline: [...source.timeline].sort((a, b) =>
-        Number(a.simulationTime ?? 0) - Number(b.simulationTime ?? 0) ||
-        Number(a.sequence ?? 0) - Number(b.sequence ?? 0)
-      ).map(item => structuredClone(item)),
-      assessmentFindings: structuredClone(results), warnings: structuredClone(warnings),
-      failedRules: structuredClone(failedRules),
-      strengths: results.filter(item => item.status === "PASS").map(item => item.name),
-      improvementOpportunities: [...warnings, ...failedRules].map(item => item.expectedBehaviour),
+      completedInterventions,
+      timeline,
+      assessmentFindings,
+      warnings: clonedWarnings,
+      failedRules: clonedFailedRules,
+      strengths,
+      improvementOpportunities,
     };
   }
 }

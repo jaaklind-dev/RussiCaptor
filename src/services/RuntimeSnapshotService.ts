@@ -1,5 +1,6 @@
 import type { RuntimeState } from "@/models/RuntimeAggregation";
 import { immutableClone, type DeepReadonly } from "@/utils/immutable";
+import { publishDerivedSnapshotNotification } from "@/services/runtime/RuntimeDerivedSnapshotTransaction";
 
 type Listener = () => void;
 
@@ -28,7 +29,7 @@ export function publishRuntimeSnapshot(state: RuntimeState, processes?: readonly
     processes: processes ?? previous?.processes ?? [],
   }));
   version += 1;
-  listeners.forEach(listener => listener());
+  publishDerivedSnapshotNotification("runtime", () => listeners.forEach(listener => listener()));
 }
 
 export function getRuntimeSnapshots(): readonly DeepReadonly<RuntimeState>[] {

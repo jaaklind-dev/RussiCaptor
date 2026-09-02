@@ -46,6 +46,7 @@ import { respiratoryFailureClinicalProcessHandler } from "@/services/runtime/cli
 import { CirculationManagementFramework } from "@/services/runtime/clinical/CirculationManagementFramework";
 import { MedicationEngine } from "@/services/runtime/medication/MedicationEngine";
 import { publishAssessmentDebugSnapshot } from "@/services/AssessmentRuntimeDebugService";
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { hvClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HvClinicalProcessHandler";
 import { hypoxiaClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HypoxiaClinicalProcessHandler";
 import { cardiacArrestClinicalProcessHandler } from "@/services/runtime/clinical/handlers/CardiacArrestClinicalProcessHandler";
@@ -62,6 +63,10 @@ import { RuntimePersistenceError } from "@/models/PersistedRuntimeState";
 import type { MassiveTransfusionPatientProcessRuntime } from "@/models/MassiveTransfusion";
 import { reconcileMtpVascularAccess } from "@/services/runtime/MassiveTransfusionPatientProcess";
 import { ACTIVE_CHECKPOINT_VITAL_EVENT_LIMIT, boundedVitalSignEvents } from "@/services/runtime/persistence/VitalHistoryCompaction";
+import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
+import { yieldToEventLoop } from "@/services/runtime/persistence/LatestGenerationPipeline";
+import { cooperativeDetachedCopy } from "@/services/runtime/assessment/CooperativeAssessmentSnapshot";
+import { runRuntimeDerivedSnapshotTransaction } from "@/services/runtime/RuntimeDerivedSnapshotTransaction";
 
 export function runScenarioEvents(
 
@@ -257,6 +262,13 @@ export class ClinicalScenarioEngine {
   private assessmentRules: AssessmentRule[] = [];
   private readonly medicationEngine = new MedicationEngine();
   private vitalSignEvents: VitalSignEvent[] = [];
+  private assessmentPublicationGeneration = 0;
+  private assessmentPendingGeneration = 0;
+  private assessmentPublishedGeneration = 0;
+  private assessmentPublicationActive?: Promise<void>;
+  private assessmentBuildCount = 0;
+  private assessmentStaleDiscardCount = 0;
+  private assessmentPublicationCount = 0;
 
   reset(fixture: GoldenFixture): void {
     this.lifecycleProcessStore.clear();
@@ -289,7 +301,7 @@ export class ClinicalScenarioEngine {
       ...(exposesSnapshotClinicalState(process)
         ? { clinicalState: structuredClone(process.clinicalState) } : {}),
     })));
-    this.publishResourceDebugSnapshot();
+    this.publishResourceDebugSnapshot(false);
     this.publishAssessmentSnapshot(true);
     if (this.rootProcess()) this.aggregateProcesses(this.runtimeState);
   }
@@ -538,7 +550,29 @@ export class ClinicalScenarioEngine {
 
   /** Atomic fail-closed rehydration boundary. Validation completes before any live state is published. */
   rehydrateRuntimePayload(payload: PersistedRuntimePayload): void {
+    this.restoreRuntimePayloadState(payload);
+    this.publishCanonicalState();
+  }
+
+  /** Production startup path: state remains private until cooperative derived publication is complete. */
+  async rehydrateRuntimePayloadAsync(payload: PersistedRuntimePayload, yieldControl: PipelineYield = yieldToEventLoop): Promise<void> {
+    const generation = ++this.assessmentPublicationGeneration;
+    this.restoreRuntimePayloadState(payload);
+    this.assessmentPendingGeneration = Math.max(this.assessmentPendingGeneration, generation);
+    await this.publishCanonicalStateCooperatively(generation, yieldControl);
+    if (this.assessmentPublishedGeneration !== generation) throw new RuntimePersistenceError(
+      "RUNTIME_INVARIANT_VIOLATION", "Runtime assessment publication was superseded during rehydrate."
+    );
+  }
+
+  private restoreRuntimePayloadState(payload: PersistedRuntimePayload): void {
+    const endClone = startRuntimeWorkTrace("STARTUP_RUNTIME_PAYLOAD_CLONE");
     const candidate = structuredClone(payload);
+    endClone();
+    const endInvariantValidation = startRuntimeWorkTrace("STARTUP_RUNTIME_PAYLOAD_INVARIANTS", {
+      processCount: candidate.processes.length,
+      eventCount: candidate.eventLog.length,
+    });
     if (!Number.isFinite(candidate.simulationTimeSec) || candidate.simulationTimeSec < 0 ||
       !Number.isInteger(candidate.sequence) || candidate.sequence < 0 || !candidate.processes.length) {
       throw new RuntimePersistenceError("RUNTIME_INVARIANT_VIOLATION", "Persisted runtime clock, sequence or process set is invalid.");
@@ -556,23 +590,35 @@ export class ClinicalScenarioEngine {
       candidate.sequence < candidate.eventLog.reduce((max, event) => Math.max(max, event.sequence ?? 0), 0)) {
       throw new RuntimePersistenceError("RUNTIME_INVARIANT_VIOLATION", "Persisted process, RuntimeState or event sequence identity is inconsistent.");
     }
+    endInvariantValidation();
 
+    const endProcessState = startRuntimeWorkTrace("STARTUP_RUNTIME_PROCESS_STATE");
+    const endProcessRestore = startRuntimeWorkTrace("ENGINE_PROCESS_RESTORE", { processCount: candidate.processes.length });
     this.lifecycleProcessStore.clear(); candidate.processes.forEach(process => this.replaceLifecycleProcess(process));
+    endProcessRestore();
+    const endStateAssign = startRuntimeWorkTrace("ENGINE_STATE_ASSIGN", { eventCount: candidate.eventLog.length });
     this.runtimeState = candidate.runtimeState;
     this.simulationTimeSec = candidate.simulationTimeSec; this.sequence = candidate.sequence;
     this.eventLog = [...candidate.eventLog]; this.resourceEventLog = [...candidate.resourceEventLog];
     this.pendingTransitions = candidate.pendingTransitions.map(item => ({ dueSec: item.dueSec, transition: item.transition as HvTimedTransition }));
     this.processControlledEventPending = candidate.processControlledEventPending;
     this.appliedEventIds.clear(); candidate.appliedEventIds.forEach(id => this.appliedEventIds.add(id));
+    endStateAssign({ appliedEventCount: candidate.appliedEventIds.length });
+    endProcessState({ processCount: candidate.processes.length, appliedEventCount: candidate.appliedEventIds.length });
+    const endSubsystems = startRuntimeWorkTrace("STARTUP_RUNTIME_SUBSYSTEMS");
+    const endResourceRestore = startRuntimeWorkTrace("ENGINE_RESOURCE_RESTORE", { resourceCount: candidate.resources.length });
     this.resourcePool = new ResourcePool([...candidate.resources]);
     this.interventionEngine = new InterventionEngine(); this.interventionEngine.restore(candidate.interventionEngine);
+    endResourceRestore();
+    const endClinicalRestore = startRuntimeWorkTrace("ENGINE_CLINICAL_REFERENCE_RESTORE");
     this.clinicalIntegration.restore(candidate.clinicalIntegration);
     this.interventionRuntime.restore(candidate.interventionInstances);
     this.airwayManagement.restore(candidate.airway); this.circulationManagement.restore(candidate.circulation);
     this.medicationEngine.restore(candidate.medication);
+    endClinicalRestore();
     this.assessmentRules = structuredClone(candidate.assessmentRules) as AssessmentRule[];
     this.vitalSignEvents = boundedVitalSignEvents(candidate.vitalSignEvents);
-    this.publishCanonicalState();
+    endSubsystems({ resourceCount: candidate.resources.length, eventCount: candidate.eventLog.length });
   }
 
   /** Instructor command boundary: process transition first, canonical aggregation second. */
@@ -641,17 +687,63 @@ export class ClinicalScenarioEngine {
   }
 
   getAssessmentSnapshot(): AssessmentSnapshot {
-    return this.assessmentEngine.evaluate(this.assessmentRules, {
+    const endEventLog = startRuntimeWorkTrace("ENGINE_ASSESSMENT_EVENT_LOG_CLONE", { eventCount: this.eventLog.length });
+    const endEventLogClone = startRuntimeWorkTrace("ENGINE_ASSESSMENT_EVENT_LOG_CLONE_SOURCE", { eventCount: this.eventLog.length });
+    const eventLog = this.getEventLog();
+    endEventLogClone();
+    const endTimelineClone = startRuntimeWorkTrace("ENGINE_ASSESSMENT_TIMELINE_CLONE_SOURCE", { eventCount: this.eventLog.length });
+    const timeline = this.getEventLog();
+    endTimelineClone();
+    endEventLog();
+    const endInputs = startRuntimeWorkTrace("ENGINE_ASSESSMENT_OTHER_INPUTS");
+    const interventionLog = structuredClone(this.resourceEventLog);
+    const interventionInstances = this.interventionRuntime.snapshot();
+    const resourcePool = this.resourcePool.snapshot();
+    const airwayState = this.getAirwayState();
+    const clinicalEffects = this.clinicalIntegration.snapshot().events;
+    endInputs();
+    const endEvaluate = startRuntimeWorkTrace("ENGINE_ASSESSMENT_RULE_EVALUATE", { ruleCount: this.assessmentRules.length });
+    const snapshot = this.assessmentEngine.evaluate(this.assessmentRules, {
       timestamp: this.simulationTimeSec,
       runtimeState: this.requireRuntimeState(),
-      eventLog: this.getEventLog(),
+      eventLog, interventionLog, interventionInstances, resourcePool, airwayState, clinicalEffects, timeline,
+    });
+    endEvaluate();
+    return snapshot;
+  }
+
+  async getAssessmentSnapshotCooperatively(yieldControl: PipelineYield): Promise<AssessmentSnapshot> {
+    const endSnapshot = startRuntimeWorkTrace("ENGINE_ASSESSMENT_SNAPSHOT", { mode: "COOPERATIVE" });
+    const endEventLog = startRuntimeWorkTrace("ENGINE_ASSESSMENT_EVENT_LOG_COPY", { eventCount: this.eventLog.length });
+    const eventLog = await cooperativeDetachedCopy(this.eventLog, yieldControl);
+    endEventLog({ yieldCount: eventLog.metrics.yieldCount, maxBatchDurationMs: eventLog.metrics.maxBatchDurationMs });
+    const endTimeline = startRuntimeWorkTrace("ENGINE_ASSESSMENT_TIMELINE_COPY", { eventCount: this.eventLog.length });
+    const timeline = await cooperativeDetachedCopy(this.eventLog, yieldControl);
+    endTimeline({ yieldCount: timeline.metrics.yieldCount, maxBatchDurationMs: timeline.metrics.maxBatchDurationMs });
+    const result = await this.assessmentEngine.evaluateCooperatively(this.assessmentRules, {
+      timestamp: this.simulationTimeSec,
+      runtimeState: this.requireRuntimeState(),
+      eventLog: eventLog.value,
       interventionLog: structuredClone(this.resourceEventLog),
       interventionInstances: this.interventionRuntime.snapshot(),
       resourcePool: this.resourcePool.snapshot(),
       airwayState: this.getAirwayState(),
       clinicalEffects: this.clinicalIntegration.snapshot().events,
-      timeline: this.getEventLog(),
-    });
+      timeline: timeline.value,
+    }, yieldControl);
+    endSnapshot({ eventLogYields: eventLog.metrics.yieldCount, timelineYields: timeline.metrics.yieldCount,
+      debriefYields: result.metrics.debrief.yieldCount,
+      maxBatchDurationMs: Math.max(eventLog.metrics.maxBatchDurationMs, timeline.metrics.maxBatchDurationMs,
+        result.metrics.debrief.maxBatchDurationMs) });
+    return result.snapshot;
+  }
+
+  getAssessmentPublicationDiagnostics(): Readonly<{
+    generation: number; publishedGeneration: number; buildCount: number; staleDiscardCount: number; publicationCount: number;
+  }> {
+    return Object.freeze({ generation: this.assessmentPublicationGeneration,
+      publishedGeneration: this.assessmentPublishedGeneration, buildCount: this.assessmentBuildCount,
+      staleDiscardCount: this.assessmentStaleDiscardCount, publicationCount: this.assessmentPublicationCount });
   }
 
   getHashes(): { stateHash: string; eventLogHash: string; processTreeHash: string; resourcePoolHash: string; replayHash: string } {
@@ -732,6 +824,7 @@ export class ClinicalScenarioEngine {
   }
 
   private publishCanonicalState(): void {
+    const endRuntimeProjection = startRuntimeWorkTrace("ENGINE_RUNTIME_SNAPSHOT_PROJECTION");
     const processes = this.orderedLifecycleLeaves("SERIALIZATION");
     publishRuntimeSnapshot(this.requireRuntimeState(), processes.map(process => ({
       processId: process.outputs.processId,
@@ -745,8 +838,61 @@ export class ClinicalScenarioEngine {
           : undefined,
       } : {}),
     })));
-    this.publishResourceDebugSnapshot();
+    endRuntimeProjection({ processCount: processes.length });
+    const endResourceProjection = startRuntimeWorkTrace("ENGINE_RESOURCE_DEBUG_SNAPSHOT");
+    this.publishResourceDebugSnapshot(false);
+    endResourceProjection();
+    const endAssessmentProjection = startRuntimeWorkTrace("ENGINE_ASSESSMENT_SNAPSHOT");
     this.publishAssessmentSnapshot(true);
+    endAssessmentProjection();
+  }
+
+  private async publishCanonicalStateCooperatively(generation: number, yieldControl: PipelineYield): Promise<void> {
+    if (!this.assessmentPublicationActive) {
+      this.assessmentPublicationActive = this.drainAssessmentPublication(yieldControl).finally(() => {
+        this.assessmentPublicationActive = undefined;
+      });
+    }
+    await this.assessmentPublicationActive;
+    if (generation < this.assessmentPendingGeneration && !this.assessmentPublicationActive) {
+      await this.publishCanonicalStateCooperatively(this.assessmentPendingGeneration, yieldControl);
+    }
+  }
+
+  private async drainAssessmentPublication(yieldControl: PipelineYield): Promise<void> {
+    while (this.assessmentPublishedGeneration < this.assessmentPendingGeneration) {
+      const generation = this.assessmentPendingGeneration;
+      this.assessmentBuildCount += 1;
+      const endBuild = startRuntimeWorkTrace("ENGINE_ASSESSMENT_COOPERATIVE_BUILD", {
+        generation, buildCount: this.assessmentBuildCount,
+      });
+      const snapshot = await this.getAssessmentSnapshotCooperatively(yieldControl);
+      if (generation !== this.assessmentPublicationGeneration || generation !== this.assessmentPendingGeneration) {
+        this.assessmentStaleDiscardCount += 1;
+        endBuild({ outcome: "STALE_DISCARDED", staleDiscardCount: this.assessmentStaleDiscardCount });
+        continue;
+      }
+      const endRuntimeProjection = startRuntimeWorkTrace("ENGINE_RUNTIME_SNAPSHOT_PROJECTION");
+      const processes = this.orderedLifecycleLeaves("SERIALIZATION");
+      runRuntimeDerivedSnapshotTransaction(() => {
+        publishRuntimeSnapshot(this.requireRuntimeState(), processes.map(process => ({
+        processId: process.outputs.processId, moduleId: process.outputs.moduleId, status: process.outputs.status,
+        ...(exposesSnapshotClinicalState(process) ? {
+          clinicalState: structuredClone(process.clinicalState),
+          lastEvent: this.eventLog.filter(event => event.target === process.processId).at(-1)
+            ? { type: this.eventLog.filter(event => event.target === process.processId).at(-1)!.eventType,
+              simulationTimeSec: this.eventLog.filter(event => event.target === process.processId).at(-1)!.simulationTime ?? this.simulationTimeSec }
+            : undefined,
+        } : {}),
+        })));
+        this.publishResourceDebugSnapshot(false);
+        publishAssessmentDebugSnapshot(snapshot);
+      });
+      endRuntimeProjection({ processCount: processes.length });
+      this.assessmentPublishedGeneration = generation;
+      this.assessmentPublicationCount += 1;
+      endBuild({ outcome: "PUBLISHED", publicationCount: this.assessmentPublicationCount });
+    }
   }
 
   private logEvent(
@@ -797,7 +943,7 @@ export class ClinicalScenarioEngine {
     });
   }
 
-  private publishResourceDebugSnapshot(): void {
+  private publishResourceDebugSnapshot(includeAssessment = true): void {
     publishResourceRuntimeDebugSnapshot({
       resources: this.resourcePool.snapshot(),
       activeInterventions: this.interventionEngine.snapshot().active,
@@ -810,7 +956,7 @@ export class ClinicalScenarioEngine {
       recentEvents: this.resourceEventLog,
       updatedAt: this.simulationTimeSec,
     }, this.requireProcess().encounterId);
-    this.publishAssessmentSnapshot();
+    if (includeAssessment) this.publishAssessmentSnapshot();
   }
 
   private sortedHypoxia(): HypoxiaPatientProcessRuntime[] {

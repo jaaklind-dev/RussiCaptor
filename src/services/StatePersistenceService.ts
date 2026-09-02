@@ -29,13 +29,13 @@ import {
 } from "@/services/exercise/ExercisePackageService";
 import { installCurrentExercise } from "@/repositories/ExerciseRepository";
 import { getPatientMaterialization, restorePatientMaterialization } from "@/services/exercise/PackagePatientMaterializationService";
-import { captureActiveClinicalReferenceRuntimes, captureActiveClinicalReferenceRuntimesAsync, clearActiveClinicalReferenceRuntime, prepareActiveClinicalReferenceRuntime } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
+import { captureActiveClinicalReferenceRuntimes, captureActiveClinicalReferenceRuntimesAsync, clearActiveClinicalReferenceRuntime, prepareActiveClinicalReferenceRuntime, prepareActiveClinicalReferenceRuntimeAsync } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
 import type { RuntimeCheckpointEnvelope } from "@/models/RuntimeCheckpointAuthority";
 import { localRuntimeCheckpointStore } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { getRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
-import { BoundedObsoleteGenerationGate, LatestGenerationPipeline } from "@/services/runtime/persistence/LatestGenerationPipeline";
+import { BoundedObsoleteGenerationGate, LatestGenerationPipeline, yieldToEventLoop, type PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { capturePatientTransportRuntime, preparePatientTransportRuntime } from "@/services/runtime/exercise/PatientTransportRuntimeService";
 import { compactActiveExerciseState } from "@/services/runtime/persistence/ActiveCheckpointCompaction";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
@@ -260,6 +260,20 @@ export function acceptAuthoritativeRuntimeCheckpoint(checkpoint: RuntimeCheckpoi
   setRuntimePersistenceFailure(undefined);
 }
 
+export async function acceptAuthoritativeRuntimeCheckpointAsync(
+  checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>,
+  startRuntime = false,
+  yieldControl: PipelineYield = yieldToEventLoop,
+): Promise<void> {
+  assertRuntimeCheckpointClockConsistency(checkpoint.payload);
+  await restoreSharedExerciseStateAsync(checkpoint.payload, startRuntime, yieldControl);
+  localRuntimeCheckpointStore.restore(checkpoint);
+  const savedAt = new Date().toISOString();
+  pendingSnapshot = { ...checkpoint.payload, version: STATE_VERSION, savedAt,
+    currentCaseManager: { ...getCurrentCaseManager() } };
+  setLocalSaveStatus({ state: "saved", savedAt });
+}
+
 export function assertRuntimeCheckpointClockConsistency(restored: SharedExerciseState): void {
   const session = restored.exerciseSession;
   const lifecycleState = "lifecycleState" in session ? session.lifecycleState
@@ -274,6 +288,20 @@ export function assertRuntimeCheckpointClockConsistency(restored: SharedExercise
 }
 
 export function restoreSharedExerciseState(restored: SharedExerciseState, startRuntime = true): void {
+  restoreSharedExerciseCollections(restored);
+  restoreCanonicalRuntime(restored, startRuntime);
+}
+
+export async function restoreSharedExerciseStateAsync(
+  restored: SharedExerciseState,
+  startRuntime = true,
+  yieldControl: PipelineYield = yieldToEventLoop,
+): Promise<void> {
+  restoreSharedExerciseCollections(restored);
+  await restoreCanonicalRuntimeAsync(restored, startRuntime, yieldControl);
+}
+
+function restoreSharedExerciseCollections(restored: SharedExerciseState): void {
   stopClockRunner();
   restoreInstalledWorkbook(restored.installedWorkbook);
   restoreExerciseIdentity(restored);
@@ -308,8 +336,6 @@ export function restoreSharedExerciseState(restored: SharedExerciseState, startR
   if (restored.vitalSigns) {
     replaceItems(clinicalDataProvider.getVitalSigns(), restored.vitalSigns);
   }
-
-  restoreCanonicalRuntime(restored, startRuntime);
 
 }
 
@@ -421,7 +447,7 @@ export async function loadPersistedState(): Promise<void> {
     // resolved. The authority startup rehydrates with startRuntime=true only
     // after that gate succeeds.
     const endRuntime = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_RUNTIME");
-    restoreCanonicalRuntime(runtimeRestore, false);
+    await restoreCanonicalRuntimeAsync(runtimeRestore, false, yieldToEventLoop);
     endRuntime({ persistedRuntimeCount: restored.persistedRuntimeStates?.length ?? 0 });
     setRuntimePersistenceFailure(undefined);
     endRestore();
@@ -443,6 +469,20 @@ function restoreCanonicalRuntime(restored: SharedExerciseState, startRuntime: bo
     prepareActiveClinicalReferenceRuntime(session.exerciseId, restored.persistedRuntimeStates);
     preparePatientTransportRuntime(session.exerciseId, restored.patientTransportRuntime);
     if (lifecycleState === "RUNNING" && startRuntime) startClockRunner();
+  }
+}
+
+async function restoreCanonicalRuntimeAsync(restored: SharedExerciseState, startRuntime: boolean, yieldControl: PipelineYield): Promise<void> {
+  const session = restored.exerciseSession;
+  const lifecycleState = "lifecycleState" in session ? session.lifecycleState
+    : session.state === "running" ? "RUNNING" : session.state === "paused" ? "PAUSED" : "READY";
+  if (lifecycleState === "RUNNING" || lifecycleState === "PAUSED") {
+    assertRuntimeCheckpointClockConsistency(restored);
+    await prepareActiveClinicalReferenceRuntimeAsync(session.exerciseId, restored.persistedRuntimeStates ?? [], yieldControl);
+    preparePatientTransportRuntime(session.exerciseId, restored.patientTransportRuntime);
+    if (lifecycleState === "RUNNING" && startRuntime) startClockRunner();
+  } else {
+    clearActiveClinicalReferenceRuntime();
   }
 }
 

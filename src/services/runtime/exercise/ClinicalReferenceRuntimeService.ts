@@ -38,23 +38,30 @@ function provenance(exerciseId: string, patientId: string, pkg: NonNullable<Retu
 }
 
 export function prepareActiveClinicalReferenceRuntime(exerciseId: string, persisted: readonly PersistedRuntimeState[] = []): void {
+  const endPreparation = startRuntimeWorkTrace("STARTUP_RUNTIME_ENGINE_PREPARE", { persistedRuntimeCount: persisted.length });
   const pkg = persisted.length ? getExercisePackage(exerciseId) : activeExercisePackageService.getActive();
   const materialized = getPatientMaterialization(exerciseId);
+  const endTransport = startRuntimeWorkTrace("STARTUP_RUNTIME_TRANSPORT_RESTORE");
   preparePatientTransportRuntime(exerciseId);
+  endTransport();
   const configured = materialized?.patients.filter(record => record.runtimeFixture) ?? [];
   const legacyReference = pkg?.packageId === CARDIAC_ARREST_EXERCISE_PACKAGE.packageId || pkg?.packageId === ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE.packageId;
   const fallback = legacyReference ? getAllPatients().find(item => item.status === "Active" || item.status === "Incoming") : undefined;
   const records = configured.length ? configured : fallback ? [{ patient: fallback, runtimeFixture: { ...structuredClone(CARDIAC_ARREST_REFERENCE_FIXTURE), patientId: fallback.id } }] : [];
-  if (!pkg || !records.length) return;
-  if (!persisted.length && active.length && active.every(item => item.exerciseId === exerciseId) && active.length === records.length) return;
+  if (!pkg || !records.length) { endPreparation({ outcome: "NO_RUNTIME_RECORDS" }); return; }
+  if (!persisted.length && active.length && active.every(item => item.exerciseId === exerciseId) && active.length === records.length) { endPreparation({ outcome: "REUSED_ACTIVE" }); return; }
   exercisePackageLoader.bind(exerciseId, pkg);
   if (persisted.length && persisted.length !== records.length) throw new Error("RUNTIME_PERSISTENCE_PATIENT_SET_MISMATCH");
   const candidates: { exerciseId: string; patientId: string; engine: ClinicalScenarioEngine }[] = [];
-  try { for (const record of records) {
+  try { for (const [runtimeIndex, record] of records.entries()) {
     const patient = record.patient; const fixture = record.runtimeFixture!; const engine = new ClinicalScenarioEngine();
     const artifact = persisted.find(item => item.provenance.patientId === patient.id);
     if (persisted.length && !artifact) throw new Error(`RUNTIME_PERSISTENCE_PATIENT_MISSING:${patient.id}`);
-    if (artifact) canonicalRuntimePersistenceService.rehydrate(engine, artifact, provenance(exerciseId, patient.id, pkg));
+    if (artifact) {
+      const endEngineRehydrate = startRuntimeWorkTrace("STARTUP_RUNTIME_ENGINE_REHYDRATE", { runtimeIndex });
+      canonicalRuntimePersistenceService.rehydrate(engine, artifact, provenance(exerciseId, patient.id, pkg));
+      endEngineRehydrate();
+    }
     else engine.reset(structuredClone(fixture));
     if (!artifact && fixture.initialState && typeof fixture.initialState === "object" && "cardiacArrest" in fixture.initialState) {
       addTimelineEvent({
@@ -99,6 +106,47 @@ export function prepareActiveClinicalReferenceRuntime(exerciseId: string, persis
       dispose: () => { disposeClock(); disposeOwner(); },
     });
   });
+  endPreparation({ runtimeCount: candidates.length });
+}
+
+/** Production checkpoint startup keeps candidates private until cooperative rehydrate is complete. */
+export async function prepareActiveClinicalReferenceRuntimeAsync(
+  exerciseId: string,
+  persisted: readonly PersistedRuntimeState[],
+  yieldControl: PipelineYield,
+): Promise<void> {
+  if (!persisted.length) { prepareActiveClinicalReferenceRuntime(exerciseId, persisted); return; }
+  const endPreparation = startRuntimeWorkTrace("STARTUP_RUNTIME_ENGINE_PREPARE_ASYNC", { persistedRuntimeCount: persisted.length });
+  const pkg = getExercisePackage(exerciseId);
+  const materialized = getPatientMaterialization(exerciseId);
+  preparePatientTransportRuntime(exerciseId);
+  const records = materialized?.patients.filter(record => record.runtimeFixture) ?? [];
+  if (!pkg || !records.length) { endPreparation({ outcome: "NO_RUNTIME_RECORDS" }); return; }
+  if (persisted.length !== records.length) throw new Error("RUNTIME_PERSISTENCE_PATIENT_SET_MISMATCH");
+  exercisePackageLoader.bind(exerciseId, pkg);
+  const candidates: { exerciseId: string; patientId: string; engine: ClinicalScenarioEngine }[] = [];
+  // No stale Runtime owner remains executable while a new authoritative
+  // generation is cooperatively reconstructed. Failure therefore stays closed.
+  active.forEach(item => item.dispose());
+  active = [];
+  for (const [runtimeIndex, record] of records.entries()) {
+    const patient = record.patient;
+    const artifact = persisted.find(item => item.provenance.patientId === patient.id);
+    if (!artifact) throw new Error(`RUNTIME_PERSISTENCE_PATIENT_MISSING:${patient.id}`);
+    const engine = new ClinicalScenarioEngine();
+    const endEngineRehydrate = startRuntimeWorkTrace("STARTUP_RUNTIME_ENGINE_REHYDRATE", { runtimeIndex });
+    await canonicalRuntimePersistenceService.rehydrateAsync(engine, artifact, provenance(exerciseId, patient.id, pkg), yieldControl);
+    endEngineRehydrate({ readiness: "READY" });
+    candidates.push({ exerciseId, patientId: patient.id, engine });
+    await yieldControl();
+  }
+  active = candidates.map(({ patientId, engine }) => {
+    const disposeOwner = registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(engine, exerciseId, patientId));
+    const disposeClock = registerExerciseClockTarget(createScenarioEngineExerciseClockTarget(engine, patientId));
+    return Object.freeze({ exerciseId, patientId, engine,
+      dispose: () => { disposeClock(); disposeOwner(); } });
+  });
+  endPreparation({ runtimeCount: candidates.length, readiness: "READY" });
 }
 
 export function clearActiveClinicalReferenceRuntime(): void { active.forEach(item => item.dispose()); active = []; clearPatientTransportRuntime(); }
@@ -125,10 +173,19 @@ export async function captureActiveClinicalReferenceRuntimesAsync(
   // Detach every patient payload before yielding. This preserves one logical
   // clock boundary while expensive canonicalization proceeds cooperatively.
   const endDetach = startRuntimeWorkTrace("RUNTIME_PAYLOAD_DETACH", { runtimeCount: active.length });
-  const detached = active.slice().sort((a, b) => a.patientId.localeCompare(b.patientId)).map(item => ({
-    payload: item.engine.captureRuntimePayload(),
-    provenance: provenance(item.exerciseId, item.patientId, getExercisePackage(item.exerciseId)),
-  }));
+  const detached: {
+    payload: ReturnType<ClinicalScenarioEngine["captureRuntimePayload"]>;
+    provenance: RuntimeProvenance;
+  }[] = [];
+  for (const [runtimeIndex, item] of active.slice().sort((a, b) => a.patientId.localeCompare(b.patientId)).entries()) {
+    const endSnapshot = startRuntimeWorkTrace("PRE_CANON_RUNTIME_SNAPSHOT", { runtimeIndex });
+    const payload = item.engine.captureRuntimePayload();
+    endSnapshot({ simulationTimeSec: payload.simulationTimeSec });
+    const endProvenance = startRuntimeWorkTrace("PRE_CANON_RUNTIME_PROVENANCE", { runtimeIndex });
+    const runtimeProvenance = provenance(item.exerciseId, item.patientId, getExercisePackage(item.exerciseId));
+    endProvenance();
+    detached.push({ payload, provenance: runtimeProvenance });
+  }
   endDetach({ runtimeCount: detached.length });
   if (expectedSimulationTimeSec !== undefined && detached.some(item => item.payload.simulationTimeSec !== expectedSimulationTimeSec)) {
     throw new Error("RUNTIME_CHECKPOINT_CLOCK_MISMATCH");

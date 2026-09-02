@@ -4,7 +4,7 @@ import type { RuntimeCheckpointEnvelope, RuntimeWriterLease } from "@/models/Run
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { stopClockRunner } from "@/services/ClockRunner";
 import {
-  acceptAuthoritativeRuntimeCheckpoint,
+  acceptAuthoritativeRuntimeCheckpointAsync,
   ensureLocalRuntimeCheckpoint,
   getLocalRuntimeCheckpoint,
   subscribeToLocalRuntimeCheckpointPrepared,
@@ -555,7 +555,7 @@ export async function takeOverRuntimeWriter(): Promise<Status> {
   setStatus({state:"WRITER",revision:remoteRevision});
   // `resolved.checkpoint` is the payload already validated above. The second
   // check reads only atomic metadata unless a rollout-safe fallback is needed.
-  acceptAuthoritativeRuntimeCheckpoint(resolved.checkpoint, true);
+  await acceptAuthoritativeRuntimeCheckpointAsync(resolved.checkpoint, true, yieldToEventLoop);
   wakeCheckpointPublicationForCurrentWriter?.();
   lastRecoveryOutcome=Object.freeze({state:"SUCCEEDED",code:"TAKEOVER",occurredAt:new Date().toISOString()});
   return status;
@@ -607,7 +607,7 @@ async function reacquireRuntimeFromRemoteCheckpointForIntent(intentId: string): 
   if (!confirmed) return setAndReturn({state:"READER",code:"WRITER_AUTHORITY_UNAVAILABLE",revision:recovered.checkpoint.checkpointRevision});
   lease=confirmed; remoteRevision=recovered.checkpoint.checkpointRevision;
   setStatus({state:"WRITER",revision:remoteRevision});
-  acceptAuthoritativeRuntimeCheckpoint(recovered.checkpoint,true);
+  await acceptAuthoritativeRuntimeCheckpointAsync(recovered.checkpoint,true,yieldToEventLoop);
   wakeCheckpointPublicationForCurrentWriter?.();
   lastRecoveryOutcome=Object.freeze({state:"SUCCEEDED",code:"CHECKPOINT_RECOVERY",occurredAt:new Date().toISOString()});
   return status;
@@ -672,7 +672,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   const resolved=await resolveAuthoritativeCheckpointAsync(local,remote,yieldToEventLoop);
   endRemoteResolution({ status: resolved.status });
   if (resolved.status==="CONFLICT") setStatus({state:"CONFLICT",code:resolved.code});
-  else if (resolved.status==="REMOTE") { acceptAuthoritativeRuntimeCheckpoint(resolved.checkpoint, false); stopClockRunner(); remoteRevision=resolved.checkpoint.checkpointRevision; setStatus({state:"READER",revision:remoteRevision}); }
+  else if (resolved.status==="REMOTE") { await acceptAuthoritativeRuntimeCheckpointAsync(resolved.checkpoint, false, yieldToEventLoop); stopClockRunner(); remoteRevision=resolved.checkpoint.checkpointRevision; setStatus({state:"READER",revision:remoteRevision}); }
   else if (resolved.status!=="NONE" && isActiveExercise()) {
     remoteRevision=remote?.checkpointRevision??0;
     const acquired=await acquireRuntimeWriterTerminal(repository,exerciseId,writerId,remoteRevision,LEASE_SECONDS);
@@ -686,7 +686,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
       lease=acquired.lease;
       setRuntimeWriterAuthorityState("WRITER");
       setStatus({state:"WRITER",revision:remoteRevision});
-      acceptAuthoritativeRuntimeCheckpoint(resolved.checkpoint, true);
+      await acceptAuthoritativeRuntimeCheckpointAsync(resolved.checkpoint, true, yieldToEventLoop);
     }
     else { stopClockRunner(); setStatus({state:"READER",code:acquired.code,revision:acquired.checkpointRevision}); }
   } else if(resolved.status==="NONE") setStatus({state:"DISABLED"});
@@ -860,13 +860,13 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     loadLatest:metadata=>loadRuntimeCheckpointWithCache(repository,exerciseId,checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId),"realtime",metadata),
     ignored:reason=>recordSupabaseTraffic({operation:"REALTIME_METADATA_IGNORED",endpoint:`runtime_checkpoint_notifications.${reason.toLowerCase()}`}),
     coalesced:()=>recordSupabaseTraffic({operation:"REALTIME_FETCH_COALESCED",endpoint:"runtime_checkpoint_notifications"}),
-    accept:incoming=>{
+    accept:async incoming=>{
       if(generationStopped())return;
       const decision=resolveSubscribedCheckpoint(getLocalRuntimeCheckpoint(),incoming,Boolean(lease));
       if(decision.status==="CONFLICT") { stopClockRunner(); setStatus({state:"CONFLICT",code:decision.code}); }
       else if(decision.status==="REMOTE"){
         if(lease){lease=undefined;stopClockRunner();setStatus({state:"CONFLICT",code:"REMOTE_SYNC_CONFLICT",revision:decision.checkpoint.checkpointRevision});}
-        else {acceptAuthoritativeRuntimeCheckpoint(decision.checkpoint,false);stopClockRunner();remoteRevision=decision.checkpoint.checkpointRevision;setStatus({state:"READER",revision:remoteRevision});}
+        else {await acceptAuthoritativeRuntimeCheckpointAsync(decision.checkpoint,false,yieldToEventLoop);stopClockRunner();remoteRevision=decision.checkpoint.checkpointRevision;setStatus({state:"READER",revision:remoteRevision});}
       }
     },
   });
