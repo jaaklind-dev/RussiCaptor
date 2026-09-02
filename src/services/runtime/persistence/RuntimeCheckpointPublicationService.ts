@@ -1,10 +1,11 @@
 import type { RuntimeCheckpointEnvelope, RuntimeWriterLease } from "@/models/RuntimeCheckpointAuthority";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
-import { loadCheckpointFreshness, type RuntimeCheckpointRepository } from "./RuntimeCheckpointRepository";
+import { loadCheckpointFreshness, type RuntimeCheckpointPublicationControl, type RuntimeCheckpointRepository } from "./RuntimeCheckpointRepository";
+import { RuntimeCheckpointDeltaBuildCancelledError } from "./RuntimeCheckpointDeltaService";
 
 export type RuntimeCheckpointPublicationTerminal = Readonly<
   | { state: "PUBLISHED"; checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>; reconciled: boolean }
-  | { state: "STALE_WRITER" | "REVISION_CONFLICT" | "BACKEND_ERROR" | "TRANSPORT_TIMEOUT" | "AUTH_UNAVAILABLE"; code: string }
+  | { state: "STALE_WRITER" | "REVISION_CONFLICT" | "BACKEND_ERROR" | "TRANSPORT_TIMEOUT" | "AUTH_UNAVAILABLE" | "GENERATION_STOPPED"; code: string }
 >;
 
 const DEFAULT_TIMEOUT_MS = 8_000;
@@ -35,8 +36,38 @@ export async function publishRuntimeCheckpointTerminal(
   checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   baseCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>,
+  control?: RuntimeCheckpointPublicationControl,
 ): Promise<RuntimeCheckpointPublicationTerminal> {
-  const rpc = await bounded(repository.publish(lease, expectedRevision, checkpoint, baseCheckpoint), timeoutMs);
+  let rpc: Awaited<ReturnType<typeof bounded<Awaited<ReturnType<RuntimeCheckpointRepository["publish"]>>>>>;
+  try {
+    if (control) {
+      let markSubmitted!: () => void;
+      const submitted = new Promise<void>(resolve => { markSubmitted = resolve; });
+      let settled = false;
+      const publish = repository.publish(lease, expectedRevision, checkpoint, baseCheckpoint, {
+        ...control,
+        onRpcSubmitted: () => {
+          control.onRpcSubmitted?.();
+          markSubmitted();
+        },
+      }).then(value => {
+        settled = true;
+        return value;
+      });
+      // Local cooperative preparation is allowed to take longer than the RPC
+      // transport deadline. Start the transport clock only once the request is
+      // irreversibly submitted; before that the generation guard can cancel it.
+      await Promise.race([submitted, publish.then(() => undefined)]);
+      rpc = settled ? { ok: true, value: await publish } : await bounded(publish, timeoutMs);
+    } else {
+      rpc = await bounded(repository.publish(lease, expectedRevision, checkpoint, baseCheckpoint), timeoutMs);
+    }
+  } catch (error) {
+    if (error instanceof RuntimeCheckpointDeltaBuildCancelledError || error instanceof Error && error.message === "GENERATION_STOPPED") {
+      return { state: "GENERATION_STOPPED", code: "GENERATION_STOPPED" };
+    }
+    throw error;
+  }
   if (rpc.ok) {
     if (rpc.value.status === "PUBLISHED") return { state: "PUBLISHED", checkpoint: rpc.value.checkpoint, reconciled: false };
     return failure(rpc.value.code);

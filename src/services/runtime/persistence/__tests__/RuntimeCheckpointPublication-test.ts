@@ -2,6 +2,7 @@ import type { RuntimeCheckpointEnvelope, RuntimeWriterLease } from "@/models/Run
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import type { RuntimeCheckpointRepository } from "../RuntimeCheckpointRepository";
 import { publishRuntimeCheckpointTerminal } from "../RuntimeCheckpointPublicationService";
+import { RuntimeCheckpointDeltaBuildCancelledError } from "../RuntimeCheckpointDeltaService";
 
 const lease = { exerciseId: "EX", writerInstanceId: "W" } as RuntimeWriterLease;
 const checkpoint = { exerciseId: "EX", checkpointRevision: 11, payloadHash: "H11" } as RuntimeCheckpointEnvelope<SharedExerciseState>;
@@ -45,5 +46,29 @@ describe("WP-44B terminal checkpoint publication", () => {
     const direct = { ...repository(undefined), publish: async () => ({ status: "PUBLISHED" as const, checkpoint }) } as RuntimeCheckpointRepository;
     await expect(publishRuntimeCheckpointTerminal(direct, lease, 10, checkpoint, 2))
       .resolves.toEqual({ state: "PUBLISHED", checkpoint, reconciled: false });
+  });
+  test("pre-RPC cooperative cancellation returns the existing stopped terminal without reconciliation", async () => {
+    const cancelled = {
+      ...repository(undefined),
+      publish: jest.fn(async () => { throw new RuntimeCheckpointDeltaBuildCancelledError(); }),
+      loadLatestMetadata: jest.fn(),
+    } as unknown as RuntimeCheckpointRepository;
+    await expect(publishRuntimeCheckpointTerminal(cancelled, lease, 10, checkpoint, 2, undefined, {
+      priority: "ROUTINE", yieldControl: async () => undefined, shouldContinue: () => false,
+    })).resolves.toEqual({ state: "GENERATION_STOPPED", code: "GENERATION_STOPPED" });
+    expect(cancelled.loadLatestMetadata).not.toHaveBeenCalled();
+  });
+  test("transport timeout starts only after cooperative local preparation submits the RPC", async () => {
+    const preparedThenPublished = {
+      ...repository(undefined),
+      publish: jest.fn(async (_lease, _revision, _checkpoint, _base, control) => {
+        await new Promise(resolve => setTimeout(resolve, 12));
+        control?.onRpcSubmitted?.();
+        return { status: "PUBLISHED" as const, checkpoint };
+      }),
+    } as unknown as RuntimeCheckpointRepository;
+    await expect(publishRuntimeCheckpointTerminal(preparedThenPublished, lease, 10, checkpoint, 2, undefined, {
+      priority: "ROUTINE", yieldControl: async () => undefined, shouldContinue: () => true,
+    })).resolves.toEqual({ state: "PUBLISHED", checkpoint, reconciled: false });
   });
 });

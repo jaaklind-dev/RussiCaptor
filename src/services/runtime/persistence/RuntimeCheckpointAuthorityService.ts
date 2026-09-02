@@ -359,6 +359,26 @@ class LocalRuntimeCheckpointStore {
     if (resolved.status === "CONFLICT") throw new Error(resolved.code);
     if (resolved.status === "REMOTE" || resolved.status === "EQUIVALENT") this.checkpoint = value;
   }
+  acceptPublishedAcknowledgement(
+    submitted: RuntimeCheckpointEnvelope<SharedExerciseState>,
+    acknowledged: RuntimeCheckpointEnvelope<SharedExerciseState>,
+  ): void {
+    // The acknowledgement is reconstructed from this exact immutable submitted
+    // checkpoint. Verify that server-owned metadata did not change its identity
+    // before transferring the already-established local validation proof.
+    if (acknowledged.payload !== submitted.payload ||
+      acknowledged.exerciseId !== submitted.exerciseId ||
+      acknowledged.checkpointRevision !== submitted.checkpointRevision ||
+      acknowledged.payloadHash !== submitted.payloadHash ||
+      acknowledged.provenanceHash !== submitted.provenanceHash ||
+      acknowledged.persistedRuntimeVersion !== submitted.persistedRuntimeVersion ||
+      acknowledged.envelopeVersion !== submitted.envelopeVersion) {
+      throw new Error("CHECKPOINT_ACKNOWLEDGEMENT_INVALID");
+    }
+    const resolved = resolveAgainstValidatedLocalCheckpoint(this.checkpoint, acknowledged);
+    if (resolved.status === "CONFLICT") throw new Error(resolved.code);
+    if (resolved.status === "REMOTE" || resolved.status === "EQUIVALENT") this.checkpoint = acknowledged;
+  }
 }
 
 export const localRuntimeCheckpointStore = new LocalRuntimeCheckpointStore();

@@ -1,7 +1,7 @@
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { getSupabaseTrafficMetrics, resetSupabaseTrafficMetrics, setSupabaseTrafficMetricsEnabledForTests } from "@/services/SupabaseTrafficMetrics";
 import { createRuntimeCheckpoint } from "../RuntimeCheckpointAuthorityService";
-import { applyRuntimeCheckpointDelta, applyRuntimeCheckpointDeltaChain, createRuntimeCheckpointDelta, MAX_RUNTIME_CHECKPOINT_DELTA_CHAIN } from "../RuntimeCheckpointDeltaService";
+import { applyRuntimeCheckpointDelta, applyRuntimeCheckpointDeltaChain, createRuntimeCheckpointDelta, createRuntimeCheckpointDeltaAsync, MAX_RUNTIME_CHECKPOINT_DELTA_CHAIN } from "../RuntimeCheckpointDeltaService";
 import { loadRuntimeCheckpointWithCache, RUNTIME_CHECKPOINT_DELTA_COST_RATIO } from "../RuntimeCheckpointHydrationService";
 
 const state = (time: number, marker = "A", markerSize = 60_000): SharedExerciseState => ({
@@ -27,6 +27,35 @@ const repository = (target: ReturnType<typeof checkpoint>, deltas: readonly Retu
 describe("WP-EGRESS-03 verified checkpoint delta hydration", () => {
   beforeEach(() => { setSupabaseTrafficMetricsEnabledForTests(true); resetSupabaseTrafficMetrics(); });
   afterAll(() => setSupabaseTrafficMetricsEnabledForTests(undefined));
+
+  test("cooperative publication delta is operation-for-operation identical", async () => {
+    const base = checkpoint(40, 40, "A", 80_000);
+    const target = createRuntimeCheckpoint({
+      ...state(41, "A", 80_000),
+      notes: [...state(41, "A", 80_000).notes, { id: "NEW", text: "õ\ud83d\ude80" } as never],
+      scenarioEvents: [{ id: "EVENT", detail: { nested: [1, null, true] } } as never],
+    }, 41);
+    let yields = 0;
+    const cooperative = await createRuntimeCheckpointDeltaAsync(base, target, {
+      nodesPerSlice: 1,
+      yieldControl: async () => { yields += 1; await Promise.resolve(); },
+    });
+    expect(cooperative).toEqual(createRuntimeCheckpointDelta(base, target));
+    expect(yields).toBeGreaterThan(0);
+    expect(applyRuntimeCheckpointDelta(base, cooperative)).toEqual(target);
+  });
+
+  test("cooperative publication delta stops before completion when superseded", async () => {
+    const base = checkpoint(50, 50, "A", 200_000);
+    const target = checkpoint(51, 51, "A", 200_000);
+    let active = true; let yields = 0;
+    await expect(createRuntimeCheckpointDeltaAsync(base, target, {
+      nodesPerSlice: 1,
+      shouldContinue: () => active,
+      yieldControl: async () => { yields += 1; active = false; },
+    })).rejects.toThrow("GENERATION_STOPPED");
+    expect(yields).toBe(1);
+  });
 
   test("warm restart with current durable cache performs zero full fetches", async () => {
     const current = checkpoint(4); const repo = repository(current);

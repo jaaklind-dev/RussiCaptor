@@ -4,6 +4,7 @@ import { AppState, Platform } from "react-native";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getReleaseConfigurationError } from "@/config/ReleaseConfig";
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabasePublishableKey =
@@ -13,6 +14,21 @@ export const isSupabaseConfigured = Boolean(
   supabaseUrl && supabasePublishableKey && !getReleaseConfigurationError()
 );
 
+const platformFetch = globalThis.fetch.bind(globalThis);
+const tracedFetch: typeof fetch = async (input, init) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+  if (!url.includes("/rest/v1/rpc/publish_runtime_checkpoint")) return platformFetch(input, init);
+  const body = init?.body;
+  const bodyBytes = typeof body === "string" ? body.length : 0;
+  const endBodyEncode = startRuntimeWorkTrace("REMOTE_PUB_BODY_ENCODE", { bodyBytes });
+  const request = platformFetch(input, init);
+  endBodyEncode({ bodyBytes });
+  const endNetwork = startRuntimeWorkTrace("REMOTE_PUB_NETWORK_WAIT", { bodyBytes });
+  const response = await request;
+  endNetwork({ bodyBytes, status: response.status });
+  return response;
+};
+
 export const supabase: SupabaseClient | undefined = isSupabaseConfigured
   ? createClient(supabaseUrl!, supabasePublishableKey!, {
       auth: {
@@ -21,6 +37,7 @@ export const supabase: SupabaseClient | undefined = isSupabaseConfigured
         persistSession: true,
         detectSessionInUrl: false,
       },
+      global: { fetch: tracedFetch },
     })
   : undefined;
 

@@ -39,6 +39,7 @@ import { BoundedObsoleteGenerationGate, LatestGenerationPipeline, yieldToEventLo
 import { capturePatientTransportRuntime, preparePatientTransportRuntime } from "@/services/runtime/exercise/PatientTransportRuntimeService";
 import { compactActiveExerciseState } from "@/services/runtime/persistence/ActiveCheckpointCompaction";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { installRuntimeCompletionIntentListener } from "@/services/runtime/persistence/RuntimeCheckpointLifecycleIntent";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
@@ -488,10 +489,17 @@ async function restoreCanonicalRuntimeAsync(restored: SharedExerciseState, start
 
 export function startStatePersistence(): () => void {
   let stopped = false;
+  let terminalCaptureGeneration: number | undefined;
   const obsoleteGate = new BoundedObsoleteGenerationGate();
   const pipeline = new LatestGenerationPipeline(async (generation, yieldControl) => {
+    const yieldForGeneration = async (): Promise<void> => {
+      await yieldControl();
+      if (terminalCaptureGeneration !== undefined && generation < terminalCaptureGeneration) {
+        throw new RuntimeCheckpointPreparationSupersededError();
+      }
+    };
     try {
-      const shared = await collectSharedExerciseStateAsync(yieldControl);
+      const shared = await collectSharedExerciseStateAsync(yieldForGeneration);
       if (stopped) return;
       await yieldControl();
       const hasCanonicalRuntime = (shared.persistedRuntimeStates?.length ?? 0) > 0;
@@ -500,7 +508,7 @@ export function startStatePersistence(): () => void {
         persistedRuntimeCount: shared.persistedRuntimeStates?.length ?? 0,
       });
       const preparedCheckpoint = hasCanonicalRuntime
-        ? await localRuntimeCheckpointStore.prepareCaptureAsync(shared, yieldControl)
+        ? await localRuntimeCheckpointStore.prepareCaptureAsync(shared, yieldForGeneration)
         : undefined;
       endPreparation({ prepared: Boolean(preparedCheckpoint) });
       // Drop one obsolete preparation, but force the next one through CAS so a
@@ -529,9 +537,13 @@ export function startStatePersistence(): () => void {
       pendingSnapshot = snapshot;
       setLocalSaveStatus({ state: "saving", savedAt: localSaveStatus.savedAt });
       checkpointPreparedListeners.forEach(listener => listener());
-      await yieldControl();
+      await yieldForGeneration();
       void flushLatestSnapshot();
     } catch (error) {
+      if (error instanceof RuntimeCheckpointPreparationSupersededError) {
+        startRuntimeWorkTrace("CHECKPOINT_PREPARATION_PREEMPTED")({ generation });
+        return;
+      }
       // A partially restored active Runtime must never be persisted. The
       // authority resolver may still replace it with a valid remote checkpoint.
       setLocalSaveStatus({ state: "error", savedAt: localSaveStatus.savedAt });
@@ -539,7 +551,15 @@ export function startStatePersistence(): () => void {
     }
   });
   const unsubscribe = subscribeToSync(() => pipeline.request());
-  return () => { stopped = true; unsubscribe(); };
+  const stopCompletionIntent = installRuntimeCompletionIntentListener(active => {
+    if (active) terminalCaptureGeneration = pipeline.request();
+    else terminalCaptureGeneration = undefined;
+  });
+  return () => { stopped = true; unsubscribe(); stopCompletionIntent(); };
+}
+
+class RuntimeCheckpointPreparationSupersededError extends Error {
+  constructor() { super("RUNTIME_CHECKPOINT_PREPARATION_SUPERSEDED"); }
 }
 
 async function flushLatestSnapshot(): Promise<void> {

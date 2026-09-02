@@ -35,6 +35,8 @@ function enabled(): boolean {
   return __DEV__ || process.env.EXPO_PUBLIC_SUPABASE_EGRESS_DEBUG === "1";
 }
 
+export function isSupabaseTrafficMetricsEnabled(): boolean { return enabled(); }
+
 function debugLoggingEnabled(): boolean {
   return process.env.EXPO_PUBLIC_SUPABASE_EGRESS_DEBUG === "1";
 }

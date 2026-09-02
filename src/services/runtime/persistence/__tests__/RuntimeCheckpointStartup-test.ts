@@ -356,7 +356,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const publisher = source.slice(source.indexOf("let publishInFlight=false"), source.indexOf("const stopPrepared="));
     expect(publisher).toContain("let publicationDirty=false");
     expect(publisher).toContain("publicationDirty=true;setStatus");
-    expect(publisher).toContain("if(publicationDirty)schedulePublicationRetry()");
+    expect(publisher).toContain("if(publicationDirty&&terminalIntentGeneration===undefined)schedulePublicationRetry()");
     expect(publisher.match(/publicationRetryTimer=setTimeout/g)).toHaveLength(1);
     expect(publisher).toContain("ROUTINE_CHECKPOINT_PUBLICATION_MS");
   });
@@ -700,9 +700,36 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(publish).toContain("if(publishInFlight){publishQueued=true;return;}");
     expect(publish).toContain("do {");
     expect(publish).toContain("while(publishQueued)");
-    expect(publish).toContain("Promise.race([publishRuntimeCheckpointTerminal");
+    expect(publish).toContain("Promise.race([publication,echoAcknowledgement]");
     expect(publish).toContain("echoAcknowledgement");
     expect(publish).toContain("publicationBarrier=task.then(()=>undefined,()=>undefined)");
+  });
+
+  test("terminal lifecycle publication supersedes one active routine preparation before RPC", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const publish = source.slice(source.indexOf("let publishInFlight=false"), source.indexOf("const stopPrepared="));
+    expect(publish).toContain('checkpointPublicationPriority(checkpoint)==="LIFECYCLE_CRITICAL"');
+    expect(publish).toContain("const registerLifecycleCriticalIntent=(fromCommandIntent=false)=>{");
+    expect(publish).toContain("terminalIntentGeneration=++publicationIntentGeneration");
+    expect(publish).toContain("subscribeToSync(()=>registerLifecycleCriticalIntent(false))");
+    expect(publish).toContain('priority==="LIFECYCLE_CRITICAL"||terminalIntentGeneration===undefined');
+    expect(publish).toContain('if(result.state==="GENERATION_STOPPED")');
+    expect(publish).toContain('CHECKPOINT_PUBLICATION_PREEMPTED');
+    expect(publish).toContain("installRuntimeCompletionIntentListener");
+    expect(source).toContain("if(terminalTransition)await publicationBarrier");
+    expect(publish).toContain("resolveTerminalPublication?.()");
+    expect(publish).toContain("publishQueued=true");
+    expect(publish).not.toContain("pendingPublicationQueue");
+  });
+
+  test("completion intent also supersedes an obsolete local checkpoint preparation generation", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/StatePersistenceService.ts"), "utf8");
+    const persistence = source.slice(source.indexOf("export function startStatePersistence"));
+    expect(persistence).toContain("installRuntimeCompletionIntentListener");
+    expect(persistence).toContain("terminalCaptureGeneration = pipeline.request()");
+    expect(persistence).toContain("generation < terminalCaptureGeneration");
+    expect(persistence).toContain("RuntimeCheckpointPreparationSupersededError");
+    expect(persistence).toContain('startRuntimeWorkTrace("CHECKPOINT_PREPARATION_PREEMPTED")');
   });
 
   test("a replacement sync generation waits for the prior publication terminal state", () => {
@@ -734,7 +761,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(source).toContain("let stopped=false;");
     expect(source).toContain("if(stopped)return;");
     expect(source).toContain('return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED"');
-    expect(source).toContain('stopPrepared();renewalLoop?.stop("GENERATION_CLEANUP")');
+    expect(source).toContain('stopPrepared();stopLifecyclePriority();stopCompletionIntent();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP")');
   });
 
   test("explicit Resume attaches the acquired writer to the canonical renewal lifecycle", () => {

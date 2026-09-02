@@ -1,5 +1,5 @@
 import type { SharedExerciseState } from "@/services/StatePersistenceService";
-import { createRuntimeCheckpoint, isValidRuntimeCheckpoint, isValidRuntimeCheckpointAsync, resolveAgainstValidatedLocalCheckpoint, resolveAuthoritativeCheckpoint, resolveAuthoritativeCheckpointAsync, resolveSubscribedCheckpoint } from "../RuntimeCheckpointAuthorityService";
+import { createRuntimeCheckpoint, isValidRuntimeCheckpoint, isValidRuntimeCheckpointAsync, localRuntimeCheckpointStore, resolveAgainstValidatedLocalCheckpoint, resolveAuthoritativeCheckpoint, resolveAuthoritativeCheckpointAsync, resolveSubscribedCheckpoint } from "../RuntimeCheckpointAuthorityService";
 import { sha256Text } from "@/utils/sha256";
 import { stableJson } from "@/utils/stableJson";
 import { assertRuntimeCheckpointClockConsistency, runtimeRestoreSource } from "@/services/StatePersistenceService";
@@ -31,6 +31,17 @@ describe("WP-44B checkpoint authority resolver",()=>{
     const resolved=resolveAgainstValidatedLocalCheckpoint(checkpoint,structuredClone(checkpoint));
     expect(resolved).toEqual({status:"EQUIVALENT",checkpoint});
     expect(resolved.status === "EQUIVALENT" && resolved.checkpoint).toBe(checkpoint);
+  });
+  test("published acknowledgement transfers validation only for the exact immutable submitted payload", async()=>{
+    const submitted=createRuntimeCheckpoint(state(),12);
+    await localRuntimeCheckpointStore.restoreAsync(submitted,async()=>undefined);
+    const acknowledged=Object.freeze({...submitted});
+    expect(()=>localRuntimeCheckpointStore.acceptPublishedAcknowledgement(submitted,acknowledged)).not.toThrow();
+    expect(localRuntimeCheckpointStore.get()).toBe(acknowledged);
+    const cloned=structuredClone(submitted);
+    expect(()=>localRuntimeCheckpointStore.acceptPublishedAcknowledgement(submitted,cloned)).toThrow("CHECKPOINT_ACKNOWLEDGEMENT_INVALID");
+    expect(()=>localRuntimeCheckpointStore.acceptPublishedAcknowledgement(submitted,Object.freeze({...submitted,payloadHash:"corrupt"}))).toThrow("CHECKPOINT_ACKNOWLEDGEMENT_INVALID");
+    localRuntimeCheckpointStore.restore(undefined);
   });
   test("same revision with different valid payload fails closed",()=>{
     const a=createRuntimeCheckpoint(state("EX-1",["PT-A"]),12); const b=createRuntimeCheckpoint(state("EX-1",["PT-B"]),12);

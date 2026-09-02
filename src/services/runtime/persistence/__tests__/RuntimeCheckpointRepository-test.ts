@@ -51,6 +51,24 @@ describe("WP-44B Supabase repository diagnostics",()=>{
       .resolves.toMatchObject({status:"PUBLISHED"});
     expect(mockClient.rpc.mock.calls.map(call=>call[0])).toEqual(["publish_runtime_checkpoint_delta","publish_runtime_checkpoint_metadata"]);
   });
+  test("lifecycle supersession cancels routine delta preparation before RPC submission",async()=>{
+    const base=createRuntimeCheckpoint(sharedState(1),4); const checkpoint=createRuntimeCheckpoint(sharedState(2),5);
+    const mockClient=client({data:{checkpoint_revision:5,payload_hash:checkpoint.payloadHash,provenance_hash:checkpoint.provenanceHash}}) as never;
+    const repository=new SupabaseRuntimeCheckpointRepository(mockClient);
+    await expect(repository.publish({leaseId:"L",exerciseId:"E",writerInstanceId:"W",userId:"U",expiresAt:"x"},4,checkpoint,base,{
+      priority:"ROUTINE",yieldControl:async()=>undefined,shouldContinue:()=>false,
+    })).rejects.toThrow("GENERATION_STOPPED");
+    expect((mockClient as {rpc:jest.Mock}).rpc).not.toHaveBeenCalled();
+  });
+  test("supersession after RPC submission reconciles the submitted authority result",async()=>{
+    const checkpoint=createRuntimeCheckpoint(sharedState(2),5); let active=true;
+    const mockClient=client({data:{checkpoint_revision:5,payload_hash:checkpoint.payloadHash,provenance_hash:checkpoint.provenanceHash}}) as never;
+    const repository=new SupabaseRuntimeCheckpointRepository(mockClient);
+    await expect(repository.publish({leaseId:"L",exerciseId:"E",writerInstanceId:"W",userId:"U",expiresAt:"x"},4,checkpoint,undefined,{
+      priority:"ROUTINE",yieldControl:async()=>undefined,shouldContinue:()=>active,onRpcSubmitted:()=>{active=false;},
+    })).resolves.toMatchObject({status:"PUBLISHED",checkpoint:{payloadHash:checkpoint.payloadHash}});
+    expect((mockClient as {rpc:jest.Mock}).rpc).toHaveBeenCalledTimes(1);
+  });
   test("loads only checkpoint notification metadata for subscription reconciliation",async()=>{
     const mockClient=client({data:{exercise_id:"E",checkpoint_revision:5,payload_hash:"H",provenance_hash:"P",writer_instance_id:"W",updated_at:"2026-08-26T00:00:00Z",checkpoint_bytes:12345}}) as never;
     const repository=new SupabaseRuntimeCheckpointRepository(mockClient);

@@ -6,6 +6,7 @@ import { stableJson } from "@/utils/stableJson";
 import { sha256Text } from "@/utils/sha256";
 import { notifySync } from "@/services/SyncService";
 import { runtimeWritesAllowed } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
+import { beginRuntimeCompletionCheckpointIntent } from "@/services/runtime/persistence/RuntimeCheckpointLifecycleIntent";
 
 const results = new Map<string, ExerciseControlResult>();
 const audit: ExerciseControlAuditEntry[] = [];
@@ -39,8 +40,12 @@ export function handleExerciseControlCommand(command: ExerciseControlCommand): E
     return result;
   }
   let applied: ReturnType<typeof owner.apply>;
-  try { applied = owner.apply(command); }
+  const settleCompletionIntent = command.commandType === "COMPLETE_EXERCISE"
+    ? beginRuntimeCompletionCheckpointIntent()
+    : undefined;
+  try { applied = owner.apply(command); settleCompletionIntent?.(true); }
   catch {
+    settleCompletionIntent?.(false);
     const result: ExerciseControlResult = { ok: false, commandId: command.commandId, errorCode: "RUNTIME_FAILURE", message: "Authoritative runtime rejected the command" };
     results.set(command.commandId, result);
     audit.push({ commandId: command.commandId, exerciseId: command.exerciseId, commandType: command.commandType, issuer: command.issuedBy,

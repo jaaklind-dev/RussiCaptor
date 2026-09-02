@@ -4,6 +4,7 @@ import path from "path";
 import {
   isCheckpointPublicationBoundary,
   isIdenticalCheckpointPayload,
+  checkpointPublicationPriority,
   ROUTINE_CHECKPOINT_PUBLICATION_MS,
 } from "@/services/RuntimeCheckpointSyncService";
 import {
@@ -58,5 +59,7 @@ describe("WP-47A Supabase egress hardening",()=>{
     expect(isCheckpointPublicationBoundary(before,checkpoint({interventions:[{} as never]},"I"))).toBe(true);
     expect(isCheckpointPublicationBoundary(before,checkpoint({exerciseSession:{exerciseId:"E",lifecycleState:"PAUSED",simulationTimeSec:10} as never},"L"))).toBe(true);
     expect(isCheckpointPublicationBoundary(before,checkpoint({exerciseSession:{exerciseId:"E",lifecycleState:"RUNNING",simulationTimeSec:11} as never},"C"))).toBe(false);
+    expect(checkpointPublicationPriority(before)).toBe("ROUTINE");
+    expect(checkpointPublicationPriority(checkpoint({exerciseSession:{exerciseId:"E",lifecycleState:"COMPLETED",simulationTimeSec:10} as never},"DONE"))).toBe("LIFECYCLE_CRITICAL");
   });
 });

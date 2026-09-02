@@ -6,10 +6,22 @@ import type {
   WriterAcquisitionResult,
 } from "@/models/RuntimeCheckpointAuthority";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
-import { estimateSupabasePayloadBytes, recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
+import { estimateSupabasePayloadBytes, isSupabaseTrafficMetricsEnabled, recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
 import { parseRuntimeCheckpointMetadata, type RuntimeCheckpointMetadata } from "@/services/runtime/persistence/RuntimeCheckpointMetadataCoordinator";
-import { createRuntimeCheckpointDelta, type RuntimeCheckpointDelta } from "@/services/runtime/persistence/RuntimeCheckpointDeltaService";
+import {
+  createRuntimeCheckpointDeltaAsync,
+  RuntimeCheckpointDeltaBuildCancelledError,
+  type RuntimeCheckpointDelta,
+} from "@/services/runtime/persistence/RuntimeCheckpointDeltaService";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
+
+export type RuntimeCheckpointPublicationControl = Readonly<{
+  priority: "ROUTINE" | "LIFECYCLE_CRITICAL";
+  yieldControl: PipelineYield;
+  shouldContinue: () => boolean;
+  onRpcSubmitted?: () => void;
+}>;
 
 export interface RuntimeCheckpointRepository {
   loadLatest(exerciseId: string, trafficEndpoint?: string): Promise<RuntimeCheckpointEnvelope<SharedExerciseState> | undefined>;
@@ -19,7 +31,7 @@ export interface RuntimeCheckpointRepository {
   acquireWriter(exerciseId: string, writerInstanceId: string, expectedRevision: number, leaseSec: number): Promise<WriterAcquisitionResult>;
   renewWriter(lease: RuntimeWriterLease, leaseSec: number): Promise<WriterAcquisitionResult>;
   releaseWriter(lease: RuntimeWriterLease): Promise<void>;
-  publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, baseCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>): Promise<CheckpointPublishResult<SharedExerciseState>>;
+  publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, baseCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>, control?: RuntimeCheckpointPublicationControl): Promise<CheckpointPublishResult<SharedExerciseState>>;
 }
 
 export type RuntimeCheckpointDeltaMetadata = Readonly<{
@@ -153,19 +165,45 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
     recordSupabaseTraffic({ operation: "RPC", endpoint: "release_runtime_writer" });
     if (error) throw new Error(code(error.message));
   }
-  async publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, baseCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>): Promise<CheckpointPublishResult<SharedExerciseState>> {
-    const delta = baseCheckpoint?.checkpointRevision === expectedRevision ? createRuntimeCheckpointDelta(baseCheckpoint, checkpoint) : undefined;
+  async publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, baseCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>, control?: RuntimeCheckpointPublicationControl): Promise<CheckpointPublishResult<SharedExerciseState>> {
+    const endRequestObject = startRuntimeWorkTrace("REMOTE_PUB_REQUEST_OBJECT", { checkpointRevision: checkpoint.checkpointRevision });
+    const ensureActive = (): void => {
+      if (control?.shouldContinue() === false) throw new RuntimeCheckpointDeltaBuildCancelledError();
+    };
+    ensureActive();
+    const delta = baseCheckpoint?.checkpointRevision === expectedRevision
+      ? await createRuntimeCheckpointDeltaAsync(baseCheckpoint, checkpoint, {
+          yieldControl: control?.yieldControl ?? (() => new Promise(resolve => setTimeout(resolve, 0))),
+          shouldContinue: control?.shouldContinue,
+        })
+      : undefined;
+    ensureActive();
     let rpcName = delta && deltaRpcAvailable !== false ? "publish_runtime_checkpoint_delta" : "publish_runtime_checkpoint_metadata";
     let rpcArgs = { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_expected_revision: expectedRevision, p_checkpoint: checkpoint, ...(delta && rpcName === "publish_runtime_checkpoint_delta" ? { p_delta: delta } : {}) };
+    endRequestObject({ rpcName, deltaOperationCount: delta?.operations.length ?? 0, priority: control?.priority });
+    ensureActive();
+    const endSupabaseCall = startRuntimeWorkTrace("REMOTE_PUB_SUPABASE_CALL", { rpcName });
+    control?.onRpcSubmitted?.();
     let response = await this.client.rpc(rpcName, rpcArgs);
+    endSupabaseCall({ rpcName, errorPresent: Boolean(response.error) });
     if (response.error && rpcName === "publish_runtime_checkpoint_delta" && (response.error.code === "PGRST202" || response.error.message.includes("publish_runtime_checkpoint_delta"))) {
       deltaRpcAvailable = false;
       rpcName = "publish_runtime_checkpoint_metadata";
       rpcArgs = { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_expected_revision: expectedRevision, p_checkpoint: checkpoint };
+      const endFallbackCall = startRuntimeWorkTrace("REMOTE_PUB_SUPABASE_CALL", { rpcName, fallback: true });
+      control?.onRpcSubmitted?.();
       response = await this.client.rpc(rpcName, rpcArgs);
+      endFallbackCall({ rpcName, fallback: true, errorPresent: Boolean(response.error) });
     } else if (!response.error && rpcName === "publish_runtime_checkpoint_delta") deltaRpcAvailable = true;
+    const endResponseProcess = startRuntimeWorkTrace("REMOTE_PUB_RESPONSE_PROCESS", { rpcName });
     const { data, error } = response;
-    recordSupabaseTraffic({ operation: "RPC", endpoint: rpcName, data, requestBytes: estimateSupabasePayloadBytes(rpcArgs) });
+    const endTrafficMeasurement = startRuntimeWorkTrace("REMOTE_PUB_REQUEST_SERIALIZE", { rpcName, measurementOnly: true });
+    // Egress instrumentation must not synchronously serialize a second copy of
+    // a multi-megabyte request when metrics are disabled in production.
+    const requestBytes = isSupabaseTrafficMetricsEnabled() ? estimateSupabasePayloadBytes(rpcArgs) : 0;
+    endTrafficMeasurement({ rpcName, requestBytes, measured: isSupabaseTrafficMetricsEnabled() });
+    recordSupabaseTraffic({ operation: "RPC", endpoint: rpcName, data, requestBytes });
+    endResponseProcess({ rpcName, errorPresent: Boolean(error), responseRows: Array.isArray(data) ? data.length : data == null ? 0 : 1 });
     if (error) {
       const diagnostic = code(error.message);
       return { status: diagnostic === "STALE_WRITER" ? "STALE_CHECKPOINT_WRITER" : diagnostic === "CHECKPOINT_REVISION_CONFLICT" ? "REVISION_CONFLICT" : "AUTHORITY_UNAVAILABLE", code: diagnostic as never };

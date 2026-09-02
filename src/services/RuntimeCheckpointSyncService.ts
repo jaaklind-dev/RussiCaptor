@@ -31,6 +31,7 @@ import { isSharedWorkflowValidationHarnessEnabled } from "@/config/SharedWorkflo
 import { getRuntimeLeaseLifecycleTrace, nextRuntimeLeaseTraceLabel, startRuntimeWorkTrace, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { getNativeLeaseHeartbeatDiagnostic, isNativeLeaseHeartbeatAvailable } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeat";
 import { RuntimeNativeLeaseHeartbeatController, type NativeLeaseHeartbeatSession } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeatController";
+import { installRuntimeCompletionIntentListener } from "@/services/runtime/persistence/RuntimeCheckpointLifecycleIntent";
 
 const LEASE_SECONDS = 60;
 const RENEW_MS = 20_000;
@@ -519,6 +520,12 @@ export function isIdenticalCheckpointPayload(
   return previous?.exerciseId === next.exerciseId && previous.payloadHash === next.payloadHash;
 }
 
+export function checkpointPublicationPriority(
+  checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>,
+): "ROUTINE" | "LIFECYCLE_CRITICAL" {
+  return checkpointLifecycle(checkpoint) === "COMPLETED" ? "LIFECYCLE_CRITICAL" : "ROUTINE";
+}
+
 export async function takeOverRuntimeWriter(): Promise<Status> {
   if (!supabase) return { state:"DISABLED" };
   const repository=new SupabaseRuntimeCheckpointRepository(supabase);
@@ -695,6 +702,10 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   let publishInFlight=false;
   let publishQueued=false;
   let publicationDirty=false;
+  let publicationIntentGeneration=0;
+  let terminalIntentGeneration:number|undefined;
+  let resolveTerminalPublication:(()=>void)|undefined;
+  let activePublicationPriority:"ROUTINE"|"LIFECYCLE_CRITICAL"|undefined;
   let routinePublishTimer:ReturnType<typeof setTimeout>|undefined;
   let publicationRetryTimer:ReturnType<typeof setTimeout>|undefined;
   let lastPublishedCheckpoint=remote ?? (resolved.status!=="NONE"&&resolved.status!=="CONFLICT" ? resolved.checkpoint : undefined);
@@ -704,6 +715,20 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     checkpoint:RuntimeCheckpointEnvelope<SharedExerciseState>;
     resolve:(result:RuntimeCheckpointPublicationTerminal)=>void;
   }>|undefined;
+  const registerLifecycleCriticalIntent=(fromCommandIntent=false)=>{
+    const snapshot=getCanonicalExerciseSnapshot();
+    if(snapshot.exerciseId!==exerciseId||(!fromCommandIntent&&snapshot.lifecycleState!=="COMPLETED")||terminalIntentGeneration!==undefined)return;
+    terminalIntentGeneration=++publicationIntentGeneration;
+    publishQueued=true;
+    const terminalDrain=new Promise<void>(resolve=>{resolveTerminalPublication=resolve;});
+    publicationBarrier=terminalDrain;
+    traceRuntimeLeaseLifecycle("CHECKPOINT_LIFECYCLE_PRIORITY_REGISTERED",{generation:traceGeneration,detail:{intentGeneration:terminalIntentGeneration,activePublicationPriority:activePublicationPriority??"NONE"}});
+  };
+  const cancelLifecycleCriticalIntent=()=>{
+    if(terminalIntentGeneration===undefined)return;
+    terminalIntentGeneration=undefined;
+    resolveTerminalPublication?.();resolveTerminalPublication=undefined;
+  };
   const schedulePublicationRetry=()=>{
     if(generationStopped()||publicationRetryTimer||!publicationDirty||!lease||status.state!=="WRITER")return;
     publicationRetryTimer=setTimeout(()=>{publicationRetryTimer=undefined;requestPublish();},ROUTINE_CHECKPOINT_PUBLICATION_MS);
@@ -715,32 +740,61 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         publishQueued=false;
         const checkpoint=getLocalRuntimeCheckpoint(); if(!checkpoint||!lease||status.state!=="WRITER"||checkpoint.checkpointRevision<=remoteRevision||isIdenticalCheckpointPayload(lastPublishedCheckpoint,checkpoint)) return;
         publicationDirty=true;
+        const priority=checkpointPublicationPriority(checkpoint);
+        const intentGeneration=priority==="LIFECYCLE_CRITICAL"?(terminalIntentGeneration??++publicationIntentGeneration):publicationIntentGeneration;
+        if(priority==="LIFECYCLE_CRITICAL")terminalIntentGeneration=intentGeneration;
+        activePublicationPriority=priority;
+        let rpcSubmitted=false;
+        let publicationSuperseded=false;
         const endPublish = startRuntimeWorkTrace("CHECKPOINT_REMOTE_PUBLICATION", {
           checkpointRevision: checkpoint.checkpointRevision,
+          priority,
+          intentGeneration,
         });
-        const echoAcknowledgement=new Promise<Awaited<ReturnType<typeof publishRuntimeCheckpointTerminal>>>(resolve=>{
-          pendingWriterEcho={payloadHash:checkpoint.payloadHash,checkpoint,resolve};
+        const echoAcknowledgement=new Promise<{source:"ECHO";result:Awaited<ReturnType<typeof publishRuntimeCheckpointTerminal>>}>(resolve=>{
+          pendingWriterEcho={payloadHash:checkpoint.payloadHash,checkpoint,resolve:result=>resolve({source:"ECHO",result})};
         });
-        const result=await Promise.race([publishRuntimeCheckpointTerminal(repository,lease,remoteRevision,checkpoint,undefined,lastPublishedCheckpoint),echoAcknowledgement]);
+        const publication=publishRuntimeCheckpointTerminal(repository,lease,remoteRevision,checkpoint,undefined,lastPublishedCheckpoint,{
+          priority,
+          yieldControl:yieldToEventLoop,
+          shouldContinue:()=>!generationStopped()&&!publicationSuperseded&&(priority==="LIFECYCLE_CRITICAL"||terminalIntentGeneration===undefined)&&intentGeneration===publicationIntentGeneration,
+          onRpcSubmitted:()=>{rpcSubmitted=true;traceRuntimeLeaseLifecycle("CHECKPOINT_PUBLICATION_RPC_SUBMITTED",{generation:traceGeneration,detail:{priority,intentGeneration}});},
+        }).then(result=>({source:"RPC" as const,result}));
+        const settled=await Promise.race([publication,echoAcknowledgement]);
+        if(settled.source==="ECHO")publicationSuperseded=true;
+        const result=settled.result;
         if(generationStopped()) { endPublish({ outcome: "GENERATION_STOPPED" }); return; }
         if(pendingWriterEcho?.payloadHash===checkpoint.payloadHash)pendingWriterEcho=undefined;
+        if(result.state==="GENERATION_STOPPED") {
+          publicationDirty=true;
+          endPublish({outcome:"GENERATION_STOPPED",priority,intentGeneration,rpcSubmitted});
+          traceRuntimeLeaseLifecycle("CHECKPOINT_PUBLICATION_PREEMPTED",{generation:traceGeneration,detail:{priority,intentGeneration,rpcSubmitted}});
+          continue;
+        }
         if(result.state==="PUBLISHED") {
           const currentLocal=getLocalRuntimeCheckpoint();
           // A newer prepared checkpoint may exist by the time this ACK arrives.
           // Never replace that dirty canonical state with an older acknowledged
           // envelope; advance only the remote publication cursor.
-          if(!currentLocal||currentLocal.checkpointRevision<=result.checkpoint.checkpointRevision||isIdenticalCheckpointPayload(currentLocal,result.checkpoint))localRuntimeCheckpointStore.accept(result.checkpoint);
+          const shouldAccept=!currentLocal||currentLocal.checkpointRevision<=result.checkpoint.checkpointRevision||isIdenticalCheckpointPayload(currentLocal,result.checkpoint);
+          const endLocalAcknowledgement=startRuntimeWorkTrace("REMOTE_PUB_LOCAL_ACKNOWLEDGEMENT",{checkpointRevision:result.checkpoint.checkpointRevision});
+          if(shouldAccept)localRuntimeCheckpointStore.acceptPublishedAcknowledgement(checkpoint,result.checkpoint);
+          endLocalAcknowledgement({checkpointRevision:result.checkpoint.checkpointRevision,accepted:shouldAccept});
           lastPublishedCheckpoint=result.checkpoint;lastPublicationAt=Date.now();lastCheckpointPublicationAt=new Date(lastPublicationAt).toISOString();remoteRevision=result.checkpoint.checkpointRevision;
           publicationDirty=Boolean(currentLocal&&!isIdenticalCheckpointPayload(result.checkpoint,currentLocal));
+          if(priority==="LIFECYCLE_CRITICAL"){
+            terminalIntentGeneration=undefined;
+            resolveTerminalPublication?.();resolveTerminalPublication=undefined;
+          }
           setStatus({state:"WRITER",revision:remoteRevision});
-          endPublish({ outcome: "PUBLISHED" });
+          endPublish({ outcome: "PUBLISHED",priority,intentGeneration,rpcSubmitted });
         }
         else if(publicationResultRevokesWriter(result.state)) { endPublish({ outcome: result.state }); lease=undefined; stopClockRunner(); setStatus({state:"CONFLICT",code:result.code}); return; }
         else { endPublish({ outcome: result.state }); publicationDirty=true;setStatus({state:"WRITER",code:result.code,revision:remoteRevision});schedulePublicationRetry(); }
       } while(publishQueued);
     } catch {
       publicationDirty=true;schedulePublicationRetry();
-    } finally { publishInFlight=false;if(publicationDirty)schedulePublicationRetry(); }
+    } finally { activePublicationPriority=undefined;publishInFlight=false;if(publicationDirty&&terminalIntentGeneration===undefined)schedulePublicationRetry(); }
   };
   const publishNow=()=>{
     if(generationStopped())return;
@@ -754,12 +808,22 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     const checkpoint=getLocalRuntimeCheckpoint();
     if(!checkpoint||isIdenticalCheckpointPayload(lastPublishedCheckpoint,checkpoint))return;
     publicationDirty=true;
+    if(checkpointPublicationPriority(checkpoint)==="LIFECYCLE_CRITICAL"){
+      registerLifecycleCriticalIntent();
+      publishQueued=true;
+      if(publishInFlight)return;
+      publishNow();return;
+    }
     if(isCheckpointPublicationBoundary(lastPublishedCheckpoint,checkpoint)){publishNow();return;}
     if(routinePublishTimer)return;
     const remaining=Math.max(0,ROUTINE_CHECKPOINT_PUBLICATION_MS-(Date.now()-lastPublicationAt));
     routinePublishTimer=setTimeout(()=>{routinePublishTimer=undefined;publishNow();},remaining);
   };
   wakeCheckpointPublicationForCurrentWriter=requestPublish;
+  // Register lifecycle priority as soon as the canonical lifecycle changes;
+  // terminal checkpoint preparation may still be cooperatively in progress.
+  const stopLifecyclePriority=subscribeToSync(()=>registerLifecycleCriticalIntent(false));
+  const stopCompletionIntent=installRuntimeCompletionIntentListener(active=>active?registerLifecycleCriticalIntent(true):cancelLifecycleCriticalIntent());
   // Prepared checkpoints are the single canonical publication trigger.
   // Listening to SyncService here duplicated every trigger before capture.
   const stopPrepared=subscribeToLocalRuntimeCheckpointPrepared(requestPublish);
@@ -920,7 +984,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     }
     if(channelStatus==="SUBSCRIBED"&&!generationStopped()){renewalLoop?.wake();requestPublish();}
   });
-  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });stopped=true;appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration)lease=undefined;};
+  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });stopped=true;appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();stopLifecyclePriority();stopCompletionIntent();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration)lease=undefined;};
 }
 
 async function startRuntimeCheckpointSyncOnce(): Promise<()=>void> {
@@ -957,9 +1021,11 @@ async function startRuntimeCheckpointSyncOnce(): Promise<()=>void> {
       {exerciseId:activeExerciseId,activeLifecycle},
       {exerciseId:nextExerciseId,activeLifecycle:nextActiveLifecycle},
     ))return;
+    const terminalTransition=activeLifecycle&&!nextActiveLifecycle;
     activeExerciseId=nextExerciseId;
     activeLifecycle=nextActiveLifecycle;
     switchChain=switchChain.then(async()=>{
+      if(terminalTransition)await publicationBarrier;
       stopActive();
       const nextStop=await startRuntimeCheckpointSyncForExercise(activeExerciseId);
       if(stopped)nextStop();else stopActive=nextStop;
