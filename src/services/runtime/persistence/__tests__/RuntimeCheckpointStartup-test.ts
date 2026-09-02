@@ -629,7 +629,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const loadStart = persistence.indexOf("export async function loadPersistedState");
     const restoreStart = persistence.indexOf("function restoreCanonicalRuntime", loadStart);
     const load = persistence.slice(loadStart, restoreStart);
-    expect(load).toContain("restoreCanonicalRuntime(restored, false)");
+    expect(load).toContain("restoreCanonicalRuntime(runtimeRestore, false)");
     expect(load).not.toContain("restoreCanonicalRuntime(restored, true)");
   });
 

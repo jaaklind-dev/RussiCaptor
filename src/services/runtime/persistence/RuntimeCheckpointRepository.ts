@@ -9,6 +9,7 @@ import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { estimateSupabasePayloadBytes, recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
 import { parseRuntimeCheckpointMetadata, type RuntimeCheckpointMetadata } from "@/services/runtime/persistence/RuntimeCheckpointMetadataCoordinator";
 import { createRuntimeCheckpointDelta, type RuntimeCheckpointDelta } from "@/services/runtime/persistence/RuntimeCheckpointDeltaService";
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
 export interface RuntimeCheckpointRepository {
   loadLatest(exerciseId: string, trafficEndpoint?: string): Promise<RuntimeCheckpointEnvelope<SharedExerciseState> | undefined>;
@@ -74,17 +75,21 @@ function code(message: string): string {
 export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRepository {
   constructor(private readonly client: SupabaseClient) {}
   async loadLatest(exerciseId: string, trafficEndpoint = "runtime_checkpoints.payload") {
+    const endFetch = startRuntimeWorkTrace("STARTUP_CHECKPOINT_FETCH", { endpoint: trafficEndpoint });
     const { data, error } = await this.client.from("runtime_checkpoints").select("payload")
       .eq("exercise_id", exerciseId).maybeSingle();
     recordSupabaseTraffic({ operation: "SELECT", endpoint: trafficEndpoint, data, fullSnapshot: true });
+    endFetch({ payloadBytes: estimateSupabasePayloadBytes(data) });
     if (error) throw new Error("AUTHORITY_UNAVAILABLE");
     return data?.payload as RuntimeCheckpointEnvelope<SharedExerciseState> | undefined;
   }
   async loadLatestMetadata(exerciseId: string, trafficEndpoint = "runtime_checkpoint_notifications.metadata"): Promise<RuntimeCheckpointMetadata | undefined> {
+    const endMetadata = startRuntimeWorkTrace("STARTUP_CHECKPOINT_METADATA", { endpoint: trafficEndpoint });
     const { data, error } = await this.client.from("runtime_checkpoint_notifications")
       .select("exercise_id,checkpoint_revision,payload_hash,provenance_hash,writer_instance_id,updated_at,checkpoint_bytes")
       .eq("exercise_id", exerciseId).maybeSingle();
     recordSupabaseTraffic({ operation: "SELECT", endpoint: trafficEndpoint, data });
+    endMetadata({ responseBytes: estimateSupabasePayloadBytes(data) });
     if (error) throw new Error("AUTHORITY_UNAVAILABLE");
     return parseRuntimeCheckpointMetadata(data);
   }

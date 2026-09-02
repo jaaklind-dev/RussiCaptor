@@ -6,11 +6,15 @@ import {
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { sha256Text, sha256TextAsync } from "@/utils/sha256";
 import { stableJson, stableJsonAsync } from "@/utils/stableJson";
-import { isCapturedCanonicalRuntimeArtifact } from "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
+import { isCapturedCanonicalRuntimeArtifact, markCheckpointValidatedRuntimeArtifacts } from "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
 const validatedImmutableCheckpoints = new WeakSet<object>();
+const UI_VALUES_PER_SLICE = 128;
+const UI_CHARACTERS_PER_SLICE = 8_192;
+const UI_SHA_BLOCKS_PER_SLICE = 16;
+const UI_MAX_SLICE_MS = 8;
 
 function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
   if (!value || typeof value !== "object" || seen.has(value as object)) return value;
@@ -21,6 +25,7 @@ function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
 
 function markCheckpointValidated<T extends RuntimeCheckpointEnvelope<SharedExerciseState>>(value: T): T {
   deepFreeze(value);
+  markCheckpointValidatedRuntimeArtifacts(value.payload.persistedRuntimeStates);
   validatedImmutableCheckpoints.add(value);
   return value;
 }
@@ -41,6 +46,7 @@ async function markCheckpointValidatedAsync<T extends RuntimeCheckpointEnvelope<
     visited += 1;
     if (visited % 4_096 === 0) await yieldControl();
   }
+  markCheckpointValidatedRuntimeArtifacts(value.payload.persistedRuntimeStates);
   validatedImmutableCheckpoints.add(value);
   return value;
 }
@@ -72,17 +78,24 @@ function hasValidActiveRuntimeCoverage(state: SharedExerciseState): boolean {
 }
 
 function hasValidRuntimeItems(state: SharedExerciseState): boolean {
-  return (state.persistedRuntimeStates ?? []).every(item =>
-    item.provenance.exerciseId === state.exerciseSession.exerciseId &&
-    (isCapturedCanonicalRuntimeArtifact(item) || item.payloadHash === sha256Text(stableJson(item.payload))));
+  return (state.persistedRuntimeStates ?? []).every((item, runtimeIndex) => {
+    if (item.provenance.exerciseId !== state.exerciseSession.exerciseId) return false;
+    if (isCapturedCanonicalRuntimeArtifact(item)) return true;
+    const endRuntimeHash = startRuntimeWorkTrace("STARTUP_CHECKPOINT_RUNTIME_HASH", { runtimeIndex });
+    const valid = item.payloadHash === sha256Text(stableJson(item.payload));
+    endRuntimeHash({ runtimeIndex });
+    return valid;
+  });
 }
 
 async function hasValidRuntimeItemsAsync(state: SharedExerciseState, yieldControl: PipelineYield): Promise<boolean> {
   for (const item of state.persistedRuntimeStates ?? []) {
     if (item.provenance.exerciseId !== state.exerciseSession.exerciseId) return false;
     if (!isCapturedCanonicalRuntimeArtifact(item)) {
-      const canonical = await stableJsonAsync(item.payload, { yieldControl });
-      if (item.payloadHash !== await sha256TextAsync(canonical, { yieldControl })) return false;
+      const canonical = await stableJsonAsync(item.payload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "RUNTIME_PAYLOAD" });
+      if (item.payloadHash !== await sha256TextAsync(canonical, {
+        yieldControl, charactersPerSlice: UI_CHARACTERS_PER_SLICE, blocksPerSlice: UI_SHA_BLOCKS_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "RUNTIME_PAYLOAD",
+      })) return false;
     }
   }
   return true;
@@ -124,15 +137,17 @@ export async function createRuntimeCheckpointAsync(
     throw new Error("ACTIVE_RUNTIME_PERSISTENCE_MISSING");
   }
   await yieldControl();
-  const endClone = startRuntimeWorkTrace("CHECKPOINT_STRUCTURED_CLONE");
+  const endClone = startRuntimeWorkTrace("CHECKPOINT_STRUCTURED_CLONE", { patientCount: payload.patients.length, runtimeCount: payload.persistedRuntimeStates?.length ?? 0 });
   const frozenPayload = structuredClone(payload);
   endClone();
   await yieldControl();
   const endSerialization = startRuntimeWorkTrace("CHECKPOINT_SERIALIZATION");
-  const canonical = await stableJsonAsync(frozenPayload, { yieldControl });
+  const canonical = await stableJsonAsync(frozenPayload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "FULL_CHECKPOINT" });
   endSerialization({ serializedBytes: canonical.length });
   const endHash = startRuntimeWorkTrace("CHECKPOINT_HASH");
-  const payloadHash = await sha256TextAsync(canonical, { yieldControl });
+  const payloadHash = await sha256TextAsync(canonical, {
+    yieldControl, charactersPerSlice: UI_CHARACTERS_PER_SLICE, blocksPerSlice: UI_SHA_BLOCKS_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "FULL_CHECKPOINT",
+  });
   endHash({ serializedBytes: canonical.length });
   const checkpoint = {
     envelopeVersion: RUNTIME_CHECKPOINT_ENVELOPE_VERSION,
@@ -154,15 +169,102 @@ export function isValidRuntimeCheckpoint(
   value: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined,
 ): value is RuntimeCheckpointEnvelope<SharedExerciseState> {
   if (value && validatedImmutableCheckpoints.has(value)) return true;
+  const endEnvelope = startRuntimeWorkTrace("STARTUP_CHECKPOINT_ENVELOPE_VALIDATE");
+  if (!value || value.envelopeVersion !== RUNTIME_CHECKPOINT_ENVELOPE_VERSION ||
+    !Number.isSafeInteger(value.checkpointRevision) || value.checkpointRevision < 1 ||
+    value.exerciseId !== exerciseIdOf(value.payload)) { endEnvelope({ valid: false }); return false; }
+  endEnvelope({ valid: true });
+  const endPayloadHash = startRuntimeWorkTrace("STARTUP_CHECKPOINT_FULL_HASH");
+  if (value.payloadHash !== sha256Text(stableJson(value.payload))) { endPayloadHash({ valid: false }); return false; }
+  endPayloadHash({ valid: true });
+  const endCoverage = startRuntimeWorkTrace("STARTUP_CHECKPOINT_RUNTIME_COVERAGE");
+  if (!hasValidActiveRuntimeCoverage(value.payload)) { endCoverage({ valid: false }); return false; }
+  endCoverage({ valid: true });
+  const endRuntimeItems = startRuntimeWorkTrace("STARTUP_CHECKPOINT_RUNTIME_ITEMS");
+  if (!hasValidRuntimeItems(value.payload)) { endRuntimeItems({ valid: false }); return false; }
+  endRuntimeItems({ valid: true });
+  const endProvenance = startRuntimeWorkTrace("STARTUP_CHECKPOINT_PROVENANCE_HASH");
+  if (value.provenanceHash !== provenanceHashOf(value.payload)) { endProvenance({ valid: false }); return false; }
+  endProvenance({ valid: true });
+  const endFreeze = startRuntimeWorkTrace("STARTUP_CHECKPOINT_FREEZE");
+  markCheckpointValidated(value);
+  endFreeze();
+  return true;
+}
+
+/**
+ * Startup-only counterpart to the fail-closed synchronous validator. It uses
+ * the identical canonical JSON and SHA-256 definitions, but permits the UI
+ * thread to yield between bounded serializer/hash slices.
+ */
+export async function isValidRuntimeCheckpointAsync(
+  value: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined,
+  yieldControl: PipelineYield,
+): Promise<boolean> {
+  if (value && validatedImmutableCheckpoints.has(value)) return true;
   if (!value || value.envelopeVersion !== RUNTIME_CHECKPOINT_ENVELOPE_VERSION ||
     !Number.isSafeInteger(value.checkpointRevision) || value.checkpointRevision < 1 ||
     value.exerciseId !== exerciseIdOf(value.payload)) return false;
-  if (value.payloadHash !== sha256Text(stableJson(value.payload)) ||
-    !hasValidActiveRuntimeCoverage(value.payload) ||
-    !hasValidRuntimeItems(value.payload)) return false;
-  if (value.provenanceHash !== provenanceHashOf(value.payload)) return false;
-  markCheckpointValidated(value);
+  const canonical = await stableJsonAsync(value.payload, {
+    yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "FULL_CHECKPOINT",
+  });
+  const payloadHash = await sha256TextAsync(canonical, {
+    yieldControl, charactersPerSlice: UI_CHARACTERS_PER_SLICE, blocksPerSlice: UI_SHA_BLOCKS_PER_SLICE,
+    maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "FULL_CHECKPOINT",
+  });
+  if (value.payloadHash !== payloadHash || !hasValidActiveRuntimeCoverage(value.payload) ||
+    !await hasValidRuntimeItemsAsync(value.payload, yieldControl) ||
+    value.provenanceHash !== provenanceHashOf(value.payload)) return false;
+  await markCheckpointValidatedAsync(value, yieldControl);
   return true;
+}
+
+/**
+ * The authoritative selection rules are deliberately identical to the
+ * synchronous resolver below.  Startup callers use this counterpart for a
+ * remotely deserialized envelope so canonicalization and hashing yield inside
+ * their real traversal work rather than blocking the React Native JS thread.
+ */
+export async function resolveAuthoritativeCheckpointAsync(
+  local: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined,
+  remote: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined,
+  yieldControl: PipelineYield,
+): Promise<CheckpointResolution<SharedExerciseState>> {
+  let localYields = 0;
+  const localYield: PipelineYield = async () => { localYields += 1; await yieldControl(); };
+  const endLocal = startRuntimeWorkTrace("STARTUP_CHECKPOINT_LOCAL_VALIDATE_ASYNC", {
+    checkpointRevision: local?.checkpointRevision,
+  });
+  const localValid = await isValidRuntimeCheckpointAsync(local, localYield);
+  endLocal({ valid: localValid, yieldCount: localYields });
+
+  let remoteYields = 0;
+  const remoteYield: PipelineYield = async () => { remoteYields += 1; await yieldControl(); };
+  const endRemote = startRuntimeWorkTrace("STARTUP_CHECKPOINT_REMOTE_VALIDATE_ASYNC", {
+    checkpointRevision: remote?.checkpointRevision,
+    persistedRuntimeCount: remote?.payload.persistedRuntimeStates?.length ?? 0,
+  });
+  const remoteValid = await isValidRuntimeCheckpointAsync(remote, remoteYield);
+  endRemote({ valid: remoteValid, yieldCount: remoteYields });
+  const validLocal = localValid ? local! : undefined;
+  const validRemote = remoteValid ? remote! : undefined;
+
+  if (!localValid && !remoteValid) return local || remote
+    ? { status: "CONFLICT", code: "CHECKPOINT_HASH_INVALID" }
+    : { status: "NONE" };
+  if (validLocal && validRemote && validLocal.exerciseId !== validRemote.exerciseId) {
+    return { status: "CONFLICT", code: "REMOTE_SYNC_CONFLICT" };
+  }
+  if (!validRemote) return { status: "LOCAL", checkpoint: validLocal! };
+  if (!validLocal) return { status: "REMOTE", checkpoint: validRemote };
+  if (validLocal.checkpointRevision === validRemote.checkpointRevision) {
+    return validLocal.payloadHash === validRemote.payloadHash
+      ? { status: "EQUIVALENT", checkpoint: validLocal }
+      : { status: "CONFLICT", code: "CHECKPOINT_REVISION_DIVERGENCE" };
+  }
+  return validLocal.checkpointRevision > validRemote.checkpointRevision
+    ? { status: "LOCAL", checkpoint: validLocal }
+    : { status: "REMOTE", checkpoint: validRemote };
 }
 
 export function resolveAuthoritativeCheckpoint(
@@ -232,6 +334,9 @@ class LocalRuntimeCheckpointStore {
   get(): RuntimeCheckpointEnvelope<SharedExerciseState> | undefined { return this.checkpoint; }
   restore(value: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined): void {
     this.checkpoint = value && isValidRuntimeCheckpoint(value) ? value : undefined;
+  }
+  async restoreAsync(value: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined, yieldControl: PipelineYield): Promise<void> {
+    this.checkpoint = value && await isValidRuntimeCheckpointAsync(value, yieldControl) ? value : undefined;
   }
   capture(payload: SharedExerciseState): RuntimeCheckpointEnvelope<SharedExerciseState> {
     const prior = this.checkpoint?.exerciseId === exerciseIdOf(payload) ? this.checkpoint.checkpointRevision : 0;

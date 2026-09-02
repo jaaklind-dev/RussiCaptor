@@ -13,14 +13,15 @@ import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { supabase } from "@/services/SupabaseService";
 import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
 import { subscribeToSync } from "@/services/SyncService";
-import { isValidRuntimeCheckpoint, localRuntimeCheckpointStore, resolveAgainstValidatedLocalCheckpoint, resolveAuthoritativeCheckpoint, resolveSubscribedCheckpoint } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
+import { isValidRuntimeCheckpoint, localRuntimeCheckpointStore, resolveAgainstValidatedLocalCheckpoint, resolveAuthoritativeCheckpointAsync, resolveSubscribedCheckpoint } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
+import { yieldToEventLoop } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import {
   SupabaseRuntimeCheckpointRepository,
   loadCheckpointFreshness,
   type RuntimeCheckpointRepository,
 } from "@/services/runtime/persistence/RuntimeCheckpointRepository";
 import { getRuntimeWriterInstanceId } from "@/services/runtime/persistence/RuntimeWriterIdentityService";
-import { setRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
+import { runtimeWritesAllowed, setRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { publishRuntimeCheckpointTerminal, type RuntimeCheckpointPublicationTerminal } from "@/services/runtime/persistence/RuntimeCheckpointPublicationService";
 import { isRemoteRuntimeLifecycleActive, waitForRemoteRuntimeLifecycleActive } from "@/services/CloudSyncService";
 import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
@@ -28,7 +29,7 @@ import { parseRuntimeCheckpointMetadata, RuntimeCheckpointMetadataCoordinator } 
 import { loadRuntimeCheckpointWithCache } from "@/services/runtime/persistence/RuntimeCheckpointHydrationService";
 import { isSharedWorkflowValidationHarnessEnabled } from "@/config/SharedWorkflowValidationHarness";
 import { getRuntimeLeaseLifecycleTrace, nextRuntimeLeaseTraceLabel, startRuntimeWorkTrace, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
-import { isNativeLeaseHeartbeatAvailable } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeat";
+import { getNativeLeaseHeartbeatDiagnostic, isNativeLeaseHeartbeatAvailable } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeat";
 import { RuntimeNativeLeaseHeartbeatController, type NativeLeaseHeartbeatSession } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeatController";
 
 const LEASE_SECONDS = 60;
@@ -409,6 +410,49 @@ export function getRuntimeCheckpointOperationalState() {
     leaseLifecycleTrace: getRuntimeLeaseLifecycleTrace(),
   });
 }
+
+/**
+ * Validation-only evidence for a lifecycle intent.  It never changes local
+ * authority and the remote lease read is deliberately metadata-only.  Native
+ * heartbeat activity is not treated as authority: the server lease still has
+ * to match the current Runtime writer.
+ */
+export async function traceRuntimeCompletionAuthority(stage: string): Promise<void> {
+  const currentLease = lease;
+  const localExpiryMs = currentLease ? Date.parse(currentLease.expiresAt) - Date.now() : undefined;
+  traceRuntimeLeaseLifecycle("COMPLETE_AUTHORITY_SNAPSHOT", {
+    detail: {
+      stage,
+      localAuthority: status.state,
+      localLeasePresent: Boolean(currentLease),
+      localLeaseFuture: localExpiryMs === undefined ? undefined : localExpiryMs > 0,
+      runtimeWritesAllowed: runtimeWritesAllowed(),
+    },
+  });
+  const native = await getNativeLeaseHeartbeatDiagnostic().catch(() => undefined);
+  traceRuntimeLeaseLifecycle("COMPLETE_NATIVE_HEARTBEAT_SNAPSHOT", {
+    detail: {
+      stage,
+      nativeState: native?.state ?? "UNAVAILABLE",
+      nativeRecentSuccess: Boolean(native?.lastSuccessExpiresAt),
+      nativeFailurePresent: Boolean(native?.lastFailure),
+    },
+  });
+  if (!supabase || !currentLease) return;
+  try {
+    const remoteLease = await new SupabaseRuntimeCheckpointRepository(supabase).loadWriterLease(currentLease.exerciseId);
+    traceRuntimeLeaseLifecycle("COMPLETE_SERVER_LEASE_SNAPSHOT", {
+      detail: {
+        stage,
+        remoteLeaseActive: Boolean(remoteLease),
+        remoteWriterMatchesLocal: Boolean(remoteLease && remoteLease.leaseId === currentLease.leaseId && remoteLease.writerInstanceId === currentLease.writerInstanceId),
+        remoteLeaseFuture: remoteLease ? Date.parse(remoteLease.expiresAt) > Date.now() : false,
+      },
+    });
+  } catch {
+    traceRuntimeLeaseLifecycle("COMPLETE_SERVER_LEASE_SNAPSHOT", { detail: { stage, remoteLeaseRead: "FAILED" } });
+  }
+}
 export function failRuntimeCheckpointStartup(error?: unknown): void {
   const code = error instanceof Error && error.message
     ? error.message
@@ -603,8 +647,16 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   let stopped=false;
   let local:RuntimeCheckpointEnvelope<SharedExerciseState>|undefined=checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId);
   let remote:RuntimeCheckpointEnvelope<SharedExerciseState>|undefined;
+  const endRemoteHydrationLoad = startRuntimeWorkTrace("STARTUP_REMOTE_HYDRATION_LOAD", {
+    localCheckpointRevision: local?.checkpointRevision,
+  });
   try { remote=await startupAwait(loadRuntimeCheckpointWithCache(repository,exerciseId,local,"startup")); }
   catch (error) { if (error instanceof Error && error.message === "AUTHORITY_STARTUP_TIMEOUT") throw error; setStatus({state:"OFFLINE"}); }
+  endRemoteHydrationLoad({
+    remoteCheckpointRevision: remote?.checkpointRevision,
+    remotePayloadHash: remote?.payloadHash,
+    persistedRuntimeCount: remote?.payload.persistedRuntimeStates?.length ?? 0,
+  });
   try { if(!remote && isActiveExercise())local=ensureLocalRuntimeCheckpoint(); }
   catch (error) {
     if(error instanceof Error && error.message==="ACTIVE_RUNTIME_PERSISTENCE_MISSING"){
@@ -613,7 +665,12 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     }
     throw error;
   }
-  const resolved=resolveAuthoritativeCheckpoint(local,remote);
+  const endRemoteResolution = startRuntimeWorkTrace("STARTUP_REMOTE_CHECKPOINT_RESOLUTION", {
+    localCheckpointRevision: local?.checkpointRevision,
+    remoteCheckpointRevision: remote?.checkpointRevision,
+  });
+  const resolved=await resolveAuthoritativeCheckpointAsync(local,remote,yieldToEventLoop);
+  endRemoteResolution({ status: resolved.status });
   if (resolved.status==="CONFLICT") setStatus({state:"CONFLICT",code:resolved.code});
   else if (resolved.status==="REMOTE") { acceptAuthoritativeRuntimeCheckpoint(resolved.checkpoint, false); stopClockRunner(); remoteRevision=resolved.checkpoint.checkpointRevision; setStatus({state:"READER",revision:remoteRevision}); }
   else if (resolved.status!=="NONE" && isActiveExercise()) {

@@ -5,7 +5,8 @@ import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
 import { PELVIC_INJURY_EXERCISE_PACKAGE, PLEURAL_INJURY_EXERCISE_PACKAGE } from "@/services/exercise/CanonicalExercisePackages";
 import { packagePatientDatasetRegistry } from "@/services/exercise/CanonicalPatientDatasets";
 import { CARDIAC_ARREST_REFERENCE_FIXTURE } from "@/services/golden/CardiacArrestReferenceFixture";
-import { canonicalRuntimePersistenceService, isCapturedCanonicalRuntimeArtifact, moduleCompositionHash } from "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
+import { canonicalRuntimePersistenceService, isCapturedCanonicalRuntimeArtifact, isCheckpointValidatedRuntimeArtifact, moduleCompositionHash } from "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
+import { createRuntimeCheckpoint } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 
 const tick = (patientId: string, step: number): GoldenInputEvent => ({
   sequenceId: "WP44A", step, offsetSec: step * 60, eventType: "ENGINE_TICK", actor: "ENGINE",
@@ -122,6 +123,23 @@ describe("WP-44A canonical runtime persistence", () => {
     const target = new ClinicalScenarioEngine(); canonicalRuntimePersistenceService.rehydrate(target, first, identity);
     const before = target.getHashes(); canonicalRuntimePersistenceService.rehydrate(target, first, identity);
     expect(target.getHashes()).toEqual(before);
+  });
+
+  test("checkpoint validation evidence is identity-bound and never trusts a clone", () => {
+    const pkg = PELVIC_INJURY_EXERCISE_PACKAGE; const sourceFixture = fixture(pkg); const identity = provenance(pkg, sourceFixture.patientId!);
+    const source = new ClinicalScenarioEngine(); source.reset(sourceFixture);
+    const artifact = canonicalRuntimePersistenceService.capture(source, identity);
+    const checkpoint = createRuntimeCheckpoint({
+      exerciseSession: { exerciseId: identity.exerciseId, lifecycleState: "RUNNING", simulationTimeSec: 0 } as never,
+      patients: [{ id: identity.patientId } as never], assignments: [], transfers: [], questions: [], labs: [], imagingStudies: [], orders: [], notes: [], scenarioEvents: [], timelineEvents: [],
+      persistedRuntimeStates: [structuredClone(artifact)],
+    }, 1);
+    const validated = checkpoint.payload.persistedRuntimeStates![0];
+    expect(isCheckpointValidatedRuntimeArtifact(validated)).toBe(true);
+    expect(isCheckpointValidatedRuntimeArtifact(structuredClone(validated))).toBe(false);
+    const resumed = new ClinicalScenarioEngine();
+    expect(() => canonicalRuntimePersistenceService.rehydrate(resumed, { ...validated, payloadHash: "corrupt" }, identity))
+      .toThrow(expect.objectContaining<Partial<RuntimePersistenceError>>({ code: "PAYLOAD_HASH_MISMATCH" }));
   });
 
   test("preserves Botulism root, HV and Hypoxia lifecycle state", () => {

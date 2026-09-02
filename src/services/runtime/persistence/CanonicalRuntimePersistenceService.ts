@@ -12,6 +12,15 @@ import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerat
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
 const capturedCanonicalArtifacts = new WeakSet<object>();
+// A checkpoint validator may establish that a deserialized artifact's exact
+// object identity is intact, hash-valid and deeply frozen. This evidence is
+// process-local only: clones, replacements and unvalidated artifacts never
+// inherit it.
+const checkpointValidatedRuntimeArtifacts = new WeakSet<object>();
+const UI_VALUES_PER_SLICE = 128;
+const UI_CHARACTERS_PER_SLICE = 8_192;
+const UI_SHA_BLOCKS_PER_SLICE = 16;
+const UI_MAX_SLICE_MS = 8;
 
 function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
   if (!value || typeof value !== "object" || seen.has(value as object)) return value;
@@ -34,6 +43,16 @@ async function deepFreezeAsync<T>(value: T, yieldControl: PipelineYield, seen = 
 /** True only for detached, deeply immutable artifacts created in this process. */
 export function isCapturedCanonicalRuntimeArtifact(value: PersistedRuntimeState): boolean {
   return capturedCanonicalArtifacts.has(value);
+}
+
+export function markCheckpointValidatedRuntimeArtifacts(
+  artifacts: readonly PersistedRuntimeState[] | undefined,
+): void {
+  artifacts?.forEach(artifact => checkpointValidatedRuntimeArtifacts.add(artifact));
+}
+
+export function isCheckpointValidatedRuntimeArtifact(value: PersistedRuntimeState): boolean {
+  return checkpointValidatedRuntimeArtifacts.has(value);
 }
 
 export function moduleCompositionHash(modules: readonly Readonly<{ moduleId: string; version: string }>[]): string {
@@ -70,10 +89,12 @@ export class CanonicalRuntimePersistenceService {
     });
     await yieldControl();
     const endSerialization = startRuntimeWorkTrace("RUNTIME_PAYLOAD_SERIALIZATION");
-    const canonical = await stableJsonAsync(payload, { yieldControl });
+    const canonical = await stableJsonAsync(payload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "RUNTIME_PAYLOAD" });
     endSerialization({ serializedBytes: canonical.length });
     const endHash = startRuntimeWorkTrace("RUNTIME_PAYLOAD_HASH");
-    const payloadHash = await sha256TextAsync(canonical, { yieldControl });
+    const payloadHash = await sha256TextAsync(canonical, {
+      yieldControl, charactersPerSlice: UI_CHARACTERS_PER_SLICE, blocksPerSlice: UI_SHA_BLOCKS_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "RUNTIME_PAYLOAD",
+    });
     endHash({ serializedBytes: canonical.length });
     await yieldControl();
     const endFreeze = startRuntimeWorkTrace("RUNTIME_PAYLOAD_FREEZE");
@@ -91,11 +112,16 @@ export class CanonicalRuntimePersistenceService {
   }
 
   rehydrate(engine: ClinicalScenarioEngine, artifact: PersistedRuntimeState, expected: RuntimeProvenance): void {
+    const endValidate = startRuntimeWorkTrace("STARTUP_RUNTIME_ARTIFACT_VALIDATE");
     this.validate(artifact, expected);
+    endValidate();
+    const endEngine = startRuntimeWorkTrace("STARTUP_RUNTIME_PAYLOAD_REHYDRATE");
     engine.rehydrateRuntimePayload(artifact.payload);
+    endEngine();
   }
 
   validate(artifact: PersistedRuntimeState, expected: RuntimeProvenance): void {
+    const endShape = startRuntimeWorkTrace("STARTUP_RUNTIME_ARTIFACT_SHAPE");
     if (!artifact || typeof artifact !== "object" || !artifact.payload || !artifact.provenance) {
       throw new RuntimePersistenceError("INVALID_ARTIFACT", "Persisted runtime artifact is malformed.");
     }
@@ -103,9 +129,13 @@ export class CanonicalRuntimePersistenceService {
       artifact.schemaVersion !== LEGACY_PERSISTED_RUNTIME_SCHEMA_VERSION) {
       throw new RuntimePersistenceError("UNSUPPORTED_SCHEMA_VERSION", `Runtime schema ${String(artifact.schemaVersion)} is unsupported.`);
     }
-    if (!isCapturedCanonicalRuntimeArtifact(artifact) && artifact.payloadHash !== sha256Text(stableJson(artifact.payload))) {
+    endShape();
+    const endPayloadHash = startRuntimeWorkTrace("STARTUP_RUNTIME_ARTIFACT_PAYLOAD_HASH");
+    if (!isCapturedCanonicalRuntimeArtifact(artifact) && !isCheckpointValidatedRuntimeArtifact(artifact) && artifact.payloadHash !== sha256Text(stableJson(artifact.payload))) {
       throw new RuntimePersistenceError("PAYLOAD_HASH_MISMATCH", "Persisted runtime payload hash does not match its content.");
     }
+    endPayloadHash();
+    const endMetadata = startRuntimeWorkTrace("STARTUP_RUNTIME_ARTIFACT_METADATA");
     if (artifact.capturedAtSimulationTimeSec !== artifact.payload.simulationTimeSec) {
       throw new RuntimePersistenceError("RUNTIME_INVARIANT_VIOLATION", "Persisted runtime clock does not match its capture metadata.");
     }
@@ -117,6 +147,7 @@ export class CanonicalRuntimePersistenceService {
     }
     if (artifact.provenance.definitionHash !== expected.definitionHash) throw new RuntimePersistenceError("DEFINITION_PROVENANCE_MISMATCH", "Persisted runtime definition hash does not match.");
     if (artifact.provenance.moduleCompositionHash !== expected.moduleCompositionHash) throw new RuntimePersistenceError("MODULE_COMPOSITION_MISMATCH", "Persisted runtime module composition does not match.");
+    endMetadata();
   }
 }
 

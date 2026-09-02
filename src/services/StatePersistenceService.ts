@@ -144,6 +144,7 @@ function collectSharedExerciseState(): SharedExerciseState {
 }
 
 async function collectSharedExerciseStateAsync(yieldControl: () => Promise<void>): Promise<SharedExerciseState> {
+  const endSnapshot = startRuntimeWorkTrace("PRE_CANON_SNAPSHOT");
   const endCollection = startRuntimeWorkTrace("CHECKPOINT_PROJECTION_COLLECTION");
   const shared = collectSharedExerciseProjection();
   endCollection({
@@ -151,14 +152,24 @@ async function collectSharedExerciseStateAsync(yieldControl: () => Promise<void>
     scenarioEventCount: shared.scenarioEvents.length,
     timelineEventCount: shared.timelineEvents.length,
   });
+  endSnapshot({ stage: "projection" });
   const simulationTimeSec = "simulationTimeSec" in shared.exerciseSession
     ? shared.exerciseSession.simulationTimeSec : shared.exerciseSession.currentMinute * 60;
+  const endMaterialize = startRuntimeWorkTrace("PRE_CANON_MATERIALIZE", {
+    simulationTimeSec,
+  });
   const persistedRuntimeStates = await captureActiveClinicalReferenceRuntimesAsync(
     simulationTimeSec,
     yieldControl,
     shared.exerciseSession.exerciseId,
   );
-  return { ...shared, persistedRuntimeStates };
+  endMaterialize({ persistedRuntimeCount: persistedRuntimeStates.length });
+  const endAssembly = startRuntimeWorkTrace("PRE_CANON_ASSEMBLY", {
+    persistedRuntimeCount: persistedRuntimeStates.length,
+  });
+  const result = { ...shared, persistedRuntimeStates };
+  endAssembly();
+  return result;
 }
 
 function packageReference(): { packageId: string; packageVersion: string } {
@@ -217,11 +228,25 @@ export function ensureLocalRuntimeCheckpoint(): RuntimeCheckpointEnvelope<Shared
 }
 
 export function acceptAuthoritativeRuntimeCheckpoint(checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, startRuntime = false): void {
+  const endValidate = startRuntimeWorkTrace("STARTUP_CHECKPOINT_VALIDATE", {
+    checkpointRevision: checkpoint.checkpointRevision,
+    persistedRuntimeCount: checkpoint.payload.persistedRuntimeStates?.length ?? 0,
+  });
   assertRuntimeCheckpointClockConsistency(checkpoint.payload);
+  endValidate();
+  const endRehydrate = startRuntimeWorkTrace("STARTUP_RUNTIME_REHYDRATE", {
+    persistedRuntimeCount: checkpoint.payload.persistedRuntimeStates?.length ?? 0,
+    scenarioEventCount: checkpoint.payload.scenarioEvents.length,
+  });
   restoreSharedExerciseState(checkpoint.payload, startRuntime);
+  endRehydrate();
   // The resolver has already selected this valid remote envelope as canonical.
   // Replace a checkpoint from another exercise only after rehydration succeeds.
+  const endCacheAccept = startRuntimeWorkTrace("STARTUP_CHECKPOINT_CACHE_ACCEPT", {
+    checkpointRevision: checkpoint.checkpointRevision,
+  });
   localRuntimeCheckpointStore.restore(checkpoint);
+  endCacheAccept();
   const savedAt = new Date().toISOString();
   pendingSnapshot = {
     ...checkpoint.payload,
@@ -288,6 +313,20 @@ export function restoreSharedExerciseState(restored: SharedExerciseState, startR
 
 }
 
+/**
+ * The durable checkpoint is the only source whose Runtime artifacts have
+ * passed full checkpoint validation. Local snapshot rows remain the source
+ * for every other restored projection field.
+ */
+export function runtimeRestoreSource(
+  restored: SharedExerciseState,
+  validatedCheckpoint: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined,
+): SharedExerciseState {
+  return validatedCheckpoint?.exerciseId === restored.exerciseSession.exerciseId
+    ? validatedCheckpoint.payload
+    : restored;
+}
+
 export async function loadPersistedState(): Promise<void> {
   try {
     const fileInfo = await FileSystem.getInfoAsync(stateFileUri);
@@ -296,27 +335,53 @@ export async function loadPersistedState(): Promise<void> {
       return;
     }
 
-    const restored = JSON.parse(
-      await FileSystem.readAsStringAsync(stateFileUri)
-    ) as PersistedState;
+    const endRead = startRuntimeWorkTrace("STARTUP_LOCAL_STATE_READ");
+    const serialized = await FileSystem.readAsStringAsync(stateFileUri);
+    endRead({ serializedBytes: serialized.length });
+    const endParse = startRuntimeWorkTrace("STARTUP_LOCAL_STATE_PARSE", {
+      serializedBytes: serialized.length,
+    });
+    const restored = JSON.parse(serialized) as PersistedState;
+    endParse();
 
     if (restored.version !== STATE_VERSION) {
       return;
     }
 
-    localRuntimeCheckpointStore.restore(restored.runtimeCheckpoint);
+    const endRestore = startRuntimeWorkTrace("STARTUP_LOCAL_STATE_RESTORE", {
+      patientCount: restored.patients.length,
+      scenarioEventCount: restored.scenarioEvents.length,
+      persistedRuntimeCount: restored.persistedRuntimeStates?.length ?? 0,
+    });
+    const endIdentity = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_IDENTITY");
+    const endLocalCheckpoint = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_CHECKPOINT_CACHE");
+    await localRuntimeCheckpointStore.restoreAsync(restored.runtimeCheckpoint, () => new Promise(resolve => setTimeout(resolve, 0)));
+    const runtimeRestore = runtimeRestoreSource(restored, localRuntimeCheckpointStore.get());
+    endLocalCheckpoint();
 
     setLocalSaveStatus({ state: "saved", savedAt: restored.savedAt });
 
+    const endWorkbook = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_WORKBOOK");
     restoreInstalledWorkbook(restored.installedWorkbook);
+    endWorkbook();
+    const endOperator = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_OPERATOR");
     restoreCurrentCaseManager(restored.currentCaseManager);
+    endOperator();
+    const endExerciseIdentity = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_EXERCISE_IDENTITY");
     restoreExerciseIdentity(restored);
+    endExerciseIdentity();
+    const endAudits = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_AUDITS");
     restoreExerciseControlAudit(restored.exerciseControlAudit ?? []);
     restoreInstructorCommandAudit(restored.instructorCommandAudit ?? []);
     restoreExerciseResetAudit(restored.exerciseResetAudit ?? []);
+    endAudits();
+    endIdentity();
+    const endPatients = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_PATIENTS", { patientCount: restored.patients.length });
     replaceItems(dataProvider.getPatients(), restored.patients);
     restoreAssignmentState(restored);
     restoreCaseManagerLocationState(restored.caseManagerZoneIds ?? {});
+    endPatients();
+    const endClinical = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_CLINICAL_COLLECTIONS");
     replaceItems(clinicalDataProvider.getQuestions(), restored.questions);
     replaceItems(clinicalDataProvider.getLabs(), restored.labs);
     replaceItems(
@@ -349,13 +414,17 @@ export async function loadPersistedState(): Promise<void> {
     if (restored.vitalSigns) {
       replaceItems(clinicalDataProvider.getVitalSigns(), restored.vitalSigns);
     }
+    endClinical({ scenarioEventCount: restored.scenarioEvents.length });
 
     // Cold-start restoration prepares canonical owners but must not advance
     // time before remote current-exercise discovery and writer authority have
     // resolved. The authority startup rehydrates with startRuntime=true only
     // after that gate succeeds.
-    restoreCanonicalRuntime(restored, false);
+    const endRuntime = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_RUNTIME");
+    restoreCanonicalRuntime(runtimeRestore, false);
+    endRuntime({ persistedRuntimeCount: restored.persistedRuntimeStates?.length ?? 0 });
     setRuntimePersistenceFailure(undefined);
+    endRestore();
 
   } catch (error) {
     if (error instanceof Error && error.message === "ACTIVE_RUNTIME_PERSISTENCE_MISSING") {

@@ -1,8 +1,8 @@
 import type { SharedExerciseState } from "@/services/StatePersistenceService";
-import { createRuntimeCheckpoint, isValidRuntimeCheckpoint, resolveAgainstValidatedLocalCheckpoint, resolveAuthoritativeCheckpoint, resolveSubscribedCheckpoint } from "../RuntimeCheckpointAuthorityService";
+import { createRuntimeCheckpoint, isValidRuntimeCheckpoint, isValidRuntimeCheckpointAsync, resolveAgainstValidatedLocalCheckpoint, resolveAuthoritativeCheckpoint, resolveAuthoritativeCheckpointAsync, resolveSubscribedCheckpoint } from "../RuntimeCheckpointAuthorityService";
 import { sha256Text } from "@/utils/sha256";
 import { stableJson } from "@/utils/stableJson";
-import { assertRuntimeCheckpointClockConsistency } from "@/services/StatePersistenceService";
+import { assertRuntimeCheckpointClockConsistency, runtimeRestoreSource } from "@/services/StatePersistenceService";
 
 function state(exerciseId="EX-1", patientIds=["PT-1"]):SharedExerciseState {
   const payload = {};
@@ -57,6 +57,31 @@ describe("WP-44B checkpoint authority resolver",()=>{
     const foreignProvenance={...valid,payload:{...valid.payload,persistedRuntimeStates:valid.payload.persistedRuntimeStates?.map(item=>({...item,provenance:{...item.provenance,exerciseId:"OTHER"}}))}};
     expect(isValidRuntimeCheckpoint(corruptPayload)).toBe(false);
     expect(isValidRuntimeCheckpoint(foreignProvenance)).toBe(false);
+  });
+  test("yielding validation accepts the same canonical checkpoint and marks only its exact identity", async()=>{
+    const checkpoint=createRuntimeCheckpoint(state(),12);
+    const deserialized=structuredClone(checkpoint);
+    const yieldControl=jest.fn(async()=>Promise.resolve());
+    await expect(isValidRuntimeCheckpointAsync(deserialized,yieldControl)).resolves.toBe(true);
+    expect(yieldControl).toHaveBeenCalled();
+    expect(isValidRuntimeCheckpoint(deserialized)).toBe(true);
+    await expect(isValidRuntimeCheckpointAsync({...deserialized,payloadHash:"corrupt"},yieldControl)).resolves.toBe(false);
+  });
+  test("cooperative remote resolution preserves synchronous selection and fail-closed validation", async()=>{
+    const local=createRuntimeCheckpoint(state("EX-1",["PT-1","PT-2"]),142);
+    const remote=structuredClone(createRuntimeCheckpoint(state("EX-1"),141));
+    const yieldControl=jest.fn(async()=>Promise.resolve());
+    await expect(resolveAuthoritativeCheckpointAsync(local,remote,yieldControl))
+      .resolves.toEqual(resolveAuthoritativeCheckpoint(local,remote));
+    const corrupt={...structuredClone(remote),payloadHash:"corrupt"};
+    await expect(resolveAuthoritativeCheckpointAsync(local,corrupt,yieldControl))
+      .resolves.toEqual(resolveAuthoritativeCheckpoint(local,corrupt));
+  });
+  test("validated same-exercise checkpoint is the Runtime source; other cases keep the fail-closed fallback",()=>{
+    const local=state("EX-1"); const checkpoint=createRuntimeCheckpoint(state("EX-1"),12);
+    expect(runtimeRestoreSource(local,checkpoint)).toBe(checkpoint.payload);
+    expect(runtimeRestoreSource(local,{...checkpoint,exerciseId:"OTHER"})).toBe(local);
+    expect(runtimeRestoreSource(local,undefined)).toBe(local);
   });
   test("different exercise identities fail closed",()=>{
     expect(resolveAuthoritativeCheckpoint(createRuntimeCheckpoint(state("A"),1),createRuntimeCheckpoint(state("B"),2)))

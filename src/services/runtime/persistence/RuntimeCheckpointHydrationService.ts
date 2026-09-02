@@ -1,6 +1,7 @@
 import type { RuntimeCheckpointEnvelope } from "@/models/RuntimeCheckpointAuthority";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { isValidRuntimeCheckpoint } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 import { applyRuntimeCheckpointDeltaChain, MAX_RUNTIME_CHECKPOINT_DELTA_CHAIN } from "@/services/runtime/persistence/RuntimeCheckpointDeltaService";
 import type { RuntimeCheckpointMetadata } from "@/services/runtime/persistence/RuntimeCheckpointMetadataCoordinator";
@@ -56,12 +57,25 @@ export async function loadRuntimeCheckpointWithCache(
   }
   const validLocal = local?.exerciseId === exerciseId && isValidRuntimeCheckpoint(local) ? local : undefined;
   if (local && !validLocal) metric("CACHE_INVALIDATED", `runtime_checkpoints.${purpose}.invalid_local`);
+  const sameRevision = Boolean(metadata && validLocal && validLocal.checkpointRevision === metadata.checkpointRevision);
+  const samePayloadHash = Boolean(metadata && validLocal && validLocal.payloadHash === metadata.payloadHash);
+  const sameProvenanceHash = Boolean(metadata && validLocal && validLocal.provenanceHash === metadata.provenanceHash);
+  const endDecision = startRuntimeWorkTrace("STARTUP_CHECKPOINT_CACHE_DECISION", {
+    purpose,
+    metadataPresent: Boolean(metadata),
+    validLocal: Boolean(validLocal),
+    sameRevision,
+    samePayloadHash,
+    sameProvenanceHash,
+  });
   if (metadata && validLocal && validLocal.checkpointRevision === metadata.checkpointRevision &&
       validLocal.payloadHash === metadata.payloadHash && validLocal.provenanceHash === metadata.provenanceHash) {
+    endDecision({ outcome: "CACHE_HIT" });
     metric("CACHE_HIT", `runtime_checkpoints.${purpose}`);
     metric("FULL_PAYLOAD_AVOIDED", `runtime_checkpoints.${purpose}.cache`, undefined, serializedBytes(validLocal));
     return validLocal;
   }
+  endDecision({ outcome: "CACHE_MISS" });
   metric("CACHE_MISS", `runtime_checkpoints.${purpose}`);
   if (metadata && validLocal && validLocal.checkpointRevision < metadata.checkpointRevision) {
     try {

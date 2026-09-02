@@ -1,7 +1,16 @@
 export type PipelineYield = () => Promise<void>;
 
+/**
+ * React Native frame callbacks give the UI a rendering turn between bounded
+ * checkpoint-preparation slices. Non-native callers retain timer semantics.
+ */
+const isReactNative = (): boolean =>
+  typeof navigator !== "undefined" && (navigator as Navigator & { product?: string }).product === "ReactNative";
+
 export const yieldToEventLoop: PipelineYield = () =>
-  new Promise(resolve => setTimeout(resolve, 0));
+  isReactNative() && typeof requestAnimationFrame === "function"
+    ? new Promise(resolve => requestAnimationFrame(() => resolve()))
+    : new Promise(resolve => setTimeout(resolve, 0));
 
 /** Drops one obsolete preparation, then forces progress under continuous input. */
 export class BoundedObsoleteGenerationGate {
