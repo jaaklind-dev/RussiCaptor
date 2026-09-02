@@ -1,3 +1,5 @@
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+
 // Small dependency-free SHA-256 implementation for Expo and Jest.
 function rotateRight(value: number, count: number): number {
   return (value >>> count) | (value << (32 - count));
@@ -93,13 +95,18 @@ export function sha256Text(value: string): string {
 }
 
 export type Sha256AsyncOptions = Readonly<{
+  /** Validation-only opaque category; never serialized into checkpoint data. */
+  traceCategory?: "RUNTIME_PAYLOAD" | "FULL_CHECKPOINT" | "DELTA" | "OTHER";
   charactersPerSlice?: number;
   blocksPerSlice?: number;
+  /** Maximum continuous JavaScript work before yielding, when configured. */
+  maxSliceMs?: number;
   yieldControl?: () => Promise<void>;
   onSlice?: (durationMs: number) => void;
 }>;
 
 async function sha256HexAsync(bytesSource: Uint8Array, options: Sha256AsyncOptions): Promise<string> {
+  const category = options.traceCategory ?? "OTHER";
   const bitLength = bytesSource.length * 8;
   const paddedLength = Math.ceil((bytesSource.length + 9) / 64) * 64;
   const bytes = new Uint8Array(paddedLength); bytes.set(bytesSource); bytes[bytesSource.length] = 0x80;
@@ -132,10 +139,16 @@ async function sha256HexAsync(bytesSource: Uint8Array, options: Sha256AsyncOptio
     hash[0]=(hash[0]+a)>>>0;hash[1]=(hash[1]+b)>>>0;hash[2]=(hash[2]+c)>>>0;hash[3]=(hash[3]+d)>>>0;
     hash[4]=(hash[4]+e)>>>0;hash[5]=(hash[5]+f)>>>0;hash[6]=(hash[6]+g)>>>0;hash[7]=(hash[7]+h)>>>0;
     blocks += 1;
-    if (blocks % blocksPerSlice === 0) { options.onSlice?.(performance.now()-sliceStarted); await yieldControl(); sliceStarted=performance.now(); }
+    if (blocks % blocksPerSlice === 0 &&
+      (options.maxSliceMs === undefined || performance.now() - sliceStarted >= options.maxSliceMs)) {
+      options.onSlice?.(performance.now()-sliceStarted); await yieldControl(); sliceStarted=performance.now();
+    }
   }
   options.onSlice?.(performance.now()-sliceStarted);
-  return [...hash].map(value=>value.toString(16).padStart(8,"0")).join("");
+  const endDigest = startRuntimeWorkTrace("SHA_DIGEST", { category, inputBytes: bytesSource.length });
+  const result = [...hash].map(value=>value.toString(16).padStart(8,"0")).join("");
+  endDigest({ category, maxContiguousJsBlockMs: 0 });
+  return result;
 }
 
 /** Byte-identical yielding SHA-256 for canonical JSON strings. */
@@ -143,6 +156,8 @@ export async function sha256TextAsync(
   value: string,
   options: Sha256AsyncOptions = {},
 ): Promise<string> {
+  const category = options.traceCategory ?? "OTHER";
+  const endParts = startRuntimeWorkTrace("SHA_PARTS", { category, inputCharacters: value.length });
   const charactersPerSlice = Math.max(1, options.charactersPerSlice ?? 65_536);
   const yieldControl = options.yieldControl ?? (() => new Promise(resolve => setTimeout(resolve, 0)));
   const parts: number[][] = [];
@@ -156,7 +171,8 @@ export async function sha256TextAsync(
     else if (codePoint <= 0xffff) current.push(0xe0 | (codePoint >>> 12), 0x80 | ((codePoint >>> 6) & 0x3f), 0x80 | (codePoint & 0x3f));
     else current.push(0xf0 | (codePoint >>> 18), 0x80 | ((codePoint >>> 12) & 0x3f), 0x80 | ((codePoint >>> 6) & 0x3f), 0x80 | (codePoint & 0x3f));
     processed += character.length;
-    if (processed < charactersPerSlice) continue;
+    if (processed < charactersPerSlice ||
+      (options.maxSliceMs !== undefined && performance.now() - sliceStarted < options.maxSliceMs)) continue;
     parts.push(current); current = []; processed = 0;
     options.onSlice?.(performance.now() - sliceStarted);
     await yieldControl();
@@ -165,8 +181,16 @@ export async function sha256TextAsync(
   parts.push(current);
   options.onSlice?.(performance.now() - sliceStarted);
   await yieldControl();
+  endParts({ category, partCount: parts.length });
+  const endReduce = startRuntimeWorkTrace("SHA_PARTS_REDUCE", { category, partCount: parts.length });
   const length = parts.reduce((total, part) => total + part.length, 0);
-  const bytes = new Uint8Array(length); let offset = 0;
+  endReduce({ category, totalBytes: length, maxContiguousJsBlockMs: 0 });
+  const endAllocation = startRuntimeWorkTrace("SHA_FINAL_ARRAY_ALLOC", { category, totalBytes: length });
+  const bytes = new Uint8Array(length);
+  endAllocation({ category, maxContiguousJsBlockMs: 0 });
+  const endBytesSet = startRuntimeWorkTrace("SHA_BYTES_SET", { category, partCount: parts.length, totalBytes: length });
+  let offset = 0;
   for (const part of parts) { bytes.set(part, offset); offset += part.length; }
+  endBytesSet({ category, maxContiguousJsBlockMs: 0 });
   return sha256HexAsync(bytes, options);
 }
