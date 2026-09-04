@@ -2,13 +2,22 @@ import type { ClinicalFeatureLifecycle } from "@/models/ClinicalFeatureContract"
 
 export const RINGER_FEATURE_ID = "RINGER" as const;
 export const SODIUM_CHLORIDE_0_9_FEATURE_ID = "SODIUM_CHLORIDE_0_9" as const;
+export const GELOFUSIN_FEATURE_ID = "GELOFUSIN" as const;
 export const FLUID_VOLUME_UNIT = "ML" as const;
 export const FLUID_RATE_UNIT = "ML_H" as const;
 
 export type FluidAdministrationMode = "BOLUS" | "INFUSION";
 export type FluidAdministrationStatus = ClinicalFeatureLifecycle | "COMPLETED";
 export type FluidProductClass = "CRYSTALLOID" | "COLLOID";
-export type SupportedFluidType = typeof RINGER_FEATURE_ID | typeof SODIUM_CHLORIDE_0_9_FEATURE_ID;
+export type SupportedFluidType =
+  | typeof RINGER_FEATURE_ID
+  | typeof SODIUM_CHLORIDE_0_9_FEATURE_ID
+  | typeof GELOFUSIN_FEATURE_ID;
+
+export type FluidEffectiveVolumePersistence = Readonly<{
+  model: "EXPONENTIAL_DECAY";
+  halfLifeSec: number;
+}>;
 
 export type FluidTherapyConfiguration<TFluidType extends string = string> = Readonly<{
   schemaVersion: 1;
@@ -17,6 +26,7 @@ export type FluidTherapyConfiguration<TFluidType extends string = string> = Read
   effectiveIntravascularFraction: number;
   maximumPrescribedVolumeMl: number;
   maximumRateMlHour: number;
+  effectiveVolumePersistence?: FluidEffectiveVolumePersistence;
   vitalResponsePer1000EffectiveMl: Readonly<{
     heartRateDelta: number;
     systolicBpDelta: number;
@@ -48,6 +58,8 @@ export type FluidTherapyAdministrationState<TFluidType extends string = string> 
   lastRateChangeAtSimulationTimeSec: number;
   stoppedAtSimulationTimeSec?: number;
   completedAtSimulationTimeSec?: number;
+  effectiveVolumeAnchorMl?: number;
+  effectiveVolumeAnchorAtSimulationTimeSec?: number;
 }>;
 
 export type FluidTherapyCommand<TFluidType extends string = string> = Readonly<{
@@ -98,8 +110,12 @@ export type FluidTherapyRuntimeSnapshot<TFluidType extends string = string> = Re
   events: readonly FluidTherapyRuntimeEvent<TFluidType>[];
 }>;
 
+export type AdditionalFluidTherapyRuntimeSnapshot =
+  | FluidTherapyRuntimeSnapshot<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>
+  | FluidTherapyRuntimeSnapshot<typeof GELOFUSIN_FEATURE_ID>;
+
 export type FluidTherapyPersistenceSnapshot = FluidTherapyRuntimeSnapshot<typeof RINGER_FEATURE_ID> & Readonly<{
-  additionalProducts?: readonly FluidTherapyRuntimeSnapshot<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>[];
+  additionalProducts?: readonly AdditionalFluidTherapyRuntimeSnapshot[];
 }>;
 
 export type FluidTherapyFeatureProjection<TFluidType extends string = string> = Readonly<{
@@ -119,17 +135,24 @@ export type FluidTherapyFeatureProjection<TFluidType extends string = string> = 
   lastRateChangeAtSimulationTimeSec: number;
   stoppedAtSimulationTimeSec?: number;
   completedAtSimulationTimeSec?: number;
+  effectiveVolumePersistence?: FluidEffectiveVolumePersistence;
+  effectiveVolumeAnchorMl?: number;
+  effectiveVolumeAnchorAtSimulationTimeSec?: number;
 }>;
 
 export type SupportedFluidTherapyCommand =
   | FluidTherapyCommand<typeof RINGER_FEATURE_ID>
-  | FluidTherapyCommand<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>;
+  | FluidTherapyCommand<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>
+  | FluidTherapyCommand<typeof GELOFUSIN_FEATURE_ID>;
 export type SupportedFluidTherapyCommandResult =
   | FluidTherapyCommandResult<typeof RINGER_FEATURE_ID>
-  | FluidTherapyCommandResult<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>;
+  | FluidTherapyCommandResult<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>
+  | FluidTherapyCommandResult<typeof GELOFUSIN_FEATURE_ID>;
 export type SupportedFluidTherapyProjection =
   | FluidTherapyFeatureProjection<typeof RINGER_FEATURE_ID>
-  | FluidTherapyFeatureProjection<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>;
+  | FluidTherapyFeatureProjection<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>
+  | FluidTherapyFeatureProjection<typeof GELOFUSIN_FEATURE_ID>;
 export type SupportedFluidTherapyEvent =
   | FluidTherapyRuntimeEvent<typeof RINGER_FEATURE_ID>
-  | FluidTherapyRuntimeEvent<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>;
+  | FluidTherapyRuntimeEvent<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>
+  | FluidTherapyRuntimeEvent<typeof GELOFUSIN_FEATURE_ID>;

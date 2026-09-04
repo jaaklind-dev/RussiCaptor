@@ -3,7 +3,10 @@ import type { ClinicalEffect } from "@/models/ClinicalIntegration";
 import type { MedicationAdministration, MedicationDefinition, MedicationInstance, MedicationRejectionReason, MedicationRuntimeEvent, MedicationRuntimeSnapshot } from "@/models/MedicationRuntime";
 import type { NorepinephrineCommand, NorepinephrineCommandResult, NorepinephrineFeatureProjection, NorepinephrineRuntimeEvent } from "@/models/NorepinephrineInfusion";
 import {
+  GELOFUSIN_FEATURE_ID,
   SODIUM_CHLORIDE_0_9_FEATURE_ID,
+  type AdditionalFluidTherapyRuntimeSnapshot,
+  type FluidTherapyRuntimeSnapshot,
   type SupportedFluidTherapyCommand,
   type SupportedFluidTherapyCommandResult,
   type SupportedFluidTherapyEvent,
@@ -11,6 +14,7 @@ import {
 } from "@/models/FluidTherapy";
 import type { VitalSignContributor } from "@/models/VitalSign";
 import { NorepinephrineInfusionRuntime } from "./NorepinephrineInfusion";
+import { GelofusinFluidTherapyRuntime } from "./GelofusinFluidTherapy";
 import { RINGER_FLUID_CONFIGURATION, RingerFluidTherapyRuntime } from "./RingerFluidTherapy";
 import { SodiumChlorideFluidTherapyRuntime } from "./SodiumChlorideFluidTherapy";
 
@@ -24,6 +28,7 @@ export class MedicationEngine {
   private readonly norepinephrine = new NorepinephrineInfusionRuntime();
   private readonly ringer = new RingerFluidTherapyRuntime();
   private readonly sodiumChloride = new SodiumChlorideFluidTherapyRuntime();
+  private readonly gelofusin = new GelofusinFluidTherapyRuntime();
   installDefinitions(values: MedicationDefinition[]): void {
     this.definitions.clear();
     for (const d of [...values].sort((a,b) => a.medicationId.localeCompare(b.medicationId))) {
@@ -32,7 +37,7 @@ export class MedicationEngine {
     }
   }
   reset(): void { this.instances.clear(); this.seen.clear(); this.events.length = 0; this.effects.clear();
-    this.norepinephrine.reset(); this.ringer.reset(); this.sodiumChloride.reset(); }
+    this.norepinephrine.reset(); this.ringer.reset(); this.sodiumChloride.reset(); this.gelofusin.reset(); }
   administer(a: MedicationAdministration, circulation: CirculationState): MedicationOperationResult {
     const definition = this.definitions.get(a.medicationId);
     let rejection: MedicationRejectionReason | undefined;
@@ -59,7 +64,7 @@ export class MedicationEngine {
         this.instances.set(item.administrationId, next); generated.push(this.event("MedicationCompleted", next, next.completedAt)); } }
     this.events.push(...generated); return structuredClone([
       ...generated, ...this.norepinephrine.advanceTo(timestamp), ...this.ringer.advanceTo(timestamp),
-      ...this.sodiumChloride.advanceTo(timestamp),
+      ...this.sodiumChloride.advanceTo(timestamp), ...this.gelofusin.advanceTo(timestamp),
     ]);
   }
   cancel(administrationId: string, timestamp: number): MedicationRuntimeEvent {
@@ -76,21 +81,26 @@ export class MedicationEngine {
   }
   executeFluidTherapy(command: SupportedFluidTherapyCommand,
     circulation?: CirculationState): SupportedFluidTherapyCommandResult {
-    return command.fluidType === SODIUM_CHLORIDE_0_9_FEATURE_ID
-      ? this.sodiumChloride.execute(command, circulation)
-      : this.ringer.execute(command, circulation);
+    if (command.fluidType === SODIUM_CHLORIDE_0_9_FEATURE_ID) {
+      return this.sodiumChloride.execute(command, circulation);
+    }
+    if (command.fluidType === GELOFUSIN_FEATURE_ID) return this.gelofusin.execute(command, circulation);
+    return this.ringer.execute(command, circulation);
   }
   fluidTherapyProjectionsAt(timestamp: number): readonly SupportedFluidTherapyProjection[] {
-    return [...this.ringer.projectionsAt(timestamp), ...this.sodiumChloride.projectionsAt(timestamp)]
+    return [...this.ringer.projectionsAt(timestamp), ...this.sodiumChloride.projectionsAt(timestamp),
+      ...this.gelofusin.projectionsAt(timestamp)]
       .sort((a, b) => a.startedAtSimulationTimeSec - b.startedAtSimulationTimeSec ||
         a.administrationId.localeCompare(b.administrationId));
   }
   fluidTherapyEventForCommand(commandId: string): SupportedFluidTherapyEvent | undefined {
-    return [...(this.ringer.snapshot()?.events ?? []), ...(this.sodiumChloride.snapshot()?.events ?? [])]
+    return [...(this.ringer.snapshot()?.events ?? []), ...(this.sodiumChloride.snapshot()?.events ?? []),
+      ...(this.gelofusin.snapshot()?.events ?? [])]
       .filter(event => event.commandId === commandId).at(-1);
   }
   vitalContributorsAt(timestamp: number): readonly VitalSignContributor[] {
     return [...this.ringer.vitalContributorsAt(timestamp), ...this.sodiumChloride.vitalContributorsAt(timestamp),
+      ...this.gelofusin.vitalContributorsAt(timestamp),
       ...this.norepinephrine.vitalContributorsAt(timestamp)];
   }
   activeEffects(timestamp = 0): ClinicalEffect[] {
@@ -110,10 +120,15 @@ export class MedicationEngine {
     const norepinephrine = this.norepinephrine.snapshot();
     const ringer = this.ringer.snapshot();
     const sodiumChloride = this.sodiumChloride.snapshot();
-    const fluidTherapy = ringer || sodiumChloride ? {
+    const gelofusin = this.gelofusin.snapshot();
+    const additionalProducts: AdditionalFluidTherapyRuntimeSnapshot[] = [
+      ...(sodiumChloride ? [sodiumChloride] : []),
+      ...(gelofusin ? [gelofusin] : []),
+    ];
+    const fluidTherapy = ringer || additionalProducts.length ? {
       ...(ringer ?? { schemaVersion: 1 as const, configuration: structuredClone(RINGER_FLUID_CONFIGURATION),
         administrations: [], commandResults: [], events: [] }),
-      ...(sodiumChloride ? { additionalProducts: [sodiumChloride] } : {}),
+      ...(additionalProducts.length ? { additionalProducts } : {}),
     } : undefined;
     return { definitions: [...this.definitions.values()].sort((a,b) => a.medicationId.localeCompare(b.medicationId)).map(x=>structuredClone(x)),
       instances: [...this.instances.values()].sort((a,b)=>a.timestamp-b.timestamp || a.administrationId.localeCompare(b.administrationId)).map(x=>structuredClone(x)), events: structuredClone(this.events),
@@ -135,11 +150,18 @@ export class MedicationEngine {
     if (snapshot.fluidTherapy) {
       const { additionalProducts, ...ringer } = snapshot.fluidTherapy;
       this.ringer.restore(ringer);
-      this.sodiumChloride.restore(additionalProducts?.find(item =>
-        item.configuration.fluidType === SODIUM_CHLORIDE_0_9_FEATURE_ID));
+      const sodiumChloride = additionalProducts?.find((item): item is FluidTherapyRuntimeSnapshot<
+        typeof SODIUM_CHLORIDE_0_9_FEATURE_ID
+      > => item.configuration.fluidType === SODIUM_CHLORIDE_0_9_FEATURE_ID);
+      const gelofusin = additionalProducts?.find((item): item is FluidTherapyRuntimeSnapshot<
+        typeof GELOFUSIN_FEATURE_ID
+      > => item.configuration.fluidType === GELOFUSIN_FEATURE_ID);
+      this.sodiumChloride.restore(sodiumChloride);
+      this.gelofusin.restore(gelofusin);
     } else {
       this.ringer.restore();
       this.sodiumChloride.restore();
+      this.gelofusin.restore();
     }
   }
   private validAccess(a: MedicationAdministration, c: CirculationState): boolean { if (!a.vascularAccessId) return false;

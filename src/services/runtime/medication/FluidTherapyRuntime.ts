@@ -36,6 +36,30 @@ export function effectiveIntravascularVolumeMl<TFluidType extends string>(
   return precise(Math.max(0, deliveredVolumeMl) * configuration.effectiveIntravascularFraction);
 }
 
+export function effectiveIntravascularVolumeAt<TFluidType extends string>(
+  state: FluidTherapyAdministrationState<TFluidType>,
+  simulationTimeSec: number,
+  configuration: FluidTherapyConfiguration<TFluidType>,
+): number {
+  const persistence = configuration.effectiveVolumePersistence;
+  if (!persistence) {
+    return effectiveIntravascularVolumeMl(deliveredFluidVolumeAt(state, simulationTimeSec), configuration);
+  }
+  const anchorAt = state.effectiveVolumeAnchorAtSimulationTimeSec ?? state.startedAtSimulationTimeSec;
+  const anchorMl = state.effectiveVolumeAnchorMl ?? 0;
+  const elapsedSec = Math.max(0, simulationTimeSec - anchorAt);
+  const lambda = Math.LN2 / persistence.halfLifeSec;
+  const deliveryDurationSec = state.status !== "RUNNING" ? 0 : state.mode === "BOLUS"
+    ? Math.min(elapsedSec, Math.max(0, (state.prescribedVolumeMl! - state.deliveredVolumeAtLastChangeMl) /
+      state.rateMlHour * 3600))
+    : elapsedSec;
+  const deliveryRateMlSec = state.rateMlHour / 3600 * configuration.effectiveIntravascularFraction;
+  const deliveryDecay = Math.exp(-lambda * deliveryDurationSec);
+  const afterDelivery = anchorMl * deliveryDecay + deliveryRateMlSec / lambda * (1 - deliveryDecay);
+  const postDeliveryDecaySec = elapsedSec - deliveryDurationSec;
+  return precise(afterDelivery * Math.exp(-lambda * postDeliveryDecaySec));
+}
+
 export function fluidVolumeVitalContributors<TFluidType extends string>(
   projection: FluidTherapyFeatureProjection<TFluidType>,
   configuration: FluidTherapyConfiguration<TFluidType>,
@@ -110,6 +134,9 @@ export function createFluidTherapyContract<TFluidType extends string>(
         "prescribedVolumeMl", "rateMlHour", "deliveredVolumeMl", "deliveredVolumeAtLastChangeMl",
         "startedAtSimulationTimeSec", "lastRateChangeAtSimulationTimeSec",
         "stoppedAtSimulationTimeSec", "completedAtSimulationTimeSec",
+        ...(configuration.effectiveVolumePersistence
+          ? ["effectiveVolumeAnchorMl", "effectiveVolumeAnchorAtSimulationTimeSec"]
+          : []),
       ]),
     }),
     determinism: Object.freeze({ clock: "SIMULATION_TIME", wallClockAllowed: false }),
@@ -150,11 +177,18 @@ function projectState<TFluidType extends string>(
     ...(state.prescribedVolumeMl === undefined ? {} : { prescribedVolumeMl: state.prescribedVolumeMl }),
     currentRateMlHour: state.status === "RUNNING" ? state.rateMlHour : 0,
     cumulativeDeliveredVolumeMl: deliveredVolumeMl,
-    effectiveIntravascularVolumeMl: effectiveIntravascularVolumeMl(deliveredVolumeMl, configuration),
+    effectiveIntravascularVolumeMl: effectiveIntravascularVolumeAt(state, simulationTimeSec, configuration),
     startedAtSimulationTimeSec: state.startedAtSimulationTimeSec,
     lastRateChangeAtSimulationTimeSec: state.lastRateChangeAtSimulationTimeSec,
     ...(state.stoppedAtSimulationTimeSec === undefined ? {} : { stoppedAtSimulationTimeSec: state.stoppedAtSimulationTimeSec }),
     ...(state.completedAtSimulationTimeSec === undefined ? {} : { completedAtSimulationTimeSec: state.completedAtSimulationTimeSec }),
+    ...(configuration.effectiveVolumePersistence
+      ? { effectiveVolumePersistence: structuredClone(configuration.effectiveVolumePersistence) }
+      : {}),
+    ...(state.effectiveVolumeAnchorMl === undefined ? {} : { effectiveVolumeAnchorMl: state.effectiveVolumeAnchorMl }),
+    ...(state.effectiveVolumeAnchorAtSimulationTimeSec === undefined
+      ? {}
+      : { effectiveVolumeAnchorAtSimulationTimeSec: state.effectiveVolumeAnchorAtSimulationTimeSec }),
   });
 }
 
@@ -199,11 +233,18 @@ export class FluidTherapyRuntime<TFluidType extends string> {
         ? current.lastRateChangeAtSimulationTimeSec +
           (current.prescribedVolumeMl! - current.deliveredVolumeAtLastChangeMl) / current.rateMlHour * 3600
         : undefined;
+      const effectiveVolumeAtCompletion = completionAt === undefined
+        ? undefined
+        : effectiveIntravascularVolumeAt(current, completionAt, this.configuration);
       const next: FluidTherapyAdministrationState<TFluidType> = Object.freeze({
         ...current,
         status: completed ? "COMPLETED" : "RUNNING",
         deliveredVolumeMl: delivered,
         ...(completionAt === undefined ? {} : { completedAtSimulationTimeSec: precise(completionAt) }),
+        ...(effectiveVolumeAtCompletion === undefined ? {} : {
+          effectiveVolumeAnchorMl: effectiveVolumeAtCompletion,
+          effectiveVolumeAnchorAtSimulationTimeSec: precise(completionAt!),
+        }),
       });
       this.administrations.set(next.administrationId, next);
       if (completed) generated.push(this.event("FluidAdministrationCompleted", next, next.completedAtSimulationTimeSec));
@@ -263,6 +304,10 @@ export class FluidTherapyRuntime<TFluidType extends string> {
       deliveredVolumeAtLastChangeMl: 0,
       startedAtSimulationTimeSec: command.simulationTimeSec,
       lastRateChangeAtSimulationTimeSec: command.simulationTimeSec,
+      ...(this.configuration.effectiveVolumePersistence ? {
+        effectiveVolumeAnchorMl: 0,
+        effectiveVolumeAnchorAtSimulationTimeSec: command.simulationTimeSec,
+      } : {}),
     });
     this.administrations.set(state.administrationId, state);
     this.events.push(this.event("FluidAdministrationStarted", state, command.simulationTimeSec, command.commandId));
@@ -282,12 +327,17 @@ export class FluidTherapyRuntime<TFluidType extends string> {
       return Object.freeze({ status: "NO_OP", commandId: command.commandId, state: structuredClone(current) });
     }
     const delivered = deliveredFluidVolumeAt(current, command.simulationTimeSec);
+    const effectiveVolume = effectiveIntravascularVolumeAt(current, command.simulationTimeSec, this.configuration);
     const state: FluidTherapyAdministrationState<TFluidType> = Object.freeze({
       ...current,
       rateMlHour: command.rateMlHour!,
       deliveredVolumeMl: delivered,
       deliveredVolumeAtLastChangeMl: delivered,
       lastRateChangeAtSimulationTimeSec: command.simulationTimeSec,
+      ...(this.configuration.effectiveVolumePersistence ? {
+        effectiveVolumeAnchorMl: effectiveVolume,
+        effectiveVolumeAnchorAtSimulationTimeSec: command.simulationTimeSec,
+      } : {}),
     });
     this.administrations.set(state.administrationId, state);
     this.events.push(this.event("FluidAdministrationRateChanged", state, command.simulationTimeSec, command.commandId));
@@ -305,6 +355,7 @@ export class FluidTherapyRuntime<TFluidType extends string> {
       return this.reject(command, "STALE_SIMULATION_TIME", false);
     }
     const delivered = deliveredFluidVolumeAt(current, command.simulationTimeSec);
+    const effectiveVolume = effectiveIntravascularVolumeAt(current, command.simulationTimeSec, this.configuration);
     const state: FluidTherapyAdministrationState<TFluidType> = Object.freeze({
       ...current,
       status: "STOPPED",
@@ -313,6 +364,10 @@ export class FluidTherapyRuntime<TFluidType extends string> {
       deliveredVolumeAtLastChangeMl: delivered,
       lastRateChangeAtSimulationTimeSec: command.simulationTimeSec,
       stoppedAtSimulationTimeSec: command.simulationTimeSec,
+      ...(this.configuration.effectiveVolumePersistence ? {
+        effectiveVolumeAnchorMl: effectiveVolume,
+        effectiveVolumeAnchorAtSimulationTimeSec: command.simulationTimeSec,
+      } : {}),
     });
     this.administrations.set(state.administrationId, state);
     this.events.push(this.event("FluidAdministrationStopped", state, command.simulationTimeSec, command.commandId));
@@ -365,10 +420,12 @@ export class FluidTherapyRuntime<TFluidType extends string> {
 
   private assertConfiguration(configuration: FluidTherapyConfiguration<TFluidType>): void {
     const values = [configuration.effectiveIntravascularFraction, configuration.maximumPrescribedVolumeMl,
-      configuration.maximumRateMlHour, ...Object.values(configuration.vitalResponsePer1000EffectiveMl)];
+      configuration.maximumRateMlHour, configuration.effectiveVolumePersistence?.halfLifeSec ?? 1,
+      ...Object.values(configuration.vitalResponsePer1000EffectiveMl)];
     if (!configuration.fluidType || !configuration.version || values.some(value => !Number.isFinite(value)) ||
       configuration.effectiveIntravascularFraction < 0 || configuration.effectiveIntravascularFraction > 1 ||
-      configuration.maximumPrescribedVolumeMl <= 0 || configuration.maximumRateMlHour <= 0) {
+      configuration.maximumPrescribedVolumeMl <= 0 || configuration.maximumRateMlHour <= 0 ||
+      (configuration.effectiveVolumePersistence && configuration.effectiveVolumePersistence.halfLifeSec <= 0)) {
       throw new Error("FLUID_THERAPY_CONFIGURATION_INVALID");
     }
   }
