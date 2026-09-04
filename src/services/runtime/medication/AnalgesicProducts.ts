@@ -1,0 +1,107 @@
+import type { ClinicalFeatureContract } from "@/models/ClinicalFeatureContract";
+import {
+  ANALGESIA_FEATURE_ID,
+  type AnalgesicAdministrationState,
+  type AnalgesicCommand,
+  type AnalgesicEffectDimensions,
+  type AnalgesicProductConfiguration,
+} from "@/models/AnalgesiaMedication";
+
+const effects = (value: AnalgesicEffectDimensions): AnalgesicEffectDimensions => Object.freeze(value);
+const product = (value: AnalgesicProductConfiguration): AnalgesicProductConfiguration => Object.freeze({
+  ...value, aliases: Object.freeze([...value.aliases]), routes: Object.freeze([...value.routes]),
+  modes: Object.freeze([...value.modes]), effects: effects(value.effects),
+});
+
+/** Technical simulation profiles; values are configurable effect-model parameters, not prescribing guidance. */
+export const ANALGESIC_PRODUCT_CONFIGURATIONS: readonly AnalgesicProductConfiguration[] = Object.freeze([
+  product({ schemaVersion: 1, version: "FENTANYL_EFFECT_V1", drugId: "FENTANYL", displayName: "Fentanyl",
+    aliases: [], drugClass: "OPIOID", routes: ["IV", "IO"], modes: ["BOLUS", "INFUSION"],
+    bolusDoseUnit: "MCG", infusionRateUnit: "MCG_MIN", referenceExposureDose: 100,
+    maximumBolusDose: 1000, maximumInfusionRate: 50, bolusDeliveryDurationSec: 60,
+    onsetDurationSec: 120, effectHalfLifeSec: 1800,
+    effects: { analgesia: 1, sedation: 0.55, respiratoryDepression: 0.65, dissociation: 0,
+      sympatheticEffect: 0, hemodynamicDepression: 0.2, antiInflammatoryAnalgesia: 0 } }),
+  product({ schemaVersion: 1, version: "REMIFENTANIL_EFFECT_V1", drugId: "REMIFENTANIL", displayName: "Remifentanil",
+    aliases: [], drugClass: "OPIOID", routes: ["IV", "IO"], modes: ["INFUSION"],
+    infusionRateUnit: "MCG_MIN", referenceExposureDose: 25, maximumInfusionRate: 50,
+    bolusDeliveryDurationSec: 30, onsetDurationSec: 30, effectHalfLifeSec: 180,
+    effects: { analgesia: 1, sedation: 0.6, respiratoryDepression: 0.75, dissociation: 0,
+      sympatheticEffect: 0, hemodynamicDepression: 0.2, antiInflammatoryAnalgesia: 0 } }),
+  product({ schemaVersion: 1, version: "KETAMINE_EFFECT_V1", drugId: "KETAMINE", displayName: "Ketamine",
+    aliases: [], drugClass: "DISSOCIATIVE_ANALGESIC", routes: ["IV", "IO"], modes: ["BOLUS", "INFUSION"],
+    bolusDoseUnit: "MG", infusionRateUnit: "MG_H", referenceExposureDose: 50,
+    maximumBolusDose: 500, maximumInfusionRate: 500, bolusDeliveryDurationSec: 60,
+    onsetDurationSec: 60, effectHalfLifeSec: 1800,
+    effects: { analgesia: 0.9, sedation: 0.25, respiratoryDepression: 0.1, dissociation: 0.9,
+      sympatheticEffect: 0.5, hemodynamicDepression: 0, antiInflammatoryAnalgesia: 0 } }),
+  product({ schemaVersion: 1, version: "PARACETAMOL_EFFECT_V1", drugId: "PARACETAMOL", displayName: "Paracetamol",
+    aliases: ["ACETAMINOPHEN"], drugClass: "NON_OPIOID_ANALGESIC", routes: ["IV"], modes: ["BOLUS"],
+    bolusDoseUnit: "MG", referenceExposureDose: 1000, maximumBolusDose: 2000,
+    bolusDeliveryDurationSec: 900, onsetDurationSec: 1800, effectHalfLifeSec: 7200,
+    effects: { analgesia: 0.45, sedation: 0, respiratoryDepression: 0, dissociation: 0,
+      sympatheticEffect: 0, hemodynamicDepression: 0, antiInflammatoryAnalgesia: 0 } }),
+  product({ schemaVersion: 1, version: "ESKETAMINE_EFFECT_V1", drugId: "ESKETAMINE", displayName: "Esketamine",
+    aliases: [], drugClass: "DISSOCIATIVE_ANALGESIC", routes: ["IV", "IO"], modes: ["BOLUS", "INFUSION"],
+    bolusDoseUnit: "MG", infusionRateUnit: "MG_H", referenceExposureDose: 25,
+    maximumBolusDose: 250, maximumInfusionRate: 250, bolusDeliveryDurationSec: 60,
+    onsetDurationSec: 60, effectHalfLifeSec: 1500,
+    effects: { analgesia: 0.95, sedation: 0.25, respiratoryDepression: 0.08, dissociation: 0.95,
+      sympatheticEffect: 0.55, hemodynamicDepression: 0, antiInflammatoryAnalgesia: 0 } }),
+  product({ schemaVersion: 1, version: "MORPHINE_EFFECT_V1", drugId: "MORPHINE", displayName: "Morphine",
+    aliases: [], drugClass: "OPIOID", routes: ["IV", "IO"], modes: ["BOLUS"],
+    bolusDoseUnit: "MG", referenceExposureDose: 10, maximumBolusDose: 50,
+    bolusDeliveryDurationSec: 120, onsetDurationSec: 300, effectHalfLifeSec: 7200,
+    effects: { analgesia: 0.85, sedation: 0.65, respiratoryDepression: 0.65, dissociation: 0,
+      sympatheticEffect: 0, hemodynamicDepression: 0.25, antiInflammatoryAnalgesia: 0 } }),
+  product({ schemaVersion: 1, version: "OXYCODONE_EFFECT_V1", drugId: "OXYCODONE", displayName: "Oxycodone",
+    aliases: [], drugClass: "OPIOID", routes: ["IV", "IO"], modes: ["BOLUS"],
+    bolusDoseUnit: "MG", referenceExposureDose: 10, maximumBolusDose: 50,
+    bolusDeliveryDurationSec: 120, onsetDurationSec: 300, effectHalfLifeSec: 10_800,
+    effects: { analgesia: 0.85, sedation: 0.6, respiratoryDepression: 0.6, dissociation: 0,
+      sympatheticEffect: 0, hemodynamicDepression: 0.2, antiInflammatoryAnalgesia: 0 } }),
+  product({ schemaVersion: 1, version: "KETOPROFEN_EFFECT_V1", drugId: "KETOPROFEN", displayName: "Ketoprofen",
+    aliases: [], drugClass: "NSAID", routes: ["IV"], modes: ["BOLUS"],
+    bolusDoseUnit: "MG", referenceExposureDose: 100, maximumBolusDose: 200,
+    bolusDeliveryDurationSec: 900, onsetDurationSec: 1800, effectHalfLifeSec: 10_800,
+    effects: { analgesia: 0.4, sedation: 0, respiratoryDepression: 0, dissociation: 0,
+      sympatheticEffect: 0, hemodynamicDepression: 0, antiInflammatoryAnalgesia: 0.7 } }),
+  product({ schemaVersion: 1, version: "DEXKETOPROFEN_EFFECT_V1", drugId: "DEXKETOPROFEN",
+    displayName: "Dexketoprofen (Dolmen)", aliases: ["DOLMEN"], drugClass: "NSAID", routes: ["IV"],
+    modes: ["BOLUS"], bolusDoseUnit: "MG", referenceExposureDose: 50, maximumBolusDose: 100,
+    bolusDeliveryDurationSec: 900, onsetDurationSec: 1200, effectHalfLifeSec: 7200,
+    effects: { analgesia: 0.45, sedation: 0, respiratoryDepression: 0, dissociation: 0,
+      sympatheticEffect: 0, hemodynamicDepression: 0, antiInflammatoryAnalgesia: 0.75 } }),
+]);
+
+export const analgesicProductById = new Map(ANALGESIC_PRODUCT_CONFIGURATIONS.map(item => [item.drugId, item]));
+
+export const analgesicClinicalFeatureContracts: readonly ClinicalFeatureContract<
+  string, AnalgesicCommand, AnalgesicAdministrationState, AnalgesicProductConfiguration
+>[] = Object.freeze(ANALGESIC_PRODUCT_CONFIGURATIONS.map(configuration => Object.freeze({
+  featureId: configuration.drugId,
+  category: "ANALGESIC" as const,
+  schemaVersion: 1,
+  configuration,
+  input: Object.freeze({ unit: [configuration.bolusDoseUnit, configuration.infusionRateUnit].filter(Boolean).join("/"),
+    actions: Object.freeze(["START", "CHANGE_RATE", "STOP"]), validate: () => Object.freeze([]) }),
+  authoritativeState: Object.freeze({ lifecycle: Object.freeze(["RUNNING", "STOPPED", "COMPLETED"] as const),
+    persistedFields: Object.freeze(["administrationId", "patientId", "drugId", "route", "mode", "lifecycle",
+      "prescribedDose", "doseUnit", "rate", "rateUnit", "deliveredDose", "deliveredDoseAtLastChange",
+      "startedAtSimulationTimeSec", "lastRateChangeAtSimulationTimeSec", "stoppedAtSimulationTimeSec",
+      "completedAtSimulationTimeSec", "terminalExposureAnchor"]) }),
+  determinism: Object.freeze({ clock: "SIMULATION_TIME" as const, wallClockAllowed: false as const }),
+  physiology: Object.freeze({ order: Object.freeze(["UNDERLYING_PHYSIOLOGY", "MEDICATION_CNS_RESPIRATORY",
+    "VASOPRESSOR", "FINAL_HEMODYNAMICS"] as const), combine: "VITAL_SIGN_MEDICATION_LAYER" as const,
+    contributors: () => Object.freeze([]) }),
+  persistence: Object.freeze({ boundary: "RUNTIME_CHECKPOINT" as const, detached: true as const }),
+  idempotency: Object.freeze({ key: "COMMAND_ID" as const, duplicateEffectAllowed: false as const }),
+  visibility: Object.freeze({ assessment: true as const, debug: true as const }),
+  regressionIsolation: Object.freeze({ absentFeatureChangesBaseline: false as const }),
+})));
+
+export function canonicalAnalgesicDrugId(value: string): string {
+  return value === "DOLMEN" ? "DEXKETOPROFEN" : value;
+}
+
+export { ANALGESIA_FEATURE_ID };

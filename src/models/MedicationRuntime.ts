@@ -2,6 +2,7 @@ import type { ClinicalEffectType, ClinicalParameterValue } from "@/models/Clinic
 import type { NorepinephrineRuntimeSnapshot } from "@/models/NorepinephrineInfusion";
 import type { FluidTherapyPersistenceSnapshot } from "@/models/FluidTherapy";
 import type { TranexamicAcidRuntimeSnapshot } from "@/models/TranexamicAcid";
+import type { AnalgesiaRuntimeSnapshot } from "@/models/AnalgesiaMedication";
 
 export type MedicationRoute = "IV" | "IO" | "IM" | "PO";
 export type MedicationCategory = "vasopressor" | "antiarrhythmic" | "analgesic" | "sedative" | "crystalloid" | "bloodProduct" | "reversalAgent" | "other";
@@ -24,4 +25,5 @@ export type MedicationRuntimeSnapshot = Readonly<{
   norepinephrine?: NorepinephrineRuntimeSnapshot;
   fluidTherapy?: FluidTherapyPersistenceSnapshot;
   tranexamicAcid?: TranexamicAcidRuntimeSnapshot;
+  analgesia?: AnalgesiaRuntimeSnapshot;
 }>;

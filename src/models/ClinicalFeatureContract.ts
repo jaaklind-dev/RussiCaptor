@@ -1,6 +1,6 @@
 import type { VitalSignContributor } from "@/models/VitalSign";
 
-export type ClinicalFeatureCategory = "MEDICATION" | "FLUID" | "ANTIFIBRINOLYTIC" | "VENTILATION" | "PROCEDURE";
+export type ClinicalFeatureCategory = "MEDICATION" | "FLUID" | "ANTIFIBRINOLYTIC" | "ANALGESIC" | "VENTILATION" | "PROCEDURE";
 export type ClinicalFeatureLifecycle = "RUNNING" | "STOPPING" | "STOPPED" | "COMPLETED";
 
 /**

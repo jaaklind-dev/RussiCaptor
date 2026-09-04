@@ -23,6 +23,7 @@ import { terminateHemorrhageAtDeath } from "@/services/runtime/HemorrhagePatient
 import type { MedicationAdministration, MedicationDefinition, MedicationInstance } from "@/models/MedicationRuntime";
 import type { NorepinephrineCommand, NorepinephrineCommandResult, NorepinephrineFeatureProjection } from "@/models/NorepinephrineInfusion";
 import type { TranexamicAcidCommand, TranexamicAcidCommandResult, TranexamicAcidFeatureProjection } from "@/models/TranexamicAcid";
+import type { AnalgesicCommand, AnalgesicCommandResult, AnalgesicFeatureProjection } from "@/models/AnalgesiaMedication";
 import type {
   SupportedFluidTherapyCommand,
   SupportedFluidTherapyCommandResult,
@@ -746,6 +747,26 @@ export class ClinicalScenarioEngine {
     return this.medicationEngine.tranexamicAcidProjectionsAt(this.simulationTimeSec)
       .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
   }
+  executeAnalgesicCommand(command: AnalgesicCommand): AnalgesicCommandResult {
+    if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
+      status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
+    });
+    if (command.patientId !== this.requireProcess().encounterId) return Object.freeze({
+      status: "REJECTED", commandId: command.commandId, rejectionReason: "INVALID_PATIENT",
+    });
+    const result = this.medicationEngine.executeAnalgesic(command, this.getCirculationState(command.patientId));
+    const event = this.medicationEngine.analgesicEventForCommand(command.commandId);
+    if (result.status !== "IDEMPOTENT" && event?.commandId === command.commandId) {
+      this.logEvent(event.eventType, { ...event }, event.patientId);
+    }
+    if (result.status === "APPLIED") this.aggregateProcesses();
+    this.publishResourceDebugSnapshot();
+    return structuredClone(result);
+  }
+  getAnalgesicState(patientId?: string): readonly AnalgesicFeatureProjection[] {
+    return this.medicationEngine.analgesicProjectionsAt(this.simulationTimeSec)
+      .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
+  }
 
   setAssessmentRules(rules: AssessmentRule[]): void {
     this.assessmentRules = structuredClone(rules);
@@ -768,7 +789,7 @@ export class ClinicalScenarioEngine {
     const airwayState = this.getAirwayState();
     const clinicalEffects = this.clinicalIntegration.snapshot().events;
     const clinicalFeatures = [...this.getNorepinephrineState(), ...this.getFluidTherapyState(),
-      ...this.getTranexamicAcidState()];
+      ...this.getTranexamicAcidState(), ...this.getAnalgesicState()];
     endInputs();
     const endEvaluate = startRuntimeWorkTrace("ENGINE_ASSESSMENT_RULE_EVALUATE", { ruleCount: this.assessmentRules.length });
     const snapshot = this.assessmentEngine.evaluate(this.assessmentRules, {
@@ -790,7 +811,7 @@ export class ClinicalScenarioEngine {
     const timeline = await cooperativeDetachedCopy(this.eventLog, yieldControl);
     endTimeline({ yieldCount: timeline.metrics.yieldCount, maxBatchDurationMs: timeline.metrics.maxBatchDurationMs });
     const clinicalFeatures = [...this.getNorepinephrineState(), ...this.getFluidTherapyState(),
-      ...this.getTranexamicAcidState()];
+      ...this.getTranexamicAcidState(), ...this.getAnalgesicState()];
     const result = await this.assessmentEngine.evaluateCooperatively(this.assessmentRules, {
       timestamp: this.simulationTimeSec,
       runtimeState: this.requireRuntimeState(),
@@ -1032,6 +1053,7 @@ export class ClinicalScenarioEngine {
           ...this.medicationEngine.norepinephrineProjectionsAt(this.simulationTimeSec),
           ...this.medicationEngine.fluidTherapyProjectionsAt(this.simulationTimeSec),
           ...this.medicationEngine.tranexamicAcidProjectionsAt(this.simulationTimeSec),
+          ...this.medicationEngine.analgesicProjectionsAt(this.simulationTimeSec),
         ] },
       vitalSignStates: this.runtimeState?.vitalSignState ? [{ patientId: this.requireProcess().encounterId, state: this.runtimeState.vitalSignState }] : [],
       recentEvents: this.resourceEventLog,

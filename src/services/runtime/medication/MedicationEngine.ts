@@ -19,11 +19,18 @@ import type {
   TranexamicAcidFeatureProjection,
   TranexamicAcidRuntimeEvent,
 } from "@/models/TranexamicAcid";
+import type {
+  AnalgesicCommand,
+  AnalgesicCommandResult,
+  AnalgesicFeatureProjection,
+  AnalgesicRuntimeEvent,
+} from "@/models/AnalgesiaMedication";
 import { NorepinephrineInfusionRuntime } from "./NorepinephrineInfusion";
 import { GelofusinFluidTherapyRuntime } from "./GelofusinFluidTherapy";
 import { RINGER_FLUID_CONFIGURATION, RingerFluidTherapyRuntime } from "./RingerFluidTherapy";
 import { SodiumChlorideFluidTherapyRuntime } from "./SodiumChlorideFluidTherapy";
 import { TranexamicAcidRuntime } from "./TranexamicAcid";
+import { AnalgesiaRuntime } from "./AnalgesiaRuntime";
 
 export type MedicationOperationResult = { instance?: MedicationInstance; effects: ClinicalEffect[]; events: MedicationRuntimeEvent[] };
 export class MedicationEngine {
@@ -37,6 +44,7 @@ export class MedicationEngine {
   private readonly sodiumChloride = new SodiumChlorideFluidTherapyRuntime();
   private readonly gelofusin = new GelofusinFluidTherapyRuntime();
   private readonly tranexamicAcid = new TranexamicAcidRuntime();
+  private readonly analgesia = new AnalgesiaRuntime();
   installDefinitions(values: MedicationDefinition[]): void {
     this.definitions.clear();
     for (const d of [...values].sort((a,b) => a.medicationId.localeCompare(b.medicationId))) {
@@ -46,7 +54,7 @@ export class MedicationEngine {
   }
   reset(): void { this.instances.clear(); this.seen.clear(); this.events.length = 0; this.effects.clear();
     this.norepinephrine.reset(); this.ringer.reset(); this.sodiumChloride.reset(); this.gelofusin.reset();
-    this.tranexamicAcid.reset(); }
+    this.tranexamicAcid.reset(); this.analgesia.reset(); }
   administer(a: MedicationAdministration, circulation: CirculationState): MedicationOperationResult {
     const definition = this.definitions.get(a.medicationId);
     let rejection: MedicationRejectionReason | undefined;
@@ -66,7 +74,8 @@ export class MedicationEngine {
     this.effects.set(a.administrationId, effects);
     return { instance: structuredClone(instance), effects, events: structuredClone(events) };
   }
-  advanceTo(timestamp: number): (MedicationRuntimeEvent | NorepinephrineRuntimeEvent | SupportedFluidTherapyEvent | TranexamicAcidRuntimeEvent)[] {
+  advanceTo(timestamp: number): (MedicationRuntimeEvent | NorepinephrineRuntimeEvent | SupportedFluidTherapyEvent |
+    TranexamicAcidRuntimeEvent | AnalgesicRuntimeEvent)[] {
     const generated: MedicationRuntimeEvent[] = [];
     for (const item of this.active()) { const d = this.definitions.get(item.medicationId)!;
       if (timestamp >= item.timestamp + d.durationSec) { const next = { ...item, status: "COMPLETED" as const, completedAt: item.timestamp + d.durationSec };
@@ -75,6 +84,7 @@ export class MedicationEngine {
       ...generated, ...this.norepinephrine.advanceTo(timestamp), ...this.ringer.advanceTo(timestamp),
       ...this.sodiumChloride.advanceTo(timestamp), ...this.gelofusin.advanceTo(timestamp),
       ...this.tranexamicAcid.advanceTo(timestamp),
+      ...this.analgesia.advanceTo(timestamp),
     ]);
   }
   cancel(administrationId: string, timestamp: number): MedicationRuntimeEvent {
@@ -118,10 +128,19 @@ export class MedicationEngine {
   tranexamicAcidEventForCommand(commandId: string): TranexamicAcidRuntimeEvent | undefined {
     return this.tranexamicAcid.eventForCommand(commandId);
   }
+  executeAnalgesic(command: AnalgesicCommand, circulation?: CirculationState): AnalgesicCommandResult {
+    return this.analgesia.execute(command, circulation);
+  }
+  analgesicProjectionsAt(timestamp: number): readonly AnalgesicFeatureProjection[] {
+    return this.analgesia.projectionsAt(timestamp);
+  }
+  analgesicEventForCommand(commandId: string): AnalgesicRuntimeEvent | undefined {
+    return this.analgesia.eventForCommand(commandId);
+  }
   vitalContributorsAt(timestamp: number): readonly VitalSignContributor[] {
     return [...this.ringer.vitalContributorsAt(timestamp), ...this.sodiumChloride.vitalContributorsAt(timestamp),
       ...this.gelofusin.vitalContributorsAt(timestamp),
-      ...this.norepinephrine.vitalContributorsAt(timestamp)];
+      ...this.norepinephrine.vitalContributorsAt(timestamp), ...this.analgesia.vitalContributorsAt(timestamp)];
   }
   activeEffects(timestamp = 0): ClinicalEffect[] {
     const medicationEffects = this.active().flatMap(x => this.effects.get(x.administrationId) ?? []);
@@ -151,6 +170,7 @@ export class MedicationEngine {
     const sodiumChloride = this.sodiumChloride.snapshot();
     const gelofusin = this.gelofusin.snapshot();
     const tranexamicAcid = this.tranexamicAcid.snapshot();
+    const analgesia = this.analgesia.snapshot();
     const additionalProducts: AdditionalFluidTherapyRuntimeSnapshot[] = [
       ...(sodiumChloride ? [sodiumChloride] : []),
       ...(gelofusin ? [gelofusin] : []),
@@ -165,7 +185,8 @@ export class MedicationEngine {
       effects: [...this.effects.values()].flat().sort((a,b)=>a.effectId.localeCompare(b.effectId)).map(x=>structuredClone(x)),
       ...(norepinephrine ? { norepinephrine } : {}),
       ...(fluidTherapy ? { fluidTherapy } : {}),
-      ...(tranexamicAcid ? { tranexamicAcid } : {}) };
+      ...(tranexamicAcid ? { tranexamicAcid } : {}),
+      ...(analgesia ? { analgesia } : {}) };
   }
   restore(snapshot: MedicationRuntimeSnapshot): void {
     this.definitions.clear(); snapshot.definitions.forEach(item => this.definitions.set(item.medicationId, structuredClone(item)));
@@ -179,6 +200,7 @@ export class MedicationEngine {
     }
     this.norepinephrine.restore(snapshot.norepinephrine);
     this.tranexamicAcid.restore(snapshot.tranexamicAcid);
+    this.analgesia.restore(snapshot.analgesia);
     if (snapshot.fluidTherapy) {
       const { additionalProducts, ...ringer } = snapshot.fluidTherapy;
       this.ringer.restore(ringer);
