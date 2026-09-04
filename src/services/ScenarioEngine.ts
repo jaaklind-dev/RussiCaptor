@@ -22,7 +22,11 @@ import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatient
 import { terminateHemorrhageAtDeath } from "@/services/runtime/HemorrhagePatientProcess";
 import type { MedicationAdministration, MedicationDefinition, MedicationInstance } from "@/models/MedicationRuntime";
 import type { NorepinephrineCommand, NorepinephrineCommandResult, NorepinephrineFeatureProjection } from "@/models/NorepinephrineInfusion";
-import type { FluidTherapyCommand, FluidTherapyCommandResult, FluidTherapyFeatureProjection } from "@/models/FluidTherapy";
+import type {
+  SupportedFluidTherapyCommand,
+  SupportedFluidTherapyCommandResult,
+  SupportedFluidTherapyProjection,
+} from "@/models/FluidTherapy";
 import type { ResourceRuntimeEvent, RuntimeResource, ResourceType, SchedulableIntervention } from "@/models/ResourceRuntime";
 import {
   type HvAction,
@@ -699,7 +703,7 @@ export class ClinicalScenarioEngine {
     return this.medicationEngine.norepinephrineProjectionsAt(this.simulationTimeSec)
       .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
   }
-  executeFluidTherapyCommand(command: FluidTherapyCommand<"RINGER">): FluidTherapyCommandResult<"RINGER"> {
+  executeFluidTherapyCommand(command: SupportedFluidTherapyCommand): SupportedFluidTherapyCommandResult {
     if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
       status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
     });
@@ -707,7 +711,7 @@ export class ClinicalScenarioEngine {
       status: "REJECTED", commandId: command.commandId, rejectionReason: "INVALID_PATIENT",
     });
     const result = this.medicationEngine.executeFluidTherapy(command, this.getCirculationState(command.patientId));
-    const event = this.medicationEngine.snapshot().fluidTherapy?.events.at(-1);
+    const event = this.medicationEngine.fluidTherapyEventForCommand(command.commandId);
     if (result.status !== "IDEMPOTENT" && event?.commandId === command.commandId) {
       this.logEvent(event.eventType, { ...event }, event.patientId);
     }
@@ -715,7 +719,7 @@ export class ClinicalScenarioEngine {
     this.publishResourceDebugSnapshot();
     return structuredClone(result);
   }
-  getFluidTherapyState(patientId?: string): readonly FluidTherapyFeatureProjection<"RINGER">[] {
+  getFluidTherapyState(patientId?: string): readonly SupportedFluidTherapyProjection[] {
     return this.medicationEngine.fluidTherapyProjectionsAt(this.simulationTimeSec)
       .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
   }

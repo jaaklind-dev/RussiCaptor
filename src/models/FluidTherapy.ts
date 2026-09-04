@@ -1,11 +1,14 @@
 import type { ClinicalFeatureLifecycle } from "@/models/ClinicalFeatureContract";
 
 export const RINGER_FEATURE_ID = "RINGER" as const;
+export const SODIUM_CHLORIDE_0_9_FEATURE_ID = "SODIUM_CHLORIDE_0_9" as const;
 export const FLUID_VOLUME_UNIT = "ML" as const;
 export const FLUID_RATE_UNIT = "ML_H" as const;
 
 export type FluidAdministrationMode = "BOLUS" | "INFUSION";
 export type FluidAdministrationStatus = ClinicalFeatureLifecycle | "COMPLETED";
+export type FluidProductClass = "CRYSTALLOID" | "COLLOID";
+export type SupportedFluidType = typeof RINGER_FEATURE_ID | typeof SODIUM_CHLORIDE_0_9_FEATURE_ID;
 
 export type FluidTherapyConfiguration<TFluidType extends string = string> = Readonly<{
   schemaVersion: 1;
@@ -20,6 +23,11 @@ export type FluidTherapyConfiguration<TFluidType extends string = string> = Read
     diastolicBpDelta: number;
     crtDelta: number;
   }>;
+}>;
+
+export type FluidTherapyProductDefinition<TFluidType extends string = string> = Readonly<{
+  fluidClass: FluidProductClass;
+  configuration: FluidTherapyConfiguration<TFluidType>;
 }>;
 
 export type FluidTherapyAdministrationState<TFluidType extends string = string> = Readonly<{
@@ -90,11 +98,16 @@ export type FluidTherapyRuntimeSnapshot<TFluidType extends string = string> = Re
   events: readonly FluidTherapyRuntimeEvent<TFluidType>[];
 }>;
 
+export type FluidTherapyPersistenceSnapshot = FluidTherapyRuntimeSnapshot<typeof RINGER_FEATURE_ID> & Readonly<{
+  additionalProducts?: readonly FluidTherapyRuntimeSnapshot<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>[];
+}>;
+
 export type FluidTherapyFeatureProjection<TFluidType extends string = string> = Readonly<{
   featureId: TFluidType;
   administrationId: string;
   patientId: string;
   fluidType: TFluidType;
+  fluidClass: FluidProductClass;
   mode: FluidAdministrationMode;
   status: FluidAdministrationStatus;
   vascularAccessId: string;
@@ -107,3 +120,16 @@ export type FluidTherapyFeatureProjection<TFluidType extends string = string> = 
   stoppedAtSimulationTimeSec?: number;
   completedAtSimulationTimeSec?: number;
 }>;
+
+export type SupportedFluidTherapyCommand =
+  | FluidTherapyCommand<typeof RINGER_FEATURE_ID>
+  | FluidTherapyCommand<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>;
+export type SupportedFluidTherapyCommandResult =
+  | FluidTherapyCommandResult<typeof RINGER_FEATURE_ID>
+  | FluidTherapyCommandResult<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>;
+export type SupportedFluidTherapyProjection =
+  | FluidTherapyFeatureProjection<typeof RINGER_FEATURE_ID>
+  | FluidTherapyFeatureProjection<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>;
+export type SupportedFluidTherapyEvent =
+  | FluidTherapyRuntimeEvent<typeof RINGER_FEATURE_ID>
+  | FluidTherapyRuntimeEvent<typeof SODIUM_CHLORIDE_0_9_FEATURE_ID>;

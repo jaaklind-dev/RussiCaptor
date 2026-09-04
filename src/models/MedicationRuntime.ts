@@ -1,6 +1,6 @@
 import type { ClinicalEffectType, ClinicalParameterValue } from "@/models/ClinicalIntegration";
 import type { NorepinephrineRuntimeSnapshot } from "@/models/NorepinephrineInfusion";
-import type { FluidTherapyRuntimeSnapshot } from "@/models/FluidTherapy";
+import type { FluidTherapyPersistenceSnapshot } from "@/models/FluidTherapy";
 
 export type MedicationRoute = "IV" | "IO" | "IM" | "PO";
 export type MedicationCategory = "vasopressor" | "antiarrhythmic" | "analgesic" | "sedative" | "crystalloid" | "bloodProduct" | "reversalAgent" | "other";
@@ -21,5 +21,5 @@ export type MedicationRuntimeSnapshot = Readonly<{
   events: readonly MedicationRuntimeEvent[];
   effects: readonly import("@/models/ClinicalIntegration").ClinicalEffect[];
   norepinephrine?: NorepinephrineRuntimeSnapshot;
-  fluidTherapy?: FluidTherapyRuntimeSnapshot<"RINGER">;
+  fluidTherapy?: FluidTherapyPersistenceSnapshot;
 }>;

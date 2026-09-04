@@ -5,9 +5,9 @@ import type { ResourceRuntimeEvent, RuntimeResource } from "@/models/ResourceRun
 import type { RuntimeState } from "@/models/RuntimeAggregation";
 import type { ClinicalIntegrationEvent } from "@/models/ClinicalIntegration";
 import type { NorepinephrineFeatureProjection } from "@/models/NorepinephrineInfusion";
-import type { FluidTherapyFeatureProjection } from "@/models/FluidTherapy";
+import type { SupportedFluidTherapyProjection } from "@/models/FluidTherapy";
 
-export type ClinicalFeatureProjection = NorepinephrineFeatureProjection | FluidTherapyFeatureProjection<"RINGER">;
+export type ClinicalFeatureProjection = NorepinephrineFeatureProjection | SupportedFluidTherapyProjection;
 
 export type AssessmentCategory = "AIRWAY" | "OXYGENATION" | "VENTILATION" | "MONITORING" | "RESOURCES" | "VITALS";
 export type AssessmentSeverity = "INFO" | "WARNING" | "FAIL";

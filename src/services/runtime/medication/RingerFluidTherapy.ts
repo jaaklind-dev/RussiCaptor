@@ -1,4 +1,8 @@
-import { RINGER_FEATURE_ID, type FluidTherapyConfiguration } from "@/models/FluidTherapy";
+import {
+  RINGER_FEATURE_ID,
+  type FluidTherapyConfiguration,
+  type FluidTherapyProductDefinition,
+} from "@/models/FluidTherapy";
 import { createFluidTherapyContract, FluidTherapyRuntime } from "./FluidTherapyRuntime";
 
 export const RINGER_FLUID_CONFIGURATION: FluidTherapyConfiguration<typeof RINGER_FEATURE_ID> = Object.freeze({
@@ -16,10 +20,18 @@ export const RINGER_FLUID_CONFIGURATION: FluidTherapyConfiguration<typeof RINGER
   }),
 });
 
-export const ringerClinicalFeatureContract = createFluidTherapyContract(RINGER_FLUID_CONFIGURATION);
+export const RINGER_FLUID_PRODUCT: FluidTherapyProductDefinition<typeof RINGER_FEATURE_ID> = Object.freeze({
+  fluidClass: "CRYSTALLOID",
+  configuration: RINGER_FLUID_CONFIGURATION,
+});
+
+export const ringerClinicalFeatureContract = createFluidTherapyContract(
+  RINGER_FLUID_PRODUCT.configuration,
+  RINGER_FLUID_PRODUCT.fluidClass,
+);
 
 export class RingerFluidTherapyRuntime extends FluidTherapyRuntime<typeof RINGER_FEATURE_ID> {
   constructor() {
-    super(RINGER_FLUID_CONFIGURATION);
+    super(RINGER_FLUID_PRODUCT.configuration, RINGER_FLUID_PRODUCT.fluidClass);
   }
 }

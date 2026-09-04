@@ -3,6 +3,7 @@ import type { ClinicalFeatureContract } from "@/models/ClinicalFeatureContract";
 import {
   FLUID_RATE_UNIT,
   FLUID_VOLUME_UNIT,
+  type FluidProductClass,
   type FluidTherapyAdministrationState,
   type FluidTherapyCommand,
   type FluidTherapyCommandResult,
@@ -89,6 +90,7 @@ function validate<TFluidType extends string>(
 
 export function createFluidTherapyContract<TFluidType extends string>(
   configuration: FluidTherapyConfiguration<TFluidType>,
+  fluidClass: FluidProductClass = "CRYSTALLOID",
 ): ClinicalFeatureContract<TFluidType, FluidTherapyCommand<TFluidType>,
   FluidTherapyAdministrationState<TFluidType>, FluidTherapyConfiguration<TFluidType>> {
   return Object.freeze({
@@ -118,7 +120,7 @@ export function createFluidTherapyContract<TFluidType extends string>(
       ] as const),
       combine: "VITAL_SIGN_VOLUME_LAYER",
       contributors: (state: FluidTherapyAdministrationState<TFluidType>, simulationTimeSec: number) => {
-        const projection = projectState(state, simulationTimeSec, configuration);
+        const projection = projectState(state, simulationTimeSec, configuration, fluidClass);
         return fluidVolumeVitalContributors(projection, configuration);
       },
     }),
@@ -133,6 +135,7 @@ function projectState<TFluidType extends string>(
   state: FluidTherapyAdministrationState<TFluidType>,
   simulationTimeSec: number,
   configuration: FluidTherapyConfiguration<TFluidType>,
+  fluidClass: FluidProductClass,
 ): FluidTherapyFeatureProjection<TFluidType> {
   const deliveredVolumeMl = deliveredFluidVolumeAt(state, simulationTimeSec);
   return Object.freeze({
@@ -140,6 +143,7 @@ function projectState<TFluidType extends string>(
     administrationId: state.administrationId,
     patientId: state.patientId,
     fluidType: state.fluidType,
+    fluidClass,
     mode: state.mode,
     status: state.status,
     vascularAccessId: state.vascularAccessId,
@@ -159,7 +163,8 @@ export class FluidTherapyRuntime<TFluidType extends string> {
   private readonly commandResults = new Map<string, FluidTherapyCommandResult<TFluidType>>();
   private readonly events: FluidTherapyRuntimeEvent<TFluidType>[] = [];
 
-  constructor(private readonly configuration: FluidTherapyConfiguration<TFluidType>) {
+  constructor(private readonly configuration: FluidTherapyConfiguration<TFluidType>,
+    private readonly fluidClass: FluidProductClass = "CRYSTALLOID") {
     this.assertConfiguration(configuration);
   }
 
@@ -208,7 +213,7 @@ export class FluidTherapyRuntime<TFluidType extends string> {
   }
 
   projectionsAt(simulationTimeSec: number): readonly FluidTherapyFeatureProjection<TFluidType>[] {
-    return this.ordered().map(state => projectState(state, simulationTimeSec, this.configuration));
+    return this.ordered().map(state => projectState(state, simulationTimeSec, this.configuration, this.fluidClass));
   }
 
   vitalContributorsAt(simulationTimeSec: number): readonly VitalSignContributor[] {
