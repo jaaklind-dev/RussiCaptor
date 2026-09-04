@@ -4,6 +4,7 @@ import type { InterventionInstance } from "@/models/InterventionInstance";
 import type { ResourceRuntimeEvent, RuntimeResource } from "@/models/ResourceRuntime";
 import type { RuntimeState } from "@/models/RuntimeAggregation";
 import type { ClinicalIntegrationEvent } from "@/models/ClinicalIntegration";
+import type { NorepinephrineFeatureProjection } from "@/models/NorepinephrineInfusion";
 
 export type AssessmentCategory = "AIRWAY" | "OXYGENATION" | "VENTILATION" | "MONITORING" | "RESOURCES" | "VITALS";
 export type AssessmentSeverity = "INFO" | "WARNING" | "FAIL";
@@ -60,6 +61,7 @@ export type AssessmentSourceSnapshot = {
   airwayState: AirwayState;
   clinicalEffects: ClinicalIntegrationEvent[];
   timeline: GoldenActualEvent[];
+  clinicalFeatures?: NorepinephrineFeatureProjection[];
 };
 
 export type DebriefReport = {
@@ -82,4 +84,5 @@ export type AssessmentSnapshot = {
   results: AssessmentResult[];
   events: AssessmentEvent[];
   debrief: DebriefReport;
+  clinicalFeatures?: NorepinephrineFeatureProjection[];
 };

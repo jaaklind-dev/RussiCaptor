@@ -30,9 +30,11 @@ function previousState(previous: RuntimeState): VitalSignState | undefined {
 export type VitalRuntimeResolution = { state: VitalSignState; configuration: VitalSignConfiguration; attribution: RuntimeVitalAttribution; events: AggregationEvent[]; acceptedOverrideFields: string[] };
 
 /** Frozen layer boundary: PatientProcess outputs -> VitalSignEngine. */
-export function resolveVitalSignRuntime(previous: RuntimeState, outputs: ProcessOutput[], overrides: RuntimeOverride[] | undefined, timestamp: number): VitalRuntimeResolution {
+export function resolveVitalSignRuntime(previous: RuntimeState, outputs: ProcessOutput[], overrides: RuntimeOverride[] | undefined,
+  timestamp: number, clinicalContributors: readonly VitalSignContributor[] = []): VitalRuntimeResolution {
   const legacy = adaptLegacyVitalContributors(outputs);
-  const contributors: VitalSignContributor[] = [...legacy.contributors, ...explicitContributors(outputs)];
+  const contributors: VitalSignContributor[] = [...legacy.contributors, ...explicitContributors(outputs),
+    ...clinicalContributors.map(item => structuredClone(item))];
   const events = [...legacy.events]; const acceptedOverrideFields: string[] = [];
   for (const override of (overrides ?? []).filter(x => x.expiresAtSec === undefined || x.expiresAtSec >= timestamp)) {
     const vital = overrideVital[override.field];

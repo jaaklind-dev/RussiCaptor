@@ -7,6 +7,7 @@ import type { ClinicalEffect } from "@/models/ClinicalIntegration";
 import type { MedicationInstance, MedicationRuntimeEvent } from "@/models/MedicationRuntime";
 import type { VitalSignState } from "@/models/VitalSign";
 import type { ResourceAllocationRuntimeState } from "@/models/ResourceAllocation";
+import type { NorepinephrineFeatureProjection } from "@/models/NorepinephrineInfusion";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { publishDerivedSnapshotNotification } from "@/services/runtime/RuntimeDerivedSnapshotTransaction";
 
@@ -18,7 +19,8 @@ export type ResourceRuntimeDebugSnapshot = {
   airwayStates?: AirwayState[];
   circulationStates?: CirculationState[];
   hemorrhageProcesses?: HemorrhagePatientProcessRuntime[];
-  medicationState?: { instances: MedicationInstance[]; events: MedicationRuntimeEvent[]; effects: ClinicalEffect[] };
+  medicationState?: { instances: MedicationInstance[]; events: MedicationRuntimeEvent[]; effects: ClinicalEffect[];
+    clinicalFeatures?: NorepinephrineFeatureProjection[] };
   vitalSignStates?: { patientId: string; state: VitalSignState }[];
   recentEvents: ResourceRuntimeEvent[];
   updatedAt: number;
@@ -69,6 +71,7 @@ export function getPatientResourceDebugSnapshot(patientId: string): ResourceRunt
       instances: patientSnapshot.medicationState.instances.filter(x => x.patientId === patientId).map(x=>structuredClone(x)),
       events: patientSnapshot.medicationState.events.filter(x => x.patientId === patientId).map(x=>structuredClone(x)),
       effects: patientSnapshot.medicationState.effects.filter(x => x.patientId === patientId).map(x=>structuredClone(x)),
+      clinicalFeatures: patientSnapshot.medicationState.clinicalFeatures?.filter(x => x.patientId === patientId).map(x=>structuredClone(x)),
     } : undefined,
     vitalSignStates: (patientSnapshot.vitalSignStates ?? []).filter(item => item.patientId === patientId).map(item => structuredClone(item)),
     recentEvents: patientSnapshot.recentEvents

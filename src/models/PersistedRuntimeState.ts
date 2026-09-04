@@ -1,10 +1,10 @@
 import type { AirwayRuntimeEvent, AirwayState } from "@/models/AirwayState";
 import type { CanonicalLifecycleProcess } from "@/models/PatientProcessLifecycle";
 import type { CirculationRuntimeEvent, CirculationState } from "@/models/CirculationState";
-import type { ClinicalIntegrationEvent, ClinicalEffect } from "@/models/ClinicalIntegration";
+import type { ClinicalIntegrationEvent } from "@/models/ClinicalIntegration";
 import type { GoldenActualEvent } from "@/models/GoldenTest";
 import type { InterventionInstance } from "@/models/InterventionInstance";
-import type { MedicationDefinition, MedicationInstance, MedicationRuntimeEvent } from "@/models/MedicationRuntime";
+import type { MedicationRuntimeSnapshot } from "@/models/MedicationRuntime";
 import type { ResourceRuntimeEvent, RuntimeIntervention, RuntimeResource } from "@/models/ResourceRuntime";
 import type { RuntimeState } from "@/models/RuntimeAggregation";
 import type { VitalSignEvent } from "@/models/VitalSign";
@@ -49,12 +49,7 @@ export type PersistedRuntimePayload = Readonly<{
   interventionInstances: readonly InterventionInstance[];
   airway: Readonly<{ states: readonly AirwayState[]; events: readonly AirwayRuntimeEvent[] }>;
   circulation: Readonly<{ states: readonly CirculationState[]; events: readonly CirculationRuntimeEvent[] }>;
-  medication: Readonly<{
-    definitions: readonly MedicationDefinition[];
-    instances: readonly MedicationInstance[];
-    events: readonly MedicationRuntimeEvent[];
-    effects: readonly ClinicalEffect[];
-  }>;
+  medication: MedicationRuntimeSnapshot;
   assessmentRules: readonly AssessmentRule[];
   vitalSignEvents: readonly VitalSignEvent[];
 }>;

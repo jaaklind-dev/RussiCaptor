@@ -1,4 +1,5 @@
 import type { ClinicalEffectType, ClinicalParameterValue } from "@/models/ClinicalIntegration";
+import type { NorepinephrineRuntimeSnapshot } from "@/models/NorepinephrineInfusion";
 
 export type MedicationRoute = "IV" | "IO" | "IM" | "PO";
 export type MedicationCategory = "vasopressor" | "antiarrhythmic" | "analgesic" | "sedative" | "crystalloid" | "bloodProduct" | "reversalAgent" | "other";
@@ -13,3 +14,10 @@ export type MedicationInstance = MedicationAdministration & { medicationName: st
 export type MedicationRejectionReason = "DEFINITION_NOT_FOUND" | "INVALID_ROUTE" | "MISSING_VASCULAR_ACCESS" | "DUPLICATE_ADMINISTRATION" | "INVALID_ADMINISTRATION";
 export type MedicationRuntimeEvent = { eventType: "MedicationOrdered" | "MedicationStarted" | "MedicationCompleted" | "MedicationCancelled" | "MedicationRejected";
   timestamp: number; administrationId: string; medicationId: string; patientId: string; reasonCode?: MedicationRejectionReason };
+export type MedicationRuntimeSnapshot = Readonly<{
+  definitions: readonly MedicationDefinition[];
+  instances: readonly MedicationInstance[];
+  events: readonly MedicationRuntimeEvent[];
+  effects: readonly import("@/models/ClinicalIntegration").ClinicalEffect[];
+  norepinephrine?: NorepinephrineRuntimeSnapshot;
+}>;

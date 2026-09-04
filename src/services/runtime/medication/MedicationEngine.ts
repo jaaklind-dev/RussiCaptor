@@ -1,6 +1,9 @@
 import type { CirculationState } from "@/models/CirculationState";
 import type { ClinicalEffect } from "@/models/ClinicalIntegration";
-import type { MedicationAdministration, MedicationDefinition, MedicationInstance, MedicationRejectionReason, MedicationRuntimeEvent } from "@/models/MedicationRuntime";
+import type { MedicationAdministration, MedicationDefinition, MedicationInstance, MedicationRejectionReason, MedicationRuntimeEvent, MedicationRuntimeSnapshot } from "@/models/MedicationRuntime";
+import type { NorepinephrineCommand, NorepinephrineCommandResult, NorepinephrineFeatureProjection, NorepinephrineRuntimeEvent } from "@/models/NorepinephrineInfusion";
+import type { VitalSignContributor } from "@/models/VitalSign";
+import { NorepinephrineInfusionRuntime } from "./NorepinephrineInfusion";
 
 export type MedicationOperationResult = { instance?: MedicationInstance; effects: ClinicalEffect[]; events: MedicationRuntimeEvent[] };
 export class MedicationEngine {
@@ -9,6 +12,7 @@ export class MedicationEngine {
   private readonly seen = new Set<string>();
   private readonly events: MedicationRuntimeEvent[] = [];
   private readonly effects = new Map<string, ClinicalEffect[]>();
+  private readonly norepinephrine = new NorepinephrineInfusionRuntime();
   installDefinitions(values: MedicationDefinition[]): void {
     this.definitions.clear();
     for (const d of [...values].sort((a,b) => a.medicationId.localeCompare(b.medicationId))) {
@@ -16,7 +20,7 @@ export class MedicationEngine {
       this.definitions.set(d.medicationId, structuredClone(d));
     }
   }
-  reset(): void { this.instances.clear(); this.seen.clear(); this.events.length = 0; this.effects.clear(); }
+  reset(): void { this.instances.clear(); this.seen.clear(); this.events.length = 0; this.effects.clear(); this.norepinephrine.reset(); }
   administer(a: MedicationAdministration, circulation: CirculationState): MedicationOperationResult {
     const definition = this.definitions.get(a.medicationId);
     let rejection: MedicationRejectionReason | undefined;
@@ -36,12 +40,12 @@ export class MedicationEngine {
     this.effects.set(a.administrationId, effects);
     return { instance: structuredClone(instance), effects, events: structuredClone(events) };
   }
-  advanceTo(timestamp: number): MedicationRuntimeEvent[] {
+  advanceTo(timestamp: number): (MedicationRuntimeEvent | NorepinephrineRuntimeEvent)[] {
     const generated: MedicationRuntimeEvent[] = [];
     for (const item of this.active()) { const d = this.definitions.get(item.medicationId)!;
       if (timestamp >= item.timestamp + d.durationSec) { const next = { ...item, status: "COMPLETED" as const, completedAt: item.timestamp + d.durationSec };
         this.instances.set(item.administrationId, next); generated.push(this.event("MedicationCompleted", next, next.completedAt)); } }
-    this.events.push(...generated); return structuredClone(generated);
+    this.events.push(...generated); return structuredClone([...generated, ...this.norepinephrine.advanceTo(timestamp)]);
   }
   cancel(administrationId: string, timestamp: number): MedicationRuntimeEvent {
     const item = this.instances.get(administrationId); if (!item || item.status !== "ACTIVE") throw new Error(`Medication ${administrationId} pole ACTIVE.`);
@@ -49,13 +53,36 @@ export class MedicationEngine {
     const event = this.event("MedicationCancelled", next, timestamp); this.events.push(event); return structuredClone(event);
   }
   active(): MedicationInstance[] { return this.snapshot().instances.filter(x => x.status === "ACTIVE"); }
-  activeEffects(): ClinicalEffect[] { return this.active().flatMap(x => this.effects.get(x.administrationId) ?? []).sort((a,b)=>a.effectId.localeCompare(b.effectId)).map(x=>structuredClone(x)); }
-  snapshot(): { definitions: MedicationDefinition[]; instances: MedicationInstance[]; events: MedicationRuntimeEvent[]; effects: ClinicalEffect[] } {
+  executeNorepinephrine(command: NorepinephrineCommand, circulation?: CirculationState): NorepinephrineCommandResult {
+    return this.norepinephrine.execute(command, circulation);
+  }
+  norepinephrineProjectionsAt(timestamp: number): readonly NorepinephrineFeatureProjection[] {
+    return this.norepinephrine.projectionsAt(timestamp);
+  }
+  vitalContributorsAt(timestamp: number): readonly VitalSignContributor[] {
+    return this.norepinephrine.vitalContributorsAt(timestamp);
+  }
+  activeEffects(timestamp = 0): ClinicalEffect[] {
+    const medicationEffects = this.active().flatMap(x => this.effects.get(x.administrationId) ?? []);
+    const norepinephrineEffects = this.norepinephrine.projectionsAt(timestamp)
+      .filter(item => item.status !== "STOPPED" && (item.currentSystolicIncreaseMmHg > 0 || item.currentDiastolicIncreaseMmHg > 0))
+      .map((item): ClinicalEffect => ({ effectId: `${item.infusionId}:VASOPRESSOR`, effectType: "VASOPRESSOR_SUPPORT",
+        encounterId: item.patientId, patientId: item.patientId, timestamp,
+        sourceInterventionInstanceId: item.infusionId, parameters: {
+          doseMicrogramsPerKgMin: item.doseMicrogramsPerKgMin, unit: item.unit,
+          systolicIncreaseMmHg: item.currentSystolicIncreaseMmHg,
+          diastolicIncreaseMmHg: item.currentDiastolicIncreaseMmHg,
+        } }));
+    return [...medicationEffects, ...norepinephrineEffects].sort((a,b)=>a.effectId.localeCompare(b.effectId)).map(x=>structuredClone(x));
+  }
+  snapshot(): MedicationRuntimeSnapshot {
+    const norepinephrine = this.norepinephrine.snapshot();
     return { definitions: [...this.definitions.values()].sort((a,b) => a.medicationId.localeCompare(b.medicationId)).map(x=>structuredClone(x)),
       instances: [...this.instances.values()].sort((a,b)=>a.timestamp-b.timestamp || a.administrationId.localeCompare(b.administrationId)).map(x=>structuredClone(x)), events: structuredClone(this.events),
-      effects: [...this.effects.values()].flat().sort((a,b)=>a.effectId.localeCompare(b.effectId)).map(x=>structuredClone(x)) };
+      effects: [...this.effects.values()].flat().sort((a,b)=>a.effectId.localeCompare(b.effectId)).map(x=>structuredClone(x)),
+      ...(norepinephrine ? { norepinephrine } : {}) };
   }
-  restore(snapshot: Readonly<{ definitions: readonly MedicationDefinition[]; instances: readonly MedicationInstance[]; events: readonly MedicationRuntimeEvent[]; effects: readonly ClinicalEffect[] }>): void {
+  restore(snapshot: MedicationRuntimeSnapshot): void {
     this.definitions.clear(); snapshot.definitions.forEach(item => this.definitions.set(item.medicationId, structuredClone(item)));
     this.instances.clear(); snapshot.instances.forEach(item => this.instances.set(item.administrationId, structuredClone(item)));
     this.seen.clear(); snapshot.instances.forEach(item => this.seen.add(item.administrationId));
@@ -65,6 +92,7 @@ export class MedicationEngine {
       const id = effect.sourceInterventionInstanceId;
       this.effects.set(id, [...(this.effects.get(id) ?? []), structuredClone(effect)]);
     }
+    this.norepinephrine.restore(snapshot.norepinephrine);
   }
   private validAccess(a: MedicationAdministration, c: CirculationState): boolean { if (!a.vascularAccessId) return false;
     return c.vascularAccess.some(x => x.interventionInstanceId === a.vascularAccessId && (a.route === "IO" ? x.type === "IO" : x.type !== "IO")); }

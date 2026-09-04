@@ -51,8 +51,8 @@ export type VitalSignConfiguration = {
 
 /**
  * Generic engine input retained for isolated engine tests and compatibility.
- * Production runtime accepts only PatientVitalContributor through
- * VitalSignRuntimeResolver.
+ * Production runtime accepts process contributors and explicit clinical
+ * feature contributors through VitalSignRuntimeResolver.
  */
 export type VitalSignContributor = {
   contributorId: string;

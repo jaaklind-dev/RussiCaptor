@@ -21,6 +21,7 @@ import type { CirculationState } from "@/models/CirculationState";
 import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatientProcess";
 import { terminateHemorrhageAtDeath } from "@/services/runtime/HemorrhagePatientProcess";
 import type { MedicationAdministration, MedicationDefinition, MedicationInstance } from "@/models/MedicationRuntime";
+import type { NorepinephrineCommand, NorepinephrineCommandResult, NorepinephrineFeatureProjection } from "@/models/NorepinephrineInfusion";
 import type { ResourceRuntimeEvent, RuntimeResource, ResourceType, SchedulableIntervention } from "@/models/ResourceRuntime";
 import {
   type HvAction,
@@ -311,7 +312,7 @@ export class ClinicalScenarioEngine {
       throw new Error("Simulatsiooniaeg peab liikuma deterministlikult edasi.");
     }
     const targetTime = simulationTimeSec;
-    for (const medicationEvent of this.medicationEngine.advanceTo(targetTime)) this.logEvent(medicationEvent.eventType, medicationEvent, medicationEvent.patientId);
+    for (const medicationEvent of this.medicationEngine.advanceTo(targetTime)) this.logEvent(medicationEvent.eventType, { ...medicationEvent }, medicationEvent.patientId);
     const root = this.rootProcess();
     if (root) {
       const descriptor = this.lifecyclePlan.descriptor(root.processType);
@@ -413,7 +414,7 @@ export class ClinicalScenarioEngine {
     this.applyDueResourceInterventions();
     for (const completed of this.interventionRuntime.completeDue(this.simulationTimeSec)) this.projectInterventionState(completed);
     this.reconcileMtpAccessFromCanonicalCirculation();
-    const activeEffects = [...this.interventionRuntime.effectsAt(this.simulationTimeSec), ...this.medicationEngine.activeEffects()]
+    const activeEffects = [...this.interventionRuntime.effectsAt(this.simulationTimeSec), ...this.medicationEngine.activeEffects(this.simulationTimeSec)]
       .sort((a,b) => a.effectType.localeCompare(b.effectType) || a.effectId.localeCompare(b.effectId));
     for (const descriptor of this.lifecyclePlan.forPhase("PREPARE")) {
       for (const current of this.lifecycleProcesses(descriptor.processType)) {
@@ -422,7 +423,7 @@ export class ClinicalScenarioEngine {
       }
     }
     for (const effect of activeEffects) {
-      if (["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED"].includes(effect.effectType)) continue;
+      if (["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED", "VASOPRESSOR_SUPPORT"].includes(effect.effectType)) continue;
       this.applyClinicalEffect(effect, true);
     }
     const payload = eventPayload(event);
@@ -680,6 +681,23 @@ export class ClinicalScenarioEngine {
   getMedicationState(patientId?: string): MedicationInstance[] {
     return this.medicationEngine.snapshot().instances.filter(x => !patientId || x.patientId === patientId);
   }
+  executeNorepinephrineCommand(command: NorepinephrineCommand): NorepinephrineCommandResult {
+    if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
+      status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
+    });
+    const result = this.medicationEngine.executeNorepinephrine(command, this.getCirculationState(command.patientId));
+    const event = this.medicationEngine.snapshot().norepinephrine?.events.at(-1);
+    if (result.status !== "IDEMPOTENT" && event?.commandId === command.commandId) {
+      this.logEvent(event.eventType, { ...event }, event.patientId);
+    }
+    if (result.status === "APPLIED") this.aggregateProcesses();
+    this.publishResourceDebugSnapshot();
+    return structuredClone(result);
+  }
+  getNorepinephrineState(patientId?: string): readonly NorepinephrineFeatureProjection[] {
+    return this.medicationEngine.norepinephrineProjectionsAt(this.simulationTimeSec)
+      .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
+  }
 
   setAssessmentRules(rules: AssessmentRule[]): void {
     this.assessmentRules = structuredClone(rules);
@@ -701,12 +719,14 @@ export class ClinicalScenarioEngine {
     const resourcePool = this.resourcePool.snapshot();
     const airwayState = this.getAirwayState();
     const clinicalEffects = this.clinicalIntegration.snapshot().events;
+    const clinicalFeatures = this.getNorepinephrineState();
     endInputs();
     const endEvaluate = startRuntimeWorkTrace("ENGINE_ASSESSMENT_RULE_EVALUATE", { ruleCount: this.assessmentRules.length });
     const snapshot = this.assessmentEngine.evaluate(this.assessmentRules, {
       timestamp: this.simulationTimeSec,
       runtimeState: this.requireRuntimeState(),
       eventLog, interventionLog, interventionInstances, resourcePool, airwayState, clinicalEffects, timeline,
+      ...(clinicalFeatures.length ? { clinicalFeatures: [...clinicalFeatures] } : {}),
     });
     endEvaluate();
     return snapshot;
@@ -720,6 +740,7 @@ export class ClinicalScenarioEngine {
     const endTimeline = startRuntimeWorkTrace("ENGINE_ASSESSMENT_TIMELINE_COPY", { eventCount: this.eventLog.length });
     const timeline = await cooperativeDetachedCopy(this.eventLog, yieldControl);
     endTimeline({ yieldCount: timeline.metrics.yieldCount, maxBatchDurationMs: timeline.metrics.maxBatchDurationMs });
+    const clinicalFeatures = this.getNorepinephrineState();
     const result = await this.assessmentEngine.evaluateCooperatively(this.assessmentRules, {
       timestamp: this.simulationTimeSec,
       runtimeState: this.requireRuntimeState(),
@@ -730,6 +751,7 @@ export class ClinicalScenarioEngine {
       airwayState: this.getAirwayState(),
       clinicalEffects: this.clinicalIntegration.snapshot().events,
       timeline: timeline.value,
+      ...(clinicalFeatures.length ? { clinicalFeatures: [...clinicalFeatures] } : {}),
     }, yieldControl);
     endSnapshot({ eventLogYields: eventLog.metrics.yieldCount, timelineYields: timeline.metrics.yieldCount,
       debriefYields: result.metrics.debrief.yieldCount,
@@ -792,7 +814,7 @@ export class ClinicalScenarioEngine {
       exerciseTimeSec: this.simulationTimeSec,
       processOutputs: processes.map(process => process.outputs),
       aggregationConfigVersion: this.sortedHypoxia().length ? "WP-7/HV-HYPOXIA" : "WP-6/HV-P0",
-    }, this.resolver);
+    }, this.resolver, this.medicationEngine.vitalContributorsAt(this.simulationTimeSec));
     if (aggregated.rejectedProcessIds.length > 0 ||
       aggregated.events.some((event) => event.eventType === "PROCESS_OUTPUT_REJECTED")) {
       throw new Error(`PatientProcess output lükati ownership'i või agregatsiooni poolt tagasi.`);
@@ -944,6 +966,7 @@ export class ClinicalScenarioEngine {
   }
 
   private publishResourceDebugSnapshot(includeAssessment = true): void {
+    const medicationState = this.medicationEngine.snapshot();
     publishResourceRuntimeDebugSnapshot({
       resources: this.resourcePool.snapshot(),
       activeInterventions: this.interventionEngine.snapshot().active,
@@ -951,7 +974,11 @@ export class ClinicalScenarioEngine {
       airwayStates: this.airwayManagement.snapshot().states,
       circulationStates: this.circulationManagement.snapshot().states,
       hemorrhageProcesses: this.hemorrhageProcesses(),
-      medicationState: this.medicationEngine.snapshot(),
+      medicationState: { ...medicationState,
+        instances: [...medicationState.instances],
+        events: [...medicationState.events],
+        effects: [...medicationState.effects],
+        clinicalFeatures: [...this.medicationEngine.norepinephrineProjectionsAt(this.simulationTimeSec)] },
       vitalSignStates: this.runtimeState?.vitalSignState ? [{ patientId: this.requireProcess().encounterId, state: this.runtimeState.vitalSignState }] : [],
       recentEvents: this.resourceEventLog,
       updatedAt: this.simulationTimeSec,

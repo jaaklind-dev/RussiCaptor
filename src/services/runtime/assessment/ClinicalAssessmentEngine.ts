@@ -128,7 +128,8 @@ export class ClinicalAssessmentEngine {
     const endDebrief = startRuntimeWorkTrace("ENGINE_ASSESSMENT_DEBRIEF", { timelineCount: source.timeline.length });
     const debrief = this.debrief(source, results);
     endDebrief();
-    return { results, events, debrief };
+    return { results, events, debrief,
+      ...(source.clinicalFeatures?.length ? { clinicalFeatures: structuredClone(source.clinicalFeatures) } : {}) };
   }
 
   async evaluateCooperatively(rules: AssessmentRule[], source: AssessmentSourceSnapshot, yieldControl: PipelineYield): Promise<{
@@ -162,7 +163,8 @@ export class ClinicalAssessmentEngine {
       assessmentFindings: structuredClone(results), warnings: structuredClone(warnings), failedRules: structuredClone(failedRules),
       strengths: results.filter(item => item.status === "PASS").map(item => item.name),
       improvementOpportunities: [...warnings, ...failedRules].map(item => item.expectedBehaviour),
-    } }, metrics: { debrief: timeline.metrics } };
+    }, ...(source.clinicalFeatures?.length ? { clinicalFeatures: structuredClone(source.clinicalFeatures) } : {}) },
+    metrics: { debrief: timeline.metrics } };
   }
 
   private resultEvent(result: AssessmentResult): AssessmentEvent[] {
