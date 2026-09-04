@@ -30,6 +30,12 @@ export type PelvicSourceControlConfiguration = Readonly<{
 export type HemorrhageCoagulationConfiguration = Readonly<{
   temperatureModifiers?: readonly Readonly<{ belowCelsius: number; factor: number }>[];
 }>;
+export type HemorrhageFibrinolysisConfiguration = Readonly<{
+  /** Optional scenario-specific amplification above the non-hyperfibrinolytic baseline of 1. */
+  excessFactor: number;
+  /** Fraction of the excess component that a normalized antifibrinolytic effect may attenuate. */
+  txaSensitivity: number;
+}>;
 export type HemorrhageConfiguration = {
   baselineBleedingRateMlMin: number;
   /** Optional thoracic rate used while a canonical pleural drain is active. */
@@ -42,6 +48,7 @@ export type HemorrhageConfiguration = {
   pressureDependentFlow?: PressureDependentHemorrhageFlowConfiguration;
   pelvicSourceControl?: PelvicSourceControlConfiguration;
   coagulation?: HemorrhageCoagulationConfiguration;
+  fibrinolysis?: HemorrhageFibrinolysisConfiguration;
   severityThresholdsMl: readonly [number, number, number, number];
   perfusionThresholdsMl: readonly [number, number, number];
   compensationThresholdsMl: readonly [number, number];
@@ -65,6 +72,9 @@ export type HemorrhageClinicalState = {
   correctStabilizationStartedAtSec?: number;
   timeSinceCorrectStabilizationSec?: number;
   coagulationFactor?: number;
+  fibrinolysisExcessFactor?: number;
+  txaEffect?: number;
+  effectiveFibrinolysisFactor?: number;
   activeHemorrhage: boolean;
   severity: HemorrhageSeverity;
   perfusion: PerfusionState;

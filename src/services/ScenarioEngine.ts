@@ -22,6 +22,7 @@ import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatient
 import { terminateHemorrhageAtDeath } from "@/services/runtime/HemorrhagePatientProcess";
 import type { MedicationAdministration, MedicationDefinition, MedicationInstance } from "@/models/MedicationRuntime";
 import type { NorepinephrineCommand, NorepinephrineCommandResult, NorepinephrineFeatureProjection } from "@/models/NorepinephrineInfusion";
+import type { TranexamicAcidCommand, TranexamicAcidCommandResult, TranexamicAcidFeatureProjection } from "@/models/TranexamicAcid";
 import type {
   SupportedFluidTherapyCommand,
   SupportedFluidTherapyCommandResult,
@@ -428,7 +429,7 @@ export class ClinicalScenarioEngine {
       }
     }
     for (const effect of activeEffects) {
-      if (["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED", "VASOPRESSOR_SUPPORT"].includes(effect.effectType)) continue;
+      if (["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED", "VASOPRESSOR_SUPPORT", "ANTIFIBRINOLYTIC_SUPPORT"].includes(effect.effectType)) continue;
       this.applyClinicalEffect(effect, true);
     }
     const payload = eventPayload(event);
@@ -723,6 +724,28 @@ export class ClinicalScenarioEngine {
     return this.medicationEngine.fluidTherapyProjectionsAt(this.simulationTimeSec)
       .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
   }
+  executeTranexamicAcidCommand(command: TranexamicAcidCommand): TranexamicAcidCommandResult {
+    if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
+      status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
+    });
+    if (command.patientId !== this.requireProcess().encounterId) return Object.freeze({
+      status: "REJECTED", commandId: command.commandId, rejectionReason: "INVALID_PATIENT",
+    });
+    // No authoritative injury-onset timestamp exists in the current Runtime contract. The medication
+    // state therefore records the explicit deferred classification instead of treating exercise start as injury time.
+    const result = this.medicationEngine.executeTranexamicAcid(command, this.getCirculationState(command.patientId));
+    const event = this.medicationEngine.tranexamicAcidEventForCommand(command.commandId);
+    if (result.status !== "IDEMPOTENT" && event?.commandId === command.commandId) {
+      this.logEvent(event.eventType, { ...event }, event.patientId);
+    }
+    if (result.status === "APPLIED") this.aggregateProcesses();
+    this.publishResourceDebugSnapshot();
+    return structuredClone(result);
+  }
+  getTranexamicAcidState(patientId?: string): readonly TranexamicAcidFeatureProjection[] {
+    return this.medicationEngine.tranexamicAcidProjectionsAt(this.simulationTimeSec)
+      .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
+  }
 
   setAssessmentRules(rules: AssessmentRule[]): void {
     this.assessmentRules = structuredClone(rules);
@@ -744,7 +767,8 @@ export class ClinicalScenarioEngine {
     const resourcePool = this.resourcePool.snapshot();
     const airwayState = this.getAirwayState();
     const clinicalEffects = this.clinicalIntegration.snapshot().events;
-    const clinicalFeatures = [...this.getNorepinephrineState(), ...this.getFluidTherapyState()];
+    const clinicalFeatures = [...this.getNorepinephrineState(), ...this.getFluidTherapyState(),
+      ...this.getTranexamicAcidState()];
     endInputs();
     const endEvaluate = startRuntimeWorkTrace("ENGINE_ASSESSMENT_RULE_EVALUATE", { ruleCount: this.assessmentRules.length });
     const snapshot = this.assessmentEngine.evaluate(this.assessmentRules, {
@@ -765,7 +789,8 @@ export class ClinicalScenarioEngine {
     const endTimeline = startRuntimeWorkTrace("ENGINE_ASSESSMENT_TIMELINE_COPY", { eventCount: this.eventLog.length });
     const timeline = await cooperativeDetachedCopy(this.eventLog, yieldControl);
     endTimeline({ yieldCount: timeline.metrics.yieldCount, maxBatchDurationMs: timeline.metrics.maxBatchDurationMs });
-    const clinicalFeatures = [...this.getNorepinephrineState(), ...this.getFluidTherapyState()];
+    const clinicalFeatures = [...this.getNorepinephrineState(), ...this.getFluidTherapyState(),
+      ...this.getTranexamicAcidState()];
     const result = await this.assessmentEngine.evaluateCooperatively(this.assessmentRules, {
       timestamp: this.simulationTimeSec,
       runtimeState: this.requireRuntimeState(),
@@ -1006,6 +1031,7 @@ export class ClinicalScenarioEngine {
         clinicalFeatures: [
           ...this.medicationEngine.norepinephrineProjectionsAt(this.simulationTimeSec),
           ...this.medicationEngine.fluidTherapyProjectionsAt(this.simulationTimeSec),
+          ...this.medicationEngine.tranexamicAcidProjectionsAt(this.simulationTimeSec),
         ] },
       vitalSignStates: this.runtimeState?.vitalSignState ? [{ patientId: this.requireProcess().encounterId, state: this.runtimeState.vitalSignState }] : [],
       recentEvents: this.resourceEventLog,

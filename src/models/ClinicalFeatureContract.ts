@@ -1,6 +1,6 @@
 import type { VitalSignContributor } from "@/models/VitalSign";
 
-export type ClinicalFeatureCategory = "MEDICATION" | "FLUID" | "VENTILATION" | "PROCEDURE";
+export type ClinicalFeatureCategory = "MEDICATION" | "FLUID" | "ANTIFIBRINOLYTIC" | "VENTILATION" | "PROCEDURE";
 export type ClinicalFeatureLifecycle = "RUNNING" | "STOPPING" | "STOPPED" | "COMPLETED";
 
 /**
@@ -32,8 +32,8 @@ export type ClinicalFeatureContract<
     wallClockAllowed: false;
   }>;
   physiology: Readonly<{
-    order: readonly ["UNDERLYING_PHYSIOLOGY", "HEMORRHAGE_SOURCE_CONTROL", "VOLUME_RESUSCITATION", "VASOPRESSOR", "FINAL_HEMODYNAMICS"];
-    combine: "VITAL_SIGN_MEDICATION_LAYER" | "VITAL_SIGN_VOLUME_LAYER";
+    order: readonly string[];
+    combine: "VITAL_SIGN_MEDICATION_LAYER" | "VITAL_SIGN_VOLUME_LAYER" | "HEMORRHAGE_HEMOSTASIS_LAYER";
     contributors(state: TState, simulationTimeSec: number): readonly VitalSignContributor[];
   }>;
   persistence: Readonly<{

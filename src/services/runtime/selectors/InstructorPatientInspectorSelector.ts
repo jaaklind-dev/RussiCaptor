@@ -52,6 +52,11 @@ function processDetail(process: RuntimeProcessProjection): string {
     `piir ${String(state.sourceControlCeilingMlMin)} ml/min`,
     `rõhutegur ${String(state.pressureFactor)}`,
     `koagulatsioon ${String(state.coagulationFactor)}`,
+    ...(state.effectiveFibrinolysisFactor === undefined ? [] : [
+      `fibrinolüüs ${String(state.fibrinolysisExcessFactor)}`,
+      `TXA toime ${String(state.txaEffect)}`,
+      `efektiivne fibrinolüüs ${String(state.effectiveFibrinolysisFactor)}`,
+    ]),
     `tegelik ${String(state.bleedingRateMlMin)} ml/min`,
   ];
   return parts.join(" · ");
