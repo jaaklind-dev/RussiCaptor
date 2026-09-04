@@ -22,6 +22,7 @@ import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatient
 import { terminateHemorrhageAtDeath } from "@/services/runtime/HemorrhagePatientProcess";
 import type { MedicationAdministration, MedicationDefinition, MedicationInstance } from "@/models/MedicationRuntime";
 import type { NorepinephrineCommand, NorepinephrineCommandResult, NorepinephrineFeatureProjection } from "@/models/NorepinephrineInfusion";
+import type { FluidTherapyCommand, FluidTherapyCommandResult, FluidTherapyFeatureProjection } from "@/models/FluidTherapy";
 import type { ResourceRuntimeEvent, RuntimeResource, ResourceType, SchedulableIntervention } from "@/models/ResourceRuntime";
 import {
   type HvAction,
@@ -698,6 +699,26 @@ export class ClinicalScenarioEngine {
     return this.medicationEngine.norepinephrineProjectionsAt(this.simulationTimeSec)
       .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
   }
+  executeFluidTherapyCommand(command: FluidTherapyCommand<"RINGER">): FluidTherapyCommandResult<"RINGER"> {
+    if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
+      status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
+    });
+    if (command.patientId !== this.requireProcess().encounterId) return Object.freeze({
+      status: "REJECTED", commandId: command.commandId, rejectionReason: "INVALID_PATIENT",
+    });
+    const result = this.medicationEngine.executeFluidTherapy(command, this.getCirculationState(command.patientId));
+    const event = this.medicationEngine.snapshot().fluidTherapy?.events.at(-1);
+    if (result.status !== "IDEMPOTENT" && event?.commandId === command.commandId) {
+      this.logEvent(event.eventType, { ...event }, event.patientId);
+    }
+    if (result.status === "APPLIED") this.aggregateProcesses();
+    this.publishResourceDebugSnapshot();
+    return structuredClone(result);
+  }
+  getFluidTherapyState(patientId?: string): readonly FluidTherapyFeatureProjection<"RINGER">[] {
+    return this.medicationEngine.fluidTherapyProjectionsAt(this.simulationTimeSec)
+      .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
+  }
 
   setAssessmentRules(rules: AssessmentRule[]): void {
     this.assessmentRules = structuredClone(rules);
@@ -719,7 +740,7 @@ export class ClinicalScenarioEngine {
     const resourcePool = this.resourcePool.snapshot();
     const airwayState = this.getAirwayState();
     const clinicalEffects = this.clinicalIntegration.snapshot().events;
-    const clinicalFeatures = this.getNorepinephrineState();
+    const clinicalFeatures = [...this.getNorepinephrineState(), ...this.getFluidTherapyState()];
     endInputs();
     const endEvaluate = startRuntimeWorkTrace("ENGINE_ASSESSMENT_RULE_EVALUATE", { ruleCount: this.assessmentRules.length });
     const snapshot = this.assessmentEngine.evaluate(this.assessmentRules, {
@@ -740,7 +761,7 @@ export class ClinicalScenarioEngine {
     const endTimeline = startRuntimeWorkTrace("ENGINE_ASSESSMENT_TIMELINE_COPY", { eventCount: this.eventLog.length });
     const timeline = await cooperativeDetachedCopy(this.eventLog, yieldControl);
     endTimeline({ yieldCount: timeline.metrics.yieldCount, maxBatchDurationMs: timeline.metrics.maxBatchDurationMs });
-    const clinicalFeatures = this.getNorepinephrineState();
+    const clinicalFeatures = [...this.getNorepinephrineState(), ...this.getFluidTherapyState()];
     const result = await this.assessmentEngine.evaluateCooperatively(this.assessmentRules, {
       timestamp: this.simulationTimeSec,
       runtimeState: this.requireRuntimeState(),
@@ -978,7 +999,10 @@ export class ClinicalScenarioEngine {
         instances: [...medicationState.instances],
         events: [...medicationState.events],
         effects: [...medicationState.effects],
-        clinicalFeatures: [...this.medicationEngine.norepinephrineProjectionsAt(this.simulationTimeSec)] },
+        clinicalFeatures: [
+          ...this.medicationEngine.norepinephrineProjectionsAt(this.simulationTimeSec),
+          ...this.medicationEngine.fluidTherapyProjectionsAt(this.simulationTimeSec),
+        ] },
       vitalSignStates: this.runtimeState?.vitalSignState ? [{ patientId: this.requireProcess().encounterId, state: this.runtimeState.vitalSignState }] : [],
       recentEvents: this.resourceEventLog,
       updatedAt: this.simulationTimeSec,

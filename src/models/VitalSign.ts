@@ -7,7 +7,7 @@ export type VitalTrendStability = "STABLE" | "UNSTABLE";
 export type MonitorQuality = "VALID" | "UNRELIABLE" | "LOST" | "OFFLINE";
 export type PulseOxSignalQuality = "GOOD" | "POOR" | "NO_SIGNAL";
 export type Avpu = "ALERT" | "VOICE" | "PAIN" | "UNRESPONSIVE";
-export type VitalContributionLayer = "PERMANENT" | "PROCESS" | "MEDICATION" | "TEMPORARY";
+export type VitalContributionLayer = "PERMANENT" | "PROCESS" | "VOLUME_RESUSCITATION" | "MEDICATION" | "TEMPORARY";
 
 export type VitalSignReading = {
   current: number;

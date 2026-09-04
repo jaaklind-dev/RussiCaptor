@@ -1,7 +1,7 @@
 import type { VitalSignContributor } from "@/models/VitalSign";
 
 export type ClinicalFeatureCategory = "MEDICATION" | "FLUID" | "VENTILATION" | "PROCEDURE";
-export type ClinicalFeatureLifecycle = "RUNNING" | "STOPPING" | "STOPPED";
+export type ClinicalFeatureLifecycle = "RUNNING" | "STOPPING" | "STOPPED" | "COMPLETED";
 
 /**
  * Small reusable contract for authoritative clinical features. Implementations
@@ -33,7 +33,7 @@ export type ClinicalFeatureContract<
   }>;
   physiology: Readonly<{
     order: readonly ["UNDERLYING_PHYSIOLOGY", "HEMORRHAGE_SOURCE_CONTROL", "VOLUME_RESUSCITATION", "VASOPRESSOR", "FINAL_HEMODYNAMICS"];
-    combine: "VITAL_SIGN_MEDICATION_LAYER";
+    combine: "VITAL_SIGN_MEDICATION_LAYER" | "VITAL_SIGN_VOLUME_LAYER";
     contributors(state: TState, simulationTimeSec: number): readonly VitalSignContributor[];
   }>;
   persistence: Readonly<{

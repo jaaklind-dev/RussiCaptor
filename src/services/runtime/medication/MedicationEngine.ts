@@ -2,8 +2,10 @@ import type { CirculationState } from "@/models/CirculationState";
 import type { ClinicalEffect } from "@/models/ClinicalIntegration";
 import type { MedicationAdministration, MedicationDefinition, MedicationInstance, MedicationRejectionReason, MedicationRuntimeEvent, MedicationRuntimeSnapshot } from "@/models/MedicationRuntime";
 import type { NorepinephrineCommand, NorepinephrineCommandResult, NorepinephrineFeatureProjection, NorepinephrineRuntimeEvent } from "@/models/NorepinephrineInfusion";
+import type { FluidTherapyCommand, FluidTherapyCommandResult, FluidTherapyFeatureProjection, FluidTherapyRuntimeEvent } from "@/models/FluidTherapy";
 import type { VitalSignContributor } from "@/models/VitalSign";
 import { NorepinephrineInfusionRuntime } from "./NorepinephrineInfusion";
+import { RingerFluidTherapyRuntime } from "./RingerFluidTherapy";
 
 export type MedicationOperationResult = { instance?: MedicationInstance; effects: ClinicalEffect[]; events: MedicationRuntimeEvent[] };
 export class MedicationEngine {
@@ -13,6 +15,7 @@ export class MedicationEngine {
   private readonly events: MedicationRuntimeEvent[] = [];
   private readonly effects = new Map<string, ClinicalEffect[]>();
   private readonly norepinephrine = new NorepinephrineInfusionRuntime();
+  private readonly ringer = new RingerFluidTherapyRuntime();
   installDefinitions(values: MedicationDefinition[]): void {
     this.definitions.clear();
     for (const d of [...values].sort((a,b) => a.medicationId.localeCompare(b.medicationId))) {
@@ -20,7 +23,8 @@ export class MedicationEngine {
       this.definitions.set(d.medicationId, structuredClone(d));
     }
   }
-  reset(): void { this.instances.clear(); this.seen.clear(); this.events.length = 0; this.effects.clear(); this.norepinephrine.reset(); }
+  reset(): void { this.instances.clear(); this.seen.clear(); this.events.length = 0; this.effects.clear();
+    this.norepinephrine.reset(); this.ringer.reset(); }
   administer(a: MedicationAdministration, circulation: CirculationState): MedicationOperationResult {
     const definition = this.definitions.get(a.medicationId);
     let rejection: MedicationRejectionReason | undefined;
@@ -40,12 +44,14 @@ export class MedicationEngine {
     this.effects.set(a.administrationId, effects);
     return { instance: structuredClone(instance), effects, events: structuredClone(events) };
   }
-  advanceTo(timestamp: number): (MedicationRuntimeEvent | NorepinephrineRuntimeEvent)[] {
+  advanceTo(timestamp: number): (MedicationRuntimeEvent | NorepinephrineRuntimeEvent | FluidTherapyRuntimeEvent<"RINGER">)[] {
     const generated: MedicationRuntimeEvent[] = [];
     for (const item of this.active()) { const d = this.definitions.get(item.medicationId)!;
       if (timestamp >= item.timestamp + d.durationSec) { const next = { ...item, status: "COMPLETED" as const, completedAt: item.timestamp + d.durationSec };
         this.instances.set(item.administrationId, next); generated.push(this.event("MedicationCompleted", next, next.completedAt)); } }
-    this.events.push(...generated); return structuredClone([...generated, ...this.norepinephrine.advanceTo(timestamp)]);
+    this.events.push(...generated); return structuredClone([
+      ...generated, ...this.norepinephrine.advanceTo(timestamp), ...this.ringer.advanceTo(timestamp),
+    ]);
   }
   cancel(administrationId: string, timestamp: number): MedicationRuntimeEvent {
     const item = this.instances.get(administrationId); if (!item || item.status !== "ACTIVE") throw new Error(`Medication ${administrationId} pole ACTIVE.`);
@@ -59,8 +65,15 @@ export class MedicationEngine {
   norepinephrineProjectionsAt(timestamp: number): readonly NorepinephrineFeatureProjection[] {
     return this.norepinephrine.projectionsAt(timestamp);
   }
+  executeFluidTherapy(command: FluidTherapyCommand<"RINGER">,
+    circulation?: CirculationState): FluidTherapyCommandResult<"RINGER"> {
+    return this.ringer.execute(command, circulation);
+  }
+  fluidTherapyProjectionsAt(timestamp: number): readonly FluidTherapyFeatureProjection<"RINGER">[] {
+    return this.ringer.projectionsAt(timestamp);
+  }
   vitalContributorsAt(timestamp: number): readonly VitalSignContributor[] {
-    return this.norepinephrine.vitalContributorsAt(timestamp);
+    return [...this.ringer.vitalContributorsAt(timestamp), ...this.norepinephrine.vitalContributorsAt(timestamp)];
   }
   activeEffects(timestamp = 0): ClinicalEffect[] {
     const medicationEffects = this.active().flatMap(x => this.effects.get(x.administrationId) ?? []);
@@ -77,10 +90,12 @@ export class MedicationEngine {
   }
   snapshot(): MedicationRuntimeSnapshot {
     const norepinephrine = this.norepinephrine.snapshot();
+    const fluidTherapy = this.ringer.snapshot();
     return { definitions: [...this.definitions.values()].sort((a,b) => a.medicationId.localeCompare(b.medicationId)).map(x=>structuredClone(x)),
       instances: [...this.instances.values()].sort((a,b)=>a.timestamp-b.timestamp || a.administrationId.localeCompare(b.administrationId)).map(x=>structuredClone(x)), events: structuredClone(this.events),
       effects: [...this.effects.values()].flat().sort((a,b)=>a.effectId.localeCompare(b.effectId)).map(x=>structuredClone(x)),
-      ...(norepinephrine ? { norepinephrine } : {}) };
+      ...(norepinephrine ? { norepinephrine } : {}),
+      ...(fluidTherapy ? { fluidTherapy } : {}) };
   }
   restore(snapshot: MedicationRuntimeSnapshot): void {
     this.definitions.clear(); snapshot.definitions.forEach(item => this.definitions.set(item.medicationId, structuredClone(item)));
@@ -93,6 +108,7 @@ export class MedicationEngine {
       this.effects.set(id, [...(this.effects.get(id) ?? []), structuredClone(effect)]);
     }
     this.norepinephrine.restore(snapshot.norepinephrine);
+    this.ringer.restore(snapshot.fluidTherapy);
   }
   private validAccess(a: MedicationAdministration, c: CirculationState): boolean { if (!a.vascularAccessId) return false;
     return c.vascularAccess.some(x => x.interventionInstanceId === a.vascularAccessId && (a.route === "IO" ? x.type === "IO" : x.type !== "IO")); }

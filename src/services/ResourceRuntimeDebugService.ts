@@ -7,7 +7,7 @@ import type { ClinicalEffect } from "@/models/ClinicalIntegration";
 import type { MedicationInstance, MedicationRuntimeEvent } from "@/models/MedicationRuntime";
 import type { VitalSignState } from "@/models/VitalSign";
 import type { ResourceAllocationRuntimeState } from "@/models/ResourceAllocation";
-import type { NorepinephrineFeatureProjection } from "@/models/NorepinephrineInfusion";
+import type { ClinicalFeatureProjection } from "@/models/ClinicalAssessment";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { publishDerivedSnapshotNotification } from "@/services/runtime/RuntimeDerivedSnapshotTransaction";
 
@@ -20,7 +20,7 @@ export type ResourceRuntimeDebugSnapshot = {
   circulationStates?: CirculationState[];
   hemorrhageProcesses?: HemorrhagePatientProcessRuntime[];
   medicationState?: { instances: MedicationInstance[]; events: MedicationRuntimeEvent[]; effects: ClinicalEffect[];
-    clinicalFeatures?: NorepinephrineFeatureProjection[] };
+    clinicalFeatures?: ClinicalFeatureProjection[] };
   vitalSignStates?: { patientId: string; state: VitalSignState }[];
   recentEvents: ResourceRuntimeEvent[];
   updatedAt: number;

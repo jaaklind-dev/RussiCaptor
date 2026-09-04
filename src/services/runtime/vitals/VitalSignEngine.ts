@@ -20,7 +20,7 @@ export const defaultVitalSignConfiguration: VitalSignConfiguration = {
 };
 
 const keys = Object.keys(defaultVitalSignConfiguration.signs) as VitalSignKey[];
-const layerOrder = { PERMANENT: 0, PROCESS: 1, MEDICATION: 2, TEMPORARY: 3 } as const;
+const layerOrder = { PERMANENT: 0, PROCESS: 1, VOLUME_RESUSCITATION: 2, MEDICATION: 3, TEMPORARY: 4 } as const;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const round = (value: number, digits: number) => Number(value.toFixed(digits));
