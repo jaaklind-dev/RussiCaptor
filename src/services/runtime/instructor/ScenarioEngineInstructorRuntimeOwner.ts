@@ -5,6 +5,7 @@ import { inferredInterventionDefinitionId } from "@/services/runtime/clinical/In
 import { runtimeWritesAllowed } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { notifySync } from "@/services/SyncService";
 import type { ClinicalTreatmentRuntimeResult } from "@/models/ClinicalTreatment";
+import { ResourceAwareInterventionError } from "@/services/runtime/clinical/ResourceAwareInterventionError";
 
 const readOnly = () => ({ ok: false as const, reason: "Runtime active on another device" });
 
@@ -60,6 +61,19 @@ export function createScenarioEngineInstructorRuntimeOwner(
         notifySync("local"); return { ok: true, runtimeEventId: `INTERVENTION:${sourceInterventionId}` };
       } catch (error) {
         return { ok: false, reason: error instanceof Error ? error.message : "Resource intervention failed" };
+      }
+    },
+    executeResourceAwareIntervention(commandId, definitionId, resourceIds, parameters) {
+      if (!runtimeWritesAllowed()) return readOnly();
+      const sourceInterventionId = `CLINICAL:${commandId}`;
+      try {
+        const instance = engine.startResourceAwareClinicalIntervention({ sourceInterventionId, definitionId,
+          patientId, resourceIds, parameters });
+        notifySync("local");
+        return { ok: true, runtimeEventId: `INTERVENTION:${instance.instanceId}` };
+      } catch (error) {
+        return { ok: false, reason: error instanceof Error ? error.message : "Clinical intervention failed",
+          ...(error instanceof ResourceAwareInterventionError ? { code: error.code } : {}) };
       }
     },
     stopResourceIntervention(commandId, sourceInterventionId) {

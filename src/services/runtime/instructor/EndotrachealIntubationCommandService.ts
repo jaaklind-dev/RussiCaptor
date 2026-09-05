@@ -1,0 +1,53 @@
+import { addTimelineEvent } from "@/repositories/TimelineRepository";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { getCanonicalPatientRuntimeSnapshot } from "@/services/RuntimeSnapshotService";
+import { getInstructorRuntimeOwner } from "./InstructorRuntimeEventRegistry";
+
+export type EndotrachealIntubationCommand = Readonly<{
+  commandId: string; exerciseId: string; patientId: string; tubeResourceId: string;
+  laryngoscopeResourceId: string; capnographyResourceId?: string; device: "DIRECT" | "VIDEO";
+  tubeSize: number; cuff: boolean; confirmation: boolean; issuedBy: string;
+}>;
+
+export type EndotrachealIntubationCommandResult =
+  | Readonly<{ ok: true; commandId: string; runtimeEventId: string }>
+  | Readonly<{ ok: false; commandId: string; errorCode: "TUBE_UNAVAILABLE" | "LARYNGOSCOPE_UNAVAILABLE" |
+      "RESOURCE_UNAVAILABLE" | "INVALID_PARAMETER" | "INTERVENTION_REJECTED" | "RUNTIME_UNAVAILABLE"; message: string }>;
+
+const results = new Map<string, EndotrachealIntubationCommandResult>();
+let sequence = 0;
+
+export function createEndotrachealIntubationCommandId(exerciseId: string, patientId: string): string {
+  sequence += 1;
+  return `ETT-${exerciseId}-${patientId}-${getCanonicalExerciseSnapshot().simulationTimeSec}-${sequence}`;
+}
+
+export function executeEndotrachealIntubationCommand(command: EndotrachealIntubationCommand): EndotrachealIntubationCommandResult {
+  const previous = results.get(command.commandId);
+  if (previous) return structuredClone(previous);
+  const exercise = getCanonicalExerciseSnapshot();
+  const owner = getInstructorRuntimeOwner(command.exerciseId, command.patientId);
+  const applied = exercise.exerciseId === command.exerciseId && exercise.lifecycleState === "RUNNING"
+    ? owner?.executeResourceAwareIntervention?.(command.commandId, "ENDOTRACHEAL_INTUBATION",
+      [command.tubeResourceId, command.laryngoscopeResourceId, ...(command.capnographyResourceId ? [command.capnographyResourceId] : [])],
+      { device: command.device, tubeSize: command.tubeSize, cuff: command.cuff, confirmation: command.confirmation })
+    : undefined;
+  const knownCodes = new Set(["TUBE_UNAVAILABLE", "LARYNGOSCOPE_UNAVAILABLE", "RESOURCE_UNAVAILABLE",
+    "INVALID_PARAMETER", "INTERVENTION_REJECTED"]);
+  const errorCode = applied && !applied.ok && applied.code && knownCodes.has(applied.code)
+    ? applied.code as Exclude<EndotrachealIntubationCommandResult, { ok: true }>['errorCode'] : "RUNTIME_UNAVAILABLE";
+  const result: EndotrachealIntubationCommandResult = !applied
+    ? { ok: false, commandId: command.commandId, errorCode: "RUNTIME_UNAVAILABLE", message: "Kliiniline Runtime ei ole kirjutamiseks valmis." }
+    : applied.ok ? { ok: true, commandId: command.commandId, runtimeEventId: applied.runtimeEventId }
+      : { ok: false, commandId: command.commandId, errorCode, message: applied.reason };
+  if (result.ok) {
+    const simulationTimeSec = getCanonicalPatientRuntimeSnapshot(command.patientId)?.state.exerciseTimeSec ?? 0;
+    addTimelineEvent({ id: `TL-ETT-${command.commandId}`, exerciseId: command.exerciseId, patientId: command.patientId,
+      timestamp: `T+${simulationTimeSec}s`, simulationTimeSec, type: "intervention", title: "Endotrahheaalne intubatsioon",
+      description: `ETT ${command.tubeSize} paigaldati ja asend kinnitati`, author: command.issuedBy, visibility: "revealed" });
+  }
+  results.set(command.commandId, structuredClone(result));
+  return structuredClone(result);
+}
+
+export function resetEndotrachealIntubationCommands(): void { results.clear(); sequence = 0; }

@@ -11,6 +11,7 @@ import { PleuralDrainControls } from "./PleuralDrainControls";
 import { PatientTransportControls } from "./PatientTransportControls";
 import { PelvicBinderControls } from "./PelvicBinderControls";
 import { ClinicalTreatmentPanel } from "./ClinicalTreatmentPanel";
+import { EndotrachealIntubationControls } from "./EndotrachealIntubationControls";
 
 type Props = {
   patientId: string;
@@ -36,6 +37,7 @@ export default function InterventionsTab({
   return (
     <View style={styles.card}>
       <ClinicalTreatmentPanel patientId={patientId} readOnly={readOnly} />
+      <EndotrachealIntubationControls patientId={patientId} readOnly={readOnly} />
       <PatientTransportControls patientId={patientId} readOnly={readOnly} />
       <PleuralDrainControls patientId={patientId} readOnly={readOnly} />
       <PelvicBinderControls patientId={patientId} readOnly={readOnly} />

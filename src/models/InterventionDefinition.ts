@@ -2,7 +2,8 @@ import type { ClinicalEffectType, ClinicalParameterValue } from "@/models/Clinic
 import type { ResourceType } from "@/models/ResourceRuntime";
 
 export type ResourceRequirement = {
-  resourceType: ResourceType;
+  resourceType?: ResourceType;
+  oneOfResourceTypes?: ResourceType[];
   quantity: number;
   optional?: boolean;
 };

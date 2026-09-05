@@ -18,6 +18,7 @@ import { resetCurrentCaseManager } from "@/services/CurrentUserService";
 import { clearRuntimeSnapshots } from "@/services/RuntimeSnapshotService";
 import { clearInstructorRuntimeOwners } from "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
 import { resetResourceInterventionCommands } from "@/services/runtime/instructor/ResourceInterventionCommandService";
+import { resetEndotrachealIntubationCommands } from "@/services/runtime/instructor/EndotrachealIntubationCommandService";
 import { resetMtpCommands } from "@/services/runtime/instructor/MassiveTransfusionCommandService";
 import { clearActiveClinicalReferenceRuntime } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
 import { resetExerciseControlCommandHandler } from "@/services/runtime/exercise/ExerciseControlCommandHandler";
@@ -51,6 +52,6 @@ export function clearPreparedExerciseWorkingData(): void {
   resetImagingStudies(); resetLabResults(); resetOrders(); resetQuestions(); resetNotes();
   resetInterventions(); resetMedicationAdministrations(); resetVitalSigns(); clearScenarioEvents(); clearTimelineEvents();
   resetPatients(); clearAssignments(); resetCurrentCaseManager(); resetCaseManagerLocations(); clearRuntimeSnapshots();
-  clearInstructorRuntimeOwners(); clearActiveClinicalReferenceRuntime(); resetExerciseControlCommandHandler(); resetInstructorCommandHandler(); resetResourceInterventionCommands(); resetMtpCommands();
+  clearInstructorRuntimeOwners(); clearActiveClinicalReferenceRuntime(); resetExerciseControlCommandHandler(); resetInstructorCommandHandler(); resetResourceInterventionCommands(); resetEndotrachealIntubationCommands(); resetMtpCommands();
   restorePatientMaterialization();
 }

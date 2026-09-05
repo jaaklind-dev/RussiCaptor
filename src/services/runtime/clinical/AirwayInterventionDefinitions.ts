@@ -41,7 +41,8 @@ export const airwayInterventionDefinitions: InterventionDefinition[] = [
   },
   {
     definitionId: "ENDOTRACHEAL_INTUBATION", version: "1.0.0", name: "Endotracheal intubation",
-    requiredResources: [{ resourceType: "endotrachealTube", quantity: 1 }, { resourceType: "directLaryngoscope", quantity: 1 },
+    requiredResources: [{ resourceType: "endotrachealTube", quantity: 1 },
+      { oneOfResourceTypes: ["directLaryngoscope", "videoLaryngoscope"], quantity: 1 },
       { resourceType: "capnography", quantity: 1, optional: true }],
     effects: [{ effectType: "AIRWAY_PROTECTED", parameterMap: { device: "device", confirmed: "confirmation" } }],
     duration: continuous,

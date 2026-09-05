@@ -53,6 +53,8 @@ import { ClinicalIntegrationFramework } from "@/services/runtime/clinical/Clinic
 import { ClinicalProcessRegistry } from "@/services/runtime/clinical/ClinicalProcessRegistry";
 import { InterventionDefinitionRegistry } from "@/services/runtime/clinical/InterventionDefinitionRegistry";
 import { InterventionRuntime } from "@/services/runtime/clinical/InterventionRuntime";
+import { validateInterventionResourceSelection } from "@/services/runtime/clinical/InterventionResourceRequirements";
+import { ResourceAwareInterventionError } from "@/services/runtime/clinical/ResourceAwareInterventionError";
 import { airwayInterventionDefinitions } from "@/services/runtime/clinical/AirwayInterventionDefinitions";
 import { AirwayManagementFramework } from "@/services/runtime/clinical/AirwayManagementFramework";
 import { ClinicalAssessmentEngine } from "@/services/runtime/assessment/ClinicalAssessmentEngine";
@@ -511,6 +513,73 @@ export class ClinicalScenarioEngine {
   }): InterventionInstance {
     return this.interventionRuntime.startAllocated({ ...input, encounterId: this.requireProcess().encounterId,
       startedAt: this.simulationTimeSec, resourceIds: [], clinicalContext: this.airwayClinicalContext() });
+  }
+
+  /** Atomically reserves a complete equipment set and starts its canonical intervention. */
+  startResourceAwareClinicalIntervention(input: {
+    sourceInterventionId: string; definitionId: string; patientId: string; resourceIds: string[];
+    parameters: Record<string, import("@/models/ClinicalIntegration").ClinicalParameterValue>;
+  }): InterventionInstance {
+    const existing = this.interventionRuntime.forPatient(input.patientId)
+      .find(item => item.sourceInterventionId === input.sourceInterventionId);
+    if (existing) return existing;
+    const encounterId = this.requireProcess().encounterId;
+    if (input.patientId !== encounterId) throw new ResourceAwareInterventionError(
+      "INTERVENTION_REJECTED", "Valitud ressursside patsiendikontekst ei vasta Runtime'ile.");
+    let validated: ReturnType<InterventionRuntime["validateAllocatedStart"]>;
+    try {
+      validated = this.interventionRuntime.validateAllocatedStart({ definitionId: input.definitionId,
+        encounterId, parameters: input.parameters, clinicalContext: this.airwayClinicalContext() });
+    } catch {
+      throw new ResourceAwareInterventionError("INVALID_PARAMETER", "Intubatsiooni parameetrid ei ole kehtivad.");
+    }
+    const ids = [...new Set(input.resourceIds)];
+    if (ids.length !== input.resourceIds.length) throw new ResourceAwareInterventionError(
+      "RESOURCE_UNAVAILABLE", "Sama ressurssi ei saa valida mitu korda.");
+    const selected = ids.map(resourceId => this.resourcePool.getResource(resourceId));
+    if (selected.some(resource => !resource)) throw new ResourceAwareInterventionError(
+      "RESOURCE_UNAVAILABLE", "Valitud ressurss ei ole enam saadaval.");
+    const resources = selected as RuntimeResource[];
+    const tube = resources.find(resource => resource.type === "endotrachealTube");
+    const scope = resources.find(resource => resource.type === "directLaryngoscope" || resource.type === "videoLaryngoscope");
+    if (!tube) throw new ResourceAwareInterventionError("TUBE_UNAVAILABLE", "Sobiv endotrahheaaltoru puudub.");
+    if (!scope) throw new ResourceAwareInterventionError("LARYNGOSCOPE_UNAVAILABLE", "Sobiv larüngoskoop puudub.");
+    if (resources.some(resource => !this.resourcePool.isAvailable(resource.resourceId))) throw new ResourceAwareInterventionError(
+      "RESOURCE_UNAVAILABLE", "Valitud ressurss ei ole enam saadaval.");
+    try { validateInterventionResourceSelection(validated.definition, resources); } catch {
+      throw new ResourceAwareInterventionError("RESOURCE_UNAVAILABLE", "Valitud ressursikomplekt ei vasta sekkumisele.");
+    }
+    const expectedDevice = scope.type === "videoLaryngoscope" ? "VIDEO" : "DIRECT";
+    if (validated.parameters.device !== expectedDevice || validated.parameters.confirmation !== true) {
+      throw new ResourceAwareInterventionError("INVALID_PARAMETER", "Seadme valik või toru asendi kinnitus ei ole kehtiv.");
+    }
+    const metadataSize = tube.metadata.tubeSize;
+    if (typeof metadataSize === "number" && validated.parameters.tubeSize !== metadataSize) {
+      throw new ResourceAwareInterventionError("INVALID_PARAMETER", "Toru suurus ei vasta valitud ressursile.");
+    }
+    const metadataCuff = tube.metadata.cuffed;
+    if (typeof metadataCuff === "boolean" && validated.parameters.cuff !== metadataCuff) {
+      throw new ResourceAwareInterventionError("INVALID_PARAMETER", "Manseti valik ei vasta valitud torule.");
+    }
+    const reserved: string[] = [];
+    try {
+      for (const resourceId of ids) { this.resourcePool.reserve(resourceId, input.patientId); reserved.push(resourceId); }
+      const instance = this.interventionRuntime.startAllocated({ ...input, encounterId, startedAt: this.simulationTimeSec,
+        parameters: validated.parameters, resourceIds: ids, clinicalContext: this.airwayClinicalContext() });
+      if (instance.status !== "RUNNING") throw new Error("Canonical intervention rejected");
+      this.projectInterventionState(instance);
+      this.logEvent("EndotrachealIntubationStarted", { interventionInstanceId: instance.instanceId,
+        definitionId: instance.definitionId, resourceIds: instance.resourceIds, parameters: instance.parameters }, input.patientId);
+      this.publishResourceDebugSnapshot();
+      return instance;
+    } catch (error) {
+      for (const resourceId of reserved.reverse()) {
+        const resource = this.resourcePool.getResource(resourceId);
+        if (resource?.assignedPatientId === input.patientId) this.resourcePool.release(resourceId);
+      }
+      if (error instanceof ResourceAwareInterventionError) throw error;
+      throw new ResourceAwareInterventionError("INTERVENTION_REJECTED", "Kanooniline intubatsioon lükati tagasi.");
+    }
   }
 
   /** Applies commands scheduled for the current canonical instant without advancing clinical time. */

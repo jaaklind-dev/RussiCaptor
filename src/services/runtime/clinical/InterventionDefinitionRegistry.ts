@@ -1,11 +1,14 @@
 import type { ClinicalParameterValue } from "@/models/ClinicalIntegration";
 import type { InterventionDefinition } from "@/models/InterventionDefinition";
+import { resourceRequirementTypes } from "@/services/runtime/clinical/InterventionResourceRequirements";
 
 function validateDefinition(definition: InterventionDefinition): void {
   if (!definition.definitionId || !definition.version || !definition.name) {
     throw new Error("InterventionDefinition identity on puudulik.");
   }
-  if (definition.requiredResources.some(item => !item.resourceType || !Number.isInteger(item.quantity) || item.quantity < 1)) {
+  if (definition.requiredResources.some(item => resourceRequirementTypes(item).length === 0 ||
+    new Set(resourceRequirementTypes(item)).size !== resourceRequirementTypes(item).length ||
+    !Number.isInteger(item.quantity) || item.quantity < 1)) {
     throw new Error(`InterventionDefinition ${definition.definitionId} resource requirement on vigane.`);
   }
   if (definition.duration.kind === "FIXED" &&

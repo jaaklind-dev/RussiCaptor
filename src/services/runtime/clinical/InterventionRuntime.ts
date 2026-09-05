@@ -3,6 +3,7 @@ import type { InterventionDefinition } from "@/models/InterventionDefinition";
 import type { InterventionInstance, InterventionFailureReason } from "@/models/InterventionInstance";
 import type { ResourceRuntimeEvent, RuntimeResource } from "@/models/ResourceRuntime";
 import { InterventionDefinitionRegistry } from "@/services/runtime/clinical/InterventionDefinitionRegistry";
+import { resourceMatchesRequirement } from "@/services/runtime/clinical/InterventionResourceRequirements";
 
 export function inferredInterventionDefinitionId(resource: RuntimeResource | undefined): string | undefined {
   return ({
@@ -31,6 +32,24 @@ export class InterventionRuntime {
     this.instances.clear();
   }
 
+  validateAllocatedStart(input: {
+    definitionId: string; encounterId: string; parameters?: Record<string, ClinicalParameterValue>;
+    clinicalContext?: Record<string, boolean>;
+  }): { definition: InterventionDefinition; parameters: Record<string, ClinicalParameterValue> } {
+    const definition = this.definitions.get(input.definitionId);
+    if (!definition) throw new Error("DEFINITION_NOT_FOUND");
+    const parameters = this.definitions.normalizeParameters(definition, input.parameters);
+    if (!input.encounterId && definition.preconditions.some(item => item.kind === "ACTIVE_ENCOUNTER")) {
+      throw new Error("PRECONDITION_FAILED");
+    }
+    for (const precondition of definition.preconditions) {
+      if (precondition.kind === "CLINICAL_FLAG" && input.clinicalContext?.[precondition.flag] !== precondition.equals) {
+        throw new Error("PRECONDITION_FAILED");
+      }
+    }
+    return { definition, parameters };
+  }
+
   startAllocated(input: {
     sourceInterventionId: string;
     definitionId: string;
@@ -45,20 +64,10 @@ export class InterventionRuntime {
     const existing = this.instances.get(instanceId);
     if (existing) return structuredClone(existing);
     const definition = this.definitions.get(input.definitionId);
-    if (!definition) {
-      return this.storeFailed(input, "DEFINITION_NOT_FOUND");
-    }
+    if (!definition) return this.storeFailed(input, "DEFINITION_NOT_FOUND");
     let parameters: Record<string, ClinicalParameterValue>;
     try {
-      parameters = this.definitions.normalizeParameters(definition, input.parameters);
-      if (!input.encounterId && definition.preconditions.some(item => item.kind === "ACTIVE_ENCOUNTER")) {
-        throw new Error("Active encounter puudub.");
-      }
-      for (const precondition of definition.preconditions) {
-        if (precondition.kind === "CLINICAL_FLAG" && input.clinicalContext?.[precondition.flag] !== precondition.equals) {
-          throw new Error(`Clinical precondition ${precondition.flag} ei ole täidetud.`);
-        }
-      }
+      parameters = this.validateAllocatedStart(input).parameters;
     } catch {
       return this.storeFailed(input, "PRECONDITION_FAILED");
     }
@@ -120,7 +129,7 @@ export class InterventionRuntime {
         startedAt: event.timestamp,
         parameters,
         resourceIds: resources.filter(item => item.assignedPatientId === event.patientId &&
-          definition.requiredResources.some(required => required.resourceType === item.type))
+          definition.requiredResources.some(required => resourceMatchesRequirement(item, required)))
           .map(item => item.resourceId).sort(),
         sourceInterventionId: event.interventionId ?? event.resourceId,
       };
@@ -203,9 +212,9 @@ export class InterventionRuntime {
 
   private validateResources(definition: InterventionDefinition, patientId: string, resources: RuntimeResource[]): void {
     for (const requirement of definition.requiredResources.filter(item => !item.optional)) {
-      const count = resources.filter(item => item.type === requirement.resourceType && item.status === "RESERVED" &&
+      const count = resources.filter(item => resourceMatchesRequirement(item, requirement) && item.status === "RESERVED" &&
         item.assignedPatientId === patientId).length;
-      if (count < requirement.quantity) throw new Error(`Required resource ${requirement.resourceType} puudub.`);
+      if (count < requirement.quantity) throw new Error("Required intervention resource puudub.");
     }
   }
 
