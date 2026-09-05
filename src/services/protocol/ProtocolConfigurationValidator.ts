@@ -2,11 +2,13 @@ import type { ClinicalProtocolConfiguration, ProtocolActionReference, ProtocolCo
 import { ALS_CAPABILITY_STATUS } from "@/modules/als/AlsCapabilityStatus";
 import { classifyCardiacRhythm } from "@/services/runtime/CardiacArrestPatientProcess";
 import { calculateProtocolHash } from "./ProtocolConfigurationHash";
+import type { CardiacRhythm } from "@/models/PatientProcessRuntime";
 
 export type ProtocolDiagnosticCode = "INVALID_IDENTITY" | "INVALID_HASH" | "DUPLICATE_RULE" | "DUPLICATE_EXPECTATION" | "UNKNOWN_CAPABILITY" | "UNKNOWN_RHYTHM" | "CONTRADICTORY_RHYTHM_CATEGORY" | "UNKNOWN_ACTION" | "INVALID_TEMPORAL_CONSTRAINT" | "MALFORMED_MEDICATION_REFERENCE";
 export type ProtocolDiagnostic = Readonly<{ code: ProtocolDiagnosticCode; path: string; message: string }>;
 
-const rhythms = ["VF", "PULSELESS_VT", "PEA", "ASYSTOLE", "PERFUSING"] as const;
+const rhythms: readonly CardiacRhythm[] = ["VF", "PULSELESS_VT", "PEA", "ASYSTOLE", "PERFUSING",
+  "SINUS_BRADYCARDIA", "REGULAR_NARROW_COMPLEX_SVT", "TORSADES_DE_POINTES"];
 const actions: readonly ProtocolActionReference[] = ["AIRWAY_INTERVENTION", "DEFIBRILLATION", "MEDICATION_ADMINISTRATION", "START_CPR", "STOP_CPR"];
 const capabilities = new Set(ALS_CAPABILITY_STATUS.map(item => item.capabilityId));
 const duplicates = (values: readonly string[]) => [...new Set(values.filter((value, index) => values.indexOf(value) !== index))].sort();

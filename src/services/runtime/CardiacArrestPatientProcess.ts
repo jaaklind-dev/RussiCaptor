@@ -17,7 +17,8 @@ export class CardiacArrestConfigurationError extends Error {
 }
 
 const moduleId = "CARDIAC_ARREST_V1";
-const rhythms: readonly CardiacRhythm[] = ["ASYSTOLE", "PEA", "PERFUSING", "PULSELESS_VT", "VF"];
+const rhythms: readonly CardiacRhythm[] = ["ASYSTOLE", "PEA", "PERFUSING", "PULSELESS_VT", "VF",
+  "SINUS_BRADYCARDIA", "REGULAR_NARROW_COMPLEX_SVT", "TORSADES_DE_POINTES"];
 const states: readonly CardiacState[] = ["ARREST", "PERFUSING", "ROSC"];
 
 export const defaultCardiacArrestConfiguration: CardiacArrestConfiguration = Object.freeze({
@@ -47,7 +48,8 @@ function fail(code: CardiacArrestDiagnosticCode, message: string): never {
 function isRhythm(value: unknown): value is CardiacRhythm { return rhythms.includes(value as CardiacRhythm); }
 function isState(value: unknown): value is CardiacState { return states.includes(value as CardiacState); }
 function compatible(state: CardiacState, rhythm: CardiacRhythm): boolean {
-  return state === "ARREST" ? classifyCardiacRhythm(rhythm) !== "PERFUSING" : rhythm === "PERFUSING";
+  return state === "ARREST" ? classifyCardiacRhythm(rhythm) !== "PERFUSING" :
+    classifyCardiacRhythm(rhythm) === "PERFUSING";
 }
 
 function transitionKey(value: CardiacRhythmTransition): string {
@@ -136,6 +138,7 @@ export function bootstrapCardiacArrestPatientProcess(
     clinicalState: {
       cardiacState: configuration.initialState, rhythm: configuration.initialRhythm,
       rhythmClassification: classifyCardiacRhythm(configuration.initialRhythm), cprActive: configuration.initialCprActive,
+      ...("adverseSigns" in initial ? { adverseSigns: Boolean(initial.adverseSigns) } : {}),
       oxygenTherapyActive: false as const, shockAttemptCount: 0, appliedEffectIds: [],
     },
     configuration, nextTick: Number(initial.nextTick ?? 1), pendingEvidence: [],
@@ -161,7 +164,9 @@ export function applyExplicitCardiacRhythmTransition(
 
 function transition(process: CardiacArrestPatientProcessRuntime, item: CardiacRhythmTransition): CardiacArrestPatientProcessRuntime {
   const fromRhythm = process.clinicalState.rhythm;
-  const toState: CardiacState = item.toRhythm === "PERFUSING" ? "ROSC" : "ARREST";
+  const toPerfusing = classifyCardiacRhythm(item.toRhythm) === "PERFUSING";
+  const toState: CardiacState = !toPerfusing ? "ARREST" :
+    process.clinicalState.cardiacState === "ARREST" ? "ROSC" : process.clinicalState.cardiacState;
   const evidence: CardiacProcessEvidence[] = [{ eventType: "CARDIAC_RHYTHM_TRANSITION", details: { transitionId: item.transitionId, fromRhythm, toRhythm: item.toRhythm, trigger: item.trigger } }];
   if (toState === "ROSC" && process.clinicalState.cardiacState === "ARREST") evidence.push({ eventType: "ROSC_ACHIEVED", details: { fromRhythm } });
   if (toState === "ARREST" && process.clinicalState.cardiacState !== "ARREST") evidence.push({ eventType: "CARDIAC_REARREST", details: { toRhythm: item.toRhythm } });

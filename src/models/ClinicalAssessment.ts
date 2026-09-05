@@ -9,9 +9,11 @@ import type { SupportedFluidTherapyProjection } from "@/models/FluidTherapy";
 import type { TranexamicAcidFeatureProjection } from "@/models/TranexamicAcid";
 import type { AnalgesicFeatureProjection } from "@/models/AnalgesiaMedication";
 import type { MechanicalVentilationFeatureProjection } from "@/models/MechanicalVentilation";
+import type { AlsMedicationFeatureProjection } from "@/models/AlsMedication";
 
 export type ClinicalFeatureProjection = NorepinephrineFeatureProjection | SupportedFluidTherapyProjection |
-  TranexamicAcidFeatureProjection | AnalgesicFeatureProjection | MechanicalVentilationFeatureProjection;
+  TranexamicAcidFeatureProjection | AnalgesicFeatureProjection | MechanicalVentilationFeatureProjection |
+  AlsMedicationFeatureProjection;
 
 export type AssessmentCategory = "AIRWAY" | "OXYGENATION" | "VENTILATION" | "MONITORING" | "RESOURCES" | "VITALS";
 export type AssessmentSeverity = "INFO" | "WARNING" | "FAIL";

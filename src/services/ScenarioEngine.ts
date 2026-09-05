@@ -31,6 +31,9 @@ import type {
   MechanicalVentilationState,
 } from "@/models/MechanicalVentilation";
 import type {
+  AlsMedicationCommand, AlsMedicationCommandResult, AlsMedicationFeatureProjection, AlsRhythmContext,
+} from "@/models/AlsMedication";
+import type {
   SupportedFluidTherapyCommand,
   SupportedFluidTherapyCommandResult,
   SupportedFluidTherapyProjection,
@@ -814,6 +817,27 @@ export class ClinicalScenarioEngine {
       state => this.mechanicalVentilationProjectionContext(state))
       .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
   }
+  executeAlsMedicationCommand(command: AlsMedicationCommand): AlsMedicationCommandResult {
+    if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
+      status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
+    });
+    if (command.patientId !== this.requireProcess().encounterId) return Object.freeze({
+      status: "REJECTED", commandId: command.commandId, rejectionReason: "INVALID_PATIENT",
+    });
+    const result = this.medicationEngine.executeAlsMedication(command,
+      this.getCirculationState(command.patientId), this.alsRhythmContext(command.patientId));
+    const event = this.medicationEngine.alsMedicationEventForCommand(command.commandId);
+    if (result.status !== "IDEMPOTENT" && event?.commandId === command.commandId) {
+      this.logEvent(event.eventType, { ...event }, event.patientId);
+    }
+    if (result.status === "APPLIED") this.aggregateProcesses();
+    this.publishResourceDebugSnapshot();
+    return structuredClone(result);
+  }
+  getAlsMedicationState(patientId?: string): readonly AlsMedicationFeatureProjection[] {
+    return this.medicationEngine.alsMedicationProjectionsAt(this.simulationTimeSec, patientId)
+      .map(item => structuredClone(item));
+  }
 
   setAssessmentRules(rules: AssessmentRule[]): void {
     this.assessmentRules = structuredClone(rules);
@@ -836,7 +860,8 @@ export class ClinicalScenarioEngine {
     const airwayState = this.getAirwayState();
     const clinicalEffects = this.clinicalIntegration.snapshot().events;
     const clinicalFeatures = [...this.getNorepinephrineState(), ...this.getFluidTherapyState(),
-      ...this.getTranexamicAcidState(), ...this.getAnalgesicState(), ...this.getMechanicalVentilationState()];
+      ...this.getTranexamicAcidState(), ...this.getAnalgesicState(), ...this.getMechanicalVentilationState(),
+      ...this.getAlsMedicationState()];
     endInputs();
     const endEvaluate = startRuntimeWorkTrace("ENGINE_ASSESSMENT_RULE_EVALUATE", { ruleCount: this.assessmentRules.length });
     const snapshot = this.assessmentEngine.evaluate(this.assessmentRules, {
@@ -858,7 +883,8 @@ export class ClinicalScenarioEngine {
     const timeline = await cooperativeDetachedCopy(this.eventLog, yieldControl);
     endTimeline({ yieldCount: timeline.metrics.yieldCount, maxBatchDurationMs: timeline.metrics.maxBatchDurationMs });
     const clinicalFeatures = [...this.getNorepinephrineState(), ...this.getFluidTherapyState(),
-      ...this.getTranexamicAcidState(), ...this.getAnalgesicState(), ...this.getMechanicalVentilationState()];
+      ...this.getTranexamicAcidState(), ...this.getAnalgesicState(), ...this.getMechanicalVentilationState(),
+      ...this.getAlsMedicationState()];
     const result = await this.assessmentEngine.evaluateCooperatively(this.assessmentRules, {
       timestamp: this.simulationTimeSec,
       runtimeState: this.requireRuntimeState(),
@@ -1105,6 +1131,7 @@ export class ClinicalScenarioEngine {
           ...this.medicationEngine.analgesicProjectionsAt(this.simulationTimeSec),
           ...this.mechanicalVentilation.projectionsAt(this.simulationTimeSec,
             state => this.mechanicalVentilationProjectionContext(state)),
+          ...this.medicationEngine.alsMedicationProjectionsAt(this.simulationTimeSec),
         ] },
       vitalSignStates: this.runtimeState?.vitalSignState ? [{ patientId: this.requireProcess().encounterId, state: this.runtimeState.vitalSignState }] : [],
       recentEvents: this.resourceEventLog,
@@ -1231,6 +1258,19 @@ export class ClinicalScenarioEngine {
         ventilationState: airwayEvent.ventilationState }, airwayEvent.patientId);
     }
     if (events.length) this.aggregateProcesses();
+  }
+
+  private alsRhythmContext(patientId: string): AlsRhythmContext | undefined {
+    const process = this.orderedLifecycleLeaves("SERIALIZATION").find(item =>
+      item.processType === "CARDIAC_ARREST" && item.encounterId === patientId) as
+      CardiacArrestPatientProcessRuntime | undefined;
+    if (!process) return undefined;
+    return Object.freeze({ patientId, cardiacState: process.clinicalState.cardiacState,
+      rhythm: process.clinicalState.rhythm, rhythmClassification: process.clinicalState.rhythmClassification,
+      shockAttemptCount: process.clinicalState.shockAttemptCount, cprActive: process.clinicalState.cprActive,
+      ...(process.clinicalState.adverseSigns === undefined ? {} : {
+        adverseSigns: process.clinicalState.adverseSigns,
+      }), hyperkalaemiaSubstrate: "UNMODELED" });
   }
 
   private rootProcess(): BotulismRootPatientProcessRuntime | undefined {

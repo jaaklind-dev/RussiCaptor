@@ -219,7 +219,8 @@ export type PleuralInjuryPatientProcessRuntime = {
 };
 
 export type CardiacState = "PERFUSING" | "ARREST" | "ROSC";
-export type CardiacRhythm = "VF" | "PULSELESS_VT" | "PEA" | "ASYSTOLE" | "PERFUSING";
+export type CardiacRhythm = "VF" | "PULSELESS_VT" | "PEA" | "ASYSTOLE" | "PERFUSING" |
+  "SINUS_BRADYCARDIA" | "REGULAR_NARROW_COMPLEX_SVT" | "TORSADES_DE_POINTES";
 export type CardiacRhythmClassification = "SHOCKABLE" | "NON_SHOCKABLE" | "PERFUSING";
 
 export type CardiacVitalTargets = Readonly<{
@@ -272,6 +273,7 @@ export type CardiacArrestPatientProcessRuntime = {
     rhythm: CardiacRhythm;
     rhythmClassification: CardiacRhythmClassification;
     cprActive: boolean;
+    adverseSigns?: boolean;
     /** Compatibility discriminator shared by existing clinical process consumers; cardiac process never owns oxygen therapy. */
     oxygenTherapyActive: false;
       shockAttemptCount: number;
