@@ -57,6 +57,21 @@ export class AirwayManagementFramework {
     });
   }
 
+  setMechanicalVentilation(patientId: string, active: boolean, timestamp: number,
+    supportId: string): AirwayRuntimeEvent | undefined {
+    const previous = this.getState(patientId);
+    const target: VentilationState = active ? "MECHANICAL" : "NONE";
+    if (previous.currentVentilation === target) return undefined;
+    const next: AirwayState = { ...previous, currentVentilation: target, updatedAt: timestamp };
+    this.states.set(patientId, next);
+    const event: AirwayRuntimeEvent = { eventType: active ? "VentilationStarted" : "VentilationStopped",
+      timestamp, patientId, interventionInstanceId: supportId,
+      definitionId: "MECHANICAL_VENTILATION", airwayState: next.activeAirway,
+      ventilationState: next.currentVentilation };
+    this.eventLog.push(event);
+    return structuredClone(event);
+  }
+
   snapshot(): { states: AirwayState[]; events: AirwayRuntimeEvent[] } {
     return {
       states: [...this.states.values()].sort((a, b) => a.patientId.localeCompare(b.patientId)).map(item => structuredClone(item)),

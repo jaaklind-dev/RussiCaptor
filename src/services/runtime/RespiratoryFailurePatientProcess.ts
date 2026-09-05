@@ -6,6 +6,7 @@ import type {
   PleuralRespiratoryRecoveryConfiguration,
 } from "@/models/PatientProcessRuntime";
 import type { ProcessOutput } from "@/models/RuntimeAggregation";
+import type { ExternalMechanicalVentilationSupport } from "@/models/MechanicalVentilation";
 
 const moduleId = "RESPIRATORY_FAILURE_V1";
 
@@ -182,7 +183,8 @@ export function tickRespiratoryFailurePatientProcess(
   previous: RespiratoryFailurePatientProcessRuntime,
   tickSeconds: number,
   impairmentMultiplier = 1,
-  pleuralRecovery?: PleuralRespiratoryRecoveryConfiguration
+  pleuralRecovery?: PleuralRespiratoryRecoveryConfiguration,
+  externalSupport?: ExternalMechanicalVentilationSupport,
 ): RespiratoryFailurePatientProcessRuntime {
   if (!Number.isFinite(tickSeconds) || tickSeconds <= 0) throw new Error("ENGINE_TICK kestus peab olema positiivne arv sekundeid.");
   if (previous.state === "Resolved") return previous;
@@ -191,19 +193,27 @@ export function tickRespiratoryFailurePatientProcess(
   const clinical = previous.clinicalState;
   const hypoxaemic = clinical.phenotype !== "HYPERCAPNIC";
   const hypercapnic = clinical.phenotype !== "HYPOXAEMIC";
-  const ventilationSpo2 = clinical.ventilationMode === "MECHANICAL"
+  const mechanicalActive = clinical.ventilationMode === "MECHANICAL" || Boolean(externalSupport);
+  const externalOxygenFraction = externalSupport
+    ? Math.max(0, Math.min(1, (externalSupport.fio2 - 0.21) / 0.79)) : undefined;
+  const oxygenSupportActive = externalSupport ? externalSupport.fio2 > 0.21 : clinical.oxygenSupport;
+  const ventilationSpo2 = mechanicalActive
     ? support.mechanicalSpo2RecoveryPerMin
     : clinical.ventilationMode === "BVM" ? support.bvmSpo2RecoveryPerMin : 0;
-  const ventilationCo2 = clinical.ventilationMode === "MECHANICAL"
+  const ventilationCo2 = mechanicalActive
     ? support.mechanicalEtco2ClearancePerMin
     : clinical.ventilationMode === "BVM" ? support.bvmEtco2ClearancePerMin : 0;
-  const fatigueRecovery = clinical.ventilationMode === "MECHANICAL"
+  const fatigueRecovery = mechanicalActive
     ? support.mechanicalFatigueRecoveryPerMin
     : clinical.ventilationMode === "BVM" ? support.bvmFatigueRecoveryPerMin : 0;
-  const supported = clinical.oxygenSupport || clinical.ventilationMode !== "NONE";
+  const supported = oxygenSupportActive || mechanicalActive || clinical.ventilationMode === "BVM";
   const impairment = Math.max(0, impairmentMultiplier);
   const respiratorySpo2Recovery = pleuralRecovery?.spo2RecoveryPerMin ?? 0;
-  const unboundedSpo2 = clinical.spo2 + ((clinical.oxygenSupport ? support.oxygenSpo2RecoveryPerMin : 0) + ventilationSpo2 + respiratorySpo2Recovery - (hypoxaemic ? progression.spo2DeclinePerMin * impairment : 0)) * minutes;
+  const oxygenRecovery = externalOxygenFraction === undefined
+    ? (clinical.oxygenSupport ? support.oxygenSpo2RecoveryPerMin : 0)
+    : support.oxygenSpo2RecoveryPerMin * externalOxygenFraction;
+  const unboundedSpo2 = clinical.spo2 + (oxygenRecovery + ventilationSpo2 + respiratorySpo2Recovery -
+    (hypoxaemic ? progression.spo2DeclinePerMin * impairment : 0)) * minutes;
   const spo2 = clamp(pleuralRecovery ? Math.min(pleuralRecovery.spo2Ceiling, unboundedSpo2) : unboundedSpo2, limits.spo2);
   const etco2 = clamp(clinical.etco2 + ((hypercapnic ? progression.etco2RisePerMin * impairment : 0) - ventilationCo2) * minutes, limits.etco2);
   const fatigue = clamp(pleuralRecovery
@@ -212,7 +222,10 @@ export function tickRespiratoryFailurePatientProcess(
   const workOfBreathing = clamp(pleuralRecovery
     ? Math.max(pleuralRecovery.workOfBreathingFloor, clinical.workOfBreathing + (progression.workOfBreathingRisePerMin * impairment - (clinical.airwayPatent ? support.patentAirwayWorkRecoveryPerMin : 0) - fatigueRecovery - pleuralRecovery.workOfBreathingRecoveryPerMin) * minutes)
     : clinical.workOfBreathing + (progression.workOfBreathingRisePerMin * impairment - (clinical.airwayPatent ? support.patentAirwayWorkRecoveryPerMin : 0) - fatigueRecovery) * minutes, limits.workOfBreathing);
-  const respiratoryRateDirection = clinical.ventilationMode === "NONE" ? progression.respiratoryRateChangePerMin * impairment : -progression.respiratoryRateChangePerMin;
+  // External support leaves the spontaneous respiratory trajectory untouched. Only the legacy
+  // process-owned ventilation mode changes that underlying trajectory.
+  const respiratoryRateDirection = clinical.ventilationMode === "NONE"
+    ? progression.respiratoryRateChangePerMin * impairment : -progression.respiratoryRateChangePerMin;
   const unboundedRespiratoryRate = clinical.respiratoryRate + (respiratoryRateDirection - (pleuralRecovery?.respiratoryRateRecoveryPerMin ?? 0)) * minutes;
   const respiratoryRate = clamp(pleuralRecovery ? Math.max(pleuralRecovery.respiratoryRateFloor, unboundedRespiratoryRate) : unboundedRespiratoryRate, limits.respiratoryRate);
   const deteriorating = (!supported && hypoxaemic) || (hypercapnic && ventilationCo2 === 0);

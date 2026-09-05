@@ -13,6 +13,7 @@ import { bootstrapPleuralInjuryPatientProcess, tickPleuralInjuryPatientProcess }
 import { bootstrapRespiratoryFailurePatientProcess, tickRespiratoryFailurePatientProcess } from "@/services/runtime/RespiratoryFailurePatientProcess";
 import type { BloodProductDeliveryMode, MassiveTransfusionPatientProcessRuntime, VascularAccessLineId } from "@/models/MassiveTransfusion";
 import { activateMassiveTransfusion, administerMtpCalcium, bootstrapMassiveTransfusionPatientProcess, changeBloodProductDeliveryMode, drainMassiveTransfusionEvidence, startBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
+import { externalMechanicalVentilationSupportFromEffects } from "@/services/runtime/respiratory/MechanicalVentilationRuntime";
 
 const respiratoryImpairment = (processes: readonly CanonicalLifecycleProcess[]) => Math.max(1, ...processes.map(process => Number(process.outputs.runtimeContributions?.respiratoryImpairmentMultiplier ?? 1)));
 const pleuralRespiratoryRecovery = (processes: readonly CanonicalLifecycleProcess[]): PleuralRespiratoryRecoveryConfiguration | undefined => {
@@ -93,7 +94,9 @@ const hv: PatientProcessLifecycleDescriptor = {
       ? { processes: [applyHvTimedTransition(process as PatientProcessRuntime, context.transition as HvTimedTransition)], events: [], aggregationRequested: true }
       : unchanged(process);
   },
-  tick(process, context) { return { processes: [tickHvPatientProcess(process as PatientProcessRuntime, context.tickSeconds)], events: [], aggregationRequested: true }; },
+  tick(process, context) { return { processes: [tickHvPatientProcess(process as PatientProcessRuntime,
+    context.tickSeconds, externalMechanicalVentilationSupportFromEffects(context.activeEffects, process.encounterId))],
+    events: [], aggregationRequested: true }; },
   postAggregate(process, context) { return context.inputEvent ? [{ eventType: "ENGINE_TICK_APPLIED", details: {
     sourceProcessId: process.processId, inputEventId: context.inputEvent.eventId, tickSeconds: context.tickSeconds,
   }, recordPhase: "AFTER_AGGREGATION", sourceProcessId: process.processId }] : []; },
@@ -174,7 +177,11 @@ const respiratoryFailure: PatientProcessLifecycleDescriptor = {
     if (parent) { process.parentProcessId = parent.processId; process.parentProcessType = parent.processType; }
     return { processes: [process], events: [], aggregationRequested: false };
   },
-  tick(process, context) { return { processes: [tickRespiratoryFailurePatientProcess(process as RespiratoryFailurePatientProcessRuntime, context.tickSeconds, respiratoryImpairment(context.existingProcesses), pleuralRespiratoryRecovery(context.existingProcesses))], events: [], aggregationRequested: true }; },
+  tick(process, context) { return { processes: [tickRespiratoryFailurePatientProcess(
+    process as RespiratoryFailurePatientProcessRuntime, context.tickSeconds,
+    respiratoryImpairment(context.existingProcesses), pleuralRespiratoryRecovery(context.existingProcesses),
+    externalMechanicalVentilationSupportFromEffects(context.activeEffects, process.encounterId))],
+    events: [], aggregationRequested: true }; },
 };
 
 const hypoxia: PatientProcessLifecycleDescriptor = {
@@ -197,7 +204,11 @@ const hypoxia: PatientProcessLifecycleDescriptor = {
     }, parent));
     return { processes, events: [], aggregationRequested: false };
   },
-  tick(process, context) { return { processes: [tickHypoxiaPatientProcess(process as HypoxiaPatientProcessRuntime, context.tickSeconds, respiratoryImpairment(context.existingProcesses), pleuralRespiratoryRecovery(context.existingProcesses))], events: [], aggregationRequested: true }; },
+  tick(process, context) { return { processes: [tickHypoxiaPatientProcess(
+    process as HypoxiaPatientProcessRuntime, context.tickSeconds, respiratoryImpairment(context.existingProcesses),
+    pleuralRespiratoryRecovery(context.existingProcesses),
+    externalMechanicalVentilationSupportFromEffects(context.activeEffects, process.encounterId))],
+    events: [], aggregationRequested: true }; },
   postAggregate(process, context) { return context.inputEvent ? [{ eventType: "PROCESS_TICK_APPLIED", details: {
     inputEventId: context.inputEvent.eventId, tickSeconds: context.tickSeconds,
   }, target: process.processId, recordPhase: "AFTER_AGGREGATION", sourceProcessId: process.processId }] : []; },

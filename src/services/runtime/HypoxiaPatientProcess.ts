@@ -1,6 +1,7 @@
 import type { GoldenFixture } from "@/models/GoldenTest";
 import type { HypoxiaPatientProcessRuntime, PleuralRespiratoryRecoveryConfiguration } from "@/models/PatientProcessRuntime";
 import type { ProcessOutput } from "@/models/RuntimeAggregation";
+import type { ExternalMechanicalVentilationSupport } from "@/models/MechanicalVentilation";
 
 const hypoxiaModuleId = "HYPOXIA_V1";
 
@@ -71,15 +72,22 @@ export function tickHypoxiaPatientProcess(
   previous: HypoxiaPatientProcessRuntime,
   tickSeconds: number,
   impairmentMultiplier = 1,
-  pleuralRecovery?: PleuralRespiratoryRecoveryConfiguration
+  pleuralRecovery?: PleuralRespiratoryRecoveryConfiguration,
+  externalSupport?: ExternalMechanicalVentilationSupport,
 ): HypoxiaPatientProcessRuntime {
   const minutes = tickSeconds / 60;
-  const supported = previous.clinicalState.oxygenTherapyActive;
+  const oxygenSupportFraction = externalSupport
+    ? Math.max(0, Math.min(1, (externalSupport.fio2 - 0.21) / 0.79))
+    : previous.clinicalState.oxygenTherapyActive ? 1 : 0;
+  const supported = oxygenSupportFraction > 0;
   const oxygenationReserve = Math.max(0, Math.min(
     100,
-    previous.clinicalState.oxygenationReserve + (supported ? 2 : -Math.max(0, impairmentMultiplier)) * minutes
+    previous.clinicalState.oxygenationReserve +
+      (supported ? 2 * oxygenSupportFraction : -Math.max(0, impairmentMultiplier)) * minutes
   ));
-  const unboundedSpo2 = previous.clinicalState.spo2 + ((supported ? 2 : -Math.max(0, impairmentMultiplier)) + (pleuralRecovery?.spo2RecoveryPerMin ?? 0)) * minutes;
+  const unboundedSpo2 = previous.clinicalState.spo2 +
+    ((supported ? 2 * oxygenSupportFraction : -Math.max(0, impairmentMultiplier)) +
+      (pleuralRecovery?.spo2RecoveryPerMin ?? 0)) * minutes;
   const spo2 = Math.max(40, Math.min(pleuralRecovery ? pleuralRecovery.spo2Ceiling : 100, unboundedSpo2));
   const clinicalState = {
     ...previous.clinicalState,

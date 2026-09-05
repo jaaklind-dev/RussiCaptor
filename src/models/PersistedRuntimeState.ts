@@ -9,6 +9,7 @@ import type { ResourceRuntimeEvent, RuntimeIntervention, RuntimeResource } from 
 import type { RuntimeState } from "@/models/RuntimeAggregation";
 import type { VitalSignEvent } from "@/models/VitalSign";
 import type { AssessmentRule } from "@/models/ClinicalAssessment";
+import type { MechanicalVentilationRuntimeSnapshot } from "@/models/MechanicalVentilation";
 
 export const LEGACY_PERSISTED_RUNTIME_SCHEMA_VERSION = 1 as const;
 export const PERSISTED_RUNTIME_SCHEMA_VERSION = 2 as const;
@@ -50,6 +51,7 @@ export type PersistedRuntimePayload = Readonly<{
   airway: Readonly<{ states: readonly AirwayState[]; events: readonly AirwayRuntimeEvent[] }>;
   circulation: Readonly<{ states: readonly CirculationState[]; events: readonly CirculationRuntimeEvent[] }>;
   medication: MedicationRuntimeSnapshot;
+  mechanicalVentilation?: MechanicalVentilationRuntimeSnapshot;
   assessmentRules: readonly AssessmentRule[];
   vitalSignEvents: readonly VitalSignEvent[];
 }>;

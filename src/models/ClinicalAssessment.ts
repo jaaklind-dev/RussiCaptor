@@ -8,9 +8,10 @@ import type { NorepinephrineFeatureProjection } from "@/models/NorepinephrineInf
 import type { SupportedFluidTherapyProjection } from "@/models/FluidTherapy";
 import type { TranexamicAcidFeatureProjection } from "@/models/TranexamicAcid";
 import type { AnalgesicFeatureProjection } from "@/models/AnalgesiaMedication";
+import type { MechanicalVentilationFeatureProjection } from "@/models/MechanicalVentilation";
 
 export type ClinicalFeatureProjection = NorepinephrineFeatureProjection | SupportedFluidTherapyProjection |
-  TranexamicAcidFeatureProjection | AnalgesicFeatureProjection;
+  TranexamicAcidFeatureProjection | AnalgesicFeatureProjection | MechanicalVentilationFeatureProjection;
 
 export type AssessmentCategory = "AIRWAY" | "OXYGENATION" | "VENTILATION" | "MONITORING" | "RESOURCES" | "VITALS";
 export type AssessmentSeverity = "INFO" | "WARNING" | "FAIL";

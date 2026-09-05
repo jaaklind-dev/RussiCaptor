@@ -33,7 +33,8 @@ export type ClinicalFeatureContract<
   }>;
   physiology: Readonly<{
     order: readonly string[];
-    combine: "VITAL_SIGN_MEDICATION_LAYER" | "VITAL_SIGN_VOLUME_LAYER" | "HEMORRHAGE_HEMOSTASIS_LAYER";
+    combine: "VITAL_SIGN_MEDICATION_LAYER" | "VITAL_SIGN_VOLUME_LAYER" | "HEMORRHAGE_HEMOSTASIS_LAYER" |
+      "EXTERNAL_RESPIRATORY_SUPPORT_FLOOR";
     contributors(state: TState, simulationTimeSec: number): readonly VitalSignContributor[];
   }>;
   persistence: Readonly<{

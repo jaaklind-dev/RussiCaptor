@@ -25,6 +25,12 @@ import type { NorepinephrineCommand, NorepinephrineCommandResult, Norepinephrine
 import type { TranexamicAcidCommand, TranexamicAcidCommandResult, TranexamicAcidFeatureProjection } from "@/models/TranexamicAcid";
 import type { AnalgesicCommand, AnalgesicCommandResult, AnalgesicFeatureProjection } from "@/models/AnalgesiaMedication";
 import type {
+  MechanicalVentilationCommand,
+  MechanicalVentilationCommandResult,
+  MechanicalVentilationFeatureProjection,
+  MechanicalVentilationState,
+} from "@/models/MechanicalVentilation";
+import type {
   SupportedFluidTherapyCommand,
   SupportedFluidTherapyCommandResult,
   SupportedFluidTherapyProjection,
@@ -75,6 +81,11 @@ import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerat
 import { yieldToEventLoop } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { cooperativeDetachedCopy } from "@/services/runtime/assessment/CooperativeAssessmentSnapshot";
 import { runRuntimeDerivedSnapshotTransaction } from "@/services/runtime/RuntimeDerivedSnapshotTransaction";
+import {
+  MechanicalVentilationRuntime,
+  type MechanicalVentilationProjectionContext,
+  type SecuredAirwayReference,
+} from "@/services/runtime/respiratory/MechanicalVentilationRuntime";
 
 export function runScenarioEvents(
 
@@ -269,6 +280,7 @@ export class ClinicalScenarioEngine {
   private readonly circulationManagement = new CirculationManagementFramework();
   private assessmentRules: AssessmentRule[] = [];
   private readonly medicationEngine = new MedicationEngine();
+  private readonly mechanicalVentilation = new MechanicalVentilationRuntime();
   private vitalSignEvents: VitalSignEvent[] = [];
   private assessmentPublicationGeneration = 0;
   private assessmentPendingGeneration = 0;
@@ -303,6 +315,7 @@ export class ClinicalScenarioEngine {
     this.airwayManagement.reset();
     this.circulationManagement.reset();
     this.medicationEngine.reset();
+    this.mechanicalVentilation.reset();
     this.vitalSignEvents = [];
     publishRuntimeSnapshot(this.runtimeState, this.orderedLifecycleLeaves("SERIALIZATION").map(process => ({
       processId: process.outputs.processId, moduleId: process.outputs.moduleId, status: process.outputs.status,
@@ -421,7 +434,9 @@ export class ClinicalScenarioEngine {
     this.applyDueResourceInterventions();
     for (const completed of this.interventionRuntime.completeDue(this.simulationTimeSec)) this.projectInterventionState(completed);
     this.reconcileMtpAccessFromCanonicalCirculation();
-    const activeEffects = [...this.interventionRuntime.effectsAt(this.simulationTimeSec), ...this.medicationEngine.activeEffects(this.simulationTimeSec)]
+    const activeEffects = [...this.interventionRuntime.effectsAt(this.simulationTimeSec),
+      ...this.medicationEngine.activeEffects(this.simulationTimeSec),
+      ...this.mechanicalVentilation.activeEffects(state => this.mechanicalAirwayValid(state))]
       .sort((a,b) => a.effectType.localeCompare(b.effectType) || a.effectId.localeCompare(b.effectId));
     for (const descriptor of this.lifecyclePlan.forPhase("PREPARE")) {
       for (const current of this.lifecycleProcesses(descriptor.processType)) {
@@ -430,7 +445,9 @@ export class ClinicalScenarioEngine {
       }
     }
     for (const effect of activeEffects) {
-      if (["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED", "VASOPRESSOR_SUPPORT", "ANTIFIBRINOLYTIC_SUPPORT"].includes(effect.effectType)) continue;
+      if (["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING",
+        "BLOOD_PRODUCT_STARTED", "VASOPRESSOR_SUPPORT", "ANTIFIBRINOLYTIC_SUPPORT",
+        "EXTERNAL_MECHANICAL_VENTILATION"].includes(effect.effectType)) continue;
       this.applyClinicalEffect(effect, true);
     }
     const payload = eventPayload(event);
@@ -551,6 +568,7 @@ export class ClinicalScenarioEngine {
       airway: this.airwayManagement.snapshot(),
       circulation: this.circulationManagement.snapshot(),
       medication: this.medicationEngine.snapshot(),
+      ...(this.mechanicalVentilation.snapshot() ? { mechanicalVentilation: this.mechanicalVentilation.snapshot() } : {}),
       assessmentRules: this.assessmentRules,
       vitalSignEvents: boundedVitalSignEvents(this.vitalSignEvents),
     }) as PersistedRuntimePayload;
@@ -623,6 +641,7 @@ export class ClinicalScenarioEngine {
     this.interventionRuntime.restore(candidate.interventionInstances);
     this.airwayManagement.restore(candidate.airway); this.circulationManagement.restore(candidate.circulation);
     this.medicationEngine.restore(candidate.medication);
+    this.mechanicalVentilation.restore(candidate.mechanicalVentilation);
     endClinicalRestore();
     this.assessmentRules = structuredClone(candidate.assessmentRules) as AssessmentRule[];
     this.vitalSignEvents = boundedVitalSignEvents(candidate.vitalSignEvents);
@@ -767,6 +786,34 @@ export class ClinicalScenarioEngine {
     return this.medicationEngine.analgesicProjectionsAt(this.simulationTimeSec)
       .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
   }
+  executeMechanicalVentilationCommand(command: MechanicalVentilationCommand): MechanicalVentilationCommandResult {
+    if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
+      status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
+    });
+    if (command.patientId !== this.requireProcess().encounterId) return Object.freeze({
+      status: "REJECTED", commandId: command.commandId, rejectionReason: "INVALID_PATIENT",
+    });
+    const result = this.mechanicalVentilation.execute(command, this.securedAirwayReference(command));
+    const event = this.mechanicalVentilation.eventForCommand(command.commandId);
+    if (result.status !== "IDEMPOTENT" && event?.commandId === command.commandId) {
+      this.logEvent(event.eventType, { ...event }, event.patientId);
+    }
+    if (result.status === "APPLIED" && result.state) {
+      const airwayEvent = this.airwayManagement.setMechanicalVentilation(command.patientId,
+        result.state.lifecycle === "RUNNING", command.simulationTimeSec, result.state.supportId);
+      if (airwayEvent) this.logEvent(airwayEvent.eventType, { interventionInstanceId: airwayEvent.interventionInstanceId,
+        definitionId: airwayEvent.definitionId, airwayState: airwayEvent.airwayState,
+        ventilationState: airwayEvent.ventilationState }, airwayEvent.patientId);
+      this.aggregateProcesses();
+    }
+    this.publishResourceDebugSnapshot();
+    return structuredClone(result);
+  }
+  getMechanicalVentilationState(patientId?: string): readonly MechanicalVentilationFeatureProjection[] {
+    return this.mechanicalVentilation.projectionsAt(this.simulationTimeSec,
+      state => this.mechanicalVentilationProjectionContext(state))
+      .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
+  }
 
   setAssessmentRules(rules: AssessmentRule[]): void {
     this.assessmentRules = structuredClone(rules);
@@ -789,7 +836,7 @@ export class ClinicalScenarioEngine {
     const airwayState = this.getAirwayState();
     const clinicalEffects = this.clinicalIntegration.snapshot().events;
     const clinicalFeatures = [...this.getNorepinephrineState(), ...this.getFluidTherapyState(),
-      ...this.getTranexamicAcidState(), ...this.getAnalgesicState()];
+      ...this.getTranexamicAcidState(), ...this.getAnalgesicState(), ...this.getMechanicalVentilationState()];
     endInputs();
     const endEvaluate = startRuntimeWorkTrace("ENGINE_ASSESSMENT_RULE_EVALUATE", { ruleCount: this.assessmentRules.length });
     const snapshot = this.assessmentEngine.evaluate(this.assessmentRules, {
@@ -811,7 +858,7 @@ export class ClinicalScenarioEngine {
     const timeline = await cooperativeDetachedCopy(this.eventLog, yieldControl);
     endTimeline({ yieldCount: timeline.metrics.yieldCount, maxBatchDurationMs: timeline.metrics.maxBatchDurationMs });
     const clinicalFeatures = [...this.getNorepinephrineState(), ...this.getFluidTherapyState(),
-      ...this.getTranexamicAcidState(), ...this.getAnalgesicState()];
+      ...this.getTranexamicAcidState(), ...this.getAnalgesicState(), ...this.getMechanicalVentilationState()];
     const result = await this.assessmentEngine.evaluateCooperatively(this.assessmentRules, {
       timestamp: this.simulationTimeSec,
       runtimeState: this.requireRuntimeState(),
@@ -885,7 +932,9 @@ export class ClinicalScenarioEngine {
       exerciseTimeSec: this.simulationTimeSec,
       processOutputs: processes.map(process => process.outputs),
       aggregationConfigVersion: this.sortedHypoxia().length ? "WP-7/HV-HYPOXIA" : "WP-6/HV-P0",
-    }, this.resolver, this.medicationEngine.vitalContributorsAt(this.simulationTimeSec));
+    }, this.resolver, [...this.medicationEngine.vitalContributorsAt(this.simulationTimeSec),
+      ...this.mechanicalVentilation.vitalContributorsAt(this.simulationTimeSec,
+        state => this.mechanicalVentilationProjectionContext(state))]);
     if (aggregated.rejectedProcessIds.length > 0 ||
       aggregated.events.some((event) => event.eventType === "PROCESS_OUTPUT_REJECTED")) {
       throw new Error(`PatientProcess output lükati ownership'i või agregatsiooni poolt tagasi.`);
@@ -1054,6 +1103,8 @@ export class ClinicalScenarioEngine {
           ...this.medicationEngine.fluidTherapyProjectionsAt(this.simulationTimeSec),
           ...this.medicationEngine.tranexamicAcidProjectionsAt(this.simulationTimeSec),
           ...this.medicationEngine.analgesicProjectionsAt(this.simulationTimeSec),
+          ...this.mechanicalVentilation.projectionsAt(this.simulationTimeSec,
+            state => this.mechanicalVentilationProjectionContext(state)),
         ] },
       vitalSignStates: this.runtimeState?.vitalSignState ? [{ patientId: this.requireProcess().encounterId, state: this.runtimeState.vitalSignState }] : [],
       recentEvents: this.resourceEventLog,
@@ -1127,6 +1178,59 @@ export class ClinicalScenarioEngine {
       this.logEvent(circulationEvent.eventType, { interventionInstanceId: circulationEvent.interventionInstanceId,
         definitionId: circulationEvent.definitionId }, circulationEvent.patientId);
     }
+    this.reconcileMechanicalVentilationAirway(instance.patientId);
+  }
+
+  private securedAirwayReference(command: MechanicalVentilationCommand): SecuredAirwayReference | undefined {
+    const instance = this.interventionRuntime.active(command.patientId)
+      .find(item => item.instanceId === command.securedAirwayId);
+    return instance ? { instanceId: instance.instanceId, patientId: instance.patientId,
+      definitionId: instance.definitionId, status: "RUNNING",
+      airwayState: this.airwayManagement.getState(command.patientId) } : undefined;
+  }
+
+  private mechanicalAirwayValid(state: MechanicalVentilationState): boolean {
+    const airwayState = this.airwayManagement.getState(state.patientId);
+    return airwayState.activeAirway === "ENDOTRACHEAL" && airwayState.confirmed &&
+      this.interventionRuntime.active(state.patientId).some(item => item.instanceId === state.securedAirwayId &&
+        item.definitionId === "ENDOTRACHEAL_INTUBATION");
+  }
+
+  private mechanicalVentilationProjectionContext(state: MechanicalVentilationState):
+    MechanicalVentilationProjectionContext {
+    return { airwayValid: this.mechanicalAirwayValid(state),
+      spontaneousRespiratoryRate: this.spontaneousRespiratoryRate(),
+      medicationRespiratoryDepression: this.medicationEngine.analgesicAggregateAt(
+        state.patientId, this.simulationTimeSec).respiratoryDepression };
+  }
+
+  private spontaneousRespiratoryRate(): number {
+    const runtime = this.requireRuntimeState();
+    const vitalState = runtime.vitalSignState;
+    if (!vitalState) return runtime.targetVitals.rr ?? defaultVitalSignConfiguration.signs.respiratoryRate.baseline;
+    let target = vitalState.baseline.respiratoryRate;
+    for (const contributor of vitalState.activeContributors) {
+      if (contributor.vital !== "respiratoryRate" || contributor.layer === "EXTERNAL_RESPIRATORY_SUPPORT") continue;
+      target = contributor.operation === "DELTA" ? target + contributor.value : contributor.value;
+    }
+    return target;
+  }
+
+  private reconcileMechanicalVentilationAirway(patientId: string): void {
+    const airwayState = this.airwayManagement.getState(patientId);
+    const valid = new Set(this.interventionRuntime.active(patientId).filter(item =>
+      item.definitionId === "ENDOTRACHEAL_INTUBATION" && airwayState.activeAirway === "ENDOTRACHEAL" &&
+      airwayState.confirmed).map(item => item.instanceId));
+    const events = this.mechanicalVentilation.reconcileAirway(patientId, valid, this.simulationTimeSec);
+    for (const event of events) {
+      this.logEvent(event.eventType, { ...event }, event.patientId);
+      const airwayEvent = this.airwayManagement.setMechanicalVentilation(patientId, false,
+        this.simulationTimeSec, event.supportId);
+      if (airwayEvent) this.logEvent(airwayEvent.eventType, { interventionInstanceId: airwayEvent.interventionInstanceId,
+        definitionId: airwayEvent.definitionId, airwayState: airwayEvent.airwayState,
+        ventilationState: airwayEvent.ventilationState }, airwayEvent.patientId);
+    }
+    if (events.length) this.aggregateProcesses();
   }
 
   private rootProcess(): BotulismRootPatientProcessRuntime | undefined {

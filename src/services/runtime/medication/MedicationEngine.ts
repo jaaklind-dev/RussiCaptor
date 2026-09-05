@@ -22,6 +22,7 @@ import type {
 import type {
   AnalgesicCommand,
   AnalgesicCommandResult,
+  AnalgesicAggregateProjection,
   AnalgesicFeatureProjection,
   AnalgesicRuntimeEvent,
 } from "@/models/AnalgesiaMedication";
@@ -136,6 +137,9 @@ export class MedicationEngine {
   }
   analgesicEventForCommand(commandId: string): AnalgesicRuntimeEvent | undefined {
     return this.analgesia.eventForCommand(commandId);
+  }
+  analgesicAggregateAt(patientId: string, timestamp: number): AnalgesicAggregateProjection {
+    return this.analgesia.aggregateAt(patientId, timestamp);
   }
   vitalContributorsAt(timestamp: number): readonly VitalSignContributor[] {
     return [...this.ringer.vitalContributorsAt(timestamp), ...this.sodiumChloride.vitalContributorsAt(timestamp),

@@ -1,6 +1,7 @@
 import type { GoldenFixture } from "@/models/GoldenTest";
 import type { PatientProcessRuntime } from "@/models/PatientProcessRuntime";
 import type { ProcessOutput } from "@/models/RuntimeAggregation";
+import type { ExternalMechanicalVentilationSupport } from "@/models/MechanicalVentilation";
 
 const hvModuleId = "HYPOVENTILATION_HYPERCAPNIA_V1";
 
@@ -101,24 +102,31 @@ export function bootstrapHvPatientProcess(fixture: GoldenFixture): PatientProces
 
 export function tickHvPatientProcess(
   previous: PatientProcessRuntime,
-  tickSeconds: number
+  tickSeconds: number,
+  externalSupport?: ExternalMechanicalVentilationSupport,
 ): PatientProcessRuntime {
   if (!Number.isFinite(tickSeconds) || tickSeconds <= 0) {
     throw new Error("ENGINE_TICK kestus peab olema positiivne arv sekundeid.");
   }
   if (previous.state === "Resolved") return structuredClone(previous);
   const minutes = tickSeconds / 60;
+  const reserveSupportPerMin = externalSupport
+    ? Math.max(previous.clinicalState.reserveSupportPerMin, 5.8)
+    : previous.clinicalState.reserveSupportPerMin;
+  const co2ClearancePerMin = externalSupport
+    ? Math.max(previous.clinicalState.co2ClearancePerMin, 8.5)
+    : previous.clinicalState.co2ClearancePerMin;
   const clinicalState = {
     ...previous.clinicalState,
     ventilationReserve: Math.max(
       0,
       previous.clinicalState.ventilationReserve +
-        (previous.clinicalState.reserveSupportPerMin - previous.clinicalState.reserveLossPerMin) * minutes
+        (reserveSupportPerMin - previous.clinicalState.reserveLossPerMin) * minutes
     ),
     co2Burden: Math.min(
       100,
       previous.clinicalState.co2Burden +
-        (previous.clinicalState.co2GainPerMin - previous.clinicalState.co2ClearancePerMin) * minutes
+        (previous.clinicalState.co2GainPerMin - co2ClearancePerMin) * minutes
     ),
   };
   clinicalState.co2Trend = clinicalState.co2Burden > previous.clinicalState.co2Burden
