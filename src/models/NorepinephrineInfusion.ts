@@ -89,6 +89,8 @@ export type NorepinephrineFeatureProjection = Readonly<{
   featureId: typeof NOREPINEPHRINE_FEATURE_ID;
   infusionId: string;
   patientId: string;
+  route: "IV";
+  vascularAccessId: string;
   status: ClinicalFeatureLifecycle;
   doseMicrogramsPerKgMin: number;
   unit: typeof NOREPINEPHRINE_DOSE_UNIT;

@@ -4,6 +4,7 @@ import type { InstructorRuntimeOwner } from "./InstructorRuntimeEventRegistry";
 import { inferredInterventionDefinitionId } from "@/services/runtime/clinical/InterventionRuntime";
 import { runtimeWritesAllowed } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { notifySync } from "@/services/SyncService";
+import type { ClinicalTreatmentRuntimeResult } from "@/models/ClinicalTreatment";
 
 const readOnly = () => ({ ok: false as const, reason: "Runtime active on another device" });
 
@@ -87,6 +88,18 @@ export function createScenarioEngineInstructorRuntimeOwner(
         if (changed) notifySync("local");
         return { ok: true, runtimeEventId: `MTP:${commandId}`, changed };
       } catch (error) { return { ok: false, reason: error instanceof Error ? error.message : "MTP action failed" }; }
+    },
+    executeClinicalTreatment(request) {
+      if (!runtimeWritesAllowed()) return Object.freeze({ status: "REJECTED", commandId: request.command.commandId,
+        rejectionReason: "INVALID_STATE" }) as ClinicalTreatmentRuntimeResult;
+      const result = request.kind === "FLUID" ? engine.executeFluidTherapyCommand(request.command) :
+        request.kind === "NOREPINEPHRINE" ? engine.executeNorepinephrineCommand(request.command) :
+          request.kind === "TXA" ? engine.executeTranexamicAcidCommand(request.command) :
+            request.kind === "ANALGESIC" ? engine.executeAnalgesicCommand(request.command) :
+              request.kind === "VENTILATION" ? engine.executeMechanicalVentilationCommand(request.command) :
+                engine.executeAlsMedicationCommand(request.command);
+      if (result.status === "APPLIED") notifySync("local");
+      return result;
     },
     advanceRuntime(commandId, durationSec, canonicalSimulationTimeSec) {
       if (!runtimeWritesAllowed()) return readOnly();

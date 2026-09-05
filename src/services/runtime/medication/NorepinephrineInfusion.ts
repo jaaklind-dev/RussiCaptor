@@ -184,6 +184,8 @@ export class NorepinephrineInfusionRuntime {
         featureId: NOREPINEPHRINE_FEATURE_ID,
         infusionId: state.infusionId,
         patientId: state.patientId,
+        route: state.route,
+        vascularAccessId: state.vascularAccessId,
         status: state.status,
         doseMicrogramsPerKgMin: state.doseMicrogramsPerKgMin,
         unit: state.unit,

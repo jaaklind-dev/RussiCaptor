@@ -5,6 +5,7 @@ import type { ClinicalModuleDependency } from "@/models/clinical/ClinicalModuleD
 import type { ProtocolReference } from "@/models/protocol/ClinicalProtocolConfiguration";
 import type { EvaluationProfileReference } from "@/models/evaluation/ExerciseEvaluation";
 import type { TransportConfiguration } from "@/models/PatientTransport";
+import type { ClinicalTreatmentId } from "@/models/ClinicalTreatment";
 
 export type ExercisePackage = Readonly<{
   packageId: string;
@@ -21,4 +22,6 @@ export type ExercisePackage = Readonly<{
   protocolConfiguration?: ProtocolReference;
   evaluationProfile?: EvaluationProfileReference;
   transportConfiguration?: TransportConfiguration;
+  /** Clinical capability palette, not an authorization grant. Omission preserves the historical global palette. */
+  availableClinicalTreatments?: readonly ClinicalTreatmentId[];
 }>;

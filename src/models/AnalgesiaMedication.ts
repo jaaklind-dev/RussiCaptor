@@ -127,6 +127,7 @@ export type AnalgesicFeatureProjection = AnalgesicEffectDimensions & Readonly<{
   aliases: readonly string[];
   drugClass: AnalgesicDrugClass;
   route: "IV" | "IO";
+  vascularAccessId: string;
   mode: AnalgesicAdministrationMode;
   lifecycle: AnalgesicLifecycle;
   prescribedDose?: number;

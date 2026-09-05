@@ -181,7 +181,7 @@ export class AnalgesiaRuntime {
       return Object.freeze({ featureId: ANALGESIA_FEATURE_ID, administrationId: state.administrationId,
         patientId: state.patientId, drugId: state.drugId, displayName: configuration.displayName,
         aliases: structuredClone(configuration.aliases), drugClass: configuration.drugClass,
-        route: state.route, mode: state.mode, lifecycle: state.lifecycle,
+        route: state.route, vascularAccessId: state.vascularAccessId, mode: state.mode, lifecycle: state.lifecycle,
         ...(state.prescribedDose === undefined ? {} : { prescribedDose: state.prescribedDose }),
         ...(state.doseUnit === undefined ? {} : { doseUnit: state.doseUnit }),
         ...(state.rateUnit === undefined ? {} : { currentRate: state.lifecycle === "RUNNING" ? state.rate : 0,
