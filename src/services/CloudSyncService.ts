@@ -1,5 +1,6 @@
 import {
   createSharedExerciseProjection,
+  getLocalRuntimeCheckpoint,
   restoreRemoteExerciseIdentity,
   restoreSharedExerciseState,
   type SharedExerciseState,
@@ -37,6 +38,11 @@ import {
 import { getSharedWorkflowHead, observeSharedWorkflowHead, setSharedWorkflowConnectivity, setSharedWorkflowRealtimeLifecycle } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
 import { restorePatientSharedWorkflowState, type PatientSharedWorkflowState } from "@/services/sharedWorkflow/PatientSharedWorkflowState";
 import { getOperatorSession, hasActiveRole, type OperatorSessionState } from "@/services/authorization/OperatorSessionService";
+import {
+  canPublishProjectionWithPackageAuthority,
+  projectionPackageAuthority,
+  type ProjectionPackageAuthority,
+} from "@/services/exercise/ExerciseProjectionPackageAuthority";
 
 export type CloudSyncStatus = {
   state: "disabled" | "connecting" | "synced" | "saving" | "offline" | "error";
@@ -111,6 +117,7 @@ let stopSharedWorkflowRealtime: (() => void) | undefined;
 const remoteVersions = new Map<string, Readonly<{ revision: number; updatedAt: string }>>();
 let applyingRemoteState = false;
 let latestRemoteExercise: Readonly<{ exerciseId: string; lifecycleState: string }> | undefined;
+let latestRemoteProjectionAuthority: ProjectionPackageAuthority | undefined;
 let lastDiscoveryResponseBytes = 0;
 type RemoteSelectionState = "UNRESOLVED" | "RESOLVED" | "CONFLICT";
 let remoteSelectionState: RemoteSelectionState = "UNRESOLVED";
@@ -259,6 +266,7 @@ function applyRemoteRow(row: ExerciseStateRow): void {
     return;
   }
   latestRemoteExercise = { exerciseId: session.exerciseId, lifecycleState: lifecycle };
+  latestRemoteProjectionAuthority = projectionPackageAuthority(row.state);
   // Active canonical Runtime is synchronized only through WP-44B checkpoint
   // authority. The shared projection must never replace it directly.
   if (lifecycle === "RUNNING" || lifecycle === "PAUSED") {
@@ -447,6 +455,15 @@ function prepareCloudProjection(): ExerciseProjectionCandidate<PreparedCloudProj
   const sharedProjection = lifecycleState === "COMPLETED"
     ? withTerminalExerciseArchive(baseProjection, captureCompletedExerciseArchive())
     : baseProjection;
+  if (!canPublishProjectionWithPackageAuthority(
+    sharedProjection,
+    latestRemoteProjectionAuthority,
+    getLocalRuntimeCheckpoint(),
+  )) {
+    recordSupabaseTraffic({ operation: "PROJECTION_PACKAGE_DIVERGENCE_REJECTED", endpoint: "exercise_states.projection" });
+    setStatus({ state: "error", message: "PACKAGE_PROJECTION_DIVERGENCE" });
+    return undefined;
+  }
   const { identity, payloadBytes } = exerciseProjectionIdentity(sharedProjection);
   return { identity, payloadBytes,
     value: { exerciseId, lifecycleState, savedSession, sharedProjection } };
@@ -493,6 +510,7 @@ async function publishCloudProjection(candidate: ExerciseProjectionCandidate<Pre
       ? savedSession.lifecycleState
       : savedSession.state === "running" ? "RUNNING" : savedSession.state === "paused" ? "PAUSED" : "READY",
   };
+  latestRemoteProjectionAuthority = projectionPackageAuthority(sharedProjection);
   setStatus({ state: "synced", syncedAt: row.updated_at });
   return true;
 }
@@ -582,6 +600,7 @@ export async function startCloudSync(): Promise<() => void> {
   setStatus({ state: "connecting" });
   setSharedWorkflowConnectivity(false);
   remoteSelectionState = "UNRESOLVED";
+  latestRemoteProjectionAuthority = undefined;
   conflictingRemoteExercises = [];
   explicitlySelectedExerciseId = undefined;
 

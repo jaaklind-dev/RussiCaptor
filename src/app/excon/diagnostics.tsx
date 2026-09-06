@@ -8,7 +8,7 @@ import { isSharedWorkflowValidationHarnessEnabled } from "@/config/SharedWorkflo
 import { subscribeOperatorSession } from "@/services/authorization/OperatorSessionService";
 import { captureOperationalDiagnosticSnapshot, exportOperationalDiagnostics, type OperationalSeverity } from "@/services/operations/LiveOperationsDiagnostics";
 import { subscribeToSharedWorkflowConflicts } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
-import { terminateStaleRuntimeAfterExpiredLease } from "@/services/ExerciseRuntimeRecoveryFoundationService";
+import { terminalizePackageProjectionDivergence, terminateStaleRuntimeAfterExpiredLease } from "@/services/ExerciseRuntimeRecoveryFoundationService";
 
 const severityLabel: Readonly<Record<OperationalSeverity,string>> = {INFO:"INFO",DEGRADED:"HÄIRITUD",ACTION_REQUIRED:"VAJAB TEGEVUST",EXERCISE_BLOCKING:"ÕPPUST BLOKEERIV"};
 
@@ -36,9 +36,12 @@ export default function LiveOperationsDiagnosticsScreen() {
     <Action label={pending==="refresh"?"Värskendan…":"Värskenda autoriteetne seis"} disabled={Boolean(pending)} onPress={()=>void run("refresh",()=>refreshRemoteCurrentExercise("manual"))}/>
     {snapshot.runtime.state==="READER"&&<Action label={pending==="takeover"?"Võtan üle…":"Võta Runtime üle"} disabled={Boolean(pending)||!canRecover} onPress={()=>void run("takeover",takeOverRuntimeWriter)}/>}
     {snapshot.runtime.state==="CONFLICT"&&<Action label={pending==="recover"?"Taastan…":"Taasta pilve kontrollpunktist"} disabled={Boolean(pending)||!canRecover} onPress={()=>void run("recover",reacquireRuntimeFromRemoteCheckpoint)}/>}
-    {(snapshot.runtime.state==="READER"||snapshot.runtime.state==="CONFLICT")&&snapshot.exercise.lifecycle!=="COMPLETED"&&<><Text style={styles.warning}>Runtime’i jätkamine ei ole selles seadmes turvaline. EXCONi toiming kontrollib serveris, et writer puudub ja kontrollpunkt on aegunud, enne kui õppuse lõpetab.</Text><Action label={pending==="stale-terminalize"?"Kontrollin ja lõpetan…":"Lõpeta aegunud Runtime’i õppus turvaliselt"} disabled={Boolean(pending)||!canRecover} onPress={()=>void run("stale-terminalize",async()=>{
+    {(snapshot.runtime.state==="READER"||snapshot.runtime.state==="CONFLICT"||snapshot.runtime.state==="FAILED")&&snapshot.exercise.lifecycle!=="COMPLETED"&&<><Text style={styles.warning}>Runtime’i jätkamine ei ole selles seadmes turvaline. EXCONi toiming kontrollib serveris, et writer puudub ja kontrollpunkt on aegunud, enne kui õppuse lõpetab.</Text><Action label={pending==="stale-terminalize"?"Kontrollin ja lõpetan…":"Lõpeta aegunud Runtime’i õppus turvaliselt"} disabled={Boolean(pending)||!canRecover} onPress={()=>void run("stale-terminalize",async()=>{
       const result=await terminateStaleRuntimeAfterExpiredLease(snapshot.exercise.exerciseId);
       if (result.code!=="STALE_RUNTIME_TERMINATED"&&result.code!=="ALREADY_TERMINAL") throw new Error(result.code);
+    })}/><Action label={pending==="package-terminalize"?"Valideerin ja lõpetan…":"Lõpeta paketi lahknevusega õppus turvaliselt"} disabled={Boolean(pending)||!canRecover} onPress={()=>void run("package-terminalize",async()=>{
+      const result=await terminalizePackageProjectionDivergence(snapshot.exercise.exerciseId);
+      if(result.code!=="TERMINALIZED_DIVERGENT_STATE"&&result.code!=="ALREADY_TERMINAL")throw new Error(result.code);
     })}/></>}
     {isSharedWorkflowValidationHarnessEnabled()&&snapshot.runtime.state==="WRITER"&&<><Action label={pending==="validation-renew"?"Uuendan lease’i…":"Uuenda lease kohe (validation)"} disabled={Boolean(pending)} onPress={()=>void run("validation-renew",async()=>{const renewed=await renewRuntimeLeaseNowForValidation();setValidationRenewal(renewed?"Lease uuendati.":"Lease’i uuendamine keelati.");})}/>{validationRenewal&&<Text style={styles.warning}>{validationRenewal}</Text>}</>}
     {snapshot.runtime.durableCache==="MISSING_OR_DIFFERENT_EXERCISE"&&<Text style={styles.warning}>Puuduva kontrollpunktiga RUNNING õppust ei taastata lokaalselt. Kasuta töölaua auditeeritud lõpetamist, kui recovery õigus on olemas.</Text>}

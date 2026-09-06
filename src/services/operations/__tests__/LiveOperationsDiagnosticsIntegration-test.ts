@@ -15,6 +15,7 @@ describe("WP-NEXT-06 EXCON diagnostics integration",()=>{
     expect(screen).toContain('snapshot.runtime.state==="WRITER"');
     expect(screen).toContain("if(pending)return");
     expect(screen).toContain("Lõpeta aegunud Runtime’i õppus turvaliselt");
+    expect(screen).toContain('snapshot.runtime.state==="CONFLICT"||snapshot.runtime.state==="FAILED"');
     expect(screen).toContain("kontrollpunkt on aegunud");
     expect(screen).not.toMatch(/delete\(|service_role|access_token|from\("exercise_states"\)/);
   });
