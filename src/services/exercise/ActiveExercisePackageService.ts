@@ -53,6 +53,11 @@ export class ActiveExercisePackageService {
   }
 
   getActive(): ExercisePackage | undefined {
+    // An imported package can be re-registered after this singleton is created
+    // during cold startup. Re-read the durable selection once it becomes
+    // resolvable instead of silently losing the selected package for the life
+    // of the process.
+    if (!this.activeKey) this.activeKey = this.readPersistedKey();
     if (!this.activeKey) return undefined;
     const separator = this.activeKey.lastIndexOf("@");
     return this.registry.get(this.activeKey.slice(0, separator), this.activeKey.slice(separator + 1));

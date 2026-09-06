@@ -10,7 +10,7 @@ import { createPatientMaterializationPlan, PackagePatientDatasetRegistry } from 
 import { ExercisePackageRegistry } from "@/services/exercise/ExercisePackageRegistry";
 import { ExercisePackageValidator } from "@/services/exercise/ExercisePackageValidator";
 import { EXERCISE_DEFINITION_CATALOG } from "@/services/exercise/ExerciseDefinitionService";
-import { ImportedExercisePackageRegistry } from "@/services/import/ImportedExercisePackageRegistry";
+import { ImportedExercisePackageRegistry, type ImportedExercisePackageStorage } from "@/services/import/ImportedExercisePackageRegistry";
 import { parseImportedExercisePackageArtifacts } from "@/services/import/ImportedExercisePackageParser";
 
 const trauma = CANONICAL_EXERCISE_PACKAGES.find((pkg) => pkg.definition.profile === "TRAUMA")!;
@@ -56,6 +56,32 @@ describe("WP-45A generic exercise package import", () => {
   test("parses separate package, dataset, fixture and binding artifacts", () => { const value = genericPackage(); const artifacts = parseImportedExercisePackageArtifacts(value.modules, value.exercise); expect(artifacts.patientDataset.patients).toHaveLength(2); expect(artifacts.patientDataset.patients.every((record) => record.runtimeFixture)).toBe(true); expect(artifacts.processBindings.map((item) => item.processType)).toEqual(["HEMORRHAGE", "PLEURAL_INJURY"]); });
   test("materializes exactly the imported patients and fixtures", () => { const value = genericPackage(); const artifacts = parseImportedExercisePackageArtifacts(value.modules, value.exercise); const datasets = new PackagePatientDatasetRegistry(); datasets.register(artifacts.patientDataset); const plan = createPatientMaterializationPlan("EX-GENERIC", artifacts.exercisePackage, datasets); expect(plan.patients.map((record) => record.patient.id)).toEqual(["GEN-A", "GEN-B"]); expect(plan.patients.map((record) => record.runtimeFixture?.patientId)).toEqual(["GEN-A", "GEN-B"]); });
   test("registers and discovers an imported package generically", () => { const value = genericPackage(); const artifacts = parseImportedExercisePackageArtifacts(value.modules, value.exercise); const registry = new ImportedExercisePackageRegistry(); const published = registry.register(artifacts); expect(registry.get(published.exercisePackage.packageId, published.exercisePackage.packageVersion)?.patientDataset.patients).toHaveLength(2); });
+  test("durably restores an imported package before cold-start checkpoint binding", () => {
+    const values = new Map<string, string>();
+    const storage: ImportedExercisePackageStorage = {
+      getItem: storageKey => values.get(storageKey) ?? null,
+      setItem: (storageKey, value) => { values.set(storageKey, value); },
+    };
+    const value = genericPackage();
+    const artifacts = parseImportedExercisePackageArtifacts(value.modules, value.exercise);
+    const firstProcess = new ImportedExercisePackageRegistry(storage);
+    const published = firstProcess.register(artifacts);
+    const coldProcess = new ImportedExercisePackageRegistry(storage);
+    expect(coldProcess.restorePersisted()).toEqual({ restored: 1, rejected: 0 });
+    expect(coldProcess.get(value.pkg.packageId, value.pkg.packageVersion)).toMatchObject({
+      exercisePackage: { packageId: value.pkg.packageId, packageHash: published.exercisePackage.packageHash },
+      patientDataset: { datasetId: value.dataset.datasetId },
+    });
+  });
+  test("rejects malformed durable imported-package content without registering it", () => {
+    const storage: ImportedExercisePackageStorage = {
+      getItem: () => JSON.stringify([{ exercisePackage: { packageId: "forged", packageVersion: "1.0.0" } }]),
+      setItem: () => undefined,
+    };
+    const coldProcess = new ImportedExercisePackageRegistry(storage);
+    expect(coldProcess.restorePersisted()).toEqual({ restored: 0, rejected: 1 });
+    expect(coldProcess.get("forged", "1.0.0")).toBeUndefined();
+  });
   test("package and dataset registries accept identical re-registration and reject changed content", () => { const value = genericPackage(); const artifacts = parseImportedExercisePackageArtifacts(value.modules, value.exercise); const datasets = new PackagePatientDatasetRegistry(); datasets.register(artifacts.patientDataset); expect(() => datasets.register(structuredClone(artifacts.patientDataset))).not.toThrow(); const changed = structuredClone(artifacts.patientDataset) as unknown as { datasetId: string; version: string; patients: { patient: { name: string } }[] }; changed.patients[0].patient.name = "Changed"; expect(() => datasets.register(changed as unknown as PackagePatientDataset)).toThrow("version content conflict"); const packages = new ExercisePackageRegistry(new ExercisePackageValidator(EXERCISE_DEFINITION_CATALOG)); packages.register(artifacts.exercisePackage); expect(() => packages.register(structuredClone(artifacts.exercisePackage))).not.toThrow(); const changedPackage = createExercisePackage({ ...artifacts.exercisePackage, metadata: { ...artifacts.exercisePackage.metadata, description: "Changed" } }); expect(() => packages.register(changedPackage)).toThrow("EXERCISE_PACKAGE_VERSION_CONFLICT"); const registry = new ImportedExercisePackageRegistry(); expect(registry.get("missing", "1.0.0")).toBeUndefined(); });
 
   test("imports a generic pleural config with Narva-representative values", () => {

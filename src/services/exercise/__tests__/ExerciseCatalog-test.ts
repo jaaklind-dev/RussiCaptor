@@ -58,6 +58,19 @@ describe("WP-30 Exercise Catalog", () => {
     expect(new ActiveExercisePackageService(registry, storage).getActive()).toBe(second);
   });
 
+  test("resolves a persisted imported selection after its package is restored", () => {
+    const registry = new ExercisePackageRegistry(validator);
+    const selected = CANONICAL_EXERCISE_PACKAGES[0];
+    const storage: ActivePackageStorage = {
+      getItem: () => `${selected.packageId}@${selected.packageVersion}`,
+      setItem: () => undefined,
+    };
+    const service = new ActiveExercisePackageService(registry, storage);
+    expect(service.getActive()).toBeUndefined();
+    registry.register(selected);
+    expect(service.getActive()).toBe(selected);
+  });
+
   test("activation emits one deterministic audit and same selection is idempotent", () => {
     const { registry, storage } = setup();
     const service = new ActiveExercisePackageService(registry, storage);

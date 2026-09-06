@@ -40,6 +40,7 @@ import { capturePatientTransportRuntime, preparePatientTransportRuntime } from "
 import { compactActiveExerciseState } from "@/services/runtime/persistence/ActiveCheckpointCompaction";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { installRuntimeCompletionIntentListener } from "@/services/runtime/persistence/RuntimeCheckpointLifecycleIntent";
+import { restorePersistedImportedExercisePackages } from "@/services/import/ImportedExercisePackageRegistry";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
@@ -356,6 +357,10 @@ export function runtimeRestoreSource(
 
 export async function loadPersistedState(): Promise<void> {
   try {
+    // Imported package definitions are required to bind a validated checkpoint
+    // to its exact package after a cold process restart. Re-register them before
+    // any exercise identity or Runtime artifact is restored.
+    restorePersistedImportedExercisePackages();
     const fileInfo = await FileSystem.getInfoAsync(stateFileUri);
 
     if (!fileInfo.exists) {
