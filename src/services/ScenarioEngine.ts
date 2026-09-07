@@ -385,6 +385,7 @@ export class ClinicalScenarioEngine {
     }
     this.simulationTimeSec = targetTime;
     this.reconcileNarvaIroCardiacArrest();
+    if (this.narvaIroScenario.snapshot()) this.aggregateProcesses();
   }
 
   dispatch(event: GoldenInputEvent): void {
@@ -461,9 +462,13 @@ export class ClinicalScenarioEngine {
     this.applyDueResourceInterventions();
     for (const completed of this.interventionRuntime.completeDue(this.simulationTimeSec)) this.projectInterventionState(completed);
     this.reconcileMtpAccessFromCanonicalCirculation();
+    const medicationEffects = this.medicationEngine.activeEffects(this.simulationTimeSec)
+      .filter(effect => !(this.narvaIroScenario.vasopressorDeliveryInterrupted() &&
+        effect.effectType === "VASOPRESSOR_SUPPORT"));
+    const ventilationEffects = this.narvaIroScenario.ventilationDeliveryInterrupted() ? [] :
+      this.mechanicalVentilation.activeEffects(state => this.mechanicalAirwayValid(state));
     const activeEffects = [...this.interventionRuntime.effectsAt(this.simulationTimeSec),
-      ...this.medicationEngine.activeEffects(this.simulationTimeSec),
-      ...this.mechanicalVentilation.activeEffects(state => this.mechanicalAirwayValid(state))]
+      ...medicationEffects, ...ventilationEffects]
       .sort((a,b) => a.effectType.localeCompare(b.effectType) || a.effectId.localeCompare(b.effectId));
     for (const descriptor of this.lifecyclePlan.forPhase("PREPARE")) {
       for (const current of this.lifecycleProcesses(descriptor.processType)) {
@@ -1162,16 +1167,21 @@ export class ClinicalScenarioEngine {
 
   private aggregateProcesses(previous = this.requireRuntimeState()): void {
     const processes = this.orderedLifecycleLeaves("AGGREGATION");
+    const medicationContributors = this.medicationEngine.vitalContributorsAt(this.simulationTimeSec)
+      .filter(item => !(this.narvaIroScenario.vasopressorDeliveryInterrupted() &&
+        item.sourceId === "NARVA-IRO-NOREPINEPHRINE"));
+    const ventilationContributors = this.narvaIroScenario.ventilationDeliveryInterrupted() ? [] :
+      this.mechanicalVentilation.vitalContributorsAt(this.simulationTimeSec,
+        state => this.mechanicalVentilationProjectionContext(state));
     const aggregated = aggregateRuntimeState({
       previous,
       expectedStateVersion: previous.stateVersion,
       exerciseTimeSec: this.simulationTimeSec,
       processOutputs: processes.map(process => process.outputs),
       aggregationConfigVersion: this.sortedHypoxia().length ? "WP-7/HV-HYPOXIA" : "WP-6/HV-P0",
-    }, this.resolver, [...this.medicationEngine.vitalContributorsAt(this.simulationTimeSec),
+    }, this.resolver, [...medicationContributors,
       ...this.narvaIroScenario.vitalContributorsAt(this.simulationTimeSec),
-      ...this.mechanicalVentilation.vitalContributorsAt(this.simulationTimeSec,
-        state => this.mechanicalVentilationProjectionContext(state))]);
+      ...ventilationContributors]);
     if (aggregated.rejectedProcessIds.length > 0 ||
       aggregated.events.some((event) => event.eventType === "PROCESS_OUTPUT_REJECTED")) {
       throw new Error(`PatientProcess output lükati ownership'i või agregatsiooni poolt tagasi.`);

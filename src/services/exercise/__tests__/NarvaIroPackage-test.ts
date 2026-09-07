@@ -74,4 +74,24 @@ describe("WP-NARVA-02 IRO full package readiness", () => {
       } });
     expect(engine.getNarvaIroScenarioState()).toMatchObject({ rosc: true, goNoGoRequired: true });
   });
+
+  test("faults interrupt effective support delivery without stopping the configured treatment", () => {
+    const engine = new ClinicalScenarioEngine(); engine.reset(structuredClone(fixture()));
+    const supportedSystolicBp = engine.getRuntimeState().targetVitals.sbp!;
+    engine.triggerNarvaIroVasopressorFault(); engine.advanceTo(60);
+    expect(engine.getNarvaIroScenarioState()).toMatchObject({ vasopressorStage: "S2", systolicBp: 75 });
+    expect(engine.getRuntimeState().targetVitals.sbp).toBeLessThan(supportedSystolicBp);
+    const interruptedSystolicBp = engine.getRuntimeState().targetVitals.sbp!;
+    expect(engine.getNorepinephrineState("PT-IRO-001")[0]).toMatchObject({ status: "RUNNING",
+      doseMicrogramsPerKgMin: 0.08 });
+
+    engine.correctNarvaIroVasopressorFault(); engine.advanceTo(180);
+    expect(engine.getNarvaIroScenarioState().vasopressorStage).toBe("S2R");
+    expect(engine.getRuntimeState().targetVitals.sbp).toBeGreaterThan(interruptedSystolicBp);
+
+    engine.triggerNarvaIroVentilationFault("VENTILATOR_STOP"); engine.advanceTo(240);
+    expect(engine.getNarvaIroScenarioState()).toMatchObject({ ventilationStage: "CRITICAL", spo2: 82 });
+    expect(engine.getMechanicalVentilationState("PT-IRO-001")[0]).toMatchObject({ lifecycle: "RUNNING" });
+    expect(engine.getRuntimeState().targetVitals.spo2).toBe(82);
+  });
 });

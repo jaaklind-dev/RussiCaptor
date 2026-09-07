@@ -114,6 +114,14 @@ export class NarvaIroScenarioRuntime {
     return this.state ? frozen({ schemaVersion: 1, state: this.state }) : undefined;
   }
 
+  vasopressorDeliveryInterrupted(): boolean {
+    return Boolean(this.state?.vasopressorFault && !corrected(this.state.vasopressorFault));
+  }
+
+  ventilationDeliveryInterrupted(): boolean {
+    return Boolean(this.state?.ventilationFault && !corrected(this.state.ventilationFault));
+  }
+
   restore(snapshot?: NarvaIroScenarioSnapshot): void {
     if (!snapshot) { this.state = undefined; return; }
     if (snapshot.schemaVersion !== 1 || snapshot.state.schemaVersion !== 1 || !snapshot.state.patientId) {
