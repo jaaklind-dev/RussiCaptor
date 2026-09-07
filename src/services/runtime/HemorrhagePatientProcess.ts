@@ -16,6 +16,10 @@ function validConfig(value: unknown): value is HemorrhageConfiguration {
         c.pressureDependentFlow.minimumFlowFraction].every(Number.isFinite)) &&
     (c.pelvicSourceControl === undefined || validPelvicControl(c.pelvicSourceControl)) &&
     (c.coagulation?.temperatureModifiers === undefined || validTemperatureModifiers(c.coagulation.temperatureModifiers)) &&
+    (c.coagulation?.fibrinogenDeficiencyFactor === undefined ||
+      (Number.isFinite(c.coagulation.fibrinogenDeficiencyFactor) && c.coagulation.fibrinogenDeficiencyFactor >= 1)) &&
+    (c.coagulation?.fibrinogenCorrectionPerGram === undefined ||
+      (Number.isFinite(c.coagulation.fibrinogenCorrectionPerGram) && c.coagulation.fibrinogenCorrectionPerGram >= 0)) &&
     (c.fibrinolysis === undefined || (Number.isFinite(c.fibrinolysis.excessFactor) && c.fibrinolysis.excessFactor >= 1 &&
       Number.isFinite(c.fibrinolysis.txaSensitivity) && c.fibrinolysis.txaSensitivity >= 0 &&
       c.fibrinolysis.txaSensitivity <= 1));
@@ -72,7 +76,7 @@ export function bootstrapHemorrhagePatientProcess(encounterId: string, initial: 
   return { ...base, outputs: output(base) };
 }
 export function setHemorrhageEffects(previous: HemorrhagePatientProcessRuntime, effects: ClinicalEffect[]): HemorrhagePatientProcessRuntime {
-  const applicableEffects = effects.filter(e => ["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED", "ANTIFIBRINOLYTIC_SUPPORT"].includes(e.effectType) ||
+  const applicableEffects = effects.filter(e => ["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING", "BLOOD_PRODUCT_STARTED", "ANTIFIBRINOLYTIC_SUPPORT", "COAGULATION_SUBSTRATE_SUPPORT"].includes(e.effectType) ||
     (e.effectType === "PLEURAL_DRAINAGE" && previous.configuration.bleedingRateAfterPleuralDrainageMlMin !== undefined))
     .filter(e => {
       const targetSourceId = typeof e.parameters.sourceId === "string" ? e.parameters.sourceId : undefined;
@@ -125,10 +129,18 @@ function pelvicSourceRate(previous: HemorrhagePatientProcessRuntime): { rate: nu
   const stage = [...pelvic.correctMaturation].reverse().find(item => sinceCorrect >= item.afterSec) ?? pelvic.correctMaturation[0];
   return { rate: stage.rateMlMin, sinceCorrect };
 }
-function coagulationFactor(configuration: HemorrhageConfiguration, temperatureCelsius?: number): number {
-  if (!configuration.coagulation?.temperatureModifiers || temperatureCelsius === undefined || !Number.isFinite(temperatureCelsius)) return 1;
-  return precise(configuration.coagulation.temperatureModifiers.reduce((factor, item) =>
-    temperatureCelsius < item.belowCelsius ? Math.max(factor, item.factor) : factor, 1));
+function coagulationFactor(configuration: HemorrhageConfiguration, effects: readonly ClinicalEffect[],
+  temperatureCelsius?: number): Readonly<{ factor: number; fibrinogenDoseG: number; fibrinogenFactor: number }> {
+  const temperatureFactor = configuration.coagulation?.temperatureModifiers && temperatureCelsius !== undefined &&
+    Number.isFinite(temperatureCelsius) ? configuration.coagulation.temperatureModifiers.reduce((factor, item) =>
+      temperatureCelsius < item.belowCelsius ? Math.max(factor, item.factor) : factor, 1) : 1;
+  const deficiency = configuration.coagulation?.fibrinogenDeficiencyFactor ?? 1;
+  const fibrinogenDoseG = effects.reduce((sum, effect) => effect.effectType === "COAGULATION_SUBSTRATE_SUPPORT" &&
+    typeof effect.parameters.dose === "number" && effect.parameters.unit === "G" ? sum + effect.parameters.dose : sum, 0);
+  const fibrinogenFactor = Math.max(1, deficiency - fibrinogenDoseG *
+    (configuration.coagulation?.fibrinogenCorrectionPerGram ?? 0));
+  return Object.freeze({ factor: precise(temperatureFactor * fibrinogenFactor),
+    fibrinogenDoseG: precise(fibrinogenDoseG), fibrinogenFactor: precise(fibrinogenFactor) });
 }
 export function effectiveFibrinolysisFactor(excessFactor: number, txaEffect: number, sensitivity: number): number {
   const baselineBoundExcess = Math.max(1, excessFactor);
@@ -148,7 +160,7 @@ export function tickHemorrhagePatientProcess(previous: HemorrhagePatientProcessR
     ? c.bleedingRateAfterPleuralDrainageMlMin
     : previous.sourceType === "PELVIC" ? pelvic.rate : c.baselineBleedingRateMlMin;
   const pressureFactor = pressureDependentHemorrhageFactor(c, sbpMmHg);
-  const coagulation = coagulationFactor(c, temperatureCelsius);
+  const coagulation = coagulationFactor(c, effects, temperatureCelsius);
   const fibrinolysisExcessFactor = c.fibrinolysis?.excessFactor ?? 1;
   const txaEffect = Math.max(0, ...effects.map(effect => effect.effectType === "ANTIFIBRINOLYTIC_SUPPORT" &&
     typeof effect.parameters.txaEffect === "number" ? effect.parameters.txaEffect : 0));
@@ -156,7 +168,7 @@ export function tickHemorrhagePatientProcess(previous: HemorrhagePatientProcessR
     c.fibrinolysis?.txaSensitivity ?? 0);
   const interventionFactor = precise(1 - reduction);
   const rate = precise(stopped ? 0 : Math.max(0,
-    untreatedRate * pressureFactor * coagulation * fibrinolysis * interventionFactor - support));
+    untreatedRate * pressureFactor * coagulation.factor * fibrinolysis * interventionFactor - support));
   const cumulative = precise(previous.clinicalState.cumulativeLossMl + rate * seconds / 60);
   if (!Number.isFinite(cumulative) || cumulative < previous.clinicalState.cumulativeLossMl) {
     throw new Error("Hemorrhage cumulative loss is invalid.");
@@ -171,7 +183,8 @@ export function tickHemorrhagePatientProcess(previous: HemorrhagePatientProcessR
   const clinicalState = { ...previous.clinicalState, estimatedBloodLossMl: cumulative, cumulativeLossMl: cumulative,
     bleedingRateMlMin: rate, ...(c.pressureDependentFlow || c.pelvicSourceControl || c.coagulation || c.fibrinolysis ? {
       baseSourceRateMlMin: c.baselineBleedingRateMlMin, sourceControlCeilingMlMin: untreatedRate, pressureFactor,
-      coagulationFactor: coagulation, interventionFactor,
+      coagulationFactor: coagulation.factor, fibrinogenDoseG: coagulation.fibrinogenDoseG,
+      effectiveFibrinogenFactor: coagulation.fibrinogenFactor, interventionFactor,
       ...(c.fibrinolysis ? { fibrinolysisExcessFactor, txaEffect: precise(Math.min(1, txaEffect)),
         effectiveFibrinolysisFactor: fibrinolysis } : {}),
       ...(pelvic.sinceCorrect !== undefined ? { timeSinceCorrectStabilizationSec: pelvic.sinceCorrect } : {}),

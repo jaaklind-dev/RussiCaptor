@@ -110,7 +110,8 @@ export function createScenarioEngineInstructorRuntimeOwner(
         request.kind === "NOREPINEPHRINE" ? engine.executeNorepinephrineCommand(request.command) :
           request.kind === "TXA" ? engine.executeTranexamicAcidCommand(request.command) :
             request.kind === "ANALGESIC" ? engine.executeAnalgesicCommand(request.command) :
-              request.kind === "VENTILATION" ? engine.executeMechanicalVentilationCommand(request.command) :
+              request.kind === "MEDICATION" ? engine.executeMedicationCommand(request.command) :
+                request.kind === "VENTILATION" ? engine.executeMechanicalVentilationCommand(request.command) :
                 engine.executeAlsMedicationCommand(request.command);
       if (result.status === "APPLIED") notifySync("local");
       return result;

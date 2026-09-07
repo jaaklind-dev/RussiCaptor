@@ -59,6 +59,13 @@ export class MedicationEngine {
       this.definitions.set(d.medicationId, structuredClone(d));
     }
   }
+  ensureDefinition(value: MedicationDefinition): void {
+    const existing = this.definitions.get(value.medicationId);
+    if (existing && JSON.stringify(existing) !== JSON.stringify(value)) {
+      throw new Error(`MedicationDefinition ${value.medicationId} conflicts with installed configuration.`);
+    }
+    if (!existing) this.definitions.set(value.medicationId, structuredClone(value));
+  }
   reset(): void { this.instances.clear(); this.seen.clear(); this.events.length = 0; this.effects.clear();
     this.norepinephrine.reset(); this.ringer.reset(); this.sodiumChloride.reset(); this.gelofusin.reset();
     this.tranexamicAcid.reset(); this.analgesia.reset(); this.alsMedications.reset(); }

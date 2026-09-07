@@ -4,12 +4,13 @@ import type { SupportedFluidTherapyCommand, SupportedFluidTherapyCommandResult, 
 import type { MechanicalVentilationCommand, MechanicalVentilationCommandResult } from "@/models/MechanicalVentilation";
 import type { NorepinephrineCommand, NorepinephrineCommandResult } from "@/models/NorepinephrineInfusion";
 import type { TranexamicAcidCommand, TranexamicAcidCommandResult } from "@/models/TranexamicAcid";
+import type { MedicationAdministration, MedicationCommandResult } from "@/models/MedicationRuntime";
 
 export type ClinicalTreatmentId = SupportedFluidType | "TRANEXAMIC_ACID" | AnalgesicDrugId |
-  "NOREPINEPHRINE" | "MECHANICAL_VENTILATION" | AlsMedicationId;
+  "FIBRINOGEN_CONCENTRATE" | "NOREPINEPHRINE" | "MECHANICAL_VENTILATION" | AlsMedicationId;
 
 export type ClinicalTreatmentCategory = "FLUIDS" | "HEMOSTASIS" | "ANALGESIA" |
-  "VASOACTIVE" | "RESPIRATORY_SUPPORT" | "ALS_MEDICATIONS";
+  "SEDATION" | "NEUROMUSCULAR_BLOCKADE" | "VASOACTIVE" | "RESPIRATORY_SUPPORT" | "ALS_MEDICATIONS";
 
 export type ClinicalTreatmentFieldId = "mode" | "route" | "vascularAccessId" | "securedAirwayId" |
   "volumeMl" | "rateMlHour" | "dose" | "doseRate" | "respiratoryRate" | "tidalVolumeMl" |
@@ -32,7 +33,7 @@ export type ClinicalTreatmentDescriptor = Readonly<{
   displayName: string;
   aliases: readonly string[];
   category: ClinicalTreatmentCategory;
-  commandKind: "FLUID" | "NOREPINEPHRINE" | "TXA" | "ANALGESIC" | "VENTILATION" | "ALS";
+  commandKind: "FLUID" | "NOREPINEPHRINE" | "TXA" | "ANALGESIC" | "MEDICATION" | "VENTILATION" | "ALS";
   routes: readonly ("IV" | "IO")[];
   requiresVascularAccess: boolean;
   administrationModes: readonly string[];
@@ -51,12 +52,13 @@ export type ClinicalTreatmentCommand =
   | Readonly<{ kind: "NOREPINEPHRINE"; command: NorepinephrineCommand }>
   | Readonly<{ kind: "TXA"; command: TranexamicAcidCommand }>
   | Readonly<{ kind: "ANALGESIC"; command: AnalgesicCommand }>
+  | Readonly<{ kind: "MEDICATION"; command: MedicationAdministration & Readonly<{ commandId: string }> }>
   | Readonly<{ kind: "VENTILATION"; command: MechanicalVentilationCommand }>
   | Readonly<{ kind: "ALS"; command: AlsMedicationCommand }>;
 
 export type ClinicalTreatmentRuntimeResult = SupportedFluidTherapyCommandResult | NorepinephrineCommandResult |
   TranexamicAcidCommandResult | AnalgesicCommandResult | MechanicalVentilationCommandResult |
-  AlsMedicationCommandResult;
+  AlsMedicationCommandResult | MedicationCommandResult;
 
 export type ClinicalTreatmentSubmissionResult = Readonly<{
   treatmentId: ClinicalTreatmentId;

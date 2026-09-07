@@ -99,6 +99,11 @@ export function buildClinicalTreatmentCommand(descriptor: ClinicalTreatmentDescr
       ...(action === "CHANGE" ? { rate: numberValue(values, "doseRate"),
         rateUnit: descriptor.fields.find(item => item.fieldId === "doseRate")?.unit } : {}),
     } as AnalgesicCommand) }) });
+  if (descriptor.commandKind === "MEDICATION") return Object.freeze({ ok: true,
+    command: Object.freeze({ kind: "MEDICATION", command: Object.freeze({ commandId: context.commandId,
+      administrationId: context.instanceId, medicationId: descriptor.treatmentId, patientId: context.patientId,
+      route, dose: numberValue(values, "dose"), unit: descriptor.fields.find(item => item.fieldId === "dose")!.unit!,
+      timestamp: context.simulationTimeSec, administrator: "CLINICAL_TREATMENT", vascularAccessId: access }) }) });
   if (descriptor.commandKind === "VENTILATION") return Object.freeze({ ok: true,
     command: Object.freeze({ kind: "VENTILATION", command: Object.freeze({ ...base,
       action: action === "CHANGE" ? "CHANGE_SETTINGS" : action, supportId: context.instanceId,

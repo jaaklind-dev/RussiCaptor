@@ -17,9 +17,12 @@ import { SODIUM_CHLORIDE_0_9_CONFIGURATION } from
 import { DEFAULT_TRANEXAMIC_ACID_CONFIGURATION } from "@/services/runtime/medication/TranexamicAcid";
 import { DEFAULT_MECHANICAL_VENTILATION_CONFIGURATION } from
   "@/services/runtime/respiratory/MechanicalVentilationRuntime";
+import { FIBRINOGEN_CONCENTRATE_DEFINITION } from
+  "@/services/runtime/medication/FibrinogenConcentrate";
 
 export const CLINICAL_TREATMENT_CATEGORY_LABELS: Readonly<Record<ClinicalTreatmentCategory, string>> =
   Object.freeze({ FLUIDS: "Vedelikud", HEMOSTASIS: "Hemostaas", ANALGESIA: "Analgeesia",
+    SEDATION: "Sedatsioon", NEUROMUSCULAR_BLOCKADE: "Neuromuskulaarne blokaad",
     VASOACTIVE: "Vasoaktiivne ravi", RESPIRATORY_SUPPORT: "Hingamistugi", ALS_MEDICATIONS: "ALS ravimid" });
 
 const access = (routes: readonly ("IV" | "IO")[]): ClinicalTreatmentFieldDescriptor => Object.freeze({
@@ -61,7 +64,10 @@ const analgesicDescriptors = ANALGESIC_PRODUCT_CONFIGURATIONS.map((configuration
   const bolusMaximum = configuration.maximumBolusDose ?? Number.MAX_SAFE_INTEGER;
   const rateMaximum = configuration.maximumInfusionRate ?? Number.MAX_SAFE_INTEGER;
   return Object.freeze({ treatmentId: configuration.drugId, displayName: configuration.displayName,
-    aliases: Object.freeze([...configuration.aliases]), category: "ANALGESIA", commandKind: "ANALGESIC",
+    aliases: Object.freeze([...configuration.aliases]), category:
+      configuration.drugClass === "NEUROMUSCULAR_BLOCKER" ? "NEUROMUSCULAR_BLOCKADE" :
+        configuration.drugClass === "HYPNOTIC_SEDATIVE" || configuration.drugClass === "BENZODIAZEPINE_SEDATIVE"
+          ? "SEDATION" : "ANALGESIA", commandKind: "ANALGESIC",
     routes: Object.freeze([...configuration.routes]), requiresVascularAccess: true,
     administrationModes: Object.freeze([...configuration.modes]),
     fields: Object.freeze([
@@ -97,6 +103,13 @@ const catalog: readonly ClinicalTreatmentDescriptor[] = Object.freeze([
     fields: Object.freeze([access(["IV", "IO"])]), supportsStart: true, supportsChange: false,
     supportsStop: true, treatmentShape: "COURSE", configurationVersion:
       DEFAULT_TRANEXAMIC_ACID_CONFIGURATION.regimenVersion }),
+  Object.freeze({ treatmentId: "FIBRINOGEN_CONCENTRATE", displayName: "Fibrinogeenikontsentraat (Fibryga)",
+    aliases: Object.freeze(["FIBRYGA"]), category: "HEMOSTASIS", commandKind: "MEDICATION",
+    routes: Object.freeze(["IV"] as const), requiresVascularAccess: true,
+    administrationModes: Object.freeze(["ONE_SHOT"]), fields: Object.freeze([
+      numeric("dose", "Annus", "G", 0.1, 20), route(["IV"]), access(["IV"]),
+    ]), supportsStart: true, supportsChange: false, supportsStop: false, treatmentShape: "ONE_SHOT",
+    configurationVersion: String(FIBRINOGEN_CONCENTRATE_DEFINITION.metadata.version) }),
   ...analgesicDescriptors,
   Object.freeze({ treatmentId: "NOREPINEPHRINE", displayName: "Norepinefriin", aliases: Object.freeze([]),
     category: "VASOACTIVE", commandKind: "NOREPINEPHRINE", routes: Object.freeze(["IV"] as const),

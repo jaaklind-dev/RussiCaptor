@@ -10,6 +10,7 @@ import type { RuntimeState } from "@/models/RuntimeAggregation";
 import type { VitalSignEvent } from "@/models/VitalSign";
 import type { AssessmentRule } from "@/models/ClinicalAssessment";
 import type { MechanicalVentilationRuntimeSnapshot } from "@/models/MechanicalVentilation";
+import type { NarvaIroScenarioSnapshot } from "@/models/NarvaIroScenario";
 
 export const LEGACY_PERSISTED_RUNTIME_SCHEMA_VERSION = 1 as const;
 export const PERSISTED_RUNTIME_SCHEMA_VERSION = 2 as const;
@@ -29,6 +30,8 @@ export type RuntimeProvenance = Readonly<{
 
 export type PersistedRuntimePayload = Readonly<{
   simulationTimeSec: number;
+  /** Authoritative trauma onset on the simulation clock; optional for historical/non-trauma checkpoints. */
+  injuryOnsetSimulationTimeSec?: number;
   sequence: number;
   processes: readonly CanonicalLifecycleProcess[];
   runtimeState: RuntimeState;
@@ -52,6 +55,7 @@ export type PersistedRuntimePayload = Readonly<{
   circulation: Readonly<{ states: readonly CirculationState[]; events: readonly CirculationRuntimeEvent[] }>;
   medication: MedicationRuntimeSnapshot;
   mechanicalVentilation?: MechanicalVentilationRuntimeSnapshot;
+  narvaIroScenario?: NarvaIroScenarioSnapshot;
   assessmentRules: readonly AssessmentRule[];
   vitalSignEvents: readonly VitalSignEvent[];
 }>;

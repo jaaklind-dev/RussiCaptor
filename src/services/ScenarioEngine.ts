@@ -20,7 +20,9 @@ import type { AssessmentRule, AssessmentSnapshot } from "@/models/ClinicalAssess
 import type { CirculationState } from "@/models/CirculationState";
 import type { HemorrhagePatientProcessRuntime } from "@/models/HemorrhagePatientProcess";
 import { terminateHemorrhageAtDeath } from "@/services/runtime/HemorrhagePatientProcess";
-import type { MedicationAdministration, MedicationDefinition, MedicationInstance } from "@/models/MedicationRuntime";
+import { applyExplicitCardiacRhythmTransition, bootstrapCardiacArrestPatientProcess,
+  defaultCardiacArrestConfiguration } from "@/services/runtime/CardiacArrestPatientProcess";
+import type { MedicationAdministration, MedicationCommandResult, MedicationDefinition, MedicationInstance } from "@/models/MedicationRuntime";
 import type { NorepinephrineCommand, NorepinephrineCommandResult, NorepinephrineFeatureProjection } from "@/models/NorepinephrineInfusion";
 import type { TranexamicAcidCommand, TranexamicAcidCommandResult, TranexamicAcidFeatureProjection } from "@/models/TranexamicAcid";
 import type { AnalgesicCommand, AnalgesicCommandResult, AnalgesicFeatureProjection } from "@/models/AnalgesiaMedication";
@@ -64,6 +66,13 @@ import { pleuralInjuryClinicalProcessHandler } from "@/services/runtime/clinical
 import { respiratoryFailureClinicalProcessHandler } from "@/services/runtime/clinical/handlers/RespiratoryFailureClinicalProcessHandler";
 import { CirculationManagementFramework } from "@/services/runtime/clinical/CirculationManagementFramework";
 import { MedicationEngine } from "@/services/runtime/medication/MedicationEngine";
+import { FIBRINOGEN_CONCENTRATE_DEFINITION, FIBRINOGEN_CONCENTRATE_ID } from
+  "@/services/runtime/medication/FibrinogenConcentrate";
+import { ANALGESIC_PRODUCT_CONFIGURATIONS } from "@/services/runtime/medication/AnalgesicProducts";
+import { DEFAULT_NOREPINEPHRINE_CONFIGURATION, norepinephrineTargetEffect } from
+  "@/services/runtime/medication/NorepinephrineInfusion";
+import { DEFAULT_MECHANICAL_VENTILATION_CONFIGURATION } from
+  "@/services/runtime/respiratory/MechanicalVentilationRuntime";
 import { publishAssessmentDebugSnapshot } from "@/services/AssessmentRuntimeDebugService";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { hvClinicalProcessHandler } from "@/services/runtime/clinical/handlers/HvClinicalProcessHandler";
@@ -91,6 +100,8 @@ import {
   type MechanicalVentilationProjectionContext,
   type SecuredAirwayReference,
 } from "@/services/runtime/respiratory/MechanicalVentilationRuntime";
+import type { NarvaIroScenarioProjection, NarvaIroVentilationFault } from "@/models/NarvaIroScenario";
+import { NarvaIroScenarioRuntime } from "@/services/runtime/NarvaIroScenarioRuntime";
 
 export function runScenarioEvents(
 
@@ -265,6 +276,7 @@ export class ClinicalScenarioEngine {
   private readonly lifecycleProcessStore = new Map<string, CanonicalLifecycleProcess>();
   private runtimeState?: RuntimeState;
   private simulationTimeSec = 0;
+  private injuryOnsetSimulationTimeSec?: number;
   private sequence = 0;
   private eventLog: GoldenActualEvent[] = [];
   private resourceEventLog: ResourceRuntimeEvent[] = [];
@@ -286,6 +298,7 @@ export class ClinicalScenarioEngine {
   private assessmentRules: AssessmentRule[] = [];
   private readonly medicationEngine = new MedicationEngine();
   private readonly mechanicalVentilation = new MechanicalVentilationRuntime();
+  private readonly narvaIroScenario = new NarvaIroScenarioRuntime();
   private vitalSignEvents: VitalSignEvent[] = [];
   private assessmentPublicationGeneration = 0;
   private assessmentPendingGeneration = 0;
@@ -307,6 +320,10 @@ export class ClinicalScenarioEngine {
     }
     this.runtimeState = initialRuntimeState(fixture, this.requireProcess());
     this.simulationTimeSec = 0;
+    const fixtureState = fixture.initialState && typeof fixture.initialState === "object"
+      ? fixture.initialState as Record<string, unknown> : {};
+    this.injuryOnsetSimulationTimeSec = typeof fixtureState.injuryTimeSec === "number" &&
+      Number.isFinite(fixtureState.injuryTimeSec) ? fixtureState.injuryTimeSec : undefined;
     this.sequence = 0;
     this.eventLog = [];
     this.resourceEventLog = [];
@@ -321,6 +338,9 @@ export class ClinicalScenarioEngine {
     this.circulationManagement.reset();
     this.medicationEngine.reset();
     this.mechanicalVentilation.reset();
+    const fixturePatientId = this.requireProcess().encounterId;
+    this.narvaIroScenario.reset(fixtureState.narvaIroScenario === true ? fixturePatientId : undefined);
+    if (fixtureState.narvaIroInitialTreatments === true) this.bootstrapNarvaIroInitialTreatments(fixturePatientId);
     this.vitalSignEvents = [];
     publishRuntimeSnapshot(this.runtimeState, this.orderedLifecycleLeaves("SERIALIZATION").map(process => ({
       processId: process.outputs.processId, moduleId: process.outputs.moduleId, status: process.outputs.status,
@@ -337,6 +357,7 @@ export class ClinicalScenarioEngine {
       throw new Error("Simulatsiooniaeg peab liikuma deterministlikult edasi.");
     }
     const targetTime = simulationTimeSec;
+    if (this.narvaIroScenario.snapshot()) this.narvaIroScenario.advanceTo(targetTime);
     for (const medicationEvent of this.medicationEngine.advanceTo(targetTime)) this.logEvent(medicationEvent.eventType, { ...medicationEvent }, medicationEvent.patientId);
     const root = this.rootProcess();
     if (root) {
@@ -363,6 +384,7 @@ export class ClinicalScenarioEngine {
       }
     }
     this.simulationTimeSec = targetTime;
+    this.reconcileNarvaIroCardiacArrest();
   }
 
   dispatch(event: GoldenInputEvent): void {
@@ -451,7 +473,7 @@ export class ClinicalScenarioEngine {
     }
     for (const effect of activeEffects) {
       if (["REDUCE_EXTERNAL_BLEEDING", "STOP_EXTERNAL_BLEEDING", "PELVIC_STABILIZATION", "INFUSION_RUNNING",
-        "BLOOD_PRODUCT_STARTED", "VASOPRESSOR_SUPPORT", "ANTIFIBRINOLYTIC_SUPPORT",
+        "BLOOD_PRODUCT_STARTED", "VASOPRESSOR_SUPPORT", "ANTIFIBRINOLYTIC_SUPPORT", "COAGULATION_SUBSTRATE_SUPPORT",
         "EXTERNAL_MECHANICAL_VENTILATION"].includes(effect.effectType)) continue;
       this.applyClinicalEffect(effect, true);
     }
@@ -624,6 +646,9 @@ export class ClinicalScenarioEngine {
   captureRuntimePayload(): PersistedRuntimePayload {
     return structuredClone({
       simulationTimeSec: this.simulationTimeSec,
+      ...(this.injuryOnsetSimulationTimeSec === undefined ? {} : {
+        injuryOnsetSimulationTimeSec: this.injuryOnsetSimulationTimeSec,
+      }),
       sequence: this.sequence,
       processes: this.lifecyclePlan.orderProcesses([...this.lifecycleProcessStore.values()], "SERIALIZATION")
         .concat(this.rootProcess() ? [this.rootProcess()!] : []),
@@ -641,6 +666,7 @@ export class ClinicalScenarioEngine {
       circulation: this.circulationManagement.snapshot(),
       medication: this.medicationEngine.snapshot(),
       ...(this.mechanicalVentilation.snapshot() ? { mechanicalVentilation: this.mechanicalVentilation.snapshot() } : {}),
+      ...(this.narvaIroScenario.snapshot() ? { narvaIroScenario: this.narvaIroScenario.snapshot() } : {}),
       assessmentRules: this.assessmentRules,
       vitalSignEvents: boundedVitalSignEvents(this.vitalSignEvents),
     }) as PersistedRuntimePayload;
@@ -697,6 +723,7 @@ export class ClinicalScenarioEngine {
     const endStateAssign = startRuntimeWorkTrace("ENGINE_STATE_ASSIGN", { eventCount: candidate.eventLog.length });
     this.runtimeState = candidate.runtimeState;
     this.simulationTimeSec = candidate.simulationTimeSec; this.sequence = candidate.sequence;
+    this.injuryOnsetSimulationTimeSec = candidate.injuryOnsetSimulationTimeSec;
     this.eventLog = [...candidate.eventLog]; this.resourceEventLog = [...candidate.resourceEventLog];
     this.pendingTransitions = candidate.pendingTransitions.map(item => ({ dueSec: item.dueSec, transition: item.transition as HvTimedTransition }));
     this.processControlledEventPending = candidate.processControlledEventPending;
@@ -714,6 +741,7 @@ export class ClinicalScenarioEngine {
     this.airwayManagement.restore(candidate.airway); this.circulationManagement.restore(candidate.circulation);
     this.medicationEngine.restore(candidate.medication);
     this.mechanicalVentilation.restore(candidate.mechanicalVentilation);
+    this.narvaIroScenario.restore(candidate.narvaIroScenario);
     endClinicalRestore();
     this.assessmentRules = structuredClone(candidate.assessmentRules) as AssessmentRule[];
     this.vitalSignEvents = boundedVitalSignEvents(candidate.vitalSignEvents);
@@ -773,6 +801,31 @@ export class ClinicalScenarioEngine {
     for (const event of result.events) this.logEvent(event.eventType, event, event.patientId);
     this.publishResourceDebugSnapshot();
   }
+  executeMedicationCommand(command: MedicationAdministration & Readonly<{ commandId: string }>): MedicationCommandResult {
+    const idempotencyKey = `MEDICATION_COMMAND:${command.commandId}`;
+    if (this.appliedEventIds.has(idempotencyKey)) {
+      const state = this.medicationEngine.snapshot().instances.find(item => item.administrationId === command.administrationId);
+      return Object.freeze({ status: "IDEMPOTENT", commandId: command.commandId, ...(state ? { state } : {}) });
+    }
+    if (command.timestamp !== this.simulationTimeSec || command.patientId !== this.requireProcess().encounterId) {
+      return Object.freeze({ status: "REJECTED", commandId: command.commandId,
+        rejectionReason: "INVALID_ADMINISTRATION" });
+    }
+    if (command.medicationId === FIBRINOGEN_CONCENTRATE_ID) {
+      if (command.unit !== "G" || command.dose > 20) return Object.freeze({ status: "REJECTED",
+        commandId: command.commandId, rejectionReason: "INVALID_ADMINISTRATION" });
+      this.medicationEngine.ensureDefinition(FIBRINOGEN_CONCENTRATE_DEFINITION);
+    }
+    const before = this.medicationEngine.snapshot().instances.find(item => item.administrationId === command.administrationId);
+    if (before) return Object.freeze({ status: "IDEMPOTENT", commandId: command.commandId, state: before });
+    const result = this.medicationEngine.administer(command, this.getCirculationState(command.patientId));
+    for (const event of result.events) this.logEvent(event.eventType, event, event.patientId);
+    if (!result.instance) return Object.freeze({ status: "REJECTED", commandId: command.commandId,
+      rejectionReason: result.events.at(-1)?.reasonCode ?? "INVALID_ADMINISTRATION" });
+    this.appliedEventIds.add(idempotencyKey);
+    this.aggregateProcesses(); this.publishResourceDebugSnapshot();
+    return Object.freeze({ status: "APPLIED", commandId: command.commandId, state: result.instance });
+  }
   cancelMedication(administrationId: string, timestamp: number): void {
     const event = this.medicationEngine.cancel(administrationId, timestamp); this.logEvent(event.eventType, event, event.patientId); this.publishResourceDebugSnapshot();
   }
@@ -823,9 +876,8 @@ export class ClinicalScenarioEngine {
     if (command.patientId !== this.requireProcess().encounterId) return Object.freeze({
       status: "REJECTED", commandId: command.commandId, rejectionReason: "INVALID_PATIENT",
     });
-    // No authoritative injury-onset timestamp exists in the current Runtime contract. The medication
-    // state therefore records the explicit deferred classification instead of treating exercise start as injury time.
-    const result = this.medicationEngine.executeTranexamicAcid(command, this.getCirculationState(command.patientId));
+    const result = this.medicationEngine.executeTranexamicAcid(command, this.getCirculationState(command.patientId),
+      this.injuryOnsetSimulationTimeSec);
     const event = this.medicationEngine.tranexamicAcidEventForCommand(command.commandId);
     if (result.status !== "IDEMPOTENT" && event?.commandId === command.commandId) {
       this.logEvent(event.eventType, { ...event }, event.patientId);
@@ -885,6 +937,95 @@ export class ClinicalScenarioEngine {
     return this.mechanicalVentilation.projectionsAt(this.simulationTimeSec,
       state => this.mechanicalVentilationProjectionContext(state))
       .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
+  }
+  triggerNarvaIroVasopressorFault(): NarvaIroScenarioProjection {
+    const result = this.narvaIroScenario.triggerVasopressorFault(this.simulationTimeSec); this.aggregateProcesses(); return result;
+  }
+  triggerNarvaIroVentilationFault(type: NarvaIroVentilationFault): NarvaIroScenarioProjection {
+    const result = this.narvaIroScenario.triggerVentilationFault(type, this.simulationTimeSec); this.aggregateProcesses(); return result;
+  }
+  correctNarvaIroVasopressorFault(): NarvaIroScenarioProjection {
+    const result = this.narvaIroScenario.correctVasopressor(this.simulationTimeSec); this.aggregateProcesses(); return result;
+  }
+  correctNarvaIroVentilationFault(): NarvaIroScenarioProjection {
+    const result = this.narvaIroScenario.correctVentilation(this.simulationTimeSec); this.aggregateProcesses(); return result;
+  }
+  setNarvaIroHold(hold: boolean): NarvaIroScenarioProjection {
+    return this.narvaIroScenario.setHold(hold, this.simulationTimeSec);
+  }
+  setNarvaIroCprQuality(quality: boolean): NarvaIroScenarioProjection {
+    return this.narvaIroScenario.setCprQuality(quality, this.simulationTimeSec);
+  }
+  attemptNarvaIroRosc(): Readonly<{ status: "APPLIED" | "REJECTED"; projection: NarvaIroScenarioProjection }> {
+    const result = this.narvaIroScenario.attemptRosc(this.simulationTimeSec);
+    if (result.status === "APPLIED") {
+      const cardiac = this.lifecycleProcesses("CARDIAC_ARREST")[0] as CardiacArrestPatientProcessRuntime | undefined;
+      if (cardiac?.clinicalState.cardiacState === "ARREST") {
+        this.replaceLifecycleProcess(applyExplicitCardiacRhythmTransition(cardiac, "NARVA_IRO_CAUSE_CORRECTED_ROSC"));
+      }
+    }
+    this.aggregateProcesses(); return result;
+  }
+  getNarvaIroScenarioState(): NarvaIroScenarioProjection {
+    return this.narvaIroScenario.projectionAt(this.simulationTimeSec);
+  }
+
+  private bootstrapNarvaIroInitialTreatments(patientId: string): void {
+    const ettInstanceId = "NARVA-IRO-ETT:INSTANCE";
+    this.interventionRuntime.restore([{
+      instanceId: ettInstanceId, definitionId: "ENDOTRACHEAL_INTUBATION", definitionVersion: "1.0.0",
+      definitionName: "Endotrahheaalne intubatsioon", encounterId: patientId, patientId, status: "RUNNING",
+      startedAt: -300, parameters: { confirmation: true }, resourceIds: ["ETT-IRO-1"],
+      sourceInterventionId: "NARVA-IRO-ETT",
+    }]);
+    this.airwayManagement.restore({ states: [{ patientId, activeAirway: "ENDOTRACHEAL",
+      currentVentilation: "MECHANICAL", confirmed: true, updatedAt: 0 }], events: [] });
+    this.circulationManagement.restore({ states: [{ patientId, vascularAccess: [
+      { interventionInstanceId: "NARVA-IRO-PIV:INSTANCE", type: "PERIPHERAL_IV", resourceIds: ["PIV-IRO-1"], establishedAt: -300 },
+      { interventionInstanceId: "NARVA-IRO-CVC:INSTANCE", type: "CENTRAL_ACCESS", resourceIds: ["CVC-IRO-1"], establishedAt: -300 },
+    ], hemorrhageControl: [], runningInfusions: [], updatedAt: 0 }], events: [] });
+    const target = norepinephrineTargetEffect(0.08);
+    const analgesicState = (administrationId: string, drugId: "PROPOFOL" | "REMIFENTANIL" | "ROCURONIUM",
+      rate: number, rateUnit: "MG_H" | "MCG_MIN", exposureDose: number) => ({ schemaVersion: 1 as const,
+      featureId: "ANALGESIA" as const, administrationId, patientId, drugId,
+      productVersion: ANALGESIC_PRODUCT_CONFIGURATIONS.find(item => item.drugId === drugId)!.version,
+      route: "IV" as const, vascularAccessId: "NARVA-IRO-CVC:INSTANCE", mode: "INFUSION" as const,
+      lifecycle: "RUNNING" as const, rate, rateUnit, deliveredDose: exposureDose,
+      deliveredDoseAtLastChange: exposureDose, startedAtSimulationTimeSec: -300,
+      lastRateChangeAtSimulationTimeSec: 0 });
+    this.medicationEngine.restore({ definitions: [], instances: [], events: [], effects: [],
+      norepinephrine: { schemaVersion: 1, configuration: DEFAULT_NOREPINEPHRINE_CONFIGURATION,
+        infusions: [{ schemaVersion: 1, featureId: "NOREPINEPHRINE", infusionId: "NARVA-IRO-NOREPINEPHRINE",
+          patientId, route: "IV", vascularAccessId: "NARVA-IRO-CVC:INSTANCE", status: "RUNNING",
+          doseMicrogramsPerKgMin: 0.08, unit: "MCG_KG_MIN", startedAtSimulationTimeSec: -300,
+          lastDoseChangeAtSimulationTimeSec: 0, transition: { startedAtSimulationTimeSec: -300, durationSec: 0,
+            fromSystolicIncreaseMmHg: target.systolicIncreaseMmHg, toSystolicIncreaseMmHg: target.systolicIncreaseMmHg,
+            fromDiastolicIncreaseMmHg: target.diastolicIncreaseMmHg, toDiastolicIncreaseMmHg: target.diastolicIncreaseMmHg } }],
+        commandResults: [], events: [] },
+      analgesia: { schemaVersion: 1, productConfigurations: ANALGESIC_PRODUCT_CONFIGURATIONS,
+        administrations: [analgesicState("NARVA-IRO-PROPOFOL", "PROPOFOL", 140, "MG_H", 140),
+          analgesicState("NARVA-IRO-REMIFENTANIL", "REMIFENTANIL", 7, "MCG_MIN", 25),
+          analgesicState("NARVA-IRO-ROCURONIUM", "ROCURONIUM", 21, "MG_H", 15)],
+        painStates: [{ patientId, baselinePainIntensity: 0 }], commandResults: [], events: [] } });
+    this.mechanicalVentilation.restore({ schemaVersion: 1, configuration: DEFAULT_MECHANICAL_VENTILATION_CONFIGURATION,
+      supports: [{ schemaVersion: 1, featureId: "MECHANICAL_VENTILATION", supportId: "NARVA-IRO-VENTILATION",
+        patientId, securedAirwayId: ettInstanceId, lifecycle: "RUNNING", mode: "VOLUME_CONTROL",
+        respiratoryRate: 14, respiratoryRateUnit: "BREATHS_MIN", tidalVolumeMl: 420, tidalVolumeUnit: "ML",
+        fio2: 0.4, peepCmH2O: 8, peepUnit: "CM_H2O", startedAtSimulationTimeSec: -300,
+        lastSettingsChangeAtSimulationTimeSec: 0 }], commandResults: [], events: [] });
+  }
+
+  private reconcileNarvaIroCardiacArrest(): void {
+    if (!this.narvaIroScenario.snapshot() || !this.narvaIroScenario.projectionAt(this.simulationTimeSec).arrest ||
+      this.lifecycleProcesses("CARDIAC_ARREST").length) return;
+    const patientId = this.requireProcess().encounterId;
+    const configuration = { ...structuredClone(defaultCardiacArrestConfiguration),
+      initialRhythm: "PEA" as const, transitions: [{ transitionId: "NARVA_IRO_CAUSE_CORRECTED_ROSC",
+        trigger: "EXPLICIT" as const, fromRhythm: "PEA" as const, toRhythm: "PERFUSING" as const, priority: 100 }],
+      vitalTargets: { ...structuredClone(defaultCardiacArrestConfiguration.vitalTargets),
+        rosc: { heartRate: 105, systolicBp: 85, diastolicBp: 50, respiratoryRate: 14, gcs: 3 } } };
+    this.replaceLifecycleProcess(bootstrapCardiacArrestPatientProcess({ fixtureId: "NARVA-IRO-ARREST", patientId },
+      { processId: `${patientId}:CARDIAC_ARREST:IRO`, instanceKey: `${patientId}:cardiac-arrest:iro` }, configuration));
   }
   executeAlsMedicationCommand(command: AlsMedicationCommand): AlsMedicationCommandResult {
     if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
@@ -1028,6 +1169,7 @@ export class ClinicalScenarioEngine {
       processOutputs: processes.map(process => process.outputs),
       aggregationConfigVersion: this.sortedHypoxia().length ? "WP-7/HV-HYPOXIA" : "WP-6/HV-P0",
     }, this.resolver, [...this.medicationEngine.vitalContributorsAt(this.simulationTimeSec),
+      ...this.narvaIroScenario.vitalContributorsAt(this.simulationTimeSec),
       ...this.mechanicalVentilation.vitalContributorsAt(this.simulationTimeSec,
         state => this.mechanicalVentilationProjectionContext(state))]);
     if (aggregated.rejectedProcessIds.length > 0 ||

@@ -80,6 +80,7 @@ function executeBuilt(engine: ClinicalScenarioEngine, result: ReturnType<typeof 
   else if (request.kind === "TXA") engine.executeTranexamicAcidCommand(request.command);
   else if (request.kind === "ANALGESIC") engine.executeAnalgesicCommand(request.command);
   else if (request.kind === "VENTILATION") engine.executeMechanicalVentilationCommand(request.command);
+  else if (request.kind === "MEDICATION") engine.executeMedicationCommand(request.command);
   else engine.executeAlsMedicationCommand(request.command);
 }
 
@@ -91,12 +92,13 @@ function packageContent() {
 describe("Clinical Treatment descriptor catalog and scenario availability", () => {
   test("contains exactly one descriptor for every accepted canonical treatment", () => {
     const catalog = getClinicalTreatmentCatalog();
-    expect(catalog).toHaveLength(23);
-    expect(new Set(catalog.map(item => item.treatmentId)).size).toBe(23);
+    expect(catalog).toHaveLength(27);
+    expect(new Set(catalog.map(item => item.treatmentId)).size).toBe(27);
     expect(catalog.map(item => item.treatmentId)).toEqual(expect.arrayContaining([
       "RINGER", "SODIUM_CHLORIDE_0_9", "GELOFUSIN", "TRANEXAMIC_ACID", "NOREPINEPHRINE",
       "MECHANICAL_VENTILATION", "ADRENALINE", "AMIODARONE", "LIDOCAINE", "ATROPINE", "ADENOSINE",
       "MAGNESIUM_SULFATE", "CALCIUM_CHLORIDE", "SODIUM_BICARBONATE",
+      "FIBRINOGEN_CONCENTRATE", "PROPOFOL", "MIDAZOLAM", "ROCURONIUM",
     ]));
   });
 
@@ -109,9 +111,10 @@ describe("Clinical Treatment descriptor catalog and scenario availability", () =
     expect(catalog.find(item => item.treatmentId === "SODIUM_CHLORIDE_0_9")?.displayName).toBe("NaCl 0.9%");
   });
 
-  test("groups descriptors into six clinician-facing categories", () => {
+  test("groups descriptors into clinician-facing categories", () => {
     expect([...groupClinicalTreatments(getClinicalTreatmentCatalog()).keys()]).toEqual([
-      "FLUIDS", "HEMOSTASIS", "ANALGESIA", "VASOACTIVE", "RESPIRATORY_SUPPORT", "ALS_MEDICATIONS",
+      "FLUIDS", "HEMOSTASIS", "ANALGESIA", "SEDATION", "NEUROMUSCULAR_BLOCKADE",
+      "VASOACTIVE", "RESPIRATORY_SUPPORT", "ALS_MEDICATIONS",
     ]);
   });
 

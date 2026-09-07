@@ -2,11 +2,12 @@ export const ANALGESIA_FEATURE_ID = "ANALGESIA" as const;
 
 export const ANALGESIC_DRUG_IDS = Object.freeze([
   "FENTANYL", "REMIFENTANIL", "KETAMINE", "PARACETAMOL", "ESKETAMINE",
-  "MORPHINE", "OXYCODONE", "KETOPROFEN", "DEXKETOPROFEN",
+  "MORPHINE", "OXYCODONE", "KETOPROFEN", "DEXKETOPROFEN", "PROPOFOL", "MIDAZOLAM", "ROCURONIUM",
 ] as const);
 export type AnalgesicDrugId = typeof ANALGESIC_DRUG_IDS[number];
 export type AnalgesicDrugInputId = AnalgesicDrugId | "DOLMEN";
-export type AnalgesicDrugClass = "OPIOID" | "DISSOCIATIVE_ANALGESIC" | "NON_OPIOID_ANALGESIC" | "NSAID";
+export type AnalgesicDrugClass = "OPIOID" | "DISSOCIATIVE_ANALGESIC" | "NON_OPIOID_ANALGESIC" | "NSAID" |
+  "HYPNOTIC_SEDATIVE" | "BENZODIAZEPINE_SEDATIVE" | "NEUROMUSCULAR_BLOCKER";
 export type AnalgesicAdministrationMode = "BOLUS" | "INFUSION";
 export type AnalgesicLifecycle = "RUNNING" | "STOPPED" | "COMPLETED";
 export type AnalgesicDoseUnit = "MCG" | "MG" | "MCG_KG" | "MG_KG";
@@ -20,6 +21,8 @@ export type AnalgesicEffectDimensions = Readonly<{
   sympatheticEffect: number;
   hemodynamicDepression: number;
   antiInflammatoryAnalgesia: number;
+  hypnosis?: number;
+  neuromuscularBlockade?: number;
 }>;
 
 export type AnalgesicProductConfiguration = Readonly<{
@@ -116,6 +119,9 @@ export type AnalgesicAggregateProjection = AnalgesicEffectDimensions & Readonly<
   patientId: string;
   baselinePainIntensity: number;
   currentPainIntensity: number;
+  rass?: number;
+  bis?: number;
+  trainOfFour?: 0 | 1 | 2 | 3 | 4;
 }>;
 
 export type AnalgesicFeatureProjection = AnalgesicEffectDimensions & Readonly<{
@@ -142,6 +148,9 @@ export type AnalgesicFeatureProjection = AnalgesicEffectDimensions & Readonly<{
   normalizedExposure: number;
   baselinePainIntensity: number;
   currentPainIntensity: number;
+  rass?: number;
+  bis?: number;
+  trainOfFour?: 0 | 1 | 2 | 3 | 4;
 }>;
 
 export type AnalgesiaRuntimeSnapshot = Readonly<{

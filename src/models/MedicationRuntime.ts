@@ -6,7 +6,10 @@ import type { AnalgesiaRuntimeSnapshot } from "@/models/AnalgesiaMedication";
 import type { AlsMedicationRuntimeSnapshot } from "@/models/AlsMedication";
 
 export type MedicationRoute = "IV" | "IO" | "IM" | "PO";
-export type MedicationCategory = "vasopressor" | "antiarrhythmic" | "analgesic" | "sedative" | "crystalloid" | "bloodProduct" | "reversalAgent" | "other";
+export type MedicationCategory = "vasopressor" | "antiarrhythmic" | "analgesic" | "sedative" | "crystalloid" |
+  "coagulationProduct" | "bloodProduct" | "reversalAgent" | "other";
+export type MedicationCommandResult = Readonly<{ status: "APPLIED" | "IDEMPOTENT" | "REJECTED";
+  commandId: string; state?: MedicationInstance; rejectionReason?: MedicationRejectionReason }>;
 export type MedicationDefinition = { medicationId: string; name: string; routes: MedicationRoute[]; category: MedicationCategory;
   supportedEffects: { effectType: ClinicalEffectType; parameters?: Record<string, ClinicalParameterValue> }[];
   durationSec: number; metadata: Record<string, unknown> };

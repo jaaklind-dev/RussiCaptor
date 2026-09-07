@@ -29,6 +29,9 @@ export type PelvicSourceControlConfiguration = Readonly<{
 }>;
 export type HemorrhageCoagulationConfiguration = Readonly<{
   temperatureModifiers?: readonly Readonly<{ belowCelsius: number; factor: number }>[];
+  /** Optional factor/substrate deficit (>1 worsens clot formation); corrected by concentrate without affecting source control. */
+  fibrinogenDeficiencyFactor?: number;
+  fibrinogenCorrectionPerGram?: number;
 }>;
 export type HemorrhageFibrinolysisConfiguration = Readonly<{
   /** Optional scenario-specific amplification above the non-hyperfibrinolytic baseline of 1. */
@@ -72,6 +75,8 @@ export type HemorrhageClinicalState = {
   correctStabilizationStartedAtSec?: number;
   timeSinceCorrectStabilizationSec?: number;
   coagulationFactor?: number;
+  fibrinogenDoseG?: number;
+  effectiveFibrinogenFactor?: number;
   fibrinolysisExcessFactor?: number;
   txaEffect?: number;
   effectiveFibrinolysisFactor?: number;

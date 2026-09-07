@@ -45,7 +45,9 @@ export const NARVA_TRAUMA_MTP_CONFIGURATION: MassiveTransfusionConfiguration = O
 const pelvicReferenceSource = PELVIC_INJURY_REFERENCE_PATIENT.hemorrhageSources[0];
 const pelvicSource = Object.freeze({ ...structuredClone(pelvicReferenceSource),
   configuration: Object.freeze({ ...structuredClone(pelvicReferenceSource.configuration),
-    baselineBleedingRateMlMin: 140, binderEfficiency: 0.6 }) });
+    baselineBleedingRateMlMin: 140, binderEfficiency: 0.6,
+    coagulation: Object.freeze({ ...structuredClone(pelvicReferenceSource.configuration.coagulation ?? {}),
+      fibrinogenDeficiencyFactor: 1.25, fibrinogenCorrectionPerGram: 0.05 }) }) });
 
 export const NARVA_PELVIC_FIXTURE: GoldenFixture = Object.freeze({
   fixtureId: "FX-NARVA-PELVIC-1.0.0", fixtureType: "PROCESS", patientId: "PT-PELVIC-001",
@@ -118,11 +120,7 @@ export const NARVA_TRAUMA_PATIENT_DATASET: PackagePatientDataset = Object.freeze
   ]),
 });
 
-export const NARVA_IRO_REQUIRED_CAPABILITY_GAPS = Object.freeze([
-  "PROPOFOL", "ROCURONIUM_NEUROMUSCULAR_BLOCKADE", "TOF_RASS_BIS",
-  "PACKAGE_BOUND_VASOPRESSOR_FAULT_STATE_MACHINE", "PACKAGE_BOUND_VENTILATION_FAULT_STATE_MACHINE",
-  "CAUSE_GATED_PEA_ROSC", "ACTIVE_TREATMENT_FIXTURE_BOOTSTRAP",
-] as const);
+export const NARVA_IRO_REQUIRED_CAPABILITY_GAPS = Object.freeze([] as const);
 
 export const NARVA_IRO_FIXTURE: GoldenFixture = Object.freeze({
   fixtureId: "FX-NARVA-IRO-EVACUATION-1.0.0", fixtureType: "PROCESS", patientId: "PT-IRO-001",
@@ -139,7 +137,11 @@ export const NARVA_IRO_FIXTURE: GoldenFixture = Object.freeze({
   ]) }),
   initialState: Object.freeze({
     baselineVitals: Object.freeze({ hr: 92, sbp: 105, dbp: 62, rr: 14, spo2: 96, etco2: 4.8, gcs: 3 }),
+    processType: "HYPOVENTILATION_HYPERCAPNIA", templateId: "HV-NARVA-IRO",
+    ventilationReserve: 85, reserveLossPerMin: 0, co2Burden: 30, co2GainPerMin: 0,
     patientWeightKg: 70,
+    narvaIroScenario: true,
+    narvaIroInitialTreatments: true,
     requiredInitialSupport: Object.freeze({
       airway: "INTUBATED", ventilation: Object.freeze({ mode: "VOLUME_CONTROL", tidalVolumeMl: 420,
         respiratoryRate: 14, fio2: 0.4, peepCmH2O: 8 }),
@@ -147,7 +149,7 @@ export const NARVA_IRO_FIXTURE: GoldenFixture = Object.freeze({
       vascularAccessCount: 2, monitoring: Object.freeze(["ECG", "SPO2", "NIBP", "ETCO2"]),
       nonDigitalChecklist: Object.freeze(["URINARY_CATHETER", "NGT_OPTIONAL"]),
     }),
-    scenarioReadiness: "INCOMPLETE_REQUIRED_CAPABILITIES",
+    scenarioReadiness: "READY_FOR_PHYSICAL_REHEARSAL",
     missingCapabilities: NARVA_IRO_REQUIRED_CAPABILITY_GAPS,
   }),
 });

@@ -23,7 +23,8 @@ const definition = (exerciseTypeId: string, name: string, description: string): 
 export const NARVA_TRAUMA_TREATMENT_PALETTE: readonly ClinicalTreatmentId[] = Object.freeze([
   "RINGER", "SODIUM_CHLORIDE_0_9", "GELOFUSIN", "TRANEXAMIC_ACID", "FENTANYL",
   "REMIFENTANIL", "KETAMINE", "ESKETAMINE", "MORPHINE", "OXYCODONE", "PARACETAMOL",
-  "KETOPROFEN", "DEXKETOPROFEN", "NOREPINEPHRINE", "MECHANICAL_VENTILATION",
+  "KETOPROFEN", "DEXKETOPROFEN", "FIBRINOGEN_CONCENTRATE", "PROPOFOL", "MIDAZOLAM", "ROCURONIUM",
+  "NOREPINEPHRINE", "MECHANICAL_VENTILATION",
   "ADRENALINE", "AMIODARONE", "LIDOCAINE", "ATROPINE", "ADENOSINE", "MAGNESIUM_SULFATE",
   "CALCIUM_CHLORIDE", "SODIUM_BICARBONATE",
 ]);
@@ -62,7 +63,7 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
 });
 
 const iroDefinition = definition("RUSSICAPTOR_NARVA_IRO_EVACUATION", "Narva IRO evakuatsiooniõppus",
-  "Intubeeritud ja vasopressorsõltuva patsiendi evakuatsiooni konfiguratsioon; täisstsenaarium ootab päris Runtime võimekusi.");
+  "Intubeeritud ja vasopressorsõltuva patsiendi evakuatsiooni täisstsenaarium.");
 
 export const NARVA_IRO_EXERCISE_PACKAGE = createExercisePackage({
   packageId: "russicaptor.narva-iro-evacuation", packageVersion: "1.0.0", definition: iroDefinition,
@@ -74,10 +75,11 @@ export const NARVA_IRO_EXERCISE_PACKAGE = createExercisePackage({
     { moduleId: RESPIRATORY_FAILURE_MODULE_ID, version: RESPIRATORY_FAILURE_MODULE_VERSION },
     { moduleId: ALS_MODULE_ID, version: ALS_MODULE_VERSION },
   ]),
-  availableClinicalTreatments: Object.freeze(["REMIFENTANIL", "NOREPINEPHRINE",
-    "MECHANICAL_VENTILATION", "ADRENALINE", "AMIODARONE", "LIDOCAINE", "ATROPINE",
+  availableClinicalTreatments: Object.freeze(["RINGER", "SODIUM_CHLORIDE_0_9", "GELOFUSIN", "FIBRINOGEN_CONCENTRATE",
+    "PROPOFOL", "MIDAZOLAM", "REMIFENTANIL", "FENTANYL", "KETAMINE", "ESKETAMINE", "ROCURONIUM",
+    "NOREPINEPHRINE", "MECHANICAL_VENTILATION", "ADRENALINE", "AMIODARONE", "LIDOCAINE", "ATROPINE",
     "ADENOSINE", "MAGNESIUM_SULFATE", "CALCIUM_CHLORIDE", "SODIUM_BICARBONATE"]),
-  metadata: { name: "Narva IRO evakuatsioon", description: "Toetatud IRO konfiguratsiooniosa; ei väida valmisolekut enne puuduva sedatsiooni, NMB ja fault-state-machine võimekuse lisamist.",
+  metadata: { name: "Narva IRO evakuatsioon", description: "Narva IRO aktiivravi, tehniliste rikete ja põhjusest sõltuva elustamise täisstsenaarium.",
     author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "1.0.0", exerciseType: "CUSTOM",
-    tags: ["narva", "iro", "evacuation", "capability-gaps-explicit", "not-full-scenario-ready"] },
+    tags: ["narva", "iro", "evacuation", "active-treatment", "fault-recovery", "full-scenario-ready"] },
 });

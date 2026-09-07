@@ -21,7 +21,7 @@ const clamp = (value: number): number => Math.min(1, Math.max(0, value));
 const smoothStep = (value: number): number => { const x = clamp(value); return x * x * (3 - 2 * x); };
 const EMPTY_EFFECTS: AnalgesicEffectDimensions = Object.freeze({ analgesia: 0, sedation: 0,
   respiratoryDepression: 0, dissociation: 0, sympatheticEffect: 0, hemodynamicDepression: 0,
-  antiInflammatoryAnalgesia: 0 });
+  antiInflammatoryAnalgesia: 0, hypnosis: 0, neuromuscularBlockade: 0 });
 const effectKeys = Object.keys(EMPTY_EFFECTS) as (keyof AnalgesicEffectDimensions)[];
 
 function ratePerSecond(state: Pick<AnalgesicAdministrationState, "rate" | "rateUnit">): number {
@@ -65,13 +65,24 @@ export function normalizedAnalgesicExposureAt(state: AnalgesicAdministrationStat
 
 function scaledEffects(configuration: AnalgesicProductConfiguration, exposure: number): AnalgesicEffectDimensions {
   return Object.freeze(Object.fromEntries(effectKeys.map(key => [key,
-    precise(clamp(configuration.effects[key] * exposure))])) as unknown as AnalgesicEffectDimensions);
+    precise(clamp((configuration.effects[key] ?? 0) * exposure))])) as unknown as AnalgesicEffectDimensions);
 }
 
 /** Order-independent bounded union: 1 - product(1 - effect). */
 export function combineAnalgesicEffects(values: readonly AnalgesicEffectDimensions[]): AnalgesicEffectDimensions {
   return Object.freeze(Object.fromEntries(effectKeys.map(key => [key, precise(1 - values.reduce(
-    (remaining, value) => remaining * (1 - clamp(value[key])), 1))])) as unknown as AnalgesicEffectDimensions);
+    (remaining, value) => remaining * (1 - clamp(value[key] ?? 0)), 1))])) as unknown as AnalgesicEffectDimensions);
+}
+
+function sedationObservations(effects: AnalgesicEffectDimensions): Readonly<{
+  rass: number; bis: number; trainOfFour: 0 | 1 | 2 | 3 | 4;
+}> {
+  const depth = clamp(1 - (1 - effects.sedation) * (1 - (effects.hypnosis ?? 0)));
+  const blockade = clamp(effects.neuromuscularBlockade ?? 0);
+  const trainOfFour: 0 | 1 | 2 | 3 | 4 = blockade >= 0.9 ? 0 : blockade >= 0.65 ? 1 :
+    blockade >= 0.4 ? 2 : blockade >= 0.15 ? 3 : 4;
+  return Object.freeze({ rass: Math.max(-5, Math.min(0, -Math.round(depth * 5))),
+    bis: Math.round(90 - depth * 50), trainOfFour });
 }
 
 function productFor(value: string): AnalgesicProductConfiguration | undefined {
@@ -191,8 +202,8 @@ export class AnalgesiaRuntime {
         lastRateChangeAtSimulationTimeSec: state.lastRateChangeAtSimulationTimeSec,
         ...(state.stoppedAtSimulationTimeSec === undefined ? {} : { stoppedAtSimulationTimeSec: state.stoppedAtSimulationTimeSec }),
         ...(state.completedAtSimulationTimeSec === undefined ? {} : { completedAtSimulationTimeSec: state.completedAtSimulationTimeSec }),
-        normalizedExposure: exposure, ...dimensions, baselinePainIntensity: aggregate.baselinePainIntensity,
-        currentPainIntensity: aggregate.currentPainIntensity });
+        normalizedExposure: exposure, ...dimensions, ...sedationObservations(aggregate),
+        baselinePainIntensity: aggregate.baselinePainIntensity, currentPainIntensity: aggregate.currentPainIntensity });
     });
   }
 
@@ -204,7 +215,7 @@ export class AnalgesiaRuntime {
     });
     const combined = combineAnalgesicEffects(effects);
     const baselinePainIntensity = state?.baselinePainIntensity ?? 0;
-    return Object.freeze({ patientId, ...combined, baselinePainIntensity,
+    return Object.freeze({ patientId, ...combined, ...sedationObservations(combined), baselinePainIntensity,
       currentPainIntensity: precise(Math.max(0, baselinePainIntensity * (1 - combined.analgesia))) });
   }
 
@@ -252,7 +263,7 @@ export class AnalgesiaRuntime {
       lastRateChangeAtSimulationTimeSec: command.simulationTimeSec });
     this.administrations.set(state.administrationId, state);
     if (!this.painStates.has(state.patientId)) this.painStates.set(state.patientId,
-      Object.freeze({ patientId: state.patientId, baselinePainIntensity: 1 }));
+      Object.freeze({ patientId: state.patientId, baselinePainIntensity: configuration.effects.analgesia > 0 ? 1 : 0 }));
     this.events.push(this.event("AnalgesicAdministrationStarted", state, command.simulationTimeSec, command.commandId));
     return Object.freeze({ status: "APPLIED", commandId: command.commandId, state: structuredClone(state) });
   }
@@ -325,7 +336,9 @@ export class AnalgesiaRuntime {
       a.startedAtSimulationTimeSec - b.startedAtSimulationTimeSec || a.administrationId.localeCompare(b.administrationId));
   }
 
-  private patientIds(): string[] { return [...this.painStates.keys()].sort(); }
+  private patientIds(): string[] {
+    return [...new Set([...this.painStates.keys(), ...[...this.administrations.values()].map(item => item.patientId)])].sort();
+  }
 }
 
 export { EMPTY_EFFECTS };
