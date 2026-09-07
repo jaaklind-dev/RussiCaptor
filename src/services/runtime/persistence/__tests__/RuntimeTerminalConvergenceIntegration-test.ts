@@ -35,4 +35,13 @@ describe("WP-NARVA-06 Runtime terminal convergence integration", () => {
     expect(source).toContain("terminalProjectionOwnedByCheckpointProtocol(exerciseId)");
     expect(source.indexOf("terminalProjectionOwnedByCheckpointProtocol(exerciseId)")).toBeLessThan(source.indexOf("withTerminalExerciseArchive(baseProjection"));
   });
+
+  test("CM and EXCON patient controls use the same durable command-submission path", () => {
+    const excon = fs.readFileSync(path.resolve(process.cwd(), "src/components/instructor/InspectorResourceInterventions.tsx"), "utf8");
+    const cm = fs.readFileSync(path.resolve(process.cwd(), "src/components/patient/PelvicBinderControls.tsx"), "utf8");
+    expect(excon).toContain("submitResourceInterventionCommand");
+    expect(excon).toContain("submitMtpCommand");
+    expect(cm).toContain("submitResourceInterventionCommand");
+    expect(cm).toContain("submitStopResourceInterventionCommand");
+  });
 });
