@@ -48,8 +48,11 @@ prepares the terminal checkpoint with lifecycle `COMPLETED`. The
 
 Database triggers reject ordinary checkpoint publication after the fence,
 terminal checkpoint publication outside the finalizer, and lease acquisition or
-renewal after completed terminalization. Cloud projection sync does not issue a
-separate terminal write while this protocol owns the projection. The client
+renewal after completed terminalization. A forward-only projection fence also
+rejects stale `exercise_states` writes from the moment completion is requested,
+so an old client cannot resurrect `RUNNING` after terminalization. Cloud
+projection sync does not issue a separate terminal write while this protocol
+owns the projection. The client
 reports success only after the completed request is observed. Timeout or
 transport failure remains explicit and recoverable; it never fabricates a local
 successful completion.
