@@ -30,7 +30,7 @@ function failure(code: string): RuntimeCheckpointPublicationTerminal {
 }
 
 export async function publishRuntimeCheckpointTerminal(
-  repository: RuntimeCheckpointRepository,
+  repository: Pick<RuntimeCheckpointRepository, "publish" | "loadLatest" | "loadLatestMetadata">,
   lease: RuntimeWriterLease,
   expectedRevision: number,
   checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>,

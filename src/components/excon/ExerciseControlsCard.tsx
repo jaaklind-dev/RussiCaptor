@@ -2,8 +2,10 @@ import type { ExerciseControlCommandType } from "@/models/exercise/ExerciseContr
 import type { CanonicalExerciseSnapshot, CanonicalExerciseSpeed } from "@/models/exercise/CanonicalExerciseSnapshot";
 import { prepareExerciseControlSubmission } from "@/services/runtime/exercise/ExerciseControlSubmission";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SingleFlightActionGate } from "@/services/ui/InteractionSafety";
+import { traceRuntimeCompletionAuthority } from "@/services/RuntimeCheckpointSyncService";
+import { traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
 const SPEEDS: readonly CanonicalExerciseSpeed[] = [1, 2, 4];
 export function getExerciseControlAvailability(state: CanonicalExerciseSnapshot["lifecycleState"]) {
@@ -15,18 +17,27 @@ export default function ExerciseControlsCard({ snapshot, onApplied }: { snapshot
   const enabled = getExerciseControlAvailability(snapshot.lifecycleState);
   const [pending, setPending] = useState(false);
   const gate = useRef(new SingleFlightActionGate()).current;
-  const apply = (submit: () => ReturnType<ReturnType<typeof prepareExerciseControlSubmission>>) => {
+  useEffect(() => {
+    if (snapshot.lifecycleState === "COMPLETED") traceRuntimeLeaseLifecycle("COMPLETE_TERMINAL_RENDERED", { detail: {} });
+  }, [snapshot.lifecycleState]);
+  const apply = (submit: ReturnType<typeof prepareExerciseControlSubmission>) => {
+    traceRuntimeLeaseLifecycle("COMPLETE_APPLY_ENTER", { detail: {} });
+    void traceRuntimeCompletionAuthority("APPLY_ENTER");
     setPending(true);
     void gate.run(submit).then(result => {
+    traceRuntimeLeaseLifecycle("COMPLETE_APPLY_RESULT", { detail: { ok: result.ok, errorCode: result.ok ? undefined : result.errorCode } });
     if (!result.ok) Alert.alert("Käsk lükati tagasi", result.message);
     else onApplied?.();
     }).finally(() => setPending(false));
   };
   const issue = (commandType: ExerciseControlCommandType, speed?: CanonicalExerciseSpeed) => apply(prepareExerciseControlSubmission(commandType, speed));
   const confirmComplete = () => {
+    traceRuntimeLeaseLifecycle("COMPLETE_TOUCH_RECEIVED", { detail: {} });
+    void traceRuntimeCompletionAuthority("TOUCH_RECEIVED");
     const submit = prepareExerciseControlSubmission("COMPLETE_EXERCISE");
+    traceRuntimeLeaseLifecycle("COMPLETE_CONFIRM_PRESENTED", { detail: {} });
     Alert.alert("Kas lõpetada õppus?", "See toiming on lõplik ega lähtesta õppuse olekut.", [
-      { text: "Tühista", style: "cancel" }, { text: "Lõpeta õppus", style: "destructive", onPress: () => apply(submit) },
+      { text: "Tühista", style: "cancel" }, { text: "Lõpeta õppus", style: "destructive", onPress: () => { traceRuntimeLeaseLifecycle("COMPLETE_CONFIRM_ACCEPTED", { detail: {} }); apply(submit); } },
     ]);
   };
   const action = snapshot.lifecycleState === "READY" ? { label: "▶ Alusta", type: "START_EXERCISE" as const, enabled: enabled.start }

@@ -3,7 +3,7 @@ import { useState, useSyncExternalStore } from "react";
 
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots } from "@/services/RuntimeSnapshotService";
-import { createMtpCommandId, handleMtpCommand, type MtpAction } from "@/services/runtime/instructor/MassiveTransfusionCommandService";
+import { createMtpCommandId, submitMtpCommand, type MtpAction } from "@/services/runtime/instructor/MassiveTransfusionCommandService";
 import type { BloodProductDeliveryMode, BloodProductInventory, VascularAccessLineId } from "@/models/MassiveTransfusion";
 
 type MtpProjection = Readonly<{
@@ -43,7 +43,7 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
   const inventoryLabel = (value: BloodProductInventory | undefined) => typeof value === "number"
     ? `${value}` : value?.mode === "UNLIMITED" ? "Piiramatu" : "Teadmata";
 
-  const submit = (action: MtpAction) => {
+  const submit = async (action: MtpAction) => {
     if (submitting || readOnly) return;
     const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
     const commandId = createMtpCommandId(exerciseId, patientId, action);
@@ -51,20 +51,20 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
     const freeLine = state?.vascularAccessLines?.find(line => line.status === "FREE" && (!selectedLineId || line.lineId === selectedLineId));
     const lineId = freeLine?.lineId as VascularAccessLineId | undefined;
     const deliveryMode = lineId ? lineModes[lineId] ?? "GRAVITY" : undefined;
-    const result = handleMtpCommand({ commandId, exerciseId, patientId, action, units: 1, issuedBy: "Case Manager", deliveryMode, vascularAccessLineId: lineId });
-    setMessage(result.ok ? "Korraldus rakendati." : result.message); setSubmitting(undefined);
+    const result = await submitMtpCommand({ commandId, exerciseId, patientId, action, units: 1, issuedBy: "Case Manager", deliveryMode, vascularAccessLineId: lineId });
+    setMessage(result.ok ? "Korraldus võeti tööjärjekorda." : result.message); setSubmitting(undefined);
   };
 
   const modes = ["GRAVITY", "PRESSURE_BAG", "RAPID_INFUSER"] as const;
   const modeLabel = { GRAVITY: "Vabavool", PRESSURE_BAG: "Survekott", RAPID_INFUSER: "Verepump/soojendaja" } as const;
-  const chooseMode = (lineId: VascularAccessLineId, administrationId: string | undefined, mode: BloodProductDeliveryMode) => {
+  const chooseMode = async (lineId: VascularAccessLineId, administrationId: string | undefined, mode: BloodProductDeliveryMode) => {
     setSelectedLineId(lineId);
     if (!administrationId) { setLineModes(current => ({ ...current, [lineId]: mode })); return; }
     const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
     const action: MtpAction = "BLOOD_PRODUCT_DELIVERY_MODE_CHANGE";
     const commandId = createMtpCommandId(exerciseId, patientId, action);
     setSubmitting(`${lineId}:${mode}`); setMessage(undefined);
-    const result = handleMtpCommand({ commandId, exerciseId, patientId, action, units: 1, issuedBy: "Case Manager",
+    const result = await submitMtpCommand({ commandId, exerciseId, patientId, action, units: 1, issuedBy: "Case Manager",
       deliveryMode: mode, vascularAccessLineId: lineId, administrationId });
     if (result.ok) setLineModes(current => ({ ...current, [lineId]: mode }));
     setMessage(result.ok ? `${lineId} manustamisviis muudeti.` : result.message); setSubmitting(undefined);
@@ -84,7 +84,7 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
             ? `VABA · ${line.accessType === "CENTRAL_ACCESS" ? "tsentraalveenitee" : "perifeerne veenitee"}` :
               `HÕIVATUD · ${administration?.product ?? "verekomponent"} · ${activeMode} · ${administration?.deliveredVolumeMl ?? "?"}/${administration?.totalVolumeMl ?? "?"} ml · ${remaining ?? "?"} s`}</Text></Pressable>
           {!readOnly && line.status !== "MISSING" && <View style={styles.row}>{modes.map(mode => <Pressable key={mode}
-            disabled={Boolean(submitting)} onPress={() => chooseMode(lineId, administration?.administrationId, mode)}
+            disabled={Boolean(submitting)} onPress={() => void chooseMode(lineId, administration?.administrationId, mode)}
             style={mode === activeMode ? styles.choiceSelected : styles.choice}><Text style={styles.choiceText}>{modeLabel[mode]}</Text></Pressable>)}</View>}
         </View>; })}
     </View>}
@@ -94,9 +94,9 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
         : "Kaltsiumiasendus ei ole selles protokollis kasutusel"}
     </Text>
     {!readOnly && actions.map(({ action, label }) => <Pressable key={action} disabled={Boolean(submitting)}
-      onPress={() => submit(action)} style={styles.button}><Text style={styles.buttonText}>{label}</Text></Pressable>)}
+      onPress={() => void submit(action)} style={styles.button}><Text style={styles.buttonText}>{label}</Text></Pressable>)}
     {!readOnly && calcium?.rbcUnitsPerCalcium && <Pressable testID="administer-calcium" disabled={Boolean(submitting)}
-      onPress={() => submit("CALCIUM_ADMINISTRATION")} style={styles.calciumButton}>
+      onPress={() => void submit("CALCIUM_ADMINISTRATION")} style={styles.calciumButton}>
       <Text style={styles.buttonText}>Manusta kaltsiumi</Text>
     </Pressable>}
     {message && <Text style={styles.message}>{message}</Text>}

@@ -32,6 +32,8 @@ export interface RuntimeCheckpointRepository {
   renewWriter(lease: RuntimeWriterLease, leaseSec: number): Promise<WriterAcquisitionResult>;
   releaseWriter(lease: RuntimeWriterLease): Promise<void>;
   publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, baseCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>, control?: RuntimeCheckpointPublicationControl): Promise<CheckpointPublishResult<SharedExerciseState>>;
+  finalizeCompletion?(completionCommandId: string, lease: RuntimeWriterLease, expectedRevision: number,
+    checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>): Promise<CheckpointPublishResult<SharedExerciseState>>;
 }
 
 export type RuntimeCheckpointDeltaMetadata = Readonly<{
@@ -164,6 +166,27 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
     const { error } = await this.client.rpc("release_runtime_writer", { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId });
     recordSupabaseTraffic({ operation: "RPC", endpoint: "release_runtime_writer" });
     if (error) throw new Error(code(error.message));
+  }
+  async finalizeCompletion(completionCommandId: string, lease: RuntimeWriterLease, expectedRevision: number,
+    checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>): Promise<CheckpointPublishResult<SharedExerciseState>> {
+    const { data, error } = await this.client.rpc("finalize_runtime_completion", {
+      p_exercise_id: checkpoint.exerciseId, p_command_id: completionCommandId, p_lease_id: lease.leaseId,
+      p_writer_instance_id: lease.writerInstanceId, p_expected_checkpoint_revision: expectedRevision,
+      p_checkpoint: checkpoint,
+    });
+    recordSupabaseTraffic({ operation: "RPC", endpoint: "finalize_runtime_completion", data,
+      requestBytes: isSupabaseTrafficMetricsEnabled() ? estimateSupabasePayloadBytes(checkpoint) : 0 });
+    if (error) {
+      const diagnostic = error.message.includes("STALE_WRITER") ? "STALE_WRITER"
+        : error.message.includes("CHECKPOINT_REVISION_CONFLICT") ? "CHECKPOINT_REVISION_CONFLICT"
+          : error.message.includes("TERMINAL_CHECKPOINT_INVALID") ? "TERMINAL_CHECKPOINT_INVALID" : "AUTHORITY_UNAVAILABLE";
+      return { status: diagnostic === "STALE_WRITER" ? "STALE_CHECKPOINT_WRITER"
+        : diagnostic === "CHECKPOINT_REVISION_CONFLICT" ? "REVISION_CONFLICT" : "AUTHORITY_UNAVAILABLE", code: diagnostic as never };
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    return { status: "PUBLISHED", checkpoint: Object.freeze({ ...checkpoint,
+      checkpointRevision: Number(row.checkpoint_revision), payloadHash: String(row.payload_hash),
+      provenanceHash: String(row.provenance_hash) }) };
   }
   async publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, baseCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>, control?: RuntimeCheckpointPublicationControl): Promise<CheckpointPublishResult<SharedExerciseState>> {
     const endRequestObject = startRuntimeWorkTrace("REMOTE_PUB_REQUEST_OBJECT", { checkpointRevision: checkpoint.checkpointRevision });

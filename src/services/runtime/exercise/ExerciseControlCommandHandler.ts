@@ -5,19 +5,29 @@ import { validateExerciseControlCommand } from "./ExerciseControlValidator";
 import { stableJson } from "@/utils/stableJson";
 import { sha256Text } from "@/utils/sha256";
 import { notifySync } from "@/services/SyncService";
-import { runtimeWritesAllowed } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
+import { getRuntimeWriterAuthorityState, runtimeWritesAllowed } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
+import { traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { beginRuntimeCompletionCheckpointIntent } from "@/services/runtime/persistence/RuntimeCheckpointLifecycleIntent";
 
 const results = new Map<string, ExerciseControlResult>();
 const audit: ExerciseControlAuditEntry[] = [];
 
 export function handleExerciseControlCommand(command: ExerciseControlCommand): ExerciseControlResult {
+  if (command.commandType === "COMPLETE_EXERCISE") {
+    traceRuntimeLeaseLifecycle("COMPLETE_HANDLER_ENTER", {
+      detail: { localAuthority: getRuntimeWriterAuthorityState(), runtimeWritesAllowed: runtimeWritesAllowed() },
+    });
+  }
   const prior = results.get(command?.commandId);
-  if (prior) return prior;
+  if (prior) {
+    if (command.commandType === "COMPLETE_EXERCISE") traceRuntimeLeaseLifecycle("COMPLETE_HANDLER_REPLAY", { detail: { priorOk: prior.ok } });
+    return prior;
+  }
   const snapshot = getCanonicalExerciseSnapshot();
   if (!runtimeWritesAllowed()) {
     const result: ExerciseControlResult = { ok: false, commandId: command.commandId, errorCode: "NO_AUTHORITATIVE_OWNER", message: "Runtime active on another device" };
     results.set(command.commandId, result);
+    if (command.commandType === "COMPLETE_EXERCISE") traceRuntimeLeaseLifecycle("COMPLETE_AUTHORITY_DENIED", { detail: { localAuthority: getRuntimeWriterAuthorityState() } });
     return result;
   }
   const owner = getExerciseRuntimeOwner();
@@ -37,6 +47,7 @@ export function handleExerciseControlCommand(command: ExerciseControlCommand): E
       simulationTimeSec: snapshot.simulationTimeSec, previousState: snapshot.lifecycleState, previousSpeed: snapshot.speed,
       outcome: "REJECTED", rejectionCode: result.errorCode });
     notifySync("local");
+    if (command.commandType === "COMPLETE_EXERCISE") traceRuntimeLeaseLifecycle("COMPLETE_OWNER_DENIED", { detail: { ownerAvailable: Boolean(owner) } });
     return result;
   }
   let applied: ReturnType<typeof owner.apply>;
@@ -52,6 +63,7 @@ export function handleExerciseControlCommand(command: ExerciseControlCommand): E
       simulationTimeSec: snapshot.simulationTimeSec, previousState: snapshot.lifecycleState, previousSpeed: snapshot.speed,
       outcome: "REJECTED", rejectionCode: result.errorCode });
     notifySync("local");
+    if (command.commandType === "COMPLETE_EXERCISE") traceRuntimeLeaseLifecycle("COMPLETE_RUNTIME_FAILURE", { detail: {} });
     return result;
   }
   const result: ExerciseControlResult = { ok: true, commandId: command.commandId, ...applied };

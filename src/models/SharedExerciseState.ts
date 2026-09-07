@@ -47,4 +47,6 @@ export type SharedExerciseState = {
   patientMaterialization?: MaterializedPatientDataset;
   persistedRuntimeStates?: readonly PersistedRuntimeState[];
   patientTransportRuntime?: PatientTransportRuntimeState;
+  /** Durable monotonic cursor for patient-scoped Runtime commands. Absent in historical checkpoints. */
+  runtimePatientCommandCursor?: number;
 };

@@ -3,17 +3,21 @@ import type { ExerciseControlCommand, ExerciseControlCommandType, ExerciseContro
 import type { CanonicalExerciseSpeed } from "@/models/exercise/CanonicalExerciseSnapshot";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { handleExerciseControlCommand } from "./ExerciseControlCommandHandler";
+import { traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { submitRuntimeCompletion } from "./RuntimeCompletionService";
 
 type SubmissionDependencies = Readonly<{
   snapshot: typeof getCanonicalExerciseSnapshot;
   create: typeof createExerciseControlCommand;
   handle: typeof handleExerciseControlCommand;
+  submitCompletion?: typeof submitRuntimeCompletion;
 }>;
 
 const defaults: SubmissionDependencies = {
   snapshot: getCanonicalExerciseSnapshot,
   create: createExerciseControlCommand,
   handle: handleExerciseControlCommand,
+  submitCompletion: submitRuntimeCompletion,
 };
 
 /**
@@ -25,7 +29,7 @@ export function prepareExerciseControlSubmission(
   commandType: ExerciseControlCommandType,
   speed?: CanonicalExerciseSpeed,
   dependencies: SubmissionDependencies = defaults,
-): () => ExerciseControlResult {
+): () => ExerciseControlResult | Promise<ExerciseControlResult> {
   const current = dependencies.snapshot();
   const command: ExerciseControlCommand = dependencies.create({
     exerciseId: current.exerciseId,
@@ -33,5 +37,16 @@ export function prepareExerciseControlSubmission(
     expectedVersion: current.version,
     speed,
   });
-  return () => dependencies.handle(command);
+  return () => {
+    if (command.commandType === "COMPLETE_EXERCISE") traceRuntimeLeaseLifecycle("COMPLETE_COMMAND_START", { detail: {} });
+    if (command.commandType === "COMPLETE_EXERCISE" && dependencies.submitCompletion) {
+      return dependencies.submitCompletion(command).then(result => {
+        traceRuntimeLeaseLifecycle("COMPLETE_COMMAND_RESULT", { detail: { ok: result.ok, errorCode: result.ok ? undefined : result.errorCode } });
+        return result;
+      });
+    }
+    const result = dependencies.handle(command);
+    if (command.commandType === "COMPLETE_EXERCISE") traceRuntimeLeaseLifecycle("COMPLETE_COMMAND_RESULT", { detail: { ok: result.ok, errorCode: result.ok ? undefined : result.errorCode } });
+    return result;
+  };
 }

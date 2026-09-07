@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getPatientResourceDebugSnapshot, getResourceRuntimeDebugVersion, subscribeToResourceRuntimeDebug } from "@/services/ResourceRuntimeDebugService";
-import { handleResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
+import { submitResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
 
 export function PleuralDrainControls({ patientId, readOnly = false }: Readonly<{ patientId: string; readOnly?: boolean }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
@@ -15,9 +15,9 @@ export function PleuralDrainControls({ patientId, readOnly = false }: Readonly<{
     <Text style={styles.help}>Paigalda rindkeredreen kanoonilise pleuravigastuse raviks.</Text>
     {resources.map(resource => <Pressable key={resource.resourceId} style={styles.button} onPress={() => {
       const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
-      const result = handleResourceInterventionCommand({ commandId: `PLEURAL-DRAIN-${exerciseId}-${patientId}-${resource.resourceId}`,
-        exerciseId, patientId, resourceId: resource.resourceId, issuedBy: "Case Manager" });
-      setMessage(result.ok ? "Rindkeredreen paigaldatud." : result.message);
+      void submitResourceInterventionCommand({ commandId: `PLEURAL-DRAIN-${exerciseId}-${patientId}-${resource.resourceId}`,
+        exerciseId, patientId, resourceId: resource.resourceId, issuedBy: "Case Manager" }).then(result =>
+        setMessage(result.ok ? "Rindkeredreeni korraldus vastu võetud." : result.message));
     }}><Text style={styles.buttonText}>Paigalda rindkeredreen</Text></Pressable>)}
     {message && <Text style={styles.message}>{message}</Text>}
   </View>;

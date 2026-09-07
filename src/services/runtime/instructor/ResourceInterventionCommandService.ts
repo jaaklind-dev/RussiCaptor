@@ -5,6 +5,7 @@ import { getPatientResourceDebugSnapshot } from "@/services/ResourceRuntimeDebug
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { advanceExerciseMinutes } from "@/services/ClockService";
 import { getRegisteredExerciseClockTargetIds } from "@/services/runtime/exercise/ExerciseClockTargetRegistry";
+import { getRuntimePatientCommandGateway, submitPatientRuntimeCommand } from "@/services/runtime/commands/RuntimePatientCommandService";
 
 export type ResourceInterventionCommandResult =
   | Readonly<{ ok: true; commandId: string; runtimeEventId: string }>
@@ -58,6 +59,22 @@ export function handleResourceInterventionCommand(command: Readonly<{ commandId:
   return structuredClone(result);
 }
 
+export async function submitResourceInterventionCommand(command: Readonly<{ commandId: string; exerciseId: string;
+  patientId: string; resourceId: string; issuedBy: string }>): Promise<ResourceInterventionCommandResult> {
+  if (!getRuntimePatientCommandGateway()) return handleResourceInterventionCommand(command);
+  const submitted = await submitPatientRuntimeCommand({ exerciseId: command.exerciseId, patientId: command.patientId,
+    commandId: command.commandId, commandType: "RESOURCE_APPLY", payload: Object.freeze({ resourceId: command.resourceId }) });
+  if (submitted.status === "APPLIED" || submitted.status === "IDEMPOTENT") {
+    return Object.freeze({ ok: true, commandId: command.commandId, runtimeEventId: `QUEUED-${submitted.commandSequence ?? command.commandId}` });
+  }
+  return Object.freeze({ ok: false, commandId: command.commandId,
+    errorCode: submitted.status === "STALE_VERSION" || submitted.status === "NOT_OWNER" ? "RUNTIME_FAILURE" : "UNAVAILABLE",
+    message: submitted.status === "STALE_VERSION" || submitted.status === "NOT_OWNER"
+      ? "Patsiendi vastutus või seis muutus. Värskenda vaadet."
+      : submitted.status === "COMPLETION_FENCED" || submitted.status === "EXERCISE_NOT_ACTIVE"
+        ? "Õppust lõpetatakse või see on lõppenud." : "Kliinilist käsku ei saanud tööjärjekorda saata." });
+}
+
 export function stopResourceInterventionCommand(command: Readonly<{ commandId: string; exerciseId: string;
   patientId: string; sourceInterventionId: string; issuedBy: string }>): ResourceInterventionCommandResult {
   const previous = results.get(command.commandId);
@@ -79,6 +96,21 @@ export function stopResourceInterventionCommand(command: Readonly<{ commandId: s
   }
   results.set(command.commandId, structuredClone(result));
   return structuredClone(result);
+}
+
+export async function submitStopResourceInterventionCommand(command: Readonly<{ commandId: string; exerciseId: string;
+  patientId: string; sourceInterventionId: string; issuedBy: string }>): Promise<ResourceInterventionCommandResult> {
+  if (!getRuntimePatientCommandGateway()) return stopResourceInterventionCommand(command);
+  const submitted = await submitPatientRuntimeCommand({ exerciseId: command.exerciseId, patientId: command.patientId,
+    commandId: command.commandId, commandType: "RESOURCE_STOP",
+    payload: Object.freeze({ sourceInterventionId: command.sourceInterventionId }) });
+  return submitted.status === "APPLIED" || submitted.status === "IDEMPOTENT"
+    ? Object.freeze({ ok: true, commandId: command.commandId, runtimeEventId: `QUEUED-${submitted.commandSequence ?? command.commandId}` })
+    : Object.freeze({ ok: false, commandId: command.commandId, errorCode: "RUNTIME_FAILURE",
+      message: submitted.status === "STALE_VERSION" || submitted.status === "NOT_OWNER"
+        ? "Patsiendi vastutus või seis muutus. Värskenda vaadet."
+        : submitted.status === "COMPLETION_FENCED" || submitted.status === "EXERCISE_NOT_ACTIVE"
+          ? "Õppust lõpetatakse või see on lõppenud." : "Kliinilist käsku ei saanud tööjärjekorda saata." });
 }
 
 export function resetResourceInterventionCommands(): void { results.clear(); manualAdvanceSequence = 0; resourceInterventionSequence = 0; }

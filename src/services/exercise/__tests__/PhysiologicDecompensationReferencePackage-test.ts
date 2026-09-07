@@ -56,7 +56,7 @@ describe("WP-48 reference package", () => {
     expect(control).toContain('issuedBy: "Case Manager"');
     expect(control).toContain("Paigalda vaagnalahas");
     expect(control).toContain("Eemalda vaagnalahas");
-    expect(control).toContain("stopResourceInterventionCommand");
+    expect(control).toContain("submitStopResourceInterventionCommand");
   });
   test("DEAD absorbs later physiology ticks and freezes cumulative blood loss", () => {
     const fixture=structuredClone(packagePatientDatasetRegistry.resolve("patients.physiologic-decompensation-reference.v1").patients[0].runtimeFixture!);

@@ -41,6 +41,7 @@ import { compactActiveExerciseState } from "@/services/runtime/persistence/Activ
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { installRuntimeCompletionIntentListener } from "@/services/runtime/persistence/RuntimeCheckpointLifecycleIntent";
 import { restorePersistedImportedExercisePackages } from "@/services/import/ImportedExercisePackageRegistry";
+import { getRuntimePatientCommandCursor, restoreRuntimePatientCommandCursor } from "@/services/runtime/commands/RuntimePatientCommandCursor";
 
 const STATE_VERSION = 1;
 const stateFileUri = `${FileSystem.documentDirectory}russicaptor-state.json`;
@@ -142,7 +143,9 @@ function collectSharedExerciseState(): SharedExerciseState {
   const shared = collectSharedExerciseProjection();
   const simulationTimeSec = "simulationTimeSec" in shared.exerciseSession
     ? shared.exerciseSession.simulationTimeSec : shared.exerciseSession.currentMinute * 60;
-  return { ...shared, persistedRuntimeStates: captureActiveClinicalReferenceRuntimes(simulationTimeSec, shared.exerciseSession.exerciseId) };
+  const runtimePatientCommandCursor = getRuntimePatientCommandCursor(shared.exerciseSession.exerciseId);
+  return { ...shared, persistedRuntimeStates: captureActiveClinicalReferenceRuntimes(simulationTimeSec, shared.exerciseSession.exerciseId),
+    ...(runtimePatientCommandCursor > 0 ? { runtimePatientCommandCursor } : {}) };
 }
 
 async function collectSharedExerciseStateAsync(yieldControl: () => Promise<void>): Promise<SharedExerciseState> {
@@ -169,7 +172,9 @@ async function collectSharedExerciseStateAsync(yieldControl: () => Promise<void>
   const endAssembly = startRuntimeWorkTrace("PRE_CANON_ASSEMBLY", {
     persistedRuntimeCount: persistedRuntimeStates.length,
   });
-  const result = { ...shared, persistedRuntimeStates };
+  const runtimePatientCommandCursor = getRuntimePatientCommandCursor(shared.exerciseSession.exerciseId);
+  const result = { ...shared, persistedRuntimeStates,
+    ...(runtimePatientCommandCursor > 0 ? { runtimePatientCommandCursor } : {}) };
   endAssembly();
   return result;
 }
@@ -307,6 +312,7 @@ function restoreSharedExerciseCollections(restored: SharedExerciseState): void {
   stopClockRunner();
   restoreInstalledWorkbook(restored.installedWorkbook);
   restoreExerciseIdentity(restored);
+  restoreRuntimePatientCommandCursor(restored.exerciseSession.exerciseId, restored.runtimePatientCommandCursor);
   restoreExerciseControlAudit(restored.exerciseControlAudit ?? []);
   restoreInstructorCommandAudit(restored.instructorCommandAudit ?? []);
   restoreExerciseResetAudit(restored.exerciseResetAudit ?? []);
@@ -401,6 +407,7 @@ export async function loadPersistedState(): Promise<void> {
     endOperator();
     const endExerciseIdentity = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_EXERCISE_IDENTITY");
     restoreExerciseIdentity(restored);
+    restoreRuntimePatientCommandCursor(restored.exerciseSession.exerciseId, runtimeRestore.runtimePatientCommandCursor);
     endExerciseIdentity();
     const endAudits = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_AUDITS");
     restoreExerciseControlAudit(restored.exerciseControlAudit ?? []);

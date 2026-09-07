@@ -7,7 +7,7 @@ import {
   getResourceRuntimeDebugVersion,
   subscribeToResourceRuntimeDebug,
 } from "@/services/ResourceRuntimeDebugService";
-import { createResourceInterventionCommandId, handleResourceInterventionCommand, stopResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
+import { createResourceInterventionCommandId, submitResourceInterventionCommand, submitStopResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
 
 export function PelvicBinderControls({ patientId, readOnly = false }: Readonly<{ patientId: string; readOnly?: boolean }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
@@ -25,18 +25,20 @@ export function PelvicBinderControls({ patientId, readOnly = false }: Readonly<{
       ? <><Text style={styles.applied}>Vaagnalahas on paigaldatud.</Text><Pressable disabled={submitting} style={styles.removeButton} onPress={() => {
         const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
         setSubmitting(true); setMessage(undefined);
-        const result = stopResourceInterventionCommand({ commandId: `PELVIC-BINDER-REMOVE-${exerciseId}-${patientId}-${applied.instanceId}`,
-          exerciseId, patientId, sourceInterventionId: applied.sourceInterventionId, issuedBy: "Case Manager" });
-        setMessage(result.ok ? "Vaagnalahas eemaldati." : result.message); setSubmitting(false);
+        void submitStopResourceInterventionCommand({ commandId: `PELVIC-BINDER-REMOVE-${exerciseId}-${patientId}-${applied.instanceId}`,
+          exerciseId, patientId, sourceInterventionId: applied.sourceInterventionId, issuedBy: "Case Manager" }).then(result => {
+          setMessage(result.ok ? "Vaagnalahase eemaldamise korraldus vastu võetud." : result.message); setSubmitting(false);
+        });
       }}><Text style={styles.buttonText}>{submitting ? "Eemaldamine…" : "Eemalda vaagnalahas"}</Text></Pressable></>
       : binders.map(resource => <Pressable key={resource.resourceId} disabled={submitting} style={styles.button} onPress={() => {
         const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
         setSubmitting(true); setMessage(undefined);
-        const result = handleResourceInterventionCommand({
+        void submitResourceInterventionCommand({
           commandId: createResourceInterventionCommandId(exerciseId, patientId, resource.resourceId),
           exerciseId, patientId, resourceId: resource.resourceId, issuedBy: "Case Manager",
+        }).then(result => {
+          setMessage(result.ok ? "Vaagnalahase paigaldamise korraldus vastu võetud." : result.message); setSubmitting(false);
         });
-        setMessage(result.ok ? "Vaagnalahas paigaldati." : result.message); setSubmitting(false);
       }}><Text style={styles.buttonText}>{submitting ? "Paigaldamine…" : "Paigalda vaagnalahas"}</Text></Pressable>)}
     {message && <Text style={styles.message}>{message}</Text>}
   </View>;

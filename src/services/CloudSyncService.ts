@@ -43,6 +43,7 @@ import {
   projectionPackageAuthority,
   type ProjectionPackageAuthority,
 } from "@/services/exercise/ExerciseProjectionPackageAuthority";
+import { terminalProjectionOwnedByCheckpointProtocol } from "@/services/runtime/exercise/RuntimeCompletionService";
 
 export type CloudSyncStatus = {
   state: "disabled" | "connecting" | "synced" | "saving" | "offline" | "error";
@@ -452,6 +453,9 @@ function prepareCloudProjection(): ExerciseProjectionCandidate<PreparedCloudProj
   const lifecycleState = "lifecycleState" in savedSession
     ? savedSession.lifecycleState
     : savedSession.state === "running" ? "RUNNING" : savedSession.state === "paused" ? "PAUSED" : "READY";
+  // Terminal checkpoint and discovery projection are committed by one fenced
+  // RPC; a separate projection write could otherwise reintroduce split-brain.
+  if (lifecycleState === "COMPLETED" && terminalProjectionOwnedByCheckpointProtocol(exerciseId)) return undefined;
   const sharedProjection = lifecycleState === "COMPLETED"
     ? withTerminalExerciseArchive(baseProjection, captureCompletedExerciseArchive())
     : baseProjection;

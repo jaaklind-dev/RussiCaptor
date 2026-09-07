@@ -11,6 +11,7 @@ import type { AnalgesicCommand } from "@/models/AnalgesiaMedication";
 import type { SupportedFluidTherapyCommand } from "@/models/FluidTherapy";
 import { getInstructorRuntimeOwner } from "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
 import { runtimeWritesAllowed } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
+import { getRuntimePatientCommandGateway, submitPatientRuntimeCommand } from "@/services/runtime/commands/RuntimePatientCommandService";
 
 export type ClinicalTreatmentBuildResult = Readonly<{ ok: true; command: ClinicalTreatmentCommand }> |
   Readonly<{ ok: false; errors: readonly string[] }>;
@@ -141,7 +142,9 @@ function resultMessage(status: string, rejectionReason?: string, protocolClassif
 
 export function clinicalTreatmentMutationReadiness(exerciseId: string, patientId: string):
 Readonly<{ ready: boolean; reason?: string }> {
-  if (!runtimeWritesAllowed()) return Object.freeze({ ready: false, reason: "Simulatsiooni juhib teine seade." });
+  if (!runtimeWritesAllowed() && !getRuntimePatientCommandGateway()) {
+    return Object.freeze({ ready: false, reason: "Ravikorralduse saatmine ei ole ühendatud." });
+  }
   if (!getInstructorRuntimeOwner(exerciseId, patientId)?.executeClinicalTreatment) {
     return Object.freeze({ ready: false, reason: "Patsiendi Runtime ei ole ravikorralduseks valmis." });
   }
@@ -150,6 +153,26 @@ Readonly<{ ready: boolean; reason?: string }> {
 
 export async function submitClinicalTreatment(exerciseId: string, patientId: string,
   treatmentId: ClinicalTreatmentId, command: ClinicalTreatmentCommand): Promise<ClinicalTreatmentSubmissionResult> {
+  if (getRuntimePatientCommandGateway()) {
+    const submitted = await submitPatientRuntimeCommand({ exerciseId, patientId,
+      commandId: command.command.commandId, commandType: "CLINICAL_TREATMENT",
+      simulationTimeSec: "simulationTimeSec" in command.command ? command.command.simulationTimeSec : command.command.timestamp,
+      payload: Object.freeze({ treatmentId, command }) });
+    if (submitted.status === "APPLIED" || submitted.status === "IDEMPOTENT") {
+      return Object.freeze({ treatmentId, status: "APPLIED", message: "Ravikorraldus võeti autoritaarsesse tööjärjekorda." });
+    }
+    return Object.freeze({ treatmentId, status: "UNAVAILABLE",
+      message: submitted.status === "STALE_VERSION" || submitted.status === "NOT_OWNER"
+        ? "Patsiendi vastutus või seis muutus. Värskenda vaadet ja proovi uuesti."
+        : submitted.status === "COMPLETION_FENCED" || submitted.status === "EXERCISE_NOT_ACTIVE"
+          ? "Õppust lõpetatakse või see on juba lõppenud."
+          : "Ravikorraldust ei saanud autoritaarsesse tööjärjekorda saata." });
+  }
+  return applyClinicalTreatmentLocally(exerciseId, patientId, treatmentId, command);
+}
+
+export function applyClinicalTreatmentLocally(exerciseId: string, patientId: string,
+  treatmentId: ClinicalTreatmentId, command: ClinicalTreatmentCommand): ClinicalTreatmentSubmissionResult {
   const owner = getInstructorRuntimeOwner(exerciseId, patientId);
   if (!runtimeWritesAllowed() || !owner?.executeClinicalTreatment) return Object.freeze({ treatmentId,
     status: "UNAVAILABLE", message: "Ravikorraldust ei saa praegu autoriteetselt rakendada." });

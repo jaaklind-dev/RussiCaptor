@@ -372,7 +372,7 @@ describe("WP-44B checkpoint startup coordination", () => {
 
   test("reconnect and legitimate authority acquisition rearm the same publication scheduler", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
-    expect(source).toContain('if(channelStatus==="SUBSCRIBED"&&!generationStopped()){renewalLoop?.wake();requestPublish();}');
+    expect(source).toMatch(/if\(channelStatus==="SUBSCRIBED"&&!generationStopped\(\)\)\{\s*renewalLoop\?\.wake\(\);requestPublish\(\);/);
     expect(source).toContain('table:"runtime_checkpoint_notifications"');
     expect(source).toContain('"runtime_checkpoint_notifications.reconnect_metadata"');
     expect(source).not.toContain('table:"runtime_checkpoints",filter:');

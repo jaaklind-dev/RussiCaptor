@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getPatientResourceDebugSnapshot, getResourceRuntimeDebugVersion, subscribeToResourceRuntimeDebug } from "@/services/ResourceRuntimeDebugService";
-import { handleResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
+import { submitResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
 
 const labels = { peripheralIV: "Raja veenitee", centralVenousCatheter: "Raja tsentraalveenitee" } as const;
 
@@ -28,9 +28,10 @@ export function VascularAccessControls({ patientId, readOnly = false }: Readonly
           : instance.status === "COMPLETED" ? "Valmis" : instance.status === "CANCELLED" ? "Tühistatud" : "Ebaõnnestus"}</Text></View>; })}
     {resources.map(resource => <Pressable key={resource.resourceId} disabled={Boolean(submitting)} style={styles.button} onPress={() => {
       const exerciseId = getCanonicalExerciseSnapshot().exerciseId; setSubmitting(resource.resourceId); setMessage(undefined);
-      const result = handleResourceInterventionCommand({ commandId: `ACCESS-${exerciseId}-${patientId}-${resource.resourceId}`,
-        exerciseId, patientId, resourceId: resource.resourceId, issuedBy: "Case Manager" });
-      setMessage(result.ok ? "Vaskulaarse ligipääsu rajamine algas." : result.message); setSubmitting(undefined);
+      void submitResourceInterventionCommand({ commandId: `ACCESS-${exerciseId}-${patientId}-${resource.resourceId}`,
+        exerciseId, patientId, resourceId: resource.resourceId, issuedBy: "Case Manager" }).then(result => {
+        setMessage(result.ok ? "Vaskulaarse ligipääsu korraldus vastu võetud." : result.message); setSubmitting(undefined);
+      });
     }}><Text style={styles.buttonText}>{submitting === resource.resourceId ? "Rajamine…" : labels[resource.type as keyof typeof labels]}</Text></Pressable>)}
     {message && <Text style={styles.message}>{message}</Text>}
   </View>;
