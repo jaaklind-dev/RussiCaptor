@@ -10,6 +10,7 @@ import { CARDIAC_ARREST_REFERENCE_FIXTURE } from "@/services/golden/CardiacArres
 import { PackagePatientDatasetRegistry } from "./PackagePatientMaterializationService";
 import { MTP_REFERENCE_CONFIGURATION, WP47C_DEFAULT_DELIVERY_CONFIGURATION } from "@/models/MassiveTransfusion";
 import { PRESSURE_DEPENDENT_HEMORRHAGE_FLOW_V1 } from "@/models/HemorrhagePatientProcess";
+import { NARVA_IRO_PATIENT_DATASET, NARVA_TRAUMA_PATIENT_DATASET } from "./NarvaPatientDatasets";
 
 const clone = (patient: Patient): Patient => ({ ...patient, mist: { ...patient.mist } });
 const dataset = (datasetId: string, records: PackagePatientDataset["patients"]): PackagePatientDataset => Object.freeze({ datasetId, version: datasetId.split(".v").at(-1)!, patients: Object.freeze(records) });
@@ -110,4 +111,6 @@ export const packagePatientDatasetRegistry = new PackagePatientDatasetRegistry()
   dataset("patients.transport-reference.v1", [{ patient: transportPatient("PT-TRANSPORT-01", "Transport Patient 1"), runtimeFixture: transportFixture("PT-TRANSPORT-01", 51) }, { patient: transportPatient("PT-TRANSPORT-02", "Transport Patient 2"), runtimeFixture: transportFixture("PT-TRANSPORT-02", 52) }]),
   dataset("patients.physiologic-decompensation-reference.v1", [{ patient: decompensationPatient, runtimeFixture: physiologicDecompensationFixture }]),
   dataset("patients.pressure-dependent-hemorrhage-reference.v1", [{ patient: decompensationPatient, runtimeFixture: pressureDependentHemorrhageFixture }]),
+  NARVA_TRAUMA_PATIENT_DATASET,
+  NARVA_IRO_PATIENT_DATASET,
 ].forEach(value => packagePatientDatasetRegistry.register(value));
