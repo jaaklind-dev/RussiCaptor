@@ -25,6 +25,25 @@ describe("WP-NARVA-02 deterministic IRO fault and recovery process", () => {
     expect(value.advanceTo(arrestAt).ventilationStage).toBe("PEA");
   });
 
+  test.each([
+    ["CIRCUIT_DISCONNECT", "LOW_VOLUME", false, true, true],
+    ["HIGH_PRESSURE_KINK", "HIGH_PRESSURE", true, true, true],
+    ["OXYGEN_DEPLETION", "OXYGEN_SUPPLY", true, false, true],
+    ["VENTILATOR_STOP", "APNOEA", false, true, false],
+  ] as const)("%s exposes its own alarm and effective-support evidence", (fault, alarm, waveform,
+    oxygen, running) => {
+    const value = runtime(); value.triggerVentilationFault(fault, 0);
+    expect(value.advanceTo(30)).toMatchObject({ ventilationAlarm: alarm,
+      etco2WaveformPresent: waveform, oxygenSourceAdequate: oxygen, ventilatorRunning: running });
+  });
+
+  test("high-pressure and oxygen-depletion branches retain distinct observed physiology", () => {
+    const highPressure = runtime(); highPressure.triggerVentilationFault("HIGH_PRESSURE_KINK", 0);
+    expect(highPressure.advanceTo(30)).toMatchObject({ ventilationStage: "DETERIORATING", spo2: 92, etco2: 6 });
+    const oxygen = runtime(); oxygen.triggerVentilationFault("OXYGEN_DEPLETION", 0);
+    expect(oxygen.advanceTo(30)).toMatchObject({ ventilationStage: "DETERIORATING", heartRate: 105, spo2: 92 });
+  });
+
   test("combined faults accelerate to PEA after 90 seconds from the second fault", () => {
     const value = runtime(); value.triggerVasopressorFault(0); value.triggerVentilationFault("CIRCUIT_DISCONNECT", 20);
     expect(value.advanceTo(110).arrest).toBe(false); expect(value.advanceTo(111).arrest).toBe(true);

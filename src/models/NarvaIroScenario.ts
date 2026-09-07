@@ -35,6 +35,11 @@ export type NarvaIroScenarioProjection = NarvaIroScenarioState & Readonly<{
   spo2: number;
   etco2?: number;
   pulsePresent: boolean;
+  ventilationAlarm?: "LOW_VOLUME" | "HIGH_PRESSURE" | "OXYGEN_SUPPLY" | "APNOEA";
+  etco2WaveformPresent: boolean;
+  exhaledVolumeReduced: boolean;
+  oxygenSourceAdequate: boolean;
+  ventilatorRunning: boolean;
   causesCorrected: boolean;
   roscEligible: boolean;
 }>;

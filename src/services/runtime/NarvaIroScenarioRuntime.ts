@@ -93,9 +93,10 @@ export class NarvaIroScenarioRuntime {
     const causesCorrected = (!state.vasopressorFault || corrected(state.vasopressorFault)) &&
       (!state.ventilationFault || corrected(state.ventilationFault));
     const vital = this.vitals(vasopressorStage, ventilationStage, arrest, state.rosc,
-      simulationTimeSec - (state.roscAtSimulationTimeSec ?? state.lastUpdatedSimulationTimeSec));
+      simulationTimeSec - (state.roscAtSimulationTimeSec ?? state.lastUpdatedSimulationTimeSec), simulationTimeSec);
+    const ventilationEvidence = this.ventilationEvidence();
     return frozen({ ...state, arrest, vasopressorStage: arrest && !state.rosc ? "PEA" : vasopressorStage,
-      ventilationStage: arrest && !state.rosc ? "PEA" : ventilationStage, ...vital,
+      ventilationStage: arrest && !state.rosc ? "PEA" : ventilationStage, ...vital, ...ventilationEvidence,
       causesCorrected, roscEligible: arrest && state.cprQuality && causesCorrected });
   }
 
@@ -162,7 +163,7 @@ export class NarvaIroScenarioRuntime {
   }
 
   private vitals(vaso: NarvaIroVasopressorStage, vent: NarvaIroVentilationStage, arrest: boolean, rosc: boolean,
-    roscElapsedSec: number):
+    roscElapsedSec: number, now: number):
   Readonly<{ heartRate: number; systolicBp?: number; diastolicBp?: number; spo2: number; etco2?: number; pulsePresent: boolean }> {
     if (rosc) return roscElapsedSec >= 120
       ? { heartRate: 100, systolicBp: 100, diastolicBp: 60, spo2: 96, etco2: 4.5, pulsePresent: true }
@@ -171,10 +172,42 @@ export class NarvaIroScenarioRuntime {
     const vasoValues = vaso === "S3" ? [130, 55, 30, 3] : vaso === "S2" ? [120, 75, 40, 4] :
       vaso === "S1" ? [105, 90, 50, 4.5] : vaso === "S3R" ? [115, 78, 45, 3.8] :
         vaso === "S2R" ? [110, 85, 48, 4.2] : vaso === "S1R" ? [98, 100, 58, 4.6] : [92, 105, 62, 4.8];
-    const ventValues = vent === "CRITICAL" ? [120, 82, 3] : vent === "DETERIORATING" ? [110, 90, 4] :
-      vent === "EARLY" ? [100, 95, 4.3] : vent === "RECOVERING" ? [100, 94, 4.4] : [92, 96, 4.8];
+    const ventValues = this.ventilationVitals(vent, now);
     return { heartRate: Math.max(vasoValues[0], ventValues[0]), systolicBp: vasoValues[1],
       diastolicBp: vasoValues[2], spo2: ventValues[1], etco2: ventValues[2], pulsePresent: true };
+  }
+
+  private ventilationVitals(stage: NarvaIroVentilationStage, now: number): readonly [number, number, number?] {
+    const fault = this.require().ventilationFault;
+    if (!fault || corrected(fault)) return stage === "RECOVERING" ? [100, 94, 4.4] : [92, 96, 4.8];
+    const age = elapsed(fault, now);
+    if (stage === "EARLY") return [100, 96, fault.type === "HIGH_PRESSURE_KINK" ? 4.8 : undefined];
+    if (stage === "DETERIORATING") {
+      if (fault.type === "HIGH_PRESSURE_KINK") return [110, 92, 6];
+      if (fault.type === "OXYGEN_DEPLETION") return [105, 92, 4.3];
+      return [110, 90, undefined];
+    }
+    if (fault.type === "HIGH_PRESSURE_KINK") return [age >= 120 ? 50 : 120, 84, 6];
+    if (fault.type === "OXYGEN_DEPLETION") return [120, 82, 4];
+    return [age >= 90 ? 50 : 120, 80, undefined];
+  }
+
+  private ventilationEvidence(): Pick<NarvaIroScenarioProjection, "ventilationAlarm" |
+    "etco2WaveformPresent" | "exhaledVolumeReduced" | "oxygenSourceAdequate" | "ventilatorRunning"> {
+    const fault = this.require().ventilationFault;
+    if (!fault || corrected(fault)) return { etco2WaveformPresent: true, exhaledVolumeReduced: false,
+      oxygenSourceAdequate: true, ventilatorRunning: true };
+    if (fault.type === "CIRCUIT_DISCONNECT") return { ventilationAlarm: "LOW_VOLUME",
+      etco2WaveformPresent: false, exhaledVolumeReduced: true, oxygenSourceAdequate: true,
+      ventilatorRunning: true };
+    if (fault.type === "HIGH_PRESSURE_KINK") return { ventilationAlarm: "HIGH_PRESSURE",
+      etco2WaveformPresent: true, exhaledVolumeReduced: true, oxygenSourceAdequate: true,
+      ventilatorRunning: true };
+    if (fault.type === "OXYGEN_DEPLETION") return { ventilationAlarm: "OXYGEN_SUPPLY",
+      etco2WaveformPresent: true, exhaledVolumeReduced: false, oxygenSourceAdequate: false,
+      ventilatorRunning: true };
+    return { ventilationAlarm: "APNOEA", etco2WaveformPresent: false, exhaledVolumeReduced: true,
+      oxygenSourceAdequate: true, ventilatorRunning: false };
   }
 
   private require(): NarvaIroScenarioState {

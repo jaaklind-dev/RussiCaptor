@@ -90,8 +90,8 @@ describe("WP-NARVA-02 IRO full package readiness", () => {
     expect(engine.getRuntimeState().targetVitals.sbp).toBeGreaterThan(interruptedSystolicBp);
 
     engine.triggerNarvaIroVentilationFault("VENTILATOR_STOP"); engine.advanceTo(240);
-    expect(engine.getNarvaIroScenarioState()).toMatchObject({ ventilationStage: "CRITICAL", spo2: 82 });
+    expect(engine.getNarvaIroScenarioState()).toMatchObject({ ventilationStage: "CRITICAL", spo2: 80 });
     expect(engine.getMechanicalVentilationState("PT-IRO-001")[0]).toMatchObject({ lifecycle: "RUNNING" });
-    expect(engine.getRuntimeState().targetVitals.spo2).toBe(82);
+    expect(engine.getRuntimeState().targetVitals.spo2).toBe(80);
   });
 });
