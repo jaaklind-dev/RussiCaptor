@@ -31,6 +31,7 @@ export type CheckpointAuthorityDiagnosticCode =
   | "STALE_WRITER"
   | "TAKEOVER_DENIED"
   | "TAKEOVER_FAILED"
+  | "BACKEND_ERROR"
   | "REMOTE_SYNC_CONFLICT";
 
 export type CheckpointResolution<TPayload = unknown> = Readonly<

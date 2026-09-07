@@ -13,7 +13,7 @@ import {
   RuntimeCheckpointDeltaBuildCancelledError,
   type RuntimeCheckpointDelta,
 } from "@/services/runtime/persistence/RuntimeCheckpointDeltaService";
-import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { startRuntimeWorkTrace, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 
 export type RuntimeCheckpointPublicationControl = Readonly<{
@@ -84,6 +84,16 @@ export async function loadCheckpointFreshness(
 function code(message: string): string {
   return ["STALE_WRITER", "CHECKPOINT_REVISION_CONFLICT", "WRITER_AUTHORITY_HELD", "TAKEOVER_DENIED"]
     .find(item => message.includes(item)) ?? "AUTHORITY_UNAVAILABLE";
+}
+
+function terminalPublicationDiagnostic(error: Readonly<{ code?: string; message: string }>): string {
+  const known = ["STALE_WRITER", "CHECKPOINT_REVISION_CONFLICT", "TERMINAL_CHECKPOINT_INVALID"]
+    .find(item => error.message.includes(item));
+  if (known) return known;
+  if (error.code === "PGRST301" || /\b(jwt|not authenticated|authentication required)\b/i.test(error.message)) {
+    return "AUTHORITY_UNAVAILABLE";
+  }
+  return "BACKEND_ERROR";
 }
 
 export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRepository {
@@ -177,9 +187,10 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
     recordSupabaseTraffic({ operation: "RPC", endpoint: "finalize_runtime_completion", data,
       requestBytes: isSupabaseTrafficMetricsEnabled() ? estimateSupabasePayloadBytes(checkpoint) : 0 });
     if (error) {
-      const diagnostic = error.message.includes("STALE_WRITER") ? "STALE_WRITER"
-        : error.message.includes("CHECKPOINT_REVISION_CONFLICT") ? "CHECKPOINT_REVISION_CONFLICT"
-          : error.message.includes("TERMINAL_CHECKPOINT_INVALID") ? "TERMINAL_CHECKPOINT_INVALID" : "AUTHORITY_UNAVAILABLE";
+      const diagnostic = terminalPublicationDiagnostic(error);
+      traceRuntimeLeaseLifecycle("TERMINAL_PUBLICATION_RPC_FAILED", {
+        detail: { databaseCode: error.code ?? "UNAVAILABLE", diagnostic },
+      });
       return { status: diagnostic === "STALE_WRITER" ? "STALE_CHECKPOINT_WRITER"
         : diagnostic === "CHECKPOINT_REVISION_CONFLICT" ? "REVISION_CONFLICT" : "AUTHORITY_UNAVAILABLE", code: diagnostic as never };
     }

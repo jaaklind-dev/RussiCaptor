@@ -34,4 +34,22 @@ describe("WP-NARVA-06 terminal checkpoint repository", () => {
       status: "AUTHORITY_UNAVAILABLE", code: "TERMINAL_CHECKPOINT_INVALID",
     });
   });
+
+  test("does not misclassify an unknown database failure as missing authentication", async () => {
+    const repository = new SupabaseRuntimeCheckpointRepository({ rpc: async () => ({ data: null,
+      error: { code: "XX000", message: "database execution failed" } }) } as never);
+    const checkpoint = { exerciseId: "EX-LARGE" } as RuntimeCheckpointEnvelope<SharedExerciseState>;
+    await expect(repository.finalizeCompletion("COMPLETE-1", lease, 74, checkpoint)).resolves.toMatchObject({
+      status: "AUTHORITY_UNAVAILABLE", code: "BACKEND_ERROR",
+    });
+  });
+
+  test("retains explicit authentication failure classification", async () => {
+    const repository = new SupabaseRuntimeCheckpointRepository({ rpc: async () => ({ data: null,
+      error: { code: "PGRST301", message: "JWT expired" } }) } as never);
+    const checkpoint = { exerciseId: "EX-LARGE" } as RuntimeCheckpointEnvelope<SharedExerciseState>;
+    await expect(repository.finalizeCompletion("COMPLETE-1", lease, 74, checkpoint)).resolves.toMatchObject({
+      status: "AUTHORITY_UNAVAILABLE", code: "AUTHORITY_UNAVAILABLE",
+    });
+  });
 });
