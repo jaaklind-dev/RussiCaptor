@@ -33,7 +33,7 @@ const traumaDefinition = definition("RUSSICAPTOR_NARVA_TRAUMA", "Narva kahe pats
   "Kaks samaaegset P1 traumapatsienti, üks reanimobiil ja kaks kõrgema etapi ravisuunda.");
 
 export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
-  packageId: "russicaptor.narva-trauma", packageVersion: "1.0.0", definition: traumaDefinition,
+  packageId: "russicaptor.narva-trauma", packageVersion: "1.0.1", definition: traumaDefinition,
   patientDatasetId: NARVA_TRAUMA_DATASET_ID,
   enabledPatientProcesses: traumaDefinition.enabledPatientProcesses,
   enabledAnalyticsProviders: traumaDefinition.enabledAnalyticsProviders,
@@ -59,7 +59,7 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
     ]) }),
   metadata: { name: "Narva traumaõppus", description: "Narva kahe P1 traumapatsiendi versioneeritud konfiguratsioonipakett.",
     author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "1.0.0", exerciseType: "TRAUMA",
-    tags: ["narva", "trauma", "two-patient", "transport", "configuration-assumption-pending-final-local-count"] },
+    tags: ["narva", "trauma", "two-patient", "transport", "blood-inventory-finalized"] },
 });
 
 const iroDefinition = definition("RUSSICAPTOR_NARVA_IRO_EVACUATION", "Narva IRO evakuatsiooniõppus",

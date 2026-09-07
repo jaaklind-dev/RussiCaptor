@@ -1,4 +1,7 @@
 import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
+import { activateMassiveTransfusion, bootstrapMassiveTransfusionPatientProcess,
+  reconcileMtpVascularAccess, startBloodProductAdministration,
+  tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
 import { canonicalRuntimePersistenceService, moduleCompositionHash } from
   "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
 import { packagePatientDatasetRegistry } from "../CanonicalPatientDatasets";
@@ -15,8 +18,8 @@ const initial = (patientId: string) => fixture(patientId).initialState as Record
 describe("WP-NARVA-01 trauma package", () => {
   test("registers a valid immutable versioned package", () => {
     expect(exercisePackageValidator.validate(NARVA_TRAUMA_EXERCISE_PACKAGE)).toEqual([]);
-    expect(exercisePackageRegistry.require("russicaptor.narva-trauma", "1.0.0"))
-      .toMatchObject({ packageId: "russicaptor.narva-trauma", packageVersion: "1.0.0",
+    expect(exercisePackageRegistry.require("russicaptor.narva-trauma", "1.0.1"))
+      .toMatchObject({ packageId: "russicaptor.narva-trauma", packageVersion: "1.0.1",
         patientDatasetId: "patients.narva-trauma.v1" });
     expect(NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash).toMatch(/^[a-f0-9]{64}$/u);
   });
@@ -67,20 +70,20 @@ describe("WP-NARVA-01 trauma package", () => {
   });
 
   test("uses sufficient supported blood products, zero platelets and canonical calcium", () => {
-    expect(NARVA_TRAUMA_MTP_CONFIGURATION.initialInventory).toEqual({ RBC: 6, PLASMA: 6, PLATELETS: 0 });
+    expect(NARVA_TRAUMA_MTP_CONFIGURATION.initialInventory).toEqual({ RBC: { mode: "UNLIMITED" },
+      PLASMA: { mode: "UNLIMITED" }, PLATELETS: 0 });
     expect(NARVA_TRAUMA_MTP_CONFIGURATION.calciumReplacement).toMatchObject({ calciumEnabled: true,
       rbcUnitsPerCalcium: 3, calciumProduct: "Kaltsiumkloriid", calciumDose: "1 g", calciumRoute: "IV" });
   });
 
-  test("provides the supported two-patient resource set and records the unresolved local-count assumption", () => {
+  test("provides the supported two-patient resource set with finalized inventory assumptions", () => {
     for (const patientId of ["PT-PELVIC-001", "PT-CHEST-001"]) {
       const resources = (fixture(patientId).activeResources as any).resources;
       expect(resources.map((item: any) => item.type)).toEqual(expect.arrayContaining([
         "pelvicBinder", "peripheralIV", "centralVenousCatheter", "intraosseousAccess", "infusionPump",
         "endotrachealTube", "directLaryngoscope", "videoLaryngoscope", "ventilator", "chestDrain",
       ]));
-      expect(initial(patientId).configurationAssumptions)
-        .toContain("CONFIGURATION_ASSUMPTION_PENDING_FINAL_LOCAL_COUNT");
+      expect(initial(patientId).configurationAssumptions).toBeUndefined();
     }
   });
 
@@ -113,7 +116,7 @@ describe("WP-NARVA-01 trauma package", () => {
   test.each(["PT-PELVIC-001", "PT-CHEST-001"])("round-trips %s deterministically", patientId => {
     const source = new ClinicalScenarioEngine(); source.reset(structuredClone(fixture(patientId)));
     const identity = { exerciseId: "EX-NARVA-TRAUMA", patientId,
-      packageId: NARVA_TRAUMA_EXERCISE_PACKAGE.packageId, packageVersion: "1.0.0",
+      packageId: NARVA_TRAUMA_EXERCISE_PACKAGE.packageId, packageVersion: "1.0.1",
       packageHash: NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash,
       definitionHash: NARVA_TRAUMA_EXERCISE_PACKAGE.manifest.definitionHash,
       moduleCompositionHash: moduleCompositionHash(NARVA_TRAUMA_EXERCISE_PACKAGE.definition.clinicalModuleComposition?.modules ?? []) };
@@ -121,5 +124,26 @@ describe("WP-NARVA-01 trauma package", () => {
     const restored = new ClinicalScenarioEngine(); canonicalRuntimePersistenceService.rehydrate(restored, artifact, identity);
     expect(restored.getRuntimeState()).toEqual(source.getRuntimeState());
     expect(restored.getPatientProcesses()).toEqual(source.getPatientProcesses());
+  });
+
+  test("keeps Narva RBC and plasma non-constraining while platelets remain unavailable", () => {
+    let process = activateMassiveTransfusion(bootstrapMassiveTransfusionPatientProcess("PT-PELVIC-001", {
+      configuration: NARVA_TRAUMA_MTP_CONFIGURATION }), "ACT");
+    process = reconcileMtpVascularAccess(process, [{ interventionInstanceId: "PIV-1", type: "PERIPHERAL_IV",
+      resourceIds: ["PIV"], establishedAt: 0 }]);
+    expect(process.clinicalState.administrations).toEqual([]);
+    for (const product of ["RBC", "PLASMA"] as const) {
+      for (let index = 0; index < 8; index += 1) {
+        process = startBloodProductAdministration(process, `${product}-${index}`, product, 1);
+        process = tickMassiveTransfusionPatientProcess(process, 720);
+      }
+    }
+    expect(process.clinicalState.inventory).toEqual({ RBC: { mode: "UNLIMITED" },
+      PLASMA: { mode: "UNLIMITED" }, PLATELETS: 0 });
+    expect(process.clinicalState.administeredUnits).toMatchObject({ RBC: 8, PLASMA: 8, PLATELETS: 0 });
+    expect(() => startBloodProductAdministration(process, "PLATELETS", "PLATELETS", 1))
+      .toThrow("BLOOD_PRODUCT_UNAVAILABLE");
+    expect(NARVA_TRAUMA_TREATMENT_PALETTE).toContain("FIBRINOGEN_CONCENTRATE");
+    expect(NARVA_TRAUMA_MTP_CONFIGURATION.calciumReplacement?.calciumEnabled).toBe(true);
   });
 });

@@ -4,10 +4,11 @@ import { useState, useSyncExternalStore } from "react";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots } from "@/services/RuntimeSnapshotService";
 import { createMtpCommandId, handleMtpCommand, type MtpAction } from "@/services/runtime/instructor/MassiveTransfusionCommandService";
-import type { BloodProductDeliveryMode, VascularAccessLineId } from "@/models/MassiveTransfusion";
+import type { BloodProductDeliveryMode, BloodProductInventory, VascularAccessLineId } from "@/models/MassiveTransfusion";
 
 type MtpProjection = Readonly<{
   activated?: boolean;
+  inventory?: Readonly<Record<"RBC" | "PLASMA" | "PLATELETS", BloodProductInventory>>;
   transfusionCalcium?: Readonly<{
     completedRbcUnitsTotal?: number;
     completedRbcUnitsSinceLastCalcium?: number;
@@ -39,6 +40,9 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
   const [lineModes, setLineModes] = useState<Partial<Record<VascularAccessLineId, BloodProductDeliveryMode>>>({});
   if (!process) return null;
 
+  const inventoryLabel = (value: BloodProductInventory | undefined) => typeof value === "number"
+    ? `${value}` : value?.mode === "UNLIMITED" ? "Piiramatu" : "Teadmata";
+
   const submit = (action: MtpAction) => {
     if (submitting || readOnly) return;
     const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
@@ -68,6 +72,7 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
 
   return <View style={styles.card} testID="cm-mtp-controls">
     <Text style={styles.title}>Massiivse transfusiooni protokoll</Text>
+    {state?.inventory && <Text style={styles.status}>Verekomponendid: erütrotsüüdid {inventoryLabel(state.inventory.RBC)} · plasma {inventoryLabel(state.inventory.PLASMA)} · trombotsüüdid {inventoryLabel(state.inventory.PLATELETS)}</Text>}
     <Text style={styles.status}>Lõpetatud erütrotsüüdiühikuid: {calcium?.completedRbcUnitsTotal ?? 0}</Text>
     {state?.vascularAccessLines && <View style={styles.accessCard}>
       <Text style={styles.status}>Veeniteed: {state.vascularAccessCount ?? 0}/3</Text>

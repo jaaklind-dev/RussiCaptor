@@ -2,6 +2,11 @@ import type { ProcessOutput } from "@/models/RuntimeAggregation";
 import type { VascularAccessType } from "@/models/CirculationState";
 
 export type BloodProductType = "RBC" | "PLASMA" | "PLATELETS";
+export type UnlimitedBloodProductInventory = Readonly<{ mode: "UNLIMITED" }>;
+export type BloodProductInventory = number | UnlimitedBloodProductInventory;
+export const UNLIMITED_BLOOD_PRODUCT_INVENTORY: UnlimitedBloodProductInventory = Object.freeze({ mode: "UNLIMITED" });
+export const isUnlimitedBloodProductInventory = (value: BloodProductInventory): value is UnlimitedBloodProductInventory =>
+  typeof value === "object" && value !== null && value.mode === "UNLIMITED" && Object.keys(value).length === 1;
 export type BloodProductDeliveryMode = "GRAVITY" | "PRESSURE_BAG" | "RAPID_INFUSER";
 export type VascularAccessLineId = "IV-1" | "IV-2" | "IV-3";
 export type BloodProductDefinition = Readonly<{
@@ -10,10 +15,10 @@ export type BloodProductDefinition = Readonly<{
   coagulationContributionPerUnit: number;
   administrationRateMlMin: number;
 }>;
-export type MassiveTransfusionConfiguration = Readonly<{
+export type MassiveTransfusionConfiguration<TInventory extends BloodProductInventory = BloodProductInventory> = Readonly<{
   version: string;
   products: Readonly<Record<BloodProductType, BloodProductDefinition>>;
-  initialInventory: Readonly<Record<BloodProductType, number>>;
+  initialInventory: Readonly<Record<BloodProductType, TInventory>>;
   vitalResponsePer1000Ml: Readonly<{ heartRateDelta: number; systolicBpDelta: number; diastolicBpDelta: number; crtDelta: number }>;
   calciumReplacement?: Readonly<{
     calciumEnabled: boolean;
@@ -63,7 +68,7 @@ export type MassiveTransfusionPatientProcessRuntime = {
   clinicalState: {
     activated: boolean;
     activationId?: string;
-    inventory: Record<BloodProductType, number>;
+    inventory: Record<BloodProductType, BloodProductInventory>;
     administeredUnits: Record<BloodProductType, number>;
     transfusedVolumeMl: number;
     oxygenCarryingCapacity: number;
@@ -79,7 +84,7 @@ export type MassiveTransfusionPatientProcessRuntime = {
   outputs: ProcessOutput;
 };
 
-export const MTP_REFERENCE_CONFIGURATION: MassiveTransfusionConfiguration = Object.freeze({
+export const MTP_REFERENCE_CONFIGURATION: MassiveTransfusionConfiguration<number> = Object.freeze({
   version: "1.0.0",
   products: Object.freeze({
     RBC: Object.freeze({ volumeMlPerUnit: 300, oxygenCapacityPerUnit: 1, coagulationContributionPerUnit: 0, administrationRateMlMin: 100 }),

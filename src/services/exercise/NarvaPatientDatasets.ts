@@ -1,6 +1,6 @@
 import type { GoldenFixture } from "@/models/GoldenTest";
 import { MTP_REFERENCE_CONFIGURATION, WP47C_DEFAULT_DELIVERY_CONFIGURATION,
-  type MassiveTransfusionConfiguration } from "@/models/MassiveTransfusion";
+  UNLIMITED_BLOOD_PRODUCT_INVENTORY, type MassiveTransfusionConfiguration } from "@/models/MassiveTransfusion";
 import type { PackagePatientDataset } from "@/models/exercise/PackagePatientDataset";
 import { PELVIC_INJURY_REFERENCE_PATIENT } from "@/modules/pelvicInjury/PelvicInjuryReference";
 import { PLEURAL_INJURY_REFERENCE } from "@/modules/pleuralInjury/PleuralInjuryReference";
@@ -36,7 +36,8 @@ const traumaResources = (patientSuffix: string) => Object.freeze({ resources: Ob
 
 export const NARVA_TRAUMA_MTP_CONFIGURATION: MassiveTransfusionConfiguration = Object.freeze({
   ...structuredClone(MTP_REFERENCE_CONFIGURATION),
-  initialInventory: Object.freeze({ RBC: 6, PLASMA: 6, PLATELETS: 0 }),
+  initialInventory: Object.freeze({ RBC: UNLIMITED_BLOOD_PRODUCT_INVENTORY,
+    PLASMA: UNLIMITED_BLOOD_PRODUCT_INVENTORY, PLATELETS: 0 }),
   bloodProductDelivery: WP47C_DEFAULT_DELIVERY_CONFIGURATION,
   vitalResponsePer1000Ml: Object.freeze({ heartRateDelta: -35, systolicBpDelta: 35,
     diastolicBpDelta: 20, crtDelta: -2 }),
@@ -62,7 +63,6 @@ export const NARVA_PELVIC_FIXTURE: GoldenFixture = Object.freeze({
     ventilationReserve: 85, reserveLossPerMin: 0, co2Burden: 30, co2GainPerMin: 0,
     hemorrhageSources: Object.freeze([Object.freeze(pelvicSource)]),
     massiveTransfusion: Object.freeze({ configuration: NARVA_TRAUMA_MTP_CONFIGURATION }),
-    configurationAssumptions: Object.freeze(["CONFIGURATION_ASSUMPTION_PENDING_FINAL_LOCAL_COUNT"]),
   }),
 });
 
@@ -100,7 +100,6 @@ export const NARVA_CHEST_FIXTURE: GoldenFixture = Object.freeze({
     pleuralInjury: Object.freeze(chestPleural), respiratoryFailure: chestRespiratory,
     hypoxia: chestHypoxia, hemorrhageSources: Object.freeze([Object.freeze(chestHemorrhage)]),
     massiveTransfusion: Object.freeze({ configuration: NARVA_TRAUMA_MTP_CONFIGURATION }),
-    configurationAssumptions: Object.freeze(["CONFIGURATION_ASSUMPTION_PENDING_FINAL_LOCAL_COUNT"]),
   }),
 });
 

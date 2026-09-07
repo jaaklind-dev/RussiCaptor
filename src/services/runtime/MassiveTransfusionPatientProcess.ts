@@ -1,4 +1,4 @@
-import { MTP_REFERENCE_CONFIGURATION, type BloodProductDeliveryMode, type BloodProductType, type MassiveTransfusionConfiguration, type MassiveTransfusionEvidence, type MassiveTransfusionPatientProcessRuntime, type TransfusionCalciumSupportState, type VascularAccessLineId } from "@/models/MassiveTransfusion";
+import { MTP_REFERENCE_CONFIGURATION, isUnlimitedBloodProductInventory, type BloodProductDeliveryMode, type BloodProductInventory, type BloodProductType, type MassiveTransfusionConfiguration, type MassiveTransfusionEvidence, type MassiveTransfusionPatientProcessRuntime, type TransfusionCalciumSupportState, type VascularAccessLineId } from "@/models/MassiveTransfusion";
 import type { ActiveVascularAccess } from "@/models/CirculationState";
 import type { ProcessOutput } from "@/models/RuntimeAggregation";
 
@@ -56,6 +56,11 @@ function normalizePatientTransfusionState(previous: MassiveTransfusionPatientPro
 export function bootstrapMassiveTransfusionPatientProcess(encounterId: string, initial: Readonly<Record<string, unknown>>): MassiveTransfusionPatientProcessRuntime {
   const configuration = structuredClone(initial.configuration) as MassiveTransfusionConfiguration;
   if (!configuration?.products || !configuration.initialInventory) throw new Error("MTP_CONFIGURATION_INVALID");
+  const inventoryValid = (value: BloodProductInventory): boolean => isUnlimitedBloodProductInventory(value) ||
+    (typeof value === "number" && Number.isInteger(value) && value >= 0);
+  if (!(Object.keys(configuration.initialInventory).length === 3 &&
+    (["RBC", "PLASMA", "PLATELETS"] as BloodProductType[]).every(product =>
+      inventoryValid(configuration.initialInventory[product])))) throw new Error("MTP_INVENTORY_CONFIGURATION_INVALID");
   const calcium = calciumConfiguration(configuration);
   const delivery = configuration.bloodProductDelivery;
   if (calcium && (!Number.isInteger(calcium.rbcUnitsPerCalcium) || calcium.rbcUnitsPerCalcium <= 0 ||
@@ -177,7 +182,8 @@ export function startBloodProductAdministration(previous: MassiveTransfusionPati
   previous = normalizePatientTransfusionState(previous);
   if (previous.clinicalState.processedCommandIds.includes(commandId)) return structuredClone(previous);
   if (!Number.isInteger(units) || units <= 0) throw new Error("INVALID_BLOOD_PRODUCT_QUANTITY");
-  if (previous.clinicalState.inventory[product] < units) throw new Error("BLOOD_PRODUCT_UNAVAILABLE");
+  const inventory = previous.clinicalState.inventory[product];
+  if (!isUnlimitedBloodProductInventory(inventory) && inventory < units) throw new Error("BLOOD_PRODUCT_UNAVAILABLE");
   const delivery = previous.configuration.bloodProductDelivery;
   if (delivery && units !== 1) throw new Error("ONE_BAG_PER_ADMINISTRATION_REQUIRED");
   const durationSec = durationForMode(previous.configuration, deliveryMode);
@@ -192,7 +198,8 @@ export function startBloodProductAdministration(previous: MassiveTransfusionPati
     assignedLineId = line.lineId;
   }
   const base = structuredClone(previous); const definition = base.configuration.products[product];
-  base.clinicalState.inventory[product] -= units; base.clinicalState.processedCommandIds.push(commandId); base.clinicalState.processedCommandIds.sort();
+  if (!isUnlimitedBloodProductInventory(inventory)) base.clinicalState.inventory[product] = inventory - units;
+  base.clinicalState.processedCommandIds.push(commandId); base.clinicalState.processedCommandIds.sort();
   base.clinicalState.administrations.push({ administrationId: commandId, product, units, totalVolumeMl: definition.volumeMlPerUnit * units,
     deliveredVolumeMl: 0, deliveredUnits: 0, state: "RUNNING", ...(delivery ? { deliveryMode, vascularAccessLineId: assignedLineId,
       startedAtSec: base.elapsedTime, expectedCompletionAtSec: base.elapsedTime + durationSec!, durationSec } : {}) });
