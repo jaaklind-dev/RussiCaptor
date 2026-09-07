@@ -45,6 +45,17 @@ describe("WP-NARVA-02 deterministic IRO fault and recovery process", () => {
       pulsePresent: true, heartRate: 105, systolicBp: 85, diastolicBp: 50 } });
   });
 
+  test("stabilizes deterministically after two post-ROSC simulation minutes", () => {
+    const value = runtime(); value.triggerVasopressorFault(0); value.advanceTo(181);
+    value.setCprQuality(true, 181); value.correctVasopressor(181);
+    expect(value.attemptRosc(181)).toMatchObject({ status: "APPLIED", projection: {
+      heartRate: 105, systolicBp: 85, diastolicBp: 50, spo2: 94, etco2: 4.2,
+      pulsePresent: true, goNoGoRequired: true,
+    } });
+    expect(value.advanceTo(301)).toMatchObject({ heartRate: 100, systolicBp: 100,
+      diastolicBp: 60, spo2: 96, etco2: 4.5, pulsePresent: true, goNoGoRequired: true });
+  });
+
   test("checkpoint round-trip preserves active fault, frozen time, correction and arrest evidence", () => {
     const source = runtime(); source.triggerVasopressorFault(0); source.triggerVentilationFault("HIGH_PRESSURE_KINK", 10);
     source.setHold(true, 70); const snapshot = source.snapshot(); const restored = runtime(); restored.restore(snapshot);

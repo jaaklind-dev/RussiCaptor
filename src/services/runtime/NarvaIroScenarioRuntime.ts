@@ -69,7 +69,8 @@ export class NarvaIroScenarioRuntime {
   attemptRosc(simulationTimeSec: number): Readonly<{ status: "APPLIED" | "REJECTED"; projection: NarvaIroScenarioProjection }> {
     const projection = this.advanceTo(simulationTimeSec);
     if (!projection.roscEligible) return frozen({ status: "REJECTED", projection });
-    this.state = frozen({ ...this.require(), arrest: false, rosc: true, goNoGoRequired: true,
+    this.state = frozen({ ...this.require(), arrest: false, rosc: true,
+      roscAtSimulationTimeSec: simulationTimeSec, goNoGoRequired: true,
       lastUpdatedSimulationTimeSec: simulationTimeSec });
     return frozen({ status: "APPLIED", projection: this.projectionAt(simulationTimeSec) });
   }
@@ -91,7 +92,8 @@ export class NarvaIroScenarioRuntime {
     const arrest = state.arrest || vasopressorStage === "PEA" || ventilationStage === "PEA" || combined;
     const causesCorrected = (!state.vasopressorFault || corrected(state.vasopressorFault)) &&
       (!state.ventilationFault || corrected(state.ventilationFault));
-    const vital = this.vitals(vasopressorStage, ventilationStage, arrest, state.rosc);
+    const vital = this.vitals(vasopressorStage, ventilationStage, arrest, state.rosc,
+      simulationTimeSec - (state.roscAtSimulationTimeSec ?? state.lastUpdatedSimulationTimeSec));
     return frozen({ ...state, arrest, vasopressorStage: arrest && !state.rosc ? "PEA" : vasopressorStage,
       ventilationStage: arrest && !state.rosc ? "PEA" : ventilationStage, ...vital,
       causesCorrected, roscEligible: arrest && state.cprQuality && causesCorrected });
@@ -159,9 +161,12 @@ export class NarvaIroScenarioRuntime {
     return now - secondStart > 90;
   }
 
-  private vitals(vaso: NarvaIroVasopressorStage, vent: NarvaIroVentilationStage, arrest: boolean, rosc: boolean):
+  private vitals(vaso: NarvaIroVasopressorStage, vent: NarvaIroVentilationStage, arrest: boolean, rosc: boolean,
+    roscElapsedSec: number):
   Readonly<{ heartRate: number; systolicBp?: number; diastolicBp?: number; spo2: number; etco2?: number; pulsePresent: boolean }> {
-    if (rosc) return { heartRate: 105, systolicBp: 85, diastolicBp: 50, spo2: 94, etco2: 4.2, pulsePresent: true };
+    if (rosc) return roscElapsedSec >= 120
+      ? { heartRate: 100, systolicBp: 100, diastolicBp: 60, spo2: 96, etco2: 4.5, pulsePresent: true }
+      : { heartRate: 105, systolicBp: 85, diastolicBp: 50, spo2: 94, etco2: 4.2, pulsePresent: true };
     if (arrest) return { heartRate: 40, spo2: vent === "PEA" ? 75 : 90, pulsePresent: false };
     const vasoValues = vaso === "S3" ? [130, 55, 30, 3] : vaso === "S2" ? [120, 75, 40, 4] :
       vaso === "S1" ? [105, 90, 50, 4.5] : vaso === "S3R" ? [115, 78, 45, 3.8] :

@@ -21,6 +21,7 @@ export type NarvaIroScenarioState = Readonly<{
   arrest: boolean;
   cprQuality: boolean;
   rosc: boolean;
+  roscAtSimulationTimeSec?: number;
   goNoGoRequired: boolean;
   lastUpdatedSimulationTimeSec: number;
 }>;
