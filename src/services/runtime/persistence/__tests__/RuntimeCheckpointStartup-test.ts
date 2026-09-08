@@ -566,11 +566,13 @@ describe("WP-44B checkpoint startup coordination", () => {
     const authority = startup.indexOf('setRuntimeWriterAuthorityState("WRITER")', acquisition);
     const writer = startup.indexOf('setStatus({state:"WRITER"', authority);
     const restore = startup.indexOf("acceptAuthoritativeRuntimeCheckpointAsync(resolved.checkpoint, true", acquisition);
+    const owner = startup.indexOf("establishRuntimeOwner()", restore);
     expect(acquisition).toBeGreaterThan(-1);
     expect(lease).toBeGreaterThan(acquisition);
     expect(authority).toBeGreaterThan(lease);
     expect(writer).toBeGreaterThan(authority);
     expect(restore).toBeGreaterThan(writer);
+    expect(owner).toBeGreaterThan(restore);
     expect(source.match(/startRuntimeWriterRenewalLoop\(/g)).toHaveLength(2);
   });
 
@@ -581,10 +583,16 @@ describe("WP-44B checkpoint startup coordination", () => {
     const acquiring = takeover.indexOf('setStatus({state:"ACQUIRING"');
     const writer = takeover.indexOf('setStatus({state:"WRITER"');
     const restore = takeover.indexOf("acceptAuthoritativeRuntimeCheckpointAsync(resolved.checkpoint, true");
+    const owner = takeover.indexOf("establishExerciseRuntimeOwnerForCurrentWriter", restore);
+    const resumeCompletion = takeover.indexOf("resumePendingCompletionForCurrentWriter", owner);
+    const routinePublication = takeover.indexOf("wakeCheckpointPublicationForCurrentWriter", resumeCompletion);
     expect(lease).toBeGreaterThan(-1);
     expect(acquiring).toBeGreaterThan(lease);
     expect(writer).toBeGreaterThan(acquiring);
     expect(restore).toBeGreaterThan(writer);
+    expect(owner).toBeGreaterThan(restore);
+    expect(resumeCompletion).toBeGreaterThan(owner);
+    expect(routinePublication).toBeGreaterThan(resumeCompletion);
   });
 
   test("takeover second freshness check is metadata-only", () => {
@@ -603,7 +611,28 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(recovery).toContain("acquireRuntimeWriterTerminal(repository,exerciseId,writerId,expectedRevision");
     expect(recovery).toContain("adopt: () => {}");
     expect(recovery).toContain("acceptAuthoritativeRuntimeCheckpointAsync(recovered.checkpoint,true");
+    expect(recovery.indexOf("establishExerciseRuntimeOwnerForCurrentWriter")).toBeGreaterThan(
+      recovery.indexOf("acceptAuthoritativeRuntimeCheckpointAsync(recovered.checkpoint,true"),
+    );
+    expect(recovery.indexOf("resumePendingCompletionForCurrentWriter")).toBeGreaterThan(
+      recovery.indexOf("establishExerciseRuntimeOwnerForCurrentWriter"),
+    );
     expect(recovery).toContain('loadRuntimeCheckpointWithCache(repository,exerciseId,checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId),"recovery")');
+  });
+
+  test("pending completion recovery owns Runtime lifecycle independently of the dashboard", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const dashboard = fs.readFileSync(path.join(process.cwd(), "src/app/excon/dashboard.tsx"), "utf8");
+    const ownerRegistration = source.indexOf("const establishRuntimeOwner");
+    const completionProcessing = source.indexOf("const processCompletionRequest");
+    const initialCompletionLoad = source.lastIndexOf("completionGateway.load(exerciseId).then(processCompletionRequest)");
+    expect(ownerRegistration).toBeGreaterThan(-1);
+    expect(completionProcessing).toBeGreaterThan(ownerRegistration);
+    expect(initialCompletionLoad).toBeGreaterThan(completionProcessing);
+    expect(source).toContain("!runtimeOwnerGeneration.isReady()");
+    expect(source).toContain('releaseRuntimeOwner("GENERATION_CLEANUP")');
+    expect(dashboard).toContain("initializeAuthoritativeExerciseRuntime");
+    expect(source).not.toContain("dashboard");
   });
 
   test("remote current-exercise discovery resolves before checkpoint authority startup", () => {

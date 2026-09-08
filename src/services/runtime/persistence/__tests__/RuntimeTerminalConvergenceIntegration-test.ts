@@ -33,6 +33,22 @@ describe("WP-NARVA-06 Runtime terminal convergence integration", () => {
     expect(handler).not.toContain("audit.push({ commandId: command.commandId, exerciseId: command.exerciseId, commandType: command.commandType, replay");
   });
 
+  test("writer recovery establishes its owner before resuming a pending completion", () => {
+    const sync = fs.readFileSync(path.resolve(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const takeover = sync.slice(sync.indexOf("export async function takeOverRuntimeWriter"), sync.indexOf("/** Explicit user recovery"));
+    const recovery = sync.slice(sync.indexOf("async function reacquireRuntimeFromRemoteCheckpointForIntent"), sync.indexOf("function setAndReturn"));
+    for (const pathSource of [takeover, recovery]) {
+      const restore = pathSource.indexOf("acceptAuthoritativeRuntimeCheckpointAsync");
+      const owner = pathSource.indexOf("establishExerciseRuntimeOwnerForCurrentWriter", restore);
+      const completion = pathSource.indexOf("resumePendingCompletionForCurrentWriter", owner);
+      const routine = pathSource.indexOf("wakeCheckpointPublicationForCurrentWriter", completion);
+      expect(restore).toBeGreaterThan(-1);
+      expect(owner).toBeGreaterThan(restore);
+      expect(completion).toBeGreaterThan(owner);
+      expect(routine).toBeGreaterThan(completion);
+    }
+  });
+
   test("terminal publication uses the atomic finalizer and stops both heartbeat transports", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     expect(source).toContain("repository.finalizeCompletion!");

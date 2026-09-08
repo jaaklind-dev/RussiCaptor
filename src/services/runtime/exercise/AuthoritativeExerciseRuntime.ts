@@ -33,9 +33,11 @@ export class AuthoritativeExerciseRuntime implements ExerciseRuntimeOwner {
   }
 }
 
-let installedExerciseId: string | undefined;
 export function initializeAuthoritativeExerciseRuntime(exerciseId: string): void {
-  if (installedExerciseId === exerciseId && getExerciseRuntimeOwner()?.exerciseId === exerciseId) return;
-  registerExerciseRuntimeOwner(new AuthoritativeExerciseRuntime(exerciseId)); installedExerciseId = exerciseId;
+  // Runtime writer startup owns active/recovery registration. A dashboard that
+  // mounts later may adopt that same owner, but must never replace it merely
+  // because its presentation-local installation marker was not set yet.
+  if (getExerciseRuntimeOwner()?.exerciseId === exerciseId) return;
+  registerExerciseRuntimeOwner(new AuthoritativeExerciseRuntime(exerciseId));
   if (getCanonicalExerciseSnapshot().lifecycleState === "RUNNING") startClockRunner();
 }

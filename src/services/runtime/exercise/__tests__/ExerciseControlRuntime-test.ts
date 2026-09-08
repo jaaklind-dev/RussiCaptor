@@ -5,9 +5,10 @@ import { stopClockRunner } from "@/services/ClockRunner";
 import { AuthoritativeExerciseRuntime } from "../AuthoritativeExerciseRuntime";
 import { clearExerciseClockTargets } from "../ExerciseClockTargetRegistry";
 import { getExerciseControlAudit, getExerciseControlReplayHash, handleExerciseControlCommand, resetExerciseControlCommandHandler, restoreExerciseControlAudit } from "../ExerciseControlCommandHandler";
-import { clearExerciseRuntimeOwner, registerExerciseRuntimeOwner } from "../ExerciseRuntimeOwnerRegistry";
+import { clearExerciseRuntimeOwner, getExerciseRuntimeOwner, registerExerciseRuntimeOwner } from "../ExerciseRuntimeOwnerRegistry";
 import { setRuntimeWriterAuthorityState } from "../../persistence/RuntimeWriterAuthorityState";
 import { installRuntimeCompletionIntentListener } from "../../persistence/RuntimeCheckpointLifecycleIntent";
+import { RuntimeExerciseOwnerGeneration } from "../RuntimeExerciseOwnerGeneration";
 
 let sequence = 0;
 const command = (commandType: ExerciseControlCommandType, extras: Partial<ExerciseControlCommand> = {}): ExerciseControlCommand => ({
@@ -73,6 +74,10 @@ describe("WP-22 authoritative exercise controls", () => {
     resetExerciseControlCommandHandler();
     replaceCanonicalExerciseSnapshot(running);
     restoreExerciseControlAudit(acceptedAudit);
+    clearExerciseRuntimeOwner();
+    const recoveredOwner = new RuntimeExerciseOwnerGeneration("demo", () => true);
+    expect(getExerciseRuntimeOwner()).toBeUndefined();
+    expect(recoveredOwner.establish()).toBe(true);
     const intents: boolean[] = [];
     const stopIntent = installRuntimeCompletionIntentListener(active => intents.push(active));
     try {
@@ -87,6 +92,7 @@ describe("WP-22 authoritative exercise controls", () => {
       expect(intents).toEqual([true]);
     } finally {
       stopIntent();
+      recoveredOwner.release();
     }
   });
 
