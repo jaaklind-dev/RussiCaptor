@@ -5,6 +5,10 @@ const migration = fs.readFileSync(path.resolve(process.cwd(),
   "supabase/migrations/20260907153105_narva_multicm_terminal_convergence.sql"), "utf8");
 const terminalSqlFix = fs.readFileSync(path.resolve(process.cwd(),
   "supabase/migrations/20260908041458_qualify_terminal_completion_sql.sql"), "utf8");
+const patientCommandSqlFix = fs.readFileSync(path.resolve(process.cwd(),
+  "supabase/migrations/20260908091625_qualify_runtime_patient_command_sql.sql"), "utf8");
+const patientCommandSqlRegression = fs.readFileSync(path.resolve(process.cwd(),
+  "supabase/tests/narva_runtime_patient_command_test.sql"), "utf8");
 
 describe("WP-NARVA-06 backend authority migration", () => {
   test("adds a durable patient command inbox without adding checkpoint writers", () => {
@@ -67,5 +71,17 @@ describe("WP-NARVA-06 backend authority migration", () => {
     expect(terminalSqlFix).toMatch(/select es\.revision into v_projection_revision/);
     expect(terminalSqlFix).not.toMatch(/select checkpoint_revision into v_current/);
     expect(terminalSqlFix).not.toMatch(/select provenance_hash from public\.runtime_checkpoints/);
+  });
+
+  test("forward-only patient-command fix qualifies TABLE-return column collisions", () => {
+    expect(patientCommandSqlFix).toMatch(/rcr\.status in \('PENDING','COMPLETED'\)/);
+    expect(patientCommandSqlFix).toMatch(/select swps\.owner_user_id/);
+    expect(patientCommandSqlFix).toMatch(/from public\.runtime_patient_commands as rpc/);
+    expect(patientCommandSqlFix).not.toMatch(/where exercise_id=p_exercise_id and status in/);
+    expect(patientCommandSqlRegression).toMatch(/v_result\.status<>'APPLIED'/);
+    expect(patientCommandSqlRegression).toMatch(/v_result\.status<>'IDEMPOTENT'/);
+    expect(patientCommandSqlRegression).toMatch(/v_result\.status<>'STALE_VERSION'/);
+    expect(patientCommandSqlRegression).toMatch(/v_result\.status<>'NOT_OWNER'/);
+    expect(patientCommandSqlRegression).toContain("rollback;");
   });
 });
