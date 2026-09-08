@@ -19,6 +19,18 @@ describe("WP-NARVA-06 Runtime terminal convergence integration", () => {
     expect(source).toContain('table:"runtime_completion_requests"');
     expect(source).toContain("drainPatientCommands(request.fenceCommandSequence)");
     expect(source).toContain("materializeRuntimePatientCommand");
+    expect(source).toContain("handleExerciseControlCommand({commandId:request.commandId");
+  });
+
+  test("an accepted pending completion replay rematerializes the terminal lifecycle before publication", () => {
+    const handler = fs.readFileSync(path.resolve(process.cwd(), "src/services/runtime/exercise/ExerciseControlCommandHandler.ts"), "utf8");
+    expect(handler).toContain('entry.outcome === "ACCEPTED"');
+    expect(handler).toContain('entry.eventType === "ExerciseCompleted"');
+    expect(handler).toContain('current.lifecycleState !== "COMPLETED"');
+    expect(handler).toContain('runtimeWritesAllowed()');
+    expect(handler).toContain('COMPLETE_HANDLER_REPLAY_MATERIALIZED');
+    expect(handler).toContain('const resumed: ExerciseControlResult = { ok: true');
+    expect(handler).not.toContain("audit.push({ commandId: command.commandId, exerciseId: command.exerciseId, commandType: command.commandType, replay");
   });
 
   test("terminal publication uses the atomic finalizer and stops both heartbeat transports", () => {

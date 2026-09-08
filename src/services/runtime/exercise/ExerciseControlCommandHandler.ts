@@ -20,7 +20,49 @@ export function handleExerciseControlCommand(command: ExerciseControlCommand): E
   }
   const prior = results.get(command?.commandId);
   if (prior) {
-    if (command.commandType === "COMPLETE_EXERCISE") traceRuntimeLeaseLifecycle("COMPLETE_HANDLER_REPLAY", { detail: { priorOk: prior.ok } });
+    if (command.commandType === "COMPLETE_EXERCISE") {
+      traceRuntimeLeaseLifecycle("COMPLETE_HANDLER_REPLAY", { detail: { priorOk: prior.ok } });
+      const current = getCanonicalExerciseSnapshot();
+      const acceptedCompletion = prior.ok
+        && prior.eventType === "ExerciseCompleted"
+        && audit.some(entry => entry.commandId === command.commandId
+          && entry.exerciseId === command.exerciseId
+          && entry.commandType === "COMPLETE_EXERCISE"
+          && entry.outcome === "ACCEPTED"
+          && entry.eventType === "ExerciseCompleted");
+      // A durable PENDING completion can outlive the writer that accepted the
+      // command. Its authoritative RUNNING checkpoint restores the accepted
+      // audit/idempotency result, but still needs the lifecycle mutation to be
+      // materialized by the replacement writer. Reapply only that already
+      // accepted, checkpoint-authenticated command and do not append audit.
+      if (acceptedCompletion
+        && current.exerciseId === command.exerciseId
+        && current.lifecycleState !== "COMPLETED") {
+        if (!runtimeWritesAllowed()) {
+          return { ok: false, commandId: command.commandId, errorCode: "NO_AUTHORITATIVE_OWNER", message: "Runtime active on another device" };
+        }
+        const owner = getExerciseRuntimeOwner();
+        if (owner?.exerciseId === command.exerciseId
+          && (current.lifecycleState === "RUNNING" || current.lifecycleState === "PAUSED")) {
+          const settleCompletionIntent = beginRuntimeCompletionCheckpointIntent();
+          try {
+            const applied = owner.apply(command);
+            settleCompletionIntent(true);
+            const resumed: ExerciseControlResult = { ok: true, commandId: command.commandId, ...applied };
+            results.set(command.commandId, resumed);
+            traceRuntimeLeaseLifecycle("COMPLETE_HANDLER_REPLAY_MATERIALIZED", {
+              detail: { previousState: current.lifecycleState, resultingState: applied.snapshot.lifecycleState },
+            });
+            return resumed;
+          } catch {
+            settleCompletionIntent(false);
+            traceRuntimeLeaseLifecycle("COMPLETE_RUNTIME_FAILURE", { detail: { replay: true } });
+            return { ok: false, commandId: command.commandId, errorCode: "RUNTIME_FAILURE", message: "Authoritative runtime rejected the recovered completion" };
+          }
+        }
+        return { ok: false, commandId: command.commandId, errorCode: "NO_AUTHORITATIVE_OWNER", message: "Authoritative exercise runtime owner is not available" };
+      }
+    }
     return prior;
   }
   const snapshot = getCanonicalExerciseSnapshot();

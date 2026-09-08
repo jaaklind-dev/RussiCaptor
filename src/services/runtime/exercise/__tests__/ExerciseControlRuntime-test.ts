@@ -7,6 +7,7 @@ import { clearExerciseClockTargets } from "../ExerciseClockTargetRegistry";
 import { getExerciseControlAudit, getExerciseControlReplayHash, handleExerciseControlCommand, resetExerciseControlCommandHandler, restoreExerciseControlAudit } from "../ExerciseControlCommandHandler";
 import { clearExerciseRuntimeOwner, registerExerciseRuntimeOwner } from "../ExerciseRuntimeOwnerRegistry";
 import { setRuntimeWriterAuthorityState } from "../../persistence/RuntimeWriterAuthorityState";
+import { installRuntimeCompletionIntentListener } from "../../persistence/RuntimeCheckpointLifecycleIntent";
 
 let sequence = 0;
 const command = (commandType: ExerciseControlCommandType, extras: Partial<ExerciseControlCommand> = {}): ExerciseControlCommand => ({
@@ -58,6 +59,51 @@ describe("WP-22 authoritative exercise controls", () => {
     resetExerciseControlCommandHandler(); replaceCanonicalExerciseSnapshot(savedSnapshot); restoreExerciseControlAudit(savedAudit);
     expect(handleExerciseControlCommand(start)).toEqual(first);
     expect(getExerciseControlAudit()).toHaveLength(1);
+  });
+
+  it("materializes an accepted pending completion once after writer recovery", () => {
+    setRuntimeWriterAuthorityState("WRITER");
+    const start = command("START_EXERCISE", { commandId: "RECOVERY-START" });
+    expect(handleExerciseControlCommand(start).ok).toBe(true);
+    const running = getCanonicalExerciseSnapshot();
+    const complete = command("COMPLETE_EXERCISE", { commandId: "RECOVERY-COMPLETE" });
+    expect(handleExerciseControlCommand(complete)).toMatchObject({ ok: true, snapshot: { lifecycleState: "COMPLETED" } });
+    const acceptedAudit = getExerciseControlAudit();
+
+    resetExerciseControlCommandHandler();
+    replaceCanonicalExerciseSnapshot(running);
+    restoreExerciseControlAudit(acceptedAudit);
+    const intents: boolean[] = [];
+    const stopIntent = installRuntimeCompletionIntentListener(active => intents.push(active));
+    try {
+      const resumed = handleExerciseControlCommand(complete);
+      expect(resumed).toMatchObject({ ok: true, snapshot: { lifecycleState: "COMPLETED" } });
+      expect(getCanonicalExerciseSnapshot()).toMatchObject({ lifecycleState: "COMPLETED", lastCommandId: "RECOVERY-COMPLETE" });
+      expect(getExerciseControlAudit()).toEqual(acceptedAudit);
+      expect(intents).toEqual([true]);
+
+      expect(handleExerciseControlCommand(complete)).toEqual(resumed);
+      expect(getExerciseControlAudit()).toEqual(acceptedAudit);
+      expect(intents).toEqual([true]);
+    } finally {
+      stopIntent();
+    }
+  });
+
+  it("does not materialize an accepted completion replay without writer authority", () => {
+    setRuntimeWriterAuthorityState("WRITER");
+    expect(handleExerciseControlCommand(command("START_EXERCISE", { commandId: "READER-START" })).ok).toBe(true);
+    const running = getCanonicalExerciseSnapshot();
+    const complete = command("COMPLETE_EXERCISE", { commandId: "READER-RECOVERY-COMPLETE" });
+    expect(handleExerciseControlCommand(complete).ok).toBe(true);
+    const acceptedAudit = getExerciseControlAudit();
+
+    resetExerciseControlCommandHandler();
+    replaceCanonicalExerciseSnapshot(running);
+    restoreExerciseControlAudit(acceptedAudit);
+    setRuntimeWriterAuthorityState("READER");
+    expect(handleExerciseControlCommand(complete)).toMatchObject({ ok: false, errorCode: "NO_AUTHORITATIVE_OWNER" });
+    expect(getCanonicalExerciseSnapshot().lifecycleState).toBe("RUNNING");
   });
 
   it("uses canonical writer authority consistently for Complete authorization", () => {
