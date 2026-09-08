@@ -51,7 +51,7 @@ describe("WP-44B Runtime Resume control", () => {
     );
 
     expect(source).toContain('import CloudSyncStatusCard from "@/components/dashboard/CloudSyncStatusCard"');
-    expect(source).toContain("<CloudSyncStatusCard lifecycleState={exerciseSnapshot.lifecycleState} />");
+    expect(source).toContain("<CloudSyncStatusCard lifecycleState={completionPresentation.lifecycleState} />");
   });
   test("revision conflict exposes explicit remote-checkpoint recovery", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/components/dashboard/CloudSyncStatusCard.tsx"), "utf8");

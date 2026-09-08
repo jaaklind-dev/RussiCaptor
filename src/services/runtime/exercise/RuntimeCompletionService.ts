@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { ExerciseControlCommand, ExerciseControlResult } from "@/models/exercise/ExerciseControlCommand";
+import type { ExerciseLifecycleState } from "@/models/exercise/CanonicalExerciseSnapshot";
 import type { RuntimeCompletionRequest, RuntimeCompletionSubmissionResult } from "@/models/RuntimeCompletion";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { supabase } from "@/services/SupabaseService";
@@ -51,6 +52,19 @@ export function setRuntimeCompletionPhase(exerciseId: string, next: RuntimeCompl
 }
 export function getRuntimeCompletionPhase(): typeof phase { return phase; }
 export function subscribeToRuntimeCompletionPhase(listener: () => void): () => void { listeners.add(listener); return () => listeners.delete(listener); }
+export function getRuntimeCompletionPresentation(exerciseId: string, localLifecycle: ExerciseLifecycleState): Readonly<{
+  awaitingAuthoritativeAck: boolean;
+  lifecycleState: ExerciseLifecycleState;
+  lifecycleLabel: string;
+}> {
+  const awaitingAuthoritativeAck = phase.exerciseId === exerciseId
+    && (phase.phase === "PENDING" || phase.phase === "FINALIZING" || phase.phase === "FAILED");
+  return Object.freeze({
+    awaitingAuthoritativeAck,
+    lifecycleState: awaitingAuthoritativeAck && localLifecycle === "COMPLETED" ? "RUNNING" : localLifecycle,
+    lifecycleLabel: awaitingAuthoritativeAck ? "Lõpetamine" : localLifecycle === "COMPLETED" ? "Lõpetatud" : "",
+  });
+}
 export function terminalProjectionOwnedByCheckpointProtocol(exerciseId: string): boolean {
   return phase.exerciseId === exerciseId && ["PENDING", "FINALIZING", "COMPLETED"].includes(phase.phase);
 }

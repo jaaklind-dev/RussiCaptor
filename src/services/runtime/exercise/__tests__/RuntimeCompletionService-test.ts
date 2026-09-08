@@ -1,13 +1,22 @@
 import type { ExerciseControlCommand } from "@/models/exercise/ExerciseControlCommand";
 import type { RuntimeCompletionGateway } from "../RuntimeCompletionService";
-import { getRuntimeCompletionPhase, setRuntimeCompletionGateway, submitRuntimeCompletion } from "../RuntimeCompletionService";
+import {
+  getRuntimeCompletionPhase,
+  getRuntimeCompletionPresentation,
+  setRuntimeCompletionGateway,
+  setRuntimeCompletionPhase,
+  submitRuntimeCompletion,
+} from "../RuntimeCompletionService";
 
 const command: ExerciseControlCommand = Object.freeze({ commandId: "COMPLETE-1", exerciseId: "demo",
   commandType: "COMPLETE_EXERCISE", issuedBy: "Exercise Controller",
   issuedAtWallClock: "2026-09-07T10:00:00.000Z", expectedVersion: 0 });
 
 describe("WP-NARVA-06 completion submission", () => {
-  afterEach(() => setRuntimeCompletionGateway(undefined));
+  afterEach(() => {
+    setRuntimeCompletionGateway(undefined);
+    setRuntimeCompletionPhase("none", "IDLE");
+  });
 
   test("does not report success before atomic terminal completion is observed", async () => {
     let loads = 0;
@@ -44,5 +53,26 @@ describe("WP-NARVA-06 completion submission", () => {
       load: async () => { throw new Error("NETWORK_UNAVAILABLE"); } });
     await expect(submitRuntimeCompletion(command, 1_000)).resolves.toMatchObject({ ok: false, errorCode: "RUNTIME_FAILURE" });
     expect(getRuntimeCompletionPhase()).toMatchObject({ phase: "PENDING", code: "COMPLETION_RECONCILIATION_UNAVAILABLE" });
+  });
+
+  test.each(["PENDING", "FINALIZING", "FAILED"] as const)(
+    "%s keeps locally terminal UI in Lõpetamine until authoritative ACK",
+    completionPhase => {
+      setRuntimeCompletionPhase("demo", completionPhase);
+      expect(getRuntimeCompletionPresentation("demo", "COMPLETED")).toEqual({
+        awaitingAuthoritativeAck: true,
+        lifecycleState: "RUNNING",
+        lifecycleLabel: "Lõpetamine",
+      });
+    },
+  );
+
+  test("authoritative completion ACK exposes terminal UI", () => {
+    setRuntimeCompletionPhase("demo", "COMPLETED");
+    expect(getRuntimeCompletionPresentation("demo", "COMPLETED")).toEqual({
+      awaitingAuthoritativeAck: false,
+      lifecycleState: "COMPLETED",
+      lifecycleLabel: "Lõpetatud",
+    });
   });
 });

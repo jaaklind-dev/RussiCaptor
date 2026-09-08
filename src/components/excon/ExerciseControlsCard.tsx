@@ -13,13 +13,17 @@ export function getExerciseControlAvailability(state: CanonicalExerciseSnapshot[
     complete: state === "RUNNING" || state === "PAUSED", speed: state !== "COMPLETED" };
 }
 
-export default function ExerciseControlsCard({ snapshot, onApplied }: { snapshot: CanonicalExerciseSnapshot; onApplied?: () => void }) {
+export default function ExerciseControlsCard({ snapshot, onApplied, awaitingTerminalAck = false }: {
+  snapshot: CanonicalExerciseSnapshot;
+  onApplied?: () => void;
+  awaitingTerminalAck?: boolean;
+}) {
   const enabled = getExerciseControlAvailability(snapshot.lifecycleState);
   const [pending, setPending] = useState(false);
   const gate = useRef(new SingleFlightActionGate()).current;
   useEffect(() => {
-    if (snapshot.lifecycleState === "COMPLETED") traceRuntimeLeaseLifecycle("COMPLETE_TERMINAL_RENDERED", { detail: {} });
-  }, [snapshot.lifecycleState]);
+    if (snapshot.lifecycleState === "COMPLETED" && !awaitingTerminalAck) traceRuntimeLeaseLifecycle("COMPLETE_TERMINAL_RENDERED", { detail: {} });
+  }, [awaitingTerminalAck, snapshot.lifecycleState]);
   const apply = (submit: ReturnType<typeof prepareExerciseControlSubmission>) => {
     traceRuntimeLeaseLifecycle("COMPLETE_APPLY_ENTER", { detail: {} });
     void traceRuntimeCompletionAuthority("APPLY_ENTER");
@@ -43,15 +47,16 @@ export default function ExerciseControlsCard({ snapshot, onApplied }: { snapshot
   const action = snapshot.lifecycleState === "READY" ? { label: "▶ Alusta", type: "START_EXERCISE" as const, enabled: enabled.start }
     : snapshot.lifecycleState === "PAUSED" ? { label: "▶ Jätka", type: "RESUME_EXERCISE" as const, enabled: enabled.resume }
       : { label: "⏸ Peata", type: "PAUSE_EXERCISE" as const, enabled: enabled.pause };
+  const controlsPending = pending || awaitingTerminalAck;
   return <View style={styles.card}>
     <Text style={styles.title}>Õppuse juhtimine</Text>
     <View style={styles.row}>
-      <Pressable accessibilityState={{ busy: pending }} disabled={pending || !action.enabled} style={[styles.button, (pending || !action.enabled) && styles.disabled]} onPress={() => issue(action.type)}><Text style={styles.buttonText}>{pending ? "Töötlen…" : action.label}</Text></Pressable>
-      <Pressable disabled={pending || !enabled.complete} style={[styles.complete, (pending || !enabled.complete) && styles.disabled]} onPress={confirmComplete}><Text style={styles.buttonText}>✓ Lõpeta õppus</Text></Pressable>
+      <Pressable accessibilityState={{ busy: controlsPending }} disabled={controlsPending || !action.enabled} style={[styles.button, (controlsPending || !action.enabled) && styles.disabled]} onPress={() => issue(action.type)}><Text style={styles.buttonText}>{awaitingTerminalAck ? "Lõpetamine…" : pending ? "Töötlen…" : action.label}</Text></Pressable>
+      <Pressable disabled={controlsPending || !enabled.complete} style={[styles.complete, (controlsPending || !enabled.complete) && styles.disabled]} onPress={confirmComplete}><Text style={styles.buttonText}>✓ Lõpeta õppus</Text></Pressable>
     </View>
     <Text style={styles.label}>Simulatsiooni kiirus</Text>
-    <View style={styles.row}>{SPEEDS.map(speed => <Pressable key={speed} disabled={pending || !enabled.speed}
-      style={[styles.speed, snapshot.speed === speed && styles.active, (pending || !enabled.speed) && styles.disabled]}
+    <View style={styles.row}>{SPEEDS.map(speed => <Pressable key={speed} disabled={controlsPending || !enabled.speed}
+      style={[styles.speed, snapshot.speed === speed && styles.active, (controlsPending || !enabled.speed) && styles.disabled]}
       onPress={() => issue("SET_EXERCISE_SPEED", speed)}><Text style={styles.buttonText}>×{speed}</Text></Pressable>)}</View>
   </View>;
 }

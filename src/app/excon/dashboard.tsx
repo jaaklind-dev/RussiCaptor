@@ -23,6 +23,11 @@ import {
 } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
 import { exerciseLifecycleLabel, exercisePackageNameLabel } from "@/localization/et";
 import CloudSyncStatusCard from "@/components/dashboard/CloudSyncStatusCard";
+import {
+  getRuntimeCompletionPhase,
+  getRuntimeCompletionPresentation,
+  subscribeToRuntimeCompletionPhase,
+} from "@/services/runtime/exercise/RuntimeCompletionService";
 
 const initialFilters: InstructorDashboardFilters = {
   location: "All", triage: "All", caseManager: "All", status: "All",
@@ -32,11 +37,16 @@ const unique = (values: string[]) => ["All", ...new Set(values.filter(Boolean).s
 export default function ExerciseDashboardScreen() {
   useSyncExternalStore(subscribeToInstructorDashboard, getInstructorDashboardVersion, getInstructorDashboardVersion);
   useSyncExternalStore(subscribeToRuntimePersistenceFailure, getRuntimePersistenceFailureVersion, getRuntimePersistenceFailureVersion);
+  useSyncExternalStore(subscribeToRuntimeCompletionPhase, getRuntimeCompletionPhase, getRuntimeCompletionPhase);
   const snapshot = getInstructorDashboardSnapshot();
   const exerciseSnapshot = getCanonicalExerciseSnapshot();
   const exercisePackage = getExercisePackage(exerciseSnapshot.exerciseId);
   const exerciseDefinition = exercisePackage.definition;
   const recoveryRequired = runtimeRecoveryAvailable(exerciseSnapshot);
+  const completionPresentation = getRuntimeCompletionPresentation(
+    exerciseSnapshot.exerciseId,
+    exerciseSnapshot.lifecycleState,
+  );
   useEffect(() => initializeAuthoritativeExerciseRuntime(exerciseSnapshot.exerciseId), [exerciseSnapshot.exerciseId]);
   const [filters, setFilters] = useState(initialFilters);
   const [, setPresentationVersion] = useState(0);
@@ -71,14 +81,17 @@ export default function ExerciseDashboardScreen() {
             <View style={styles.exerciseState}>
               <Text style={styles.exerciseTime}>T+{snapshot.exerciseTimeSec}s</Text>
               <Text style={[styles.state, snapshot.exerciseState === "RUNNING" ? styles.running : styles.paused]}>
-                {exerciseLifecycleLabel(snapshot.exerciseState)} · ×{snapshot.exerciseSpeed}
+                {completionPresentation.awaitingAuthoritativeAck
+                  ? completionPresentation.lifecycleLabel
+                  : exerciseLifecycleLabel(snapshot.exerciseState)} · ×{snapshot.exerciseSpeed}
               </Text>
             </View>
           </View>
           <RuntimeRecoveryCard snapshot={exerciseSnapshot} onRecovered={refreshPresentation} />
-          <CloudSyncStatusCard lifecycleState={exerciseSnapshot.lifecycleState} />
-          {!recoveryRequired && <ExerciseControlsCard snapshot={exerciseSnapshot} onApplied={refreshPresentation} />}
-          <PrepareNewExerciseCard snapshot={exerciseSnapshot} onPrepared={refreshPresentation} />
+          <CloudSyncStatusCard lifecycleState={completionPresentation.lifecycleState} />
+          {!recoveryRequired && <ExerciseControlsCard snapshot={exerciseSnapshot} onApplied={refreshPresentation}
+            awaitingTerminalAck={completionPresentation.awaitingAuthoritativeAck} />}
+          <PrepareNewExerciseCard snapshot={{ ...exerciseSnapshot, lifecycleState: completionPresentation.lifecycleState }} onPrepared={refreshPresentation} />
           <ExercisePackageInformationCard exercisePackage={exercisePackage} compatibility={exercisePackageValidator.compatibility(exercisePackage)} />
           <ExerciseInformationCard definition={exerciseDefinition} />
           <Pressable style={styles.timelineButton} onPress={() => router.push("/excon/timeline")}><Text style={styles.timelineButtonText}>Ava õppuse ajajoon</Text></Pressable>

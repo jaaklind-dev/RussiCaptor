@@ -3,6 +3,8 @@ import path from "path";
 
 const migration = fs.readFileSync(path.resolve(process.cwd(),
   "supabase/migrations/20260907153105_narva_multicm_terminal_convergence.sql"), "utf8");
+const terminalSqlFix = fs.readFileSync(path.resolve(process.cwd(),
+  "supabase/migrations/20260908041458_qualify_terminal_completion_sql.sql"), "utf8");
 
 describe("WP-NARVA-06 backend authority migration", () => {
   test("adds a durable patient command inbox without adding checkpoint writers", () => {
@@ -57,5 +59,13 @@ describe("WP-NARVA-06 backend authority migration", () => {
     expect(completion).toBeGreaterThan(projection);
     expect(release).toBeGreaterThan(completion);
     expect(finalize).toMatch(/language plpgsql security definer/);
+  });
+
+  test("forward-only terminal fix qualifies TABLE-return column collisions", () => {
+    expect(terminalSqlFix).toMatch(/select rc\.checkpoint_revision into v_current/);
+    expect(terminalSqlFix).toMatch(/select rc\.provenance_hash from public\.runtime_checkpoints as rc/);
+    expect(terminalSqlFix).toMatch(/select es\.revision into v_projection_revision/);
+    expect(terminalSqlFix).not.toMatch(/select checkpoint_revision into v_current/);
+    expect(terminalSqlFix).not.toMatch(/select provenance_hash from public\.runtime_checkpoints/);
   });
 });
