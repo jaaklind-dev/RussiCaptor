@@ -1,6 +1,6 @@
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { setCurrentCaseManager } from "@/services/CurrentUserService";
-import { assignPatient, clearAssignments } from "@/services/AssignmentRepository";
+import { assignPatient, clearAssignments, getPatientAssignment, releasePatientConflictSafe } from "@/services/AssignmentRepository";
 import { resetPatients } from "@/repositories/PatientRepository";
 import { getSharedWorkflowOperationalState, observeSharedWorkflowHead, resetSharedWorkflowConflictMetrics, setSharedWorkflowConnectivity, setSharedWorkflowGateway, setSharedWorkflowRealtimeLifecycle } from "../SharedWorkflowMutationService";
 import { InMemorySharedWorkflowGateway } from "../InMemorySharedWorkflowGateway";
@@ -24,6 +24,14 @@ describe("physical shared-workflow validation harness", () => {
     expect(first.commandId).not.toBe(second.commandId);
     const outcomes = await Promise.all([submitPreparedPhysicalValidationMutation(first), submitPreparedPhysicalValidationMutation(second)]);
     expect(outcomes.map(item => item.result.status).sort()).toEqual(["APPLIED", "STALE_VERSION"]);
+  });
+
+  it("persists RELEASE through the authoritative path and prepares an unowned claim base", async () => {
+    const outcome = await releasePatientConflictSafe("PT-001");
+
+    expect(outcome.result).toMatchObject({ status: "APPLIED", revision: 2, ownerUserId: undefined });
+    expect(getPatientAssignment("PT-001")?.endedAt).toBeDefined();
+    expect(prepareSameBaseMutableMutation("PT-001")).toBeUndefined();
   });
 
   it("keeps workflow unavailable until the subscribed channel has hydrated patient heads", () => {

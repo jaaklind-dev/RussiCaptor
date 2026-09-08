@@ -22,8 +22,12 @@ export async function executeAuthoritativePatientMutation<T>(input:Readonly<{
   let value:T;let proposed:ReturnType<typeof capturePatientSharedWorkflowState>;
   try{value=runWithoutSyncNotifications(input.mutate);proposed=capturePatientSharedWorkflowState(input.patientId);}
   finally{restorePatientSharedWorkflowState(input.patientId,before);}
+  // RELEASE is the one ownership transition whose canonical next owner is
+  // deliberately empty.  Falling back to the current owner here turns a
+  // valid RELEASE into INVALID_OWNER_TRANSITION at the authoritative RPC.
+  const nextOwnerUserId=input.kind==="RELEASE"?undefined:input.nextOwnerUserId??expectedOwnerUserId;
   const result=await submitSharedWorkflowMutation({exerciseId,patientId:input.patientId,commandId:input.commandId,kind:input.kind,
-    expectedRevision:head.revision,expectedOwnerUserId,nextOwnerUserId:input.nextOwnerUserId??expectedOwnerUserId,state:proposed});
+    expectedRevision:head.revision,expectedOwnerUserId,nextOwnerUserId,state:proposed});
   if(result.state){restorePatientSharedWorkflowState(input.patientId,result.state as ReturnType<typeof capturePatientSharedWorkflowState>);notifySync(result.status==="APPLIED"||result.status==="IDEMPOTENT"?"device":"remote");}
   return Object.freeze({result,value:result.status==="APPLIED"||result.status==="IDEMPOTENT"?value:undefined,
     message:sharedWorkflowStatusMessage(result.status)+(operator.id===result.ownerUserId?"":"")});
