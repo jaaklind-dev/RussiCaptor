@@ -10,6 +10,7 @@ import {
   createSharedExerciseSnapshot,
   restoreRemoteExerciseIdentity,
   restoreSharedExerciseState,
+  shouldClearRuntimeForRemoteIdentity,
 } from "@/services/StatePersistenceService";
 import {
   demoTransferTarget,
@@ -61,6 +62,14 @@ describe("remote clinical state sync", () => {
     jest.advanceTimersByTime(1_000);
 
     expect(getCanonicalExerciseSnapshot().simulationTimeSec).toBe(11);
+  });
+
+  test("a validated same-exercise reader Runtime survives a discovery projection echo without gaining write authority", () => {
+    expect(shouldClearRuntimeForRemoteIdentity("READER", true)).toBe(false);
+    expect(shouldClearRuntimeForRemoteIdentity("READER", false)).toBe(true);
+    expect(shouldClearRuntimeForRemoteIdentity("UNRESOLVED", true)).toBe(true);
+    expect(shouldClearRuntimeForRemoteIdentity("CONFLICT", true)).toBe(true);
+    expect(shouldClearRuntimeForRemoteIdentity("WRITER", false)).toBe(false);
   });
 
   test("an active shared projection cannot roll back its own writer or a completed exercise", () => {

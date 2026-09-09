@@ -711,14 +711,16 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(persistence).toContain("checkpointForSnapshot ? { runtimeCheckpoint: checkpointForSnapshot }");
   });
 
-  test("remote exercise discovery disposes unresolved live Runtime, including same-exercise stale state", () => {
+  test("remote exercise discovery preserves only validated same-exercise reader Runtime", () => {
     const statePersistence = fs.readFileSync(path.join(process.cwd(), "src/services/StatePersistenceService.ts"), "utf8");
     const restore = statePersistence.indexOf("export function restoreRemoteExerciseIdentity");
-    const authorityCheck = statePersistence.indexOf('getRuntimeWriterAuthorityState() !== "WRITER"', restore);
-    const clear = statePersistence.indexOf("clearActiveClinicalReferenceRuntime();", authorityCheck);
-    const restoreIdentity = statePersistence.indexOf("restoreExerciseIdentity(restored);", clear);
-    expect(authorityCheck).toBeGreaterThan(restore);
-    expect(clear).toBeGreaterThan(authorityCheck);
+    const readReady = statePersistence.indexOf("isClinicalReferenceRuntimeReadReady", restore);
+    const clearDecision = statePersistence.indexOf("shouldClearRuntimeForRemoteIdentity", readReady);
+    const clear = statePersistence.indexOf("clearActiveClinicalReferenceRuntime();", clearDecision);
+    const restoreIdentity = statePersistence.indexOf("restoreExerciseIdentity(restored, false);", clear);
+    expect(readReady).toBeGreaterThan(restore);
+    expect(clearDecision).toBeGreaterThan(readReady);
+    expect(clear).toBeGreaterThan(clearDecision);
     expect(restoreIdentity).toBeGreaterThan(clear);
   });
 

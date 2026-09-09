@@ -29,11 +29,11 @@ import {
 } from "@/services/exercise/ExercisePackageService";
 import { installCurrentExercise } from "@/repositories/ExerciseRepository";
 import { getPatientMaterialization, restorePatientMaterialization } from "@/services/exercise/PackagePatientMaterializationService";
-import { captureActiveClinicalReferenceRuntimes, captureActiveClinicalReferenceRuntimesAsync, clearActiveClinicalReferenceRuntime, prepareActiveClinicalReferenceRuntime, prepareActiveClinicalReferenceRuntimeAsync } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
+import { captureActiveClinicalReferenceRuntimes, captureActiveClinicalReferenceRuntimesAsync, clearActiveClinicalReferenceRuntime, isClinicalReferenceRuntimeReadReady, prepareActiveClinicalReferenceRuntime, prepareActiveClinicalReferenceRuntimeAsync } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
 import type { RuntimeCheckpointEnvelope } from "@/models/RuntimeCheckpointAuthority";
 import { localRuntimeCheckpointStore } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
-import { getRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
+import { getRuntimeWriterAuthorityState, type RuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
 import { BoundedObsoleteGenerationGate, LatestGenerationPipeline, yieldToEventLoop, type PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { capturePatientTransportRuntime, preparePatientTransportRuntime } from "@/services/runtime/exercise/PatientTransportRuntimeService";
@@ -209,13 +209,21 @@ export function subscribeToLocalRuntimeCheckpointPrepared(listener: () => void):
 }
 
 /** Active shared rows expose discovery identity only; canonical Runtime is restored from WP-44B checkpoint. */
+export function shouldClearRuntimeForRemoteIdentity(authority: RuntimeWriterAuthorityState,
+  sameExerciseReaderIsHydrated: boolean): boolean {
+  return authority !== "WRITER" && !(authority === "READER" && sameExerciseReaderIsHydrated);
+}
+
 export function restoreRemoteExerciseIdentity(restored: SharedExerciseState): void {
   // During clean startup the shared exercise row is discovery identity only.
   // Until checkpoint authority is resolved, no previously restored live Runtime
   // may be combined with that projection, even when the exercise ID matches.
   // A confirmed writer keeps its canonical Runtime when receiving its own cloud
   // projection echo.
-  if (getRuntimeWriterAuthorityState() !== "WRITER") {
+  const authority = getRuntimeWriterAuthorityState();
+  const sameExerciseReaderIsHydrated = authority === "READER"
+    && isClinicalReferenceRuntimeReadReady(restored.exerciseSession.exerciseId);
+  if (shouldClearRuntimeForRemoteIdentity(authority, sameExerciseReaderIsHydrated)) {
     stopClockRunner();
     clearActiveClinicalReferenceRuntime();
   }

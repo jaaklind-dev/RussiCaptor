@@ -18,6 +18,11 @@ import { clearPatientTransportRuntime, preparePatientTransportRuntime } from "./
 
 let active: Readonly<{ exerciseId: string; patientId: string; engine: ClinicalScenarioEngine; dispose: () => void }>[] = [];
 
+/** Validated Runtime owners may be read on a reader, while their write methods remain authority-gated. */
+export function isClinicalReferenceRuntimeReadReady(exerciseId: string): boolean {
+  return active.length > 0 && active.every(item => item.exerciseId === exerciseId);
+}
+
 export function assertActiveRuntimeExerciseIdentity(
   bindings: readonly Readonly<{ exerciseId: string }>[],
   expectedExerciseId: string,
