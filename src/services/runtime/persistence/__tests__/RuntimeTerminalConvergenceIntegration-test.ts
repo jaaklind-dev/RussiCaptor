@@ -40,13 +40,25 @@ describe("WP-NARVA-06 Runtime terminal convergence integration", () => {
     for (const pathSource of [takeover, recovery]) {
       const restore = pathSource.indexOf("acceptAuthoritativeRuntimeCheckpointAsync");
       const owner = pathSource.indexOf("establishExerciseRuntimeOwnerForCurrentWriter", restore);
-      const completion = pathSource.indexOf("resumePendingCompletionForCurrentWriter", owner);
+      const commandDrain = pathSource.indexOf("drainPatientCommandsForCurrentWriter", owner);
+      const completion = pathSource.indexOf("resumePendingCompletionForCurrentWriter", commandDrain);
       const routine = pathSource.indexOf("wakeCheckpointPublicationForCurrentWriter", completion);
       expect(restore).toBeGreaterThan(-1);
       expect(owner).toBeGreaterThan(restore);
-      expect(completion).toBeGreaterThan(owner);
+      expect(commandDrain).toBeGreaterThan(owner);
+      expect(completion).toBeGreaterThan(commandDrain);
       expect(routine).toBeGreaterThan(completion);
     }
+  });
+
+  test("writer takeover drains commands accepted before the new lease", () => {
+    const sync = fs.readFileSync(path.resolve(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const takeover = sync.slice(sync.indexOf("export async function takeOverRuntimeWriter"), sync.indexOf("/** Explicit user recovery"));
+    const owner = takeover.indexOf("establishExerciseRuntimeOwnerForCurrentWriter");
+    const commandDrain = takeover.indexOf("await drainPatientCommandsForCurrentWriter?.()", owner);
+    const publish = takeover.indexOf("wakeCheckpointPublicationForCurrentWriter", commandDrain);
+    expect(commandDrain).toBeGreaterThan(owner);
+    expect(publish).toBeGreaterThan(commandDrain);
   });
 
   test("terminal publication uses the atomic finalizer and stops both heartbeat transports", () => {
