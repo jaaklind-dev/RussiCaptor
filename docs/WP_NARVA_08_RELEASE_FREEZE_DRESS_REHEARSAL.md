@@ -179,3 +179,72 @@ Regression evidence on the combined candidate:
 This candidate is not re-frozen yet. A clean versionCode 65 validation build and
 the narrow two-device transport/restart retest are still required before the
 candidate can replace the original frozen baseline.
+
+## WP-NARVA-09 physical closure and proposed re-freeze
+
+The combined freeze-break candidate was completed with two additional narrow
+Runtime corrections:
+
+- `9113080` — `fix(runtime): rehydrate reader after writer contention`
+- `108f1b4` — `fix(runtime): drain queued commands after takeover`
+
+The first keeps a validated authoritative reader Runtime available when writer
+acquisition reports contention. The second drains already accepted patient
+commands immediately after a supported takeover or recovery establishes the new
+writer; a Realtime notification that arrived before takeover is therefore not
+required to be replayed. Both paths retain the existing ownership, patient CAS,
+command-idempotency, single-writer, checkpoint CAS, lease and terminal-fence
+checks.
+
+The exact committed candidate `108f1b4aa458ff3ddb20ccb523c40ac7c53a39a7`
+passed independent clean-tree validation:
+
+- focused blocker/regression gate: 11 suites, 149 tests passed;
+- complete suite: 197 suites, 1,554 tests passed;
+- Runtime Hardening and persistence performance: 5/5 tests passed;
+- representative persistence payload: 1,877,524 bytes; checkpoint capture 27 ms;
+- TypeScript, ESLint and `git diff --check`: passed;
+- no thresholds or historical hashes were changed.
+
+Clean physical candidate:
+
+- APK: `RussiCaptor-1.0.0-67-upgrade-validation.apk`
+- version: `1.0.0` / versionCode `67`
+- source dirty: `false`
+- APK SHA-256: `30cabb7fab1bb096d4de069332c726211373e30159f59161f87ba1798dfca37b`
+- signer SHA-256: `b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d30198980e59fcde96b`
+- production signed, validation harness enabled, non-distributable
+- installed on Samsung SM-X306B `R5GL236L6ZJ` and Samsung SM-X210
+  `R92X10DCNQD`, both Android 16.
+
+The narrow physical retest reused the retained failed rehearsal exercise
+`EX-1788947202682-1` so the original blocker state remained directly
+reproducible. With another authenticated writer active, the SM-X210 cold-started
+as a genuine non-writer reader, loaded the authoritative checkpoint and exposed
+the patient Actions view without acquiring a writer lease or starting a writer
+heartbeat. Active treatment and transport evidence remained readable.
+
+From the non-writer SM-X210, chest transport to IVKH first displayed only
+`Transport algatamisel...`. It created durable command sequence 14 with command
+ID `TRANSPORT:EX-1788947202682-1:PT-CHEST-001:1`; there was no local authoritative
+`IN_TRANSIT` mutation. After supported writer takeover, the accepted command was
+materialized exactly once into the existing transport engine as `IN_TRANSIT`
+for `PT-CHEST-001`, destination `IVKH`, resource
+`NARVA-REANIMOBILE-01`. The command later remained `MATERIALIZED`, and the
+authoritative checkpoint retained the transported state. Both clean v67 clients
+loaded the same authoritative checkpoint stream; the owning SM-X210 showed IVKH
+and the subsequent arrival, handover and vehicle return evidence after navigation
+and cold restart. No duplicate transport event or second command was observed.
+
+The final durable checkpoint observed after the retest was revision 109, hash
+`9a7da3538da733912baf80bb1ee2c0af2b79e38c3a933781507fcd4224d678b3`,
+12,614,036 bytes. The final writer lease was explicitly released through the
+normal authenticated Runtime RPC and verified inactive. Routine
+`exercise_states` projection lag and large-checkpoint publication timeouts remain
+recorded as SHOULD-level operational evidence; they did not remove or duplicate
+the durable transport command or authoritative checkpoint state.
+
+Both WP-NARVA-09 release blockers are physically closed. The proposed re-freeze
+baseline is `108f1b4aa458ff3ddb20ccb523c40ac7c53a39a7`. This does not claim that
+the full trauma dress rehearsal or IRO rehearsal has been rerun; those physical
+release gates remain next.
