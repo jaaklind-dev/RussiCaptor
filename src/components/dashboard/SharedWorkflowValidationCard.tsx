@@ -11,7 +11,7 @@ import { getSharedWorkflowOperationalState, subscribeToSharedWorkflowConflicts }
 
 const patientId = "PT-PELVIC-001";
 
-export default function SharedWorkflowValidationCard() {
+export default function SharedWorkflowValidationCard({ readOnly = false }: Readonly<{ readOnly?: boolean }>) {
   const [workflow, setWorkflow] = useState(getSharedWorkflowOperationalState);
   useEffect(() => subscribeToSharedWorkflowConflicts(() => setWorkflow(getSharedWorkflowOperationalState())), []);
   const [prepared, setPrepared] = useState<PreparedPhysicalValidationMutation>();
@@ -19,6 +19,7 @@ export default function SharedWorkflowValidationCard() {
   const [pending, setPending] = useState(false);
 
   const run = async (operation: () => Promise<{ message: string }>) => {
+    if (readOnly) { setMessage("Õppus on lõpetatud. Muudatusi ei saa enam teha."); return; }
     setPending(true);
     try { setMessage((await operation()).message); } finally { setPending(false); }
   };
@@ -35,19 +36,20 @@ export default function SharedWorkflowValidationCard() {
     <Text style={styles.title}>Ainult validation-build: jagatud töövoo race-test</Text>
     <Text style={styles.description}>Kasutab tavapärast autentitud kliendi RPC/CAS rada. Canonical release’is seda kaarti ei ole.</Text>
     <Text style={styles.message}>Workflow Realtime: {workflow.realtimeLifecycle} · hüdreeritud: {workflow.online ? "jah" : "ei"}</Text>
-    <Pressable accessibilityLabel="Validation simultaneous claim" disabled={pending} style={styles.primary} onPress={() => void run(() => assignPatientToMeConflictSafe(patientId))}>
+    {readOnly && <Text accessibilityRole="alert" style={styles.terminal}>Õppus on lõpetatud · ainult lugemiseks</Text>}
+    <Pressable accessibilityLabel="Validation simultaneous claim" disabled={pending || readOnly} style={[styles.primary, readOnly && styles.disabled]} onPress={() => void run(() => assignPatientToMeConflictSafe(patientId))}>
       <Text style={styles.primaryText}>Saada samaaegne CLAIM</Text>
     </Pressable>
-    <Pressable accessibilityLabel="Validation release patient" disabled={pending} style={styles.secondary} onPress={() => void run(() => releasePatientConflictSafe(patientId))}>
+    <Pressable accessibilityLabel="Validation release patient" disabled={pending || readOnly} style={[styles.secondary, readOnly && styles.disabled]} onPress={() => void run(() => releasePatientConflictSafe(patientId))}>
       <Text style={styles.secondaryText}>Vabasta patsient puhtaks CLAIM-testiks</Text>
     </Pressable>
-    <Pressable accessibilityLabel="Prepare stale former owner mutation" disabled={pending} style={styles.secondary} onPress={() => stage("stale")}>
+    <Pressable accessibilityLabel="Prepare stale former owner mutation" disabled={pending || readOnly} style={[styles.secondary, readOnly && styles.disabled]} onPress={() => stage("stale")}>
       <Text style={styles.secondaryText}>Valmista aegunud omaniku mutatsioon</Text>
     </Pressable>
-    <Pressable accessibilityLabel="Prepare same base mutable mutation" disabled={pending} style={styles.secondary} onPress={() => stage("mutable")}>
+    <Pressable accessibilityLabel="Prepare same base mutable mutation" disabled={pending || readOnly} style={[styles.secondary, readOnly && styles.disabled]} onPress={() => stage("mutable")}>
       <Text style={styles.secondaryText}>Valmista sama alusversiooni MUTABLE</Text>
     </Pressable>
-    <Pressable accessibilityLabel="Submit prepared validation mutation" disabled={pending || !prepared} style={[styles.primary, !prepared && styles.disabled]} onPress={() => prepared && void run(() => submitPreparedPhysicalValidationMutation(prepared))}>
+    <Pressable accessibilityLabel="Submit prepared validation mutation" disabled={pending || !prepared || readOnly} style={[styles.primary, (!prepared || readOnly) && styles.disabled]} onPress={() => prepared && void run(() => submitPreparedPhysicalValidationMutation(prepared))}>
       <Text style={styles.primaryText}>Saada valmismutatsioon</Text>
     </Pressable>
     <Text accessibilityRole="alert" style={styles.message}>{message}</Text>
@@ -63,5 +65,6 @@ const styles = StyleSheet.create({
   secondary: { padding: 12, alignItems: "center", borderRadius: 8, borderWidth: 1, borderColor: "#B54708" },
   secondaryText: { color: "#7A2E0E", fontWeight: "700", textAlign: "center" },
   disabled: { opacity: 0.45 },
+  terminal: { color: "#B42318", fontSize: 14, fontWeight: "700" },
   message: { color: "#475467", fontSize: 14 },
 });

@@ -16,7 +16,8 @@ export type SharedWorkflowMutationRequest = Readonly<{
 
 export type SharedWorkflowMutationStatus =
   | "APPLIED" | "IDEMPOTENT" | "STALE_VERSION" | "OWNERSHIP_CHANGED"
-  | "NOT_OWNER" | "ALREADY_OWNED" | "AUTHORIZATION_DENIED" | "RECONNECT_REQUIRED" | "UNAVAILABLE";
+  | "NOT_OWNER" | "ALREADY_OWNED" | "COMPLETION_FENCED" | "EXERCISE_COMPLETED"
+  | "AUTHORIZATION_DENIED" | "RECONNECT_REQUIRED" | "UNAVAILABLE";
 
 export type SharedWorkflowMutationResult = Readonly<{
   status: SharedWorkflowMutationStatus;
@@ -104,10 +105,19 @@ export function sharedWorkflowStatusMessage(status: SharedWorkflowMutationStatus
     case "STALE_VERSION": return "Patsiendi andmed on muutunud. Värskenda vaade ja proovi uuesti.";
     case "OWNERSHIP_CHANGED": case "NOT_OWNER": return "Patsiendi vastutav CM on muutunud.";
     case "ALREADY_OWNED": return "Patsient on juba teise CM-i vastutusel.";
+    case "COMPLETION_FENCED": return "Õppuse lõpetamine on pooleli. Uusi muudatusi ei saa enam teha.";
+    case "EXERCISE_COMPLETED": return "Õppus on lõpetatud. Muudatusi ei saa enam teha.";
     case "AUTHORIZATION_DENIED": return "Sul puudub selle õppuse muutmise õigus.";
     case "RECONNECT_REQUIRED": return "Toimingu kinnitamiseks taasta võrguühendus.";
     default: return "Jagatud töövoo salvestamine pole praegu saadaval.";
   }
+}
+
+export function classifySharedWorkflowError(message: string): SharedWorkflowMutationStatus {
+  if (message.includes("COMPLETION_FENCED")) return "COMPLETION_FENCED";
+  if (message.includes("EXERCISE_COMPLETED")) return "EXERCISE_COMPLETED";
+  if (/AUTHORIZATION_DENIED|AUTHENTICATION_REQUIRED|42501/.test(message)) return "AUTHORIZATION_DENIED";
+  return "UNAVAILABLE";
 }
 
 export const supabaseSharedWorkflowGateway: SharedWorkflowGateway = {
@@ -122,14 +132,17 @@ export const supabaseSharedWorkflowGateway: SharedWorkflowGateway = {
       p_next_owner_user_id: request.nextOwnerUserId ?? null, p_state: request.state,
     };
     let response = await supabase.rpc("apply_shared_workflow_patient_mutation", parameters);
-    if (response.error && !/AUTHORIZATION_DENIED|42501/.test(`${response.error.message} ${response.error.code}`)) {
+    const firstErrorStatus = response.error
+      ? classifySharedWorkflowError(`${response.error.message} ${response.error.code}`)
+      : undefined;
+    if (response.error && firstErrorStatus === "UNAVAILABLE") {
       // An ambiguous transport failure may have occurred after commit. Retry
       // the exact command ID once; the server ledger makes this deterministic.
       response = await supabase.rpc("apply_shared_workflow_patient_mutation", parameters);
     }
     const {data,error}=response;
-    if (error) return Object.freeze({ status: /AUTHORIZATION_DENIED|42501/.test(`${error.message} ${error.code}`)
-      ? "AUTHORIZATION_DENIED" : "UNAVAILABLE", revision: request.expectedRevision });
+    if (error) return Object.freeze({ status: classifySharedWorkflowError(`${error.message} ${error.code}`),
+      revision: request.expectedRevision });
     const row = (Array.isArray(data) ? data[0] : data) as { status?: string; revision?: number; owner_user_id?: string; state?: Record<string,unknown> } | null;
     const status = row?.status as SharedWorkflowMutationStatus | undefined;
     if (!status) return Object.freeze({ status: "UNAVAILABLE", revision: request.expectedRevision });

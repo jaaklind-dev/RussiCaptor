@@ -38,6 +38,7 @@ export default function DashboardScreen() {
     () => getMyIncomingTakeoverRequests().length
   );
   const [, setPresentationVersion] = useState(0);
+  const canonicalExercise = getCanonicalExerciseSnapshot();
 
   useEffect(() => {
     return subscribeToSync(() => {
@@ -84,7 +85,7 @@ export default function DashboardScreen() {
 
       <LocalSaveStatusCard />
 
-      <CloudSyncStatusCard lifecycleState={getCanonicalExerciseSnapshot().lifecycleState} />
+      <CloudSyncStatusCard lifecycleState={canonicalExercise.lifecycleState} />
 
       <TakeoverRequestsCard />
 
@@ -100,20 +101,20 @@ export default function DashboardScreen() {
 
       </View>
 
-      {isSharedWorkflowValidationHarnessEnabled() && <SharedWorkflowValidationCard />}
+      {isSharedWorkflowValidationHarnessEnabled() && <SharedWorkflowValidationCard readOnly={canonicalExercise.lifecycleState === "COMPLETED"} />}
 
-      <Pressable style={styles.button} onPress={() => router.push("/scan")}>
+      {canonicalExercise.lifecycleState !== "COMPLETED" && <Pressable style={styles.button} onPress={() => router.push("/scan")}>
 
         <Text style={styles.buttonText}>Skaneeri patsient</Text>
 
-      </Pressable>
+      </Pressable>}
 
-      <Pressable
+      {canonicalExercise.lifecycleState !== "COMPLETED" && <Pressable
         style={styles.secondaryButton}
         onPress={() => router.push("/location")}
       >
         <Text style={styles.secondaryButtonText}>Skaneeri asukoht</Text>
-      </Pressable>
+      </Pressable>}
 
       <Pressable style={styles.secondaryButton} onPress={() => router.push("/patients")}>
 
@@ -131,7 +132,7 @@ export default function DashboardScreen() {
         <Text style={styles.secondaryButtonText}>Ajalugu</Text>
 
       </Pressable>
-      {hasActiveRole(operator, "EXCON", getCanonicalExerciseSnapshot().exerciseId) && <Pressable style={styles.secondaryButton} onPress={() => router.push("/excon")}><Text style={styles.secondaryButtonText}>EXCON</Text></Pressable>}
+      {hasActiveRole(operator, "EXCON", canonicalExercise.exerciseId) && <Pressable style={styles.secondaryButton} onPress={() => router.push("/excon")}><Text style={styles.secondaryButtonText}>EXCON</Text></Pressable>}
       <Pressable style={styles.logoutButton} onPress={() => void signOutOperator().then(() => router.replace("/"))}><Text style={styles.logoutButtonText}>Logi välja</Text></Pressable>
 
     </ScrollView>

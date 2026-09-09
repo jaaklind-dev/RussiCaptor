@@ -22,11 +22,15 @@ function mergeAppend(current: Readonly<Record<string,unknown>>, proposed: Readon
 export class InMemorySharedWorkflowGateway implements SharedWorkflowGateway {
   private readonly heads = new Map<string,Head>();
   private readonly commands = new Map<string,Readonly<{ actor:string; patientId:string; kind:string; result:SharedWorkflowMutationResult }>>();
+  private readonly completionState = new Map<string, "PENDING" | "COMPLETED">();
   constructor(private readonly actor: () => Actor) {}
   seed(exerciseId:string,patientId:string,state:Readonly<Record<string,unknown>>,ownerUserId?:string,revision=0):void {
     this.heads.set(patientKey(exerciseId,patientId),{revision,ownerUserId,state:Object.freeze({...state})});
   }
   read(exerciseId:string,patientId:string):Readonly<Head>|undefined { const value=this.heads.get(patientKey(exerciseId,patientId)); return value&&Object.freeze({...value}); }
+  fence(exerciseId:string):void { this.completionState.set(exerciseId,"PENDING"); }
+  complete(exerciseId:string):void { this.completionState.set(exerciseId,"COMPLETED"); }
+  acceptedCount(exerciseId:string):number { return [...this.commands.keys()].filter(key=>key.startsWith(`${exerciseId}\u0000`)).length; }
   async submit(request:SharedWorkflowMutationRequest):Promise<SharedWorkflowMutationResult>{
     const actor=this.actor();
     if(actor.exerciseIds!=="GLOBAL"&&!actor.exerciseIds.includes(request.exerciseId)) return Object.freeze({status:"AUTHORIZATION_DENIED",revision:request.expectedRevision});
@@ -35,6 +39,12 @@ export class InMemorySharedWorkflowGateway implements SharedWorkflowGateway {
       if(duplicate.actor!==actor.userId||duplicate.patientId!==request.patientId||duplicate.kind!==request.kind) throw new Error("IDEMPOTENCY_KEY_REUSE");
       const head=this.heads.get(patientKey(request.exerciseId,request.patientId))!;
       return Object.freeze({status:"IDEMPOTENT",revision:head.revision,ownerUserId:head.ownerUserId,state:head.state});
+    }
+    const terminal = this.completionState.get(request.exerciseId);
+    if (terminal) {
+      const head=this.heads.get(patientKey(request.exerciseId,request.patientId));
+      return Object.freeze({status:terminal==="PENDING"?"COMPLETION_FENCED":"EXERCISE_COMPLETED",
+        revision:head?.revision??request.expectedRevision,ownerUserId:head?.ownerUserId,state:head?.state});
     }
     const pKey=patientKey(request.exerciseId,request.patientId);
     const head=this.heads.get(pKey)??{revision:0,ownerUserId:undefined,state:Object.freeze({...request.state})};

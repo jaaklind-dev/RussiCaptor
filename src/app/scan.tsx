@@ -19,14 +19,17 @@ import { readQrCode } from "@/services/QrCodeService";
 import { getInstalledWorkbook } from "@/services/WorkbookImportService";
 import { getPatientNotFoundMessage } from "@/services/PatientLookupFeedback";
 import { SingleFlightActionGate } from "@/services/ui/InteractionSafety";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 
 export default function ScanScreen() {
 
   const [nationalId, setNationalId] = useState("");
   const [pending, setPending] = useState(false);
   const gate = useRef(new SingleFlightActionGate()).current;
+  const readOnly = getCanonicalExerciseSnapshot().lifecycleState === "COMPLETED";
 
   function handleFindPatient(value = nationalId): Promise<void> {
+    if (readOnly) { Alert.alert("Õppus on lõpetatud", "Patsiente ei saa enam määrata."); return Promise.resolve(); }
     setPending(true);
     return gate.run(() => findAndClaimPatient(value)).finally(() => setPending(false));
   }
@@ -122,7 +125,7 @@ router.push(`/patient/${patient.id}`);
 
       <Text style={styles.subtitle}>Sisesta või skaneeri patsiendi isikukood</Text>
 
-      <QrScanner
+      {!readOnly && <QrScanner
         buttonLabel="Skaneeri patsiendi QR-kood"
         onScanned={(data) => {
           const result = readQrCode(data, "patient");
@@ -140,7 +143,9 @@ router.push(`/patient/${patient.id}`);
           setNationalId(result.value);
           void handleFindPatient(result.value);
         }}
-      />
+      />}
+
+      {readOnly && <Text accessibilityRole="alert" style={styles.subtitle}>Õppus on lõpetatud · ainult lugemiseks</Text>}
 
       <TextInput
 
@@ -150,6 +155,8 @@ router.push(`/patient/${patient.id}`);
 
         onChangeText={setNationalId}
 
+        editable={!readOnly}
+
         autoCapitalize="characters"
 
         autoCorrect={false}
@@ -158,7 +165,7 @@ router.push(`/patient/${patient.id}`);
 
       />
 
-      <Pressable accessibilityRole="button" accessibilityState={{ busy: pending, disabled: pending }} disabled={pending} style={[styles.button, pending && styles.disabled]} onPress={() => void handleFindPatient()}>
+      <Pressable accessibilityRole="button" accessibilityState={{ busy: pending, disabled: pending || readOnly }} disabled={pending || readOnly} style={[styles.button, (pending || readOnly) && styles.disabled]} onPress={() => void handleFindPatient()}>
 
         {pending ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Otsi patsienti</Text>}
 

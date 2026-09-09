@@ -52,6 +52,7 @@ import ActiveInterventionsCard from "@/components/patient/ActiveInterventionsCar
 import ClinicalAssessmentDeveloperCard from "@/components/patient/ClinicalAssessmentDeveloperCard";
 import { getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots } from "@/services/RuntimeSnapshotService";
 import { SingleFlightActionGate } from "@/services/ui/InteractionSafety";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 type PatientTab =
   | "overview"
   | "vitals"
@@ -78,10 +79,11 @@ const runWorkflow=async <T extends {message:string}>(operation:()=>Promise<T>):P
   const runtimeVersion = useSyncExternalStore(subscribeToRuntimeSnapshots, getRuntimeSnapshotVersion, getRuntimeSnapshotVersion);
   const patient = findPatientById(id ?? "");
 const isCompleted = patient?.status === "Completed";
+const isExerciseCompleted = getCanonicalExerciseSnapshot().lifecycleState === "COMPLETED";
 const assignment = patient ? getPatientAssignment(patient.id) : undefined;
 const pendingTransfer = patient ? getPendingPatientTransfer(patient.id) : undefined;
 const isReadOnly = patient
-  ? isCompleted || !canCurrentCaseManagerEditPatient(patient.id)
+  ? isExerciseCompleted || isCompleted || !canCurrentCaseManagerEditPatient(patient.id)
   : true;
 const [questions, setQuestions] = useState(
   patient ? getQuestions(patient.id) : []
@@ -149,9 +151,9 @@ useEffect(() => {
         </Text>
         {workflowMessage&&<Text accessibilityRole="alert" style={workflowPending?styles.pendingNotice:styles.workflowNotice}>{workflowMessage}</Text>}
 
-        {isCompleted && (
+        {(isCompleted || isExerciseCompleted) && (
           <Text style={styles.completedNotice}>
-            Käsitlus lõpetatud · vaatamisrežiim
+            {isExerciseCompleted ? "Õppus lõpetatud" : "Käsitlus lõpetatud"} · vaatamisrežiim
           </Text>
         )}
 

@@ -15,7 +15,7 @@ describe("WP-NEXT-05 critical interaction integration", () => {
   test("claim, transfer and lifecycle operations expose pending single-flight behavior", () => {
     const scan = read("app/scan.tsx");
     expect(scan).toContain("SingleFlightActionGate");
-    expect(scan).toContain('accessibilityState={{ busy: pending, disabled: pending }}');
+    expect(scan).toContain('accessibilityState={{ busy: pending, disabled: pending || readOnly }}');
     expect(read("components/dashboard/TakeoverRequestsCard.tsx")).toContain("gate.run(operation)");
     const controls = read("components/excon/ExerciseControlsCard.tsx");
     expect(controls).toContain("SingleFlightActionGate");
