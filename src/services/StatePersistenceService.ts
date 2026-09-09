@@ -214,6 +214,12 @@ export function shouldClearRuntimeForRemoteIdentity(authority: RuntimeWriterAuth
   return authority !== "WRITER" && !(authority === "READER" && sameExerciseReaderIsHydrated);
 }
 
+const readerRuntimeHydrationCounts = new Map<string, number>();
+
+function isReaderRuntimeHydrationInProgress(exerciseId: string): boolean {
+  return (readerRuntimeHydrationCounts.get(exerciseId) ?? 0) > 0;
+}
+
 export function restoreRemoteExerciseIdentity(restored: SharedExerciseState): void {
   // During clean startup the shared exercise row is discovery identity only.
   // Until checkpoint authority is resolved, no previously restored live Runtime
@@ -222,7 +228,8 @@ export function restoreRemoteExerciseIdentity(restored: SharedExerciseState): vo
   // projection echo.
   const authority = getRuntimeWriterAuthorityState();
   const sameExerciseReaderIsHydrated = authority === "READER"
-    && isClinicalReferenceRuntimeReadReady(restored.exerciseSession.exerciseId);
+    && (isClinicalReferenceRuntimeReadReady(restored.exerciseSession.exerciseId)
+      || isReaderRuntimeHydrationInProgress(restored.exerciseSession.exerciseId));
   if (shouldClearRuntimeForRemoteIdentity(authority, sameExerciseReaderIsHydrated)) {
     stopClockRunner();
     clearActiveClinicalReferenceRuntime();
@@ -287,6 +294,28 @@ export async function acceptAuthoritativeRuntimeCheckpointAsync(
   pendingSnapshot = { ...checkpoint.payload, version: STATE_VERSION, savedAt,
     currentCaseManager: { ...getCurrentCaseManager() } };
   setLocalSaveStatus({ state: "saved", savedAt });
+}
+
+/**
+ * A validated reader checkpoint is rebuilt cooperatively. While that atomic
+ * rebuild is in progress, a same-exercise discovery projection must not clear
+ * the private Runtime candidates or the transport state prepared from the
+ * checkpoint. This grants no writer capability; all Runtime mutations remain
+ * guarded by RuntimeWriterAuthorityState.
+ */
+export async function acceptAuthoritativeRuntimeCheckpointForReaderAsync(
+  checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>,
+  yieldControl: PipelineYield = yieldToEventLoop,
+): Promise<void> {
+  const exerciseId = checkpoint.exerciseId;
+  readerRuntimeHydrationCounts.set(exerciseId, (readerRuntimeHydrationCounts.get(exerciseId) ?? 0) + 1);
+  try {
+    await acceptAuthoritativeRuntimeCheckpointAsync(checkpoint, false, yieldControl);
+  } finally {
+    const remaining = (readerRuntimeHydrationCounts.get(exerciseId) ?? 1) - 1;
+    if (remaining > 0) readerRuntimeHydrationCounts.set(exerciseId, remaining);
+    else readerRuntimeHydrationCounts.delete(exerciseId);
+  }
 }
 
 export function assertRuntimeCheckpointClockConsistency(restored: SharedExerciseState): void {

@@ -724,6 +724,39 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(restoreIdentity).toBeGreaterThan(clear);
   });
 
+  test("reader hydration is re-established after writer contention without acquiring write authority", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const startup = source.slice(
+      source.indexOf("async function startRuntimeCheckpointSyncForExercise"),
+      source.indexOf("let publishInFlight=false"),
+    );
+    const rejectedAcquisition = startup.indexOf("else {", startup.indexOf('if ("lease" in acquired)'));
+    const reader = startup.indexOf('setStatus({state:"READER",code:acquired.code', rejectedAcquisition);
+    const hydrate = startup.indexOf("acceptAuthoritativeRuntimeCheckpointForReaderAsync(resolved.checkpoint", reader);
+    const stop = startup.indexOf("stopClockRunner()", hydrate);
+    expect(rejectedAcquisition).toBeGreaterThan(-1);
+    expect(reader).toBeGreaterThan(rejectedAcquisition);
+    expect(hydrate).toBeGreaterThan(reader);
+    expect(stop).toBeGreaterThan(hydrate);
+    expect(startup.slice(rejectedAcquisition, stop)).not.toContain('setRuntimeWriterAuthorityState("WRITER")');
+  });
+
+  test("reader checkpoint hydration is protected from same-exercise discovery echoes", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/StatePersistenceService.ts"), "utf8");
+    const helper = source.slice(
+      source.indexOf("export async function acceptAuthoritativeRuntimeCheckpointForReaderAsync"),
+      source.indexOf("export function assertRuntimeCheckpointClockConsistency"),
+    );
+    expect(helper).toContain("readerRuntimeHydrationCounts.set(exerciseId");
+    expect(helper).toContain("acceptAuthoritativeRuntimeCheckpointAsync(checkpoint, false");
+    expect(helper).toContain("readerRuntimeHydrationCounts.delete(exerciseId)");
+    const restore = source.slice(
+      source.indexOf("export function restoreRemoteExerciseIdentity"),
+      source.indexOf("export function getLocalRuntimeCheckpoint"),
+    );
+    expect(restore).toContain("isReaderRuntimeHydrationInProgress(restored.exerciseSession.exerciseId)");
+  });
+
   test("checkpoint publication is serialized and coalesces overlapping local ticks", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     const publish = source.slice(source.indexOf("let publishInFlight=false"), source.indexOf("const stopLocal="));

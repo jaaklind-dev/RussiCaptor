@@ -5,6 +5,7 @@ import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepo
 import { stopClockRunner } from "@/services/ClockRunner";
 import {
   acceptAuthoritativeRuntimeCheckpointAsync,
+  acceptAuthoritativeRuntimeCheckpointForReaderAsync,
   ensureLocalRuntimeCheckpoint,
   getLocalRuntimeCheckpoint,
   subscribeToLocalRuntimeCheckpointPrepared,
@@ -718,7 +719,12 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   const resolved=await resolveAuthoritativeCheckpointAsync(local,remote,yieldToEventLoop);
   endRemoteResolution({ status: resolved.status });
   if (resolved.status==="CONFLICT") setStatus({state:"CONFLICT",code:resolved.code});
-  else if (resolved.status==="REMOTE") { await acceptAuthoritativeRuntimeCheckpointAsync(resolved.checkpoint, false, yieldToEventLoop); stopClockRunner(); remoteRevision=resolved.checkpoint.checkpointRevision; setStatus({state:"READER",revision:remoteRevision}); }
+  else if (resolved.status==="REMOTE") {
+    remoteRevision=resolved.checkpoint.checkpointRevision;
+    setStatus({state:"READER",revision:remoteRevision});
+    await acceptAuthoritativeRuntimeCheckpointForReaderAsync(resolved.checkpoint,yieldToEventLoop);
+    stopClockRunner();
+  }
   else if (resolved.status!=="NONE" && isActiveExercise()) {
     remoteRevision=remote?.checkpointRevision??0;
     const acquired=await acquireRuntimeWriterTerminal(repository,exerciseId,writerId,remoteRevision,LEASE_SECONDS);
@@ -739,7 +745,16 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         setStatus({state:"READER",code:"RUNTIME_OWNER_NOT_READY",revision:remoteRevision});
       }
     }
-    else { stopClockRunner(); setStatus({state:"READER",code:acquired.code,revision:acquired.checkpointRevision}); }
+    else {
+      // A discovery projection can clear the locally restored Runtime while
+      // writer acquisition is unresolved. Once another writer is confirmed,
+      // rebuild the validated checkpoint explicitly as a read-only Runtime.
+      // Reader authority is established before the cooperative rebuild so a
+      // same-exercise cloud echo cannot dispose the in-flight reader state.
+      setStatus({state:"READER",code:acquired.code,revision:acquired.checkpointRevision});
+      await acceptAuthoritativeRuntimeCheckpointForReaderAsync(resolved.checkpoint,yieldToEventLoop);
+      stopClockRunner();
+    }
   } else if(resolved.status==="NONE") setStatus({state:"DISABLED"});
   else setStatus({state:"READER",revision:remoteRevision});
 
