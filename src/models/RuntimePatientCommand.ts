@@ -3,6 +3,7 @@ export const runtimePatientCommandTypes = [
   "RESOURCE_STOP",
   "MTP",
   "CLINICAL_TREATMENT",
+  "TRANSPORT_START",
 ] as const;
 
 export type RuntimePatientCommandType = typeof runtimePatientCommandTypes[number];

@@ -54,6 +54,9 @@ export class InMemoryRuntimePatientCommandGateway implements RuntimePatientComma
     return structuredClone(this.commands.filter(item => item.exerciseId === exerciseId && item.commandSequence > cursor &&
       (throughSequence === undefined || item.commandSequence <= throughSequence)).sort((a,b) => a.commandSequence-b.commandSequence));
   }
+  async loadResult(_exerciseId: string, commandSequence: number): Promise<RuntimePatientCommandMaterialization | undefined> {
+    return this.results.get(commandSequence);
+  }
   async record(_exerciseId: string, commandSequence: number, _lease: RuntimeWriterLease,
     materialization: RuntimePatientCommandMaterialization): Promise<void> { this.results.set(commandSequence, structuredClone(materialization)); }
 }

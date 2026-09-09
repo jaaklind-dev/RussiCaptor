@@ -61,6 +61,23 @@ describe("WP-NARVA-06 patient-scoped Runtime command inbox", () => {
     expect(effects).toEqual(new Set(["DURABLE"]));
   });
 
+  test("non-writer transport survives writer absence and materializes once after takeover", async () => {
+    const gateway = new InMemoryRuntimePatientCommandGateway(() => actor); gateway.seed("EX-NARVA", "PT-A", "CM-A");
+    const transport: RuntimePatientCommandSubmission = Object.freeze({ ...command("PT-A", "TRANSPORT-1"),
+      commandType: "TRANSPORT_START", payload: Object.freeze({ resourceId: "REANIMOBILE-1", destinationId: "IVKH" }) });
+    expect((await gateway.submit(transport)).status).toBe("APPLIED");
+    expect(gateway.materialized(1)).toBeUndefined();
+    const effects = new Set<string>();
+    const consumer = new RuntimePatientCommandConsumer(gateway, item => {
+      effects.add(item.commandId); return { status: "MATERIALIZED", result: { ok: true } };
+    });
+    await consumer.drain("EX-NARVA", lease);
+    restoreRuntimePatientCommandCursor("EX-NARVA", 0);
+    await consumer.drain("EX-NARVA", lease);
+    expect(effects).toEqual(new Set(["TRANSPORT-1"]));
+    expect(gateway.materialized(1)).toEqual({ status: "MATERIALIZED", result: { ok: true } });
+  });
+
   test("completion fence rejects later clinical commands", async () => {
     const gateway = new InMemoryRuntimePatientCommandGateway(() => actor); gateway.seed("EX-NARVA", "PT-A", "CM-A");
     gateway.fence("EX-NARVA");

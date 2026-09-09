@@ -3,6 +3,7 @@ import type { AcceptedRuntimePatientCommand, RuntimePatientCommandMaterializatio
 import { applyClinicalTreatmentLocally } from "@/services/clinical/ClinicalTreatmentCommandService";
 import { handleMtpCommand, type MtpAction } from "@/services/runtime/instructor/MassiveTransfusionCommandService";
 import { handleResourceInterventionCommand, stopResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
+import { startPatientTransport } from "@/services/runtime/exercise/PatientTransportRuntimeService";
 
 function rejected(reason: string): RuntimePatientCommandMaterialization {
   return Object.freeze({ status: "REJECTED", result: Object.freeze({ ok: false, reason }) });
@@ -43,6 +44,14 @@ export function materializeRuntimePatientCommand(command: AcceptedRuntimePatient
       const result = applyClinicalTreatmentLocally(command.exerciseId, command.patientId, treatmentId, treatmentCommand);
       return Object.freeze({ status: result.status === "REJECTED" || result.status === "UNAVAILABLE" ? "REJECTED" : "MATERIALIZED",
         result: Object.freeze({ ...result }) as unknown as Readonly<Record<string, unknown>> });
+    }
+    if (command.commandType === "TRANSPORT_START") {
+      const resourceId = command.payload.resourceId;
+      const destinationId = command.payload.destinationId;
+      if (typeof resourceId !== "string" || typeof destinationId !== "string") return rejected("INVALID_COMMAND_PAYLOAD");
+      const result = startPatientTransport(command.commandId, command.patientId, resourceId, destinationId);
+      return Object.freeze({ status: result.status === "REJECTED" ? "REJECTED" : "MATERIALIZED",
+        result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
     }
     return rejected("UNSUPPORTED_COMMAND_TYPE");
   } catch {

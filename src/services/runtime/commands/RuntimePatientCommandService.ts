@@ -16,6 +16,7 @@ import { advanceRuntimePatientCommandCursor, getRuntimePatientCommandCursor } fr
 export interface RuntimePatientCommandGateway {
   submit(command: RuntimePatientCommandSubmission): Promise<RuntimePatientCommandSubmissionResult>;
   loadAfter(exerciseId: string, cursor: number, throughSequence?: number): Promise<readonly AcceptedRuntimePatientCommand[]>;
+  loadResult?(exerciseId: string, commandSequence: number): Promise<RuntimePatientCommandMaterialization | undefined>;
   record(exerciseId: string, commandSequence: number, lease: RuntimeWriterLease,
     materialization: RuntimePatientCommandMaterialization): Promise<void>;
 }
@@ -66,6 +67,15 @@ export class SupabaseRuntimePatientCommandGateway implements RuntimePatientComma
     })));
   }
 
+  async loadResult(exerciseId: string, commandSequence: number): Promise<RuntimePatientCommandMaterialization | undefined> {
+    const { data, error } = await this.client.from("runtime_patient_commands").select("status,materialization_result")
+      .eq("exercise_id", exerciseId).eq("command_sequence", commandSequence).maybeSingle();
+    if (error) return undefined;
+    if (!data || data.status === "ACCEPTED") return undefined;
+    return Object.freeze({ status: data.status === "MATERIALIZED" ? "MATERIALIZED" : "REJECTED",
+      result: Object.freeze((data.materialization_result ?? {}) as Record<string, unknown>) });
+  }
+
   async record(exerciseId: string, commandSequence: number, lease: RuntimeWriterLease,
     materialization: RuntimePatientCommandMaterialization): Promise<void> {
     const { error } = await this.client.rpc("record_runtime_patient_command_result", {
@@ -93,6 +103,17 @@ Readonly<{ simulationTimeSec?: number }>): Promise<RuntimePatientCommandSubmissi
     observeSharedWorkflowHead(input.exerciseId, input.patientId, result.patientRevision, result.ownerUserId);
   }
   return result;
+}
+
+export async function waitForPatientRuntimeCommandResult(exerciseId: string, commandSequence: number,
+  attempts = 40, intervalMs = 250): Promise<RuntimePatientCommandMaterialization | undefined> {
+  if (!gateway?.loadResult) return undefined;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const result = await gateway.loadResult(exerciseId, commandSequence);
+    if (result) return result;
+    if (attempt + 1 < attempts) await new Promise<void>(resolve => setTimeout(resolve, intervalMs));
+  }
+  return undefined;
 }
 
 export type RuntimePatientCommandMaterializer = (command: AcceptedRuntimePatientCommand) =>
