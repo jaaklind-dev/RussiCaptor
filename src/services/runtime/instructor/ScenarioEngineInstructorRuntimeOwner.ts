@@ -103,14 +103,16 @@ export function createScenarioEngineInstructorRuntimeOwner(
         return { ok: true, runtimeEventId: `MTP:${commandId}`, changed };
       } catch (error) { return { ok: false, reason: error instanceof Error ? error.message : "MTP action failed" }; }
     },
-    executeClinicalTreatment(request) {
+    executeClinicalTreatment(request, acceptedDurableSimulationTimeSec) {
       if (!runtimeWritesAllowed()) return Object.freeze({ status: "REJECTED", commandId: request.command.commandId,
         rejectionReason: "INVALID_STATE" }) as ClinicalTreatmentRuntimeResult;
       const result = request.kind === "FLUID" ? engine.executeFluidTherapyCommand(request.command) :
         request.kind === "NOREPINEPHRINE" ? engine.executeNorepinephrineCommand(request.command) :
-          request.kind === "TXA" ? engine.executeTranexamicAcidCommand(request.command) :
+          request.kind === "TXA" ? engine.executeTranexamicAcidCommand(request.command,
+            acceptedDurableSimulationTimeSec) :
             request.kind === "ANALGESIC" ? engine.executeAnalgesicCommand(request.command) :
-              request.kind === "MEDICATION" ? engine.executeMedicationCommand(request.command) :
+              request.kind === "MEDICATION" ? engine.executeMedicationCommand(request.command,
+                acceptedDurableSimulationTimeSec) :
                 request.kind === "VENTILATION" ? engine.executeMechanicalVentilationCommand(request.command) :
                 engine.executeAlsMedicationCommand(request.command);
       if (result.status === "APPLIED") notifySync("local");

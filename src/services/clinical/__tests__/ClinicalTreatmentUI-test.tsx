@@ -181,6 +181,17 @@ describe("Clinical Treatment generic command construction", () => {
       command: { kind: "TXA", command: { action: "START", vascularAccessId: "IV-1" } } });
   });
 
+  test("builds canonical Fibryga as 5 g IV fibrinogen concentrate", () => {
+    expect(requireClinicalTreatmentDescriptor("FIBRINOGEN_CONCENTRATE")).toMatchObject({
+      displayName: "Fibrinogeenikontsentraat (Fibryga)", aliases: ["FIBRYGA"], routes: ["IV"],
+    });
+    expect(build("FIBRINOGEN_CONCENTRATE", { dose: "5", route: "IV", vascularAccessId: "IV-1" }))
+      .toMatchObject({ ok: true, command: { kind: "MEDICATION", command: {
+        medicationId: "FIBRINOGEN_CONCENTRATE", dose: 5, unit: "G", route: "IV",
+        vascularAccessId: "IV-1",
+      } } });
+  });
+
   test.each([
     ["FENTANYL", { mode: "BOLUS", route: "IV", vascularAccessId: "IV-1", dose: "100" }, "MCG"],
     ["KETAMINE", { mode: "BOLUS", route: "IO", vascularAccessId: "IO-1", dose: "50" }, "MG"],

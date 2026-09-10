@@ -172,11 +172,12 @@ export async function submitClinicalTreatment(exerciseId: string, patientId: str
 }
 
 export function applyClinicalTreatmentLocally(exerciseId: string, patientId: string,
-  treatmentId: ClinicalTreatmentId, command: ClinicalTreatmentCommand): ClinicalTreatmentSubmissionResult {
+  treatmentId: ClinicalTreatmentId, command: ClinicalTreatmentCommand,
+  acceptedDurableSimulationTimeSec?: number): ClinicalTreatmentSubmissionResult {
   const owner = getInstructorRuntimeOwner(exerciseId, patientId);
   if (!runtimeWritesAllowed() || !owner?.executeClinicalTreatment) return Object.freeze({ treatmentId,
     status: "UNAVAILABLE", message: "Ravikorraldust ei saa praegu autoriteetselt rakendada." });
-  const runtimeResult = owner.executeClinicalTreatment(command);
+  const runtimeResult = owner.executeClinicalTreatment(command, acceptedDurableSimulationTimeSec);
   const state = runtimeResult.state as Readonly<{ protocolClassification?: string }> | undefined;
   const protocolClassification = state?.protocolClassification;
   const rejectionReason = runtimeResult.rejectionReason;

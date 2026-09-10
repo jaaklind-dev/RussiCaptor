@@ -806,13 +806,18 @@ export class ClinicalScenarioEngine {
     for (const event of result.events) this.logEvent(event.eventType, event, event.patientId);
     this.publishResourceDebugSnapshot();
   }
-  executeMedicationCommand(command: MedicationAdministration & Readonly<{ commandId: string }>): MedicationCommandResult {
+  executeMedicationCommand(command: MedicationAdministration & Readonly<{ commandId: string }>,
+    acceptedDurableSimulationTimeSec?: number): MedicationCommandResult {
     const idempotencyKey = `MEDICATION_COMMAND:${command.commandId}`;
     if (this.appliedEventIds.has(idempotencyKey)) {
       const state = this.medicationEngine.snapshot().instances.find(item => item.administrationId === command.administrationId);
       return Object.freeze({ status: "IDEMPOTENT", commandId: command.commandId, ...(state ? { state } : {}) });
     }
-    if (command.timestamp !== this.simulationTimeSec || command.patientId !== this.requireProcess().encounterId) {
+    const acceptedDurableTime = acceptedDurableSimulationTimeSec === command.timestamp &&
+      Number.isFinite(acceptedDurableSimulationTimeSec) && acceptedDurableSimulationTimeSec >= 0 &&
+      acceptedDurableSimulationTimeSec <= this.simulationTimeSec;
+    if ((command.timestamp !== this.simulationTimeSec && !acceptedDurableTime) ||
+      command.patientId !== this.requireProcess().encounterId) {
       return Object.freeze({ status: "REJECTED", commandId: command.commandId,
         rejectionReason: "INVALID_ADMINISTRATION" });
     }
@@ -874,8 +879,12 @@ export class ClinicalScenarioEngine {
     return this.medicationEngine.fluidTherapyProjectionsAt(this.simulationTimeSec)
       .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
   }
-  executeTranexamicAcidCommand(command: TranexamicAcidCommand): TranexamicAcidCommandResult {
-    if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
+  executeTranexamicAcidCommand(command: TranexamicAcidCommand,
+    acceptedDurableSimulationTimeSec?: number): TranexamicAcidCommandResult {
+    const acceptedDurableTime = acceptedDurableSimulationTimeSec === command.simulationTimeSec &&
+      Number.isFinite(acceptedDurableSimulationTimeSec) && acceptedDurableSimulationTimeSec >= 0 &&
+      acceptedDurableSimulationTimeSec <= this.simulationTimeSec;
+    if (command.simulationTimeSec !== this.simulationTimeSec && !acceptedDurableTime) return Object.freeze({
       status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
     });
     if (command.patientId !== this.requireProcess().encounterId) return Object.freeze({

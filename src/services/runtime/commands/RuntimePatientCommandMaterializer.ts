@@ -41,7 +41,8 @@ export function materializeRuntimePatientCommand(command: AcceptedRuntimePatient
       const treatmentId = command.payload.treatmentId as ClinicalTreatmentId | undefined;
       const treatmentCommand = command.payload.command as ClinicalTreatmentCommand | undefined;
       if (!treatmentId || !treatmentCommand || typeof treatmentCommand !== "object") return rejected("INVALID_COMMAND_PAYLOAD");
-      const result = applyClinicalTreatmentLocally(command.exerciseId, command.patientId, treatmentId, treatmentCommand);
+      const result = applyClinicalTreatmentLocally(command.exerciseId, command.patientId, treatmentId, treatmentCommand,
+        command.simulationTimeSec);
       return Object.freeze({ status: result.status === "REJECTED" || result.status === "UNAVAILABLE" ? "REJECTED" : "MATERIALIZED",
         result: Object.freeze({ ...result }) as unknown as Readonly<Record<string, unknown>> });
     }
