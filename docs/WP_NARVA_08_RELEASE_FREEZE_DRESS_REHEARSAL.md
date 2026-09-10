@@ -248,3 +248,72 @@ Both WP-NARVA-09 release blockers are physically closed. The proposed re-freeze
 baseline is `108f1b4aa458ff3ddb20ccb523c40ac7c53a39a7`. This does not claim that
 the full trauma dress rehearsal or IRO rehearsal has been rerun; those physical
 release gates remain next.
+
+## WP-NARVA-10A re-freeze attempt and pre-rehearsal blocker
+
+Date: 2026-09-10
+
+Status: `NARVA_DRESS_REHEARSAL_BLOCKER_FOUND`
+
+The product-code re-freeze baseline remains
+`108f1b4aa458ff3ddb20ccb523c40ac7c53a39a7`. The only later tracked change at
+the start of this attempt was this evidence document. The approved trauma
+package remained `russicaptor.narva-trauma@1.0.1`, with catalog hash
+`bcefea0e0a08c7e92ab3ba33b82d317daf6e2499f84caefffdf086a223136cc5` and
+definition hash
+`1fb41fb8bd06e1f0492bfe2a0a7d6d076cdb36a6f7d60a9e73a1484b08d4fa35`.
+No package drift was observed.
+
+The exact clean validation build was retained unchanged:
+
+- APK: `RussiCaptor-1.0.0-67-upgrade-validation.apk`
+- version: `1.0.0` / versionCode `67`
+- source SHA: `108f1b4aa458ff3ddb20ccb523c40ac7c53a39a7`
+- source dirty: `false`
+- APK SHA-256: `30cabb7fab1bb096d4de069332c726211373e30159f59161f87ba1798dfca37b`
+- signer SHA-256: `b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d30198980e59fcde96b`
+- production signed, validation harness enabled, non-distributable
+- Device A: Samsung SM-X306B `R5GL236L6ZJ`, Android 16
+- Device B: Samsung SM-X210 `R92X10DCNQD`, Android 16
+
+The exact source had already passed the independent clean automated gate: 11
+focused suites / 149 tests, 197 full suites / 1,554 tests, Runtime Hardening and
+persistence performance 5/5, TypeScript, ESLint and `git diff --check`. The
+representative persistence payload was 1,877,524 bytes and checkpoint capture
+was 27 ms. The Narva package regression was reconfirmed at 14/14. The required
+remote transport-command migration/capability was present; no migration was
+deployed during this attempt.
+
+The required fresh rehearsal exercise could not be created through the normal
+application workflow because retained exercise `EX-1788947202682-1` was still
+authoritatively `RUNNING`. The normal EXCON completion flow was used to clear
+that state. It accepted one completion intent and prepared terminal checkpoint
+revision 116 (approximately 15.6 MB canonical payload), but every terminal
+publication attempt failed in the backend with PostgreSQL SQLSTATE `57014`
+(`statement timeout`). Concise trace evidence showed lifecycle-critical
+publication failures after approximately 24.2, 33.7 and 27.8 seconds. The app
+remained responsive, the completion UI truthfully remained pending, and the
+native writer heartbeat continued renewing authority during finalization.
+
+Final preserved backend evidence for the retained exercise is:
+
+- `exercise_states`: `RUNNING`, revision 41
+- completion request: `PENDING`
+- latest durable checkpoint: revision 109, lifecycle `RUNNING`
+- Runtime lease: expired, but not explicitly released
+- supported stale-Runtime recovery result: `CHECKPOINT_NOT_STALE`
+
+Consequently, the required new Narva exercise was not created and the clinical,
+transport, reader-restart, completion, terminal-immutability and restart gates
+were not started. No product source, APK, backend schema or migration was
+changed. The failure is a release blocker because the supported completion and
+recovery paths cannot clear the retained RUNNING exercise, and the work-package
+rules prohibit an operational-row hotfix.
+
+After the failed preflight, all temporary effective rehearsal assignments were
+removed and the active count was verified as zero. Both applications were
+force-stopped. The failed exercise, checkpoint, completion request and audit
+evidence were preserved. IRO remained out of scope and was not run. The trauma
+release recommendation is NO-GO until the terminal publication timeout or an
+equivalent supported cleanup path is resolved and the full fresh rehearsal is
+rerun.

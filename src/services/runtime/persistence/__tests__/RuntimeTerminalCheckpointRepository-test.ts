@@ -6,8 +6,14 @@ const lease: RuntimeWriterLease = Object.freeze({ leaseId: "00000000-0000-0000-0
   exerciseId: "EX-LARGE", writerInstanceId: "WRITER-1", userId: "USER-1", expiresAt: "2099-01-01T00:00:00.000Z" });
 
 describe("WP-NARVA-06 terminal checkpoint repository", () => {
-  test("submits an approximately 4 MB completed checkpoint to the atomic finalizer", async () => {
-    const large = "x".repeat(4_100_000);
+  test.each([
+    ["1.8 MB", 1_800_000],
+    ["4 MB", 4_000_000],
+    ["8 MB", 8_000_000],
+    ["12 MB", 12_000_000],
+    ["15.6 MB", 15_600_000],
+  ])("submits an approximately %s completed checkpoint to the atomic finalizer", async (_label, payloadSize) => {
+    const large = "x".repeat(payloadSize);
     const checkpoint = Object.freeze({ envelopeVersion: 1 as const, exerciseId: "EX-LARGE", checkpointRevision: 75, persistedRuntimeVersion: 1,
       payloadHash: "a".repeat(64), provenanceHash: "b".repeat(64),
       payload: { exerciseSession: { exerciseId: "EX-LARGE", lifecycleState: "COMPLETED", simulationTimeSec: 120,
@@ -23,7 +29,7 @@ describe("WP-NARVA-06 terminal checkpoint repository", () => {
     expect(rpc).toHaveBeenCalledWith("finalize_runtime_completion", expect.objectContaining({
       p_command_id: "COMPLETE-1", p_expected_checkpoint_revision: 74, p_checkpoint: checkpoint,
     }));
-    expect(JSON.stringify(checkpoint).length).toBeGreaterThan(4_000_000);
+    expect(JSON.stringify(checkpoint).length).toBeGreaterThan(payloadSize);
   });
 
   test("terminal persistence failure is returned without a success acknowledgement", async () => {
