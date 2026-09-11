@@ -1,5 +1,6 @@
 import type { ClinicalTreatmentCommand, ClinicalTreatmentId } from "@/models/ClinicalTreatment";
 import type { AcceptedRuntimePatientCommand } from "@/models/RuntimePatientCommand";
+import type { RuntimeWriterLease } from "@/models/RuntimeCheckpointAuthority";
 import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
 import { packagePatientDatasetRegistry } from "@/services/exercise/CanonicalPatientDatasets";
 import { clearInstructorRuntimeOwners, registerInstructorRuntimeOwner } from
@@ -9,6 +10,8 @@ import { createScenarioEngineInstructorRuntimeOwner } from
 import { setRuntimeWriterAuthorityState } from
   "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { materializeRuntimePatientCommand } from "../RuntimePatientCommandMaterializer";
+import { RuntimePatientCommandConsumer, type RuntimePatientCommandGateway } from "../RuntimePatientCommandService";
+import { resetRuntimePatientCommandCursor } from "../RuntimePatientCommandCursor";
 
 const exerciseId = "EX-NARVA-DELAYED-TREATMENT";
 const patientId = "PT-PELVIC-001";
@@ -30,15 +33,54 @@ function setup(currentSimulationTimeSec = 600) {
 }
 
 function accepted(treatmentId: ClinicalTreatmentId, treatmentCommand: ClinicalTreatmentCommand,
-  simulationTimeSec = 120): AcceptedRuntimePatientCommand {
+  simulationTimeSec = 120, commandSequence = 8): AcceptedRuntimePatientCommand {
   return Object.freeze({ exerciseId, patientId, commandId: treatmentCommand.command.commandId,
     commandType: "CLINICAL_TREATMENT", patientBaseRevision: 4, patientResultingRevision: 5,
     simulationTimeSec, payload: Object.freeze({ treatmentId, command: treatmentCommand }),
-    commandSequence: 8, actorUserId: "CM-B" });
+    commandSequence, actorUserId: "CM-B" });
 }
 
+const lease: RuntimeWriterLease = Object.freeze({ leaseId: "LEASE", exerciseId,
+  writerInstanceId: "WRITER", userId: "CM-A", expiresAt: "2099-01-01T00:00:00.000Z" });
+
 describe("durable clinical-treatment simulation-time authority", () => {
-  afterEach(() => { clearInstructorRuntimeOwners(); setRuntimeWriterAuthorityState("UNRESOLVED"); });
+  afterEach(() => { clearInstructorRuntimeOwners(); setRuntimeWriterAuthorityState("UNRESOLVED");
+    resetRuntimePatientCommandCursor(); });
+
+  test("no-writer Fibryga and TXA stay queued until the recovered checkpoint reaches accepted intent time", async () => {
+    const engine = setup(60);
+    const fibryga = Object.freeze({ kind: "MEDICATION", command: Object.freeze({ commandId: "FIB-NO-WRITER",
+      administrationId: "FIB-NO-WRITER-ADMIN", medicationId: "FIBRINOGEN_CONCENTRATE", patientId,
+      route: "IV", dose: 5, unit: "G", timestamp: 120, administrator: "CLINICAL_TREATMENT",
+      vascularAccessId: "IV-1" }) }) satisfies ClinicalTreatmentCommand;
+    const txa = Object.freeze({ kind: "TXA", command: Object.freeze({ commandId: "TXA-NO-WRITER",
+      action: "START", regimenId: "TXA-NO-WRITER-REGIMEN", patientId, simulationTimeSec: 120,
+      vascularAccessId: "IV-1" }) }) satisfies ClinicalTreatmentCommand;
+    const commands = [accepted("FIBRINOGEN_CONCENTRATE", fibryga, 120, 1),
+      accepted("TRANEXAMIC_ACID", txa, 120, 2)];
+    const record = jest.fn(async () => undefined);
+    const gateway: RuntimePatientCommandGateway = {
+      submit: jest.fn(), loadAfter: jest.fn(async () => commands), record,
+    };
+    const consumer = new RuntimePatientCommandConsumer(gateway, materializeRuntimePatientCommand,
+      () => engine.captureRuntimePayload().simulationTimeSec);
+
+    await expect(consumer.drain(exerciseId, lease)).resolves.toBe(0);
+    expect(record).not.toHaveBeenCalled();
+    expect(engine.getMedicationState()).toHaveLength(0);
+    expect(engine.getTranexamicAcidState()).toHaveLength(0);
+
+    engine.advanceTo(120);
+    await expect(consumer.drain(exerciseId, lease)).resolves.toBe(2);
+    expect(record).toHaveBeenNthCalledWith(1, exerciseId, 1, lease,
+      expect.objectContaining({ status: "MATERIALIZED", result: expect.objectContaining({ status: "APPLIED" }) }));
+    expect(record).toHaveBeenNthCalledWith(2, exerciseId, 2, lease,
+      expect.objectContaining({ status: "MATERIALIZED", result: expect.objectContaining({ status: "APPLIED" }) }));
+    expect(engine.getMedicationState()).toContainEqual(expect.objectContaining({ medicationId: "FIBRINOGEN_CONCENTRATE",
+      timestamp: 120 }));
+    expect(engine.getTranexamicAcidState()).toContainEqual(expect.objectContaining({
+      startedAtSimulationTimeSec: 120, timingClassification: "WITHIN_WINDOW" }));
+  });
 
   test("materializes a delayed canonical 5 g IV Fibryga command without weakening dose or access validation", () => {
     const engine = setup();

@@ -11,6 +11,7 @@ import {
   restoreRemoteExerciseIdentity,
   restoreSharedExerciseState,
   shouldClearRuntimeForRemoteIdentity,
+  shouldPreserveValidatedReaderIdentity,
 } from "@/services/StatePersistenceService";
 import {
   demoTransferTarget,
@@ -70,6 +71,12 @@ describe("remote clinical state sync", () => {
     expect(shouldClearRuntimeForRemoteIdentity("UNRESOLVED", true)).toBe(true);
     expect(shouldClearRuntimeForRemoteIdentity("CONFLICT", true)).toBe(true);
     expect(shouldClearRuntimeForRemoteIdentity("WRITER", false)).toBe(false);
+  });
+
+  test("a stale same-exercise discovery echo cannot replace a read-ready checkpoint identity", () => {
+    expect(shouldPreserveValidatedReaderIdentity("READER", true)).toBe(true);
+    expect(shouldPreserveValidatedReaderIdentity("READER", false)).toBe(false);
+    expect(shouldPreserveValidatedReaderIdentity("WRITER", true)).toBe(false);
   });
 
   test("an active shared projection cannot roll back its own writer or a completed exercise", () => {

@@ -121,8 +121,12 @@ export type RuntimePatientCommandMaterializer = (command: AcceptedRuntimePatient
 
 export class RuntimePatientCommandConsumer {
   private active?: Promise<number>;
+  private pending: readonly AcceptedRuntimePatientCommand[] | undefined;
   constructor(private readonly commandGateway: RuntimePatientCommandGateway,
-    private readonly materialize: RuntimePatientCommandMaterializer) {}
+    private readonly materialize: RuntimePatientCommandMaterializer,
+    private readonly currentSimulationTimeSec: () => number = () => Number.POSITIVE_INFINITY) {}
+
+  hasDeferredCommands(): boolean { return Boolean(this.pending?.length); }
 
   drain(exerciseId: string, lease: RuntimeWriterLease, throughSequence?: number): Promise<number> {
     if (this.active) return this.active;
@@ -135,14 +139,23 @@ export class RuntimePatientCommandConsumer {
 
   private async drainOnce(exerciseId: string, lease: RuntimeWriterLease, throughSequence?: number): Promise<number> {
     let cursor = getRuntimePatientCommandCursor(exerciseId);
-    const commands = await this.commandGateway.loadAfter(exerciseId, cursor, throughSequence);
-    for (const command of commands) {
+    const commands = this.pending ?? await this.commandGateway.loadAfter(exerciseId, cursor, throughSequence);
+    for (const [index, command] of commands.entries()) {
+      // A command accepted while no writer exists can be newer than the last
+      // durable checkpoint recovered by the next writer. Keep that accepted
+      // envelope queued until canonical simulation time reaches its intent;
+      // never rewrite it to takeover time or record a permanent rejection.
+      if (Number.isFinite(command.simulationTimeSec) && command.simulationTimeSec > this.currentSimulationTimeSec()) {
+        this.pending = commands.slice(index);
+        return cursor;
+      }
       const materialization = await this.materialize(command);
       await this.commandGateway.record(exerciseId, command.commandSequence, lease, materialization);
       advanceRuntimePatientCommandCursor(exerciseId, command.commandSequence);
       cursor = command.commandSequence;
       notifySync("local");
     }
+    this.pending = undefined;
     return cursor;
   }
 }

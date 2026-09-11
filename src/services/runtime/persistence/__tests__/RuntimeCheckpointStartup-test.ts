@@ -755,6 +755,12 @@ describe("WP-44B checkpoint startup coordination", () => {
       source.indexOf("export function getLocalRuntimeCheckpoint"),
     );
     expect(restore).toContain("isReaderRuntimeHydrationInProgress(restored.exerciseSession.exerciseId)");
+    expect(restore).toContain("shouldPreserveValidatedReaderIdentity(authority, sameExerciseReaderIsHydrated)");
+    expect(restore.indexOf("shouldPreserveValidatedReaderIdentity")).toBeLessThan(
+      restore.indexOf("restoreExerciseIdentity(restored, false)"));
+    const syncSource = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const realtimeReader = syncSource.slice(syncSource.indexOf("const metadataCoordinator"));
+    expect(realtimeReader).toContain("acceptAuthoritativeRuntimeCheckpointForReaderAsync(decision.checkpoint");
   });
 
   test("checkpoint publication is serialized and coalesces overlapping local ticks", () => {
@@ -825,7 +831,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(source).toContain("let stopped=false;");
     expect(source).toContain("if(stopped)return;");
     expect(source).toContain('return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED"');
-    expect(source).toContain('stopPrepared();stopLifecyclePriority();stopCompletionIntent();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP")');
+    expect(source).toContain('stopPrepared();stopLifecyclePriority();stopCompletionIntent();stopDeferredPatientCommandDrain();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP")');
   });
 
   test("explicit Resume attaches the acquired writer to the canonical renewal lifecycle", () => {

@@ -779,7 +779,8 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   }>|undefined;
   const patientCommandGateway=getRuntimePatientCommandGateway();
   const patientCommandConsumer=patientCommandGateway
-    ? new RuntimePatientCommandConsumer(patientCommandGateway,materializeRuntimePatientCommand) : undefined;
+    ? new RuntimePatientCommandConsumer(patientCommandGateway,materializeRuntimePatientCommand,
+      ()=>getCanonicalExerciseSnapshot().simulationTimeSec) : undefined;
   const completionGateway=getRuntimeCompletionGateway();
   let activeCompletion:RuntimeCompletionRequest|undefined;
   let completionProcessing:Promise<void>|undefined;
@@ -798,6 +799,11 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   };
   const drainPendingPatientCommands=()=>drainPatientCommands();
   drainPatientCommandsForCurrentWriter=drainPendingPatientCommands;
+  const stopDeferredPatientCommandDrain=subscribeToSync(()=>{
+    if(!generationStopped()&&lease&&status.state==="WRITER"&&patientCommandConsumer?.hasDeferredCommands()){
+      void drainPatientCommands().catch(()=>setStatus({state:"WRITER",code:"RUNTIME_COMMAND_MATERIALIZATION_FAILED",revision:remoteRevision}));
+    }
+  });
 
   const processCompletionRequest=(request:RuntimeCompletionRequest|undefined):void=>{
     if(!request||request.exerciseId!==exerciseId)return;
@@ -1063,7 +1069,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
       if(decision.status==="CONFLICT") { releaseRuntimeOwner("CHECKPOINT_CONFLICT");stopClockRunner(); setStatus({state:"CONFLICT",code:decision.code}); }
       else if(decision.status==="REMOTE"){
         if(lease){releaseRuntimeOwner("REMOTE_SYNC_CONFLICT");lease=undefined;stopClockRunner();setStatus({state:"CONFLICT",code:"REMOTE_SYNC_CONFLICT",revision:decision.checkpoint.checkpointRevision});}
-        else {await acceptAuthoritativeRuntimeCheckpointAsync(decision.checkpoint,false,yieldToEventLoop);stopClockRunner();remoteRevision=decision.checkpoint.checkpointRevision;setStatus({state:"READER",revision:remoteRevision});}
+        else {await acceptAuthoritativeRuntimeCheckpointForReaderAsync(decision.checkpoint,yieldToEventLoop);stopClockRunner();remoteRevision=decision.checkpoint.checkpointRevision;setStatus({state:"READER",revision:remoteRevision});}
       }
     },
   });
@@ -1128,7 +1134,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         .catch(()=>setRuntimeCompletionPhase(exerciseId,"FAILED","COMPLETION_REQUEST_LOAD_FAILED"));
     }
   });
-  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });releaseRuntimeOwner("GENERATION_CLEANUP");stopped=true;appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();stopLifecyclePriority();stopCompletionIntent();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");terminalAuthorityFinalizer=undefined;if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;if(establishExerciseRuntimeOwnerForCurrentWriter===establishRuntimeOwner)establishExerciseRuntimeOwnerForCurrentWriter=undefined;if(drainPatientCommandsForCurrentWriter===drainPendingPatientCommands)drainPatientCommandsForCurrentWriter=undefined;if(resumePendingCompletionForCurrentWriter===resumePendingCompletion)resumePendingCompletionForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration)lease=undefined;};
+  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });releaseRuntimeOwner("GENERATION_CLEANUP");stopped=true;appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();stopLifecyclePriority();stopCompletionIntent();stopDeferredPatientCommandDrain();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");terminalAuthorityFinalizer=undefined;if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;if(establishExerciseRuntimeOwnerForCurrentWriter===establishRuntimeOwner)establishExerciseRuntimeOwnerForCurrentWriter=undefined;if(drainPatientCommandsForCurrentWriter===drainPendingPatientCommands)drainPatientCommandsForCurrentWriter=undefined;if(resumePendingCompletionForCurrentWriter===resumePendingCompletion)resumePendingCompletionForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration)lease=undefined;};
 }
 
 async function startRuntimeCheckpointSyncOnce(): Promise<()=>void> {

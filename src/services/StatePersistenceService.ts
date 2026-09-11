@@ -214,6 +214,11 @@ export function shouldClearRuntimeForRemoteIdentity(authority: RuntimeWriterAuth
   return authority !== "WRITER" && !(authority === "READER" && sameExerciseReaderIsHydrated);
 }
 
+export function shouldPreserveValidatedReaderIdentity(authority: RuntimeWriterAuthorityState,
+  sameExerciseReaderIsHydrated: boolean): boolean {
+  return authority === "READER" && sameExerciseReaderIsHydrated;
+}
+
 const readerRuntimeHydrationCounts = new Map<string, number>();
 
 function isReaderRuntimeHydrationInProgress(exerciseId: string): boolean {
@@ -230,6 +235,10 @@ export function restoreRemoteExerciseIdentity(restored: SharedExerciseState): vo
   const sameExerciseReaderIsHydrated = authority === "READER"
     && (isClinicalReferenceRuntimeReadReady(restored.exerciseSession.exerciseId)
       || isReaderRuntimeHydrationInProgress(restored.exerciseSession.exerciseId));
+  // A validated same-exercise checkpoint owns the reader's canonical clock
+  // and Runtime. A bounded discovery row may lag far behind it, so ignore that
+  // active projection wholesale instead of restoring its older session clock.
+  if (shouldPreserveValidatedReaderIdentity(authority, sameExerciseReaderIsHydrated)) return;
   if (shouldClearRuntimeForRemoteIdentity(authority, sameExerciseReaderIsHydrated)) {
     stopClockRunner();
     clearActiveClinicalReferenceRuntime();

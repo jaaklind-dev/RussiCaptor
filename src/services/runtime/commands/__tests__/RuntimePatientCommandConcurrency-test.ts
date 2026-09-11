@@ -61,6 +61,25 @@ describe("WP-NARVA-06 patient-scoped Runtime command inbox", () => {
     expect(effects).toEqual(new Set(["DURABLE"]));
   });
 
+  test("writer recovery defers a valid accepted intent newer than its checkpoint without reloading or rejecting it", async () => {
+    const gateway = new InMemoryRuntimePatientCommandGateway(() => actor); gateway.seed("EX-NARVA", "PT-A", "CM-A");
+    expect((await gateway.submit(command("PT-A", "NO-WRITER"))).status).toBe("APPLIED");
+    let simulationTimeSec = 60;
+    const materialize = jest.fn(() => ({ status: "MATERIALIZED" as const, result: { ok: true } }));
+    const consumer = new RuntimePatientCommandConsumer(gateway, materialize, () => simulationTimeSec);
+
+    await expect(consumer.drain("EX-NARVA", lease)).resolves.toBe(0);
+    expect(consumer.hasDeferredCommands()).toBe(true);
+    expect(materialize).not.toHaveBeenCalled();
+    expect(gateway.materialized(1)).toBeUndefined();
+
+    simulationTimeSec = 120;
+    await expect(consumer.drain("EX-NARVA", lease)).resolves.toBe(1);
+    expect(materialize).toHaveBeenCalledTimes(1);
+    expect(consumer.hasDeferredCommands()).toBe(false);
+    expect(gateway.materialized(1)).toEqual({ status: "MATERIALIZED", result: { ok: true } });
+  });
+
   test("non-writer transport survives writer absence and materializes once after takeover", async () => {
     const gateway = new InMemoryRuntimePatientCommandGateway(() => actor); gateway.seed("EX-NARVA", "PT-A", "CM-A");
     const transport: RuntimePatientCommandSubmission = Object.freeze({ ...command("PT-A", "TRANSPORT-1"),
