@@ -288,6 +288,19 @@ describe("Tranexamic acid antifibrinolytic clinical feature", () => {
     expect(restored.tranexamicAcidProjectionsAt(20_000)).toEqual(empty.tranexamicAcidProjectionsAt(20_000));
   });
 
+  test("restores an equivalent configuration after JSONB key reordering", () => {
+    const source = new TranexamicAcidRuntime();
+    source.execute(command({ commandId: "TXA-JSONB", simulationTimeSec: 120 }), circulation, -300);
+    const snapshot = source.snapshot()!;
+    const reorderedConfiguration = Object.fromEntries(
+      Object.entries(snapshot.configuration).reverse(),
+    ) as typeof snapshot.configuration;
+    const restored = new TranexamicAcidRuntime();
+
+    expect(() => restored.restore({ ...snapshot, configuration: reorderedConfiguration })).not.toThrow();
+    expect(restored.snapshot()).toEqual(snapshot);
+  });
+
   test("TXA coexists with Ringer, NaCl, Gelofusin and norepinephrine without volume or vital shortcuts", () => {
     const medication = new MedicationEngine();
     const fluid = (fluidType: "RINGER" | "SODIUM_CHLORIDE_0_9" | "GELOFUSIN", id: string): SupportedFluidTherapyCommand => ({

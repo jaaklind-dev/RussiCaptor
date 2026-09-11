@@ -1,5 +1,6 @@
 import type { CirculationState } from "@/models/CirculationState";
 import type { ClinicalFeatureContract } from "@/models/ClinicalFeatureContract";
+import { stableJson } from "@/utils/stableJson";
 import {
   TRANEXAMIC_ACID_DOSE_UNIT,
   TRANEXAMIC_ACID_FEATURE_ID,
@@ -226,7 +227,7 @@ export class TranexamicAcidRuntime {
   restore(snapshot?: TranexamicAcidRuntimeSnapshot): void {
     this.reset();
     if (!snapshot) return;
-    if (snapshot.schemaVersion !== 1 || JSON.stringify(snapshot.configuration) !== JSON.stringify(this.configuration)) {
+    if (snapshot.schemaVersion !== 1 || stableJson(snapshot.configuration) !== stableJson(this.configuration)) {
       throw new Error("TRANEXAMIC_ACID_CONFIGURATION_MISMATCH");
     }
     snapshot.regimens.forEach(item => this.regimens.set(item.regimenId, structuredClone(item)));
