@@ -142,7 +142,10 @@ function resultMessage(status: string, rejectionReason?: string, protocolClassif
 
 export function clinicalTreatmentMutationReadiness(exerciseId: string, patientId: string):
 Readonly<{ ready: boolean; reason?: string }> {
-  if (!runtimeWritesAllowed() && !getRuntimePatientCommandGateway()) {
+  if (getRuntimePatientCommandGateway()) {
+    return Object.freeze({ ready: true });
+  }
+  if (!runtimeWritesAllowed()) {
     return Object.freeze({ ready: false, reason: "Ravikorralduse saatmine ei ole ühendatud." });
   }
   if (!getInstructorRuntimeOwner(exerciseId, patientId)?.executeClinicalTreatment) {

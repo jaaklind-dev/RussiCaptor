@@ -10,7 +10,7 @@ import type {
 } from "@/models/ClinicalTreatment";
 import type { CirculationState } from "@/models/CirculationState";
 import type { CardiacArrestPatientProcessRuntime } from "@/models/PatientProcessRuntime";
-import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { getCanonicalExerciseSnapshot, replaceCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
 import {
   availableClinicalTreatmentDescriptors,
@@ -30,11 +30,15 @@ import { createExercisePackage } from "@/services/exercise/ExercisePackageHash";
 import { exercisePackageValidator } from "@/services/exercise/ExercisePackageService";
 import { CARDIAC_ARREST_REFERENCE_FIXTURE } from "@/services/golden/CardiacArrestReferenceFixture";
 import { publishResourceRuntimeDebugSnapshot } from "@/services/ResourceRuntimeDebugService";
-import { clearInstructorRuntimeOwners, registerInstructorRuntimeOwner } from
+import { clearInstructorRuntimeOwners, getInstructorRuntimeOwner, registerInstructorRuntimeOwner } from
   "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
 import { createScenarioEngineInstructorRuntimeOwner } from
   "@/services/runtime/instructor/ScenarioEngineInstructorRuntimeOwner";
 import { setRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
+import { setRuntimePatientCommandGateway, type RuntimePatientCommandGateway } from
+  "@/services/runtime/commands/RuntimePatientCommandService";
+import { observeSharedWorkflowHead, resetSharedWorkflowConflictMetrics } from
+  "@/services/sharedWorkflow/SharedWorkflowMutationService";
 
 const patientId = "PT-CARDIAC-REFERENCE";
 const circulation: CirculationState = { patientId, vascularAccess: [
@@ -262,7 +266,21 @@ describe("Clinical Treatment generic command construction", () => {
 });
 
 describe("Clinical Treatment authoritative integration and projections", () => {
-  beforeEach(() => { clearInstructorRuntimeOwners(); setRuntimeWriterAuthorityState("UNRESOLVED"); });
+  let exerciseBefore: ReturnType<typeof getCanonicalExerciseSnapshot>;
+  beforeEach(() => {
+    exerciseBefore = getCanonicalExerciseSnapshot();
+    clearInstructorRuntimeOwners();
+    setRuntimePatientCommandGateway(undefined);
+    setRuntimeWriterAuthorityState("UNRESOLVED");
+    resetSharedWorkflowConflictMetrics();
+  });
+  afterEach(() => {
+    clearInstructorRuntimeOwners();
+    setRuntimePatientCommandGateway(undefined);
+    setRuntimeWriterAuthorityState("UNRESOLVED");
+    resetSharedWorkflowConflictMetrics();
+    replaceCanonicalExerciseSnapshot(exerciseBefore);
+  });
 
   test("submits a technically valid but too-early shockable adrenaline action to Runtime", async () => {
     const engine = cardiacEngine({ rhythm: "VF", rhythmClassification: "SHOCKABLE", shockAttemptCount: 2 });
@@ -290,6 +308,61 @@ describe("Clinical Treatment authoritative integration and projections", () => {
         status: "UNAVAILABLE",
       });
     expect(engine.getAlsMedicationState()).toEqual([]);
+  });
+
+  test("keeps a restarted non-writer ready through the durable patient-command gateway", async () => {
+    const exerciseId = "READER-COLD-RESTART";
+    const submit = jest.fn(async () => Object.freeze({ status: "APPLIED" as const,
+      commandSequence: 12, patientRevision: 8, ownerUserId: "CM-B" }));
+    const gateway: RuntimePatientCommandGateway = {
+      submit,
+      loadAfter: jest.fn(async () => Object.freeze([])),
+      record: jest.fn(async () => undefined),
+    };
+    replaceCanonicalExerciseSnapshot({ exerciseId, lifecycleState: "RUNNING", simulationTimeSec: 600,
+      speed: 1, version: 4, clockVersion: 2, clockInitializedAtSimulationTimeSec: 0 });
+    observeSharedWorkflowHead(exerciseId, patientId, 7, "CM-B");
+    setRuntimeWriterAuthorityState("READER");
+    setRuntimePatientCommandGateway(gateway);
+
+    // Cold-start hydration may replace writer-only engine adapters. Durable
+    // submission readiness must not depend on one being registered locally.
+    clearInstructorRuntimeOwners();
+    expect(getInstructorRuntimeOwner(exerciseId, patientId)).toBeUndefined();
+    expect(clinicalTreatmentMutationReadiness(exerciseId, patientId)).toEqual({ ready: true });
+
+    const built = build("RINGER", { mode: "BOLUS", volumeMl: "500", rateMlHour: "1000",
+      vascularAccessId: "IV-1" });
+    expect(built.ok).toBe(true);
+    await expect(submitClinicalTreatment(exerciseId, patientId, "RINGER",
+      (built as { ok: true; command: ClinicalTreatmentCommand }).command)).resolves.toMatchObject({
+        status: "APPLIED",
+      });
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({ exerciseId, patientId,
+      patientBaseRevision: 7, simulationTimeSec: 0, commandType: "CLINICAL_TREATMENT" }));
+    expect(getInstructorRuntimeOwner(exerciseId, patientId)).toBeUndefined();
+  });
+
+  test("keeps durable reader readiness across repeated owner hydration and reconnect replacement", () => {
+    const exerciseId = "READER-REHYDRATION";
+    const gateway: RuntimePatientCommandGateway = { submit: jest.fn(),
+      loadAfter: jest.fn(async () => Object.freeze([])), record: jest.fn(async () => undefined) };
+    setRuntimeWriterAuthorityState("READER");
+    setRuntimePatientCommandGateway(gateway);
+    expect(clinicalTreatmentMutationReadiness(exerciseId, patientId)).toEqual({ ready: true });
+
+    const disposeCheckpointN = registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(
+      cardiacEngine(), exerciseId, patientId));
+    expect(clinicalTreatmentMutationReadiness(exerciseId, patientId)).toEqual({ ready: true });
+    disposeCheckpointN();
+    expect(clinicalTreatmentMutationReadiness(exerciseId, patientId)).toEqual({ ready: true });
+
+    const disposeCheckpointN1 = registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(
+      cardiacEngine(), exerciseId, patientId));
+    expect(clinicalTreatmentMutationReadiness(exerciseId, patientId)).toEqual({ ready: true });
+    disposeCheckpointN1();
+    expect(clinicalTreatmentMutationReadiness(exerciseId, patientId)).toEqual({ ready: true });
   });
 
   test("normalizes active cards while keeping historical treatments outside the current palette visible", () => {
