@@ -7,7 +7,7 @@ import {
 } from "@/services/InstructorDashboardService";
 import { filterInstructorPatients } from "@/services/runtime/selectors/InstructorDashboardSelector";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import ExerciseControlsCard from "@/components/excon/ExerciseControlsCard";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
@@ -28,6 +28,10 @@ import {
   getRuntimeCompletionPresentation,
   subscribeToRuntimeCompletionPhase,
 } from "@/services/runtime/exercise/RuntimeCompletionService";
+import { NarvaIroScenarioControlsCard, narvaIroScenarioControlsAvailable } from
+  "@/components/excon/NarvaIroScenarioControlsCard";
+import { useOperatorSession } from "@/hooks/useOperatorSession";
+import { hasActiveRole } from "@/services/authorization/OperatorSessionService";
 
 const initialFilters: InstructorDashboardFilters = {
   location: "All", triage: "All", caseManager: "All", status: "All",
@@ -35,6 +39,7 @@ const initialFilters: InstructorDashboardFilters = {
 const unique = (values: string[]) => ["All", ...new Set(values.filter(Boolean).sort())];
 
 export default function ExerciseDashboardScreen() {
+  const operator = useOperatorSession();
   useSyncExternalStore(subscribeToInstructorDashboard, getInstructorDashboardVersion, getInstructorDashboardVersion);
   useSyncExternalStore(subscribeToRuntimePersistenceFailure, getRuntimePersistenceFailureVersion, getRuntimePersistenceFailureVersion);
   useSyncExternalStore(subscribeToRuntimeCompletionPhase, getRuntimeCompletionPhase, getRuntimeCompletionPhase);
@@ -42,6 +47,10 @@ export default function ExerciseDashboardScreen() {
   const exerciseSnapshot = getCanonicalExerciseSnapshot();
   const exercisePackage = getExercisePackage(exerciseSnapshot.exerciseId);
   const exerciseDefinition = exercisePackage.definition;
+  const iroPatientId = snapshot.patients.find(patient => patient.patientId === "PT-IRO-001")?.patientId;
+  const showIroControls = narvaIroScenarioControlsAvailable({ packageId: exercisePackage.packageId,
+    packageVersion: exercisePackage.packageVersion, lifecycleState: exerciseSnapshot.lifecycleState,
+    authorized: hasActiveRole(operator, "EXCON", exerciseSnapshot.exerciseId), patientId: iroPatientId });
   const recoveryRequired = runtimeRecoveryAvailable(exerciseSnapshot);
   const completionPresentation = getRuntimeCompletionPresentation(
     exerciseSnapshot.exerciseId,
@@ -53,13 +62,13 @@ export default function ExerciseDashboardScreen() {
   const refreshPresentation = useCallback(() => setPresentationVersion(value => value + 1), []);
   const { width } = useWindowDimensions();
   const columns = width >= 1180 ? 4 : width >= 860 ? 3 : width >= 560 ? 2 : 1;
-  const visiblePatients = useMemo(() => filterInstructorPatients(snapshot.patients, filters), [snapshot.patients, filters]);
-  const options = useMemo(() => ({
+  const visiblePatients = filterInstructorPatients(snapshot.patients, filters);
+  const options = {
     location: unique(["EMO", "Resus", "OR", "ICU", "Ward", ...snapshot.patients.map(item => item.location)]),
     triage: unique(["P1", "P2", "P3", "Expectant", ...snapshot.patients.map(item => item.triage)]),
     caseManager: unique(snapshot.patients.map(item => item.caseManagerName ?? "")),
     status: unique(["Stable", "Critical", "Completed", ...snapshot.patients.map(item => item.status)]),
-  }), [snapshot.patients]);
+  };
   const openPatient = useCallback((patientId: string) => router.push(`/excon/patient/${patientId}`), []);
 
   return (
@@ -91,6 +100,8 @@ export default function ExerciseDashboardScreen() {
           <CloudSyncStatusCard lifecycleState={completionPresentation.lifecycleState} />
           {!recoveryRequired && <ExerciseControlsCard snapshot={exerciseSnapshot} onApplied={refreshPresentation}
             awaitingTerminalAck={completionPresentation.awaitingAuthoritativeAck} />}
+          {showIroControls && iroPatientId && <NarvaIroScenarioControlsCard
+            exerciseId={exerciseSnapshot.exerciseId} patientId={iroPatientId} />}
           <PrepareNewExerciseCard snapshot={{ ...exerciseSnapshot, lifecycleState: completionPresentation.lifecycleState }} onPrepared={refreshPresentation} />
           <ExercisePackageInformationCard exercisePackage={exercisePackage} compatibility={exercisePackageValidator.compatibility(exercisePackage)} />
           <ExerciseInformationCard definition={exerciseDefinition} />

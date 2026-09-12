@@ -1,5 +1,20 @@
 export type NarvaIroVentilationFault = "CIRCUIT_DISCONNECT" | "HIGH_PRESSURE_KINK" |
   "OXYGEN_DEPLETION" | "VENTILATOR_STOP";
+
+export const narvaIroScenarioControlCommandTypes = [
+  "IRO_VASOPRESSOR_FAULT_START",
+  "IRO_VASOPRESSOR_FAULT_CORRECT",
+  "IRO_VENTILATION_FAULT_START",
+  "IRO_VENTILATION_FAULT_CORRECT",
+  "IRO_HOLD",
+  "IRO_RESUME",
+] as const;
+
+export type NarvaIroScenarioControlCommandType = typeof narvaIroScenarioControlCommandTypes[number];
+
+export function isNarvaIroScenarioControlCommandType(value: string): value is NarvaIroScenarioControlCommandType {
+  return (narvaIroScenarioControlCommandTypes as readonly string[]).includes(value);
+}
 export type NarvaIroVasopressorStage = "S0" | "S1" | "S2" | "S3" | "PEA" |
   "S1R" | "S2R" | "S3R" | "ROSC";
 export type NarvaIroVentilationStage = "NORMAL" | "EARLY" | "DETERIORATING" | "CRITICAL" | "PEA" | "RECOVERING";

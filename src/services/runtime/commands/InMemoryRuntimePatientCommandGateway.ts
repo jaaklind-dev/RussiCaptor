@@ -2,6 +2,7 @@ import type { RuntimeWriterLease } from "@/models/RuntimeCheckpointAuthority";
 import type { AcceptedRuntimePatientCommand, RuntimePatientCommandMaterialization,
   RuntimePatientCommandSubmission, RuntimePatientCommandSubmissionResult } from "@/models/RuntimePatientCommand";
 import type { RuntimePatientCommandGateway } from "./RuntimePatientCommandService";
+import { isNarvaIroScenarioControlCommandType } from "@/models/NarvaIroScenario";
 
 export type RuntimeCommandActor = Readonly<{ userId: string; role: "CM" | "EXCON"; exerciseIds: readonly string[] | "GLOBAL" }>;
 
@@ -11,7 +12,7 @@ export class InMemoryRuntimePatientCommandGateway implements RuntimePatientComma
   private readonly commands: AcceptedRuntimePatientCommand[] = [];
   private readonly results = new Map<number, RuntimePatientCommandMaterialization>();
   private readonly fenced = new Set<string>();
-  constructor(private readonly actor: () => RuntimeCommandActor) {}
+  constructor(private readonly actor: () => RuntimeCommandActor | undefined) {}
   private key(exerciseId: string, patientId: string): string { return `${exerciseId}\u0000${patientId}`; }
   seed(exerciseId: string, patientId: string, ownerUserId?: string, revision = 0): void {
     this.heads.set(this.key(exerciseId, patientId), { revision, ownerUserId });
@@ -27,7 +28,11 @@ export class InMemoryRuntimePatientCommandGateway implements RuntimePatientComma
 
   async submit(command: RuntimePatientCommandSubmission): Promise<RuntimePatientCommandSubmissionResult> {
     const actor = this.actor();
+    if (!actor) return { status: "AUTHORIZATION_DENIED", patientRevision: command.patientBaseRevision };
     if (actor.exerciseIds !== "GLOBAL" && !actor.exerciseIds.includes(command.exerciseId)) {
+      return { status: "AUTHORIZATION_DENIED", patientRevision: command.patientBaseRevision };
+    }
+    if (isNarvaIroScenarioControlCommandType(command.commandType) && actor.role !== "EXCON") {
       return { status: "AUTHORIZATION_DENIED", patientRevision: command.patientBaseRevision };
     }
     const duplicate = this.commands.find(item => item.exerciseId === command.exerciseId && item.commandId === command.commandId);

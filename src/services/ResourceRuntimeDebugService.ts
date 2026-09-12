@@ -8,6 +8,7 @@ import type { MedicationInstance, MedicationRuntimeEvent } from "@/models/Medica
 import type { VitalSignState } from "@/models/VitalSign";
 import type { ResourceAllocationRuntimeState } from "@/models/ResourceAllocation";
 import type { ClinicalFeatureProjection } from "@/models/ClinicalAssessment";
+import type { NarvaIroScenarioProjection } from "@/models/NarvaIroScenario";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { publishDerivedSnapshotNotification } from "@/services/runtime/RuntimeDerivedSnapshotTransaction";
 
@@ -22,6 +23,7 @@ export type ResourceRuntimeDebugSnapshot = {
   medicationState?: { instances: MedicationInstance[]; events: MedicationRuntimeEvent[]; effects: ClinicalEffect[];
     clinicalFeatures?: ClinicalFeatureProjection[] };
   vitalSignStates?: { patientId: string; state: VitalSignState }[];
+  narvaIroScenario?: NarvaIroScenarioProjection;
   recentEvents: ResourceRuntimeEvent[];
   updatedAt: number;
 };
@@ -74,6 +76,8 @@ export function getPatientResourceDebugSnapshot(patientId: string): ResourceRunt
       clinicalFeatures: patientSnapshot.medicationState.clinicalFeatures?.filter(x => x.patientId === patientId).map(x=>structuredClone(x)),
     } : undefined,
     vitalSignStates: (patientSnapshot.vitalSignStates ?? []).filter(item => item.patientId === patientId).map(item => structuredClone(item)),
+    narvaIroScenario: patientSnapshot.narvaIroScenario?.patientId === patientId
+      ? structuredClone(patientSnapshot.narvaIroScenario) : undefined,
     recentEvents: patientSnapshot.recentEvents
       .filter(event => event.patientId === patientId)
       .slice(-10)

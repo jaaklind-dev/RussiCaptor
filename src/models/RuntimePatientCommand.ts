@@ -4,6 +4,12 @@ export const runtimePatientCommandTypes = [
   "MTP",
   "CLINICAL_TREATMENT",
   "TRANSPORT_START",
+  "IRO_VASOPRESSOR_FAULT_START",
+  "IRO_VASOPRESSOR_FAULT_CORRECT",
+  "IRO_VENTILATION_FAULT_START",
+  "IRO_VENTILATION_FAULT_CORRECT",
+  "IRO_HOLD",
+  "IRO_RESUME",
 ] as const;
 
 export type RuntimePatientCommandType = typeof runtimePatientCommandTypes[number];

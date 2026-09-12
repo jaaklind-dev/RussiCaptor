@@ -4,6 +4,8 @@ import { applyClinicalTreatmentLocally } from "@/services/clinical/ClinicalTreat
 import { handleMtpCommand, type MtpAction } from "@/services/runtime/instructor/MassiveTransfusionCommandService";
 import { handleResourceInterventionCommand, stopResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
 import { startPatientTransport } from "@/services/runtime/exercise/PatientTransportRuntimeService";
+import { isNarvaIroScenarioControlCommandType } from "@/models/NarvaIroScenario";
+import { handleNarvaIroScenarioControlCommand } from "@/services/runtime/instructor/NarvaIroScenarioControlCommandService";
 
 function rejected(reason: string): RuntimePatientCommandMaterialization {
   return Object.freeze({ status: "REJECTED", result: Object.freeze({ ok: false, reason }) });
@@ -53,6 +55,14 @@ export function materializeRuntimePatientCommand(command: AcceptedRuntimePatient
       const result = startPatientTransport(command.commandId, command.patientId, resourceId, destinationId);
       return Object.freeze({ status: result.status === "REJECTED" ? "REJECTED" : "MATERIALIZED",
         result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
+    }
+    if (isNarvaIroScenarioControlCommandType(command.commandType)) {
+      const result = handleNarvaIroScenarioControlCommand({ commandId: command.commandId,
+        exerciseId: command.exerciseId, patientId: command.patientId, commandType: command.commandType,
+        payload: command.payload, issuedBy: command.actorUserId,
+        acceptedDurableSimulationTimeSec: command.simulationTimeSec });
+      return Object.freeze({ status: result.ok ? "MATERIALIZED" : "REJECTED",
+        result: Object.freeze({ ...result }) as unknown as Readonly<Record<string, unknown>> });
     }
     return rejected("UNSUPPORTED_COMMAND_TYPE");
   } catch {
