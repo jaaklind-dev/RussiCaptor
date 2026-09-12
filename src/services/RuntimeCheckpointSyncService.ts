@@ -206,7 +206,7 @@ type RuntimeWriterRenewalLoopOptions = Readonly<{
 type RuntimeWriterRenewalLoop = Readonly<{
   isActive: () => boolean;
   wake: () => void;
-  stop: (reason?: "GENERATION_CLEANUP" | "APP_BACKGROUND" | "AUTHORITY_LOSS" | "EXPLICIT_STOP" | "TERMINAL_COMPLETION") => void;
+  stop: (reason?: "GENERATION_CLEANUP" | "AUTHORITY_LOSS" | "EXPLICIT_STOP" | "TERMINAL_COMPLETION") => void;
 }>;
 
 export function startRuntimeWriterRenewalLoop(options: RuntimeWriterRenewalLoopOptions): RuntimeWriterRenewalLoop {
@@ -490,6 +490,10 @@ export function shouldRestartRuntimeCheckpointSync(previous: SyncIdentity, next:
 }
 export function shouldResetRuntimeCheckpointSyncForPrincipal(previousUserId: string, nextUserId?: string): boolean {
   return previousUserId !== (nextUserId ?? "");
+}
+
+export function runtimeWriterAppStateAction(nextState: string): "PRESERVE" | "RECONCILE" {
+  return nextState === "active" ? "RECONCILE" : "PRESERVE";
 }
 
 export function publicationResultRevokesWriter(state: RuntimeCheckpointPublicationTerminal["state"]): boolean {
@@ -1089,24 +1093,15 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     }
     void metadataCoordinator.notify(metadata).catch(()=>setStatus({state:"OFFLINE",code:"AUTHORITY_UNAVAILABLE"}));
   };
-  // Native platforms may suspend JavaScript timers in the background. Rather
-  // than displaying a writer whose lease can silently expire, deliberately
-  // relinquish this generation and require an authoritative foreground
-  // reconciliation/takeover. UI routes do not own this listener.
+  // The native heartbeat owns Android background lease continuity. AppState is
+  // therefore a reconciliation signal, not an authority-transfer command.
+  // A genuine remote writer change is still rejected by handleMetadata/CAS.
   const appStateSubscription=AppState.addEventListener("change",nextState=>{
     if(generationStopped())return;
     traceRuntimeLeaseLifecycle("APP_STATE_CHANGED", { generation: traceGeneration, detail: { nextState } });
-    if(nextState!=="active"&&lease&&(status.state==="WRITER"||status.state==="ACQUIRING")){
-      const releasedLease=lease;
-      renewalLoop?.stop("APP_BACKGROUND");renewalLoop=undefined;stopNativeHeartbeat("APP_BACKGROUND");lease=undefined;stopClockRunner();
-      releaseRuntimeOwner("APP_BACKGROUND");
-      recordRenewalDiagnostic("RENEWAL_SCHEDULER_STOPPED", "APP_BACKGROUND");
-      setStatus({state:"READER",code:"WRITER_BACKGROUND_RELINQUISHED",revision:remoteRevision});
-      void repository.releaseWriter(releasedLease);
-      return;
-    }
-    if(nextState==="active") {
+    if(runtimeWriterAppStateAction(nextState)==="RECONCILE") {
       traceRuntimeLeaseLifecycle("APP_FOREGROUND_RECONCILIATION", { generation: traceGeneration, detail: {} });
+      renewalLoop?.wake();
       void repository.loadLatestMetadata(exerciseId,"runtime_checkpoint_notifications.app_foreground_metadata").then(handleMetadata).catch(()=>setStatus({state:"OFFLINE",code:"AUTHORITY_UNAVAILABLE"}));
     }
   });

@@ -1,5 +1,5 @@
 import type { NarvaIroScenarioControlCommandType, NarvaIroVentilationFault } from "@/models/NarvaIroScenario";
-import { getResourceRuntimeDebugSnapshot, getResourceRuntimeDebugVersion,
+import { getPatientResourceDebugSnapshot, getResourceRuntimeDebugVersion,
   subscribeToResourceRuntimeDebug } from "@/services/ResourceRuntimeDebugService";
 import { createNarvaIroScenarioControlCommandId, submitNarvaIroScenarioControlCommand,
   waitForNarvaIroScenarioControlMaterialization } from
@@ -37,7 +37,7 @@ export function NarvaIroScenarioControlsCard({ exerciseId, patientId }: Readonly
   patientId: string;
 }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
-  const scenario = getResourceRuntimeDebugSnapshot().narvaIroScenario;
+  const scenario = getPatientResourceDebugSnapshot(patientId).narvaIroScenario;
   const [ventilationFault, setVentilationFault] = useState<NarvaIroVentilationFault>("CIRCUIT_DISCONNECT");
   const [action, setAction] = useState<ActionState>();
   const busy = action?.status === "SUBMITTING" || action?.status === "ACCEPTED";

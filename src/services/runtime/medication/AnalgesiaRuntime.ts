@@ -15,6 +15,7 @@ import {
 } from "@/models/AnalgesiaMedication";
 import type { VitalSignContributor, VitalSignKey } from "@/models/VitalSign";
 import { ANALGESIC_PRODUCT_CONFIGURATIONS, analgesicProductById, canonicalAnalgesicDrugId } from "./AnalgesicProducts";
+import { stableJson } from "@/utils/stableJson";
 
 const precise = (value: number): number => Number(value.toFixed(6));
 const clamp = (value: number): number => Math.min(1, Math.max(0, value));
@@ -242,8 +243,8 @@ export class AnalgesiaRuntime {
   restore(snapshot?: AnalgesiaRuntimeSnapshot): void {
     this.reset();
     if (!snapshot) return;
-    if (snapshot.schemaVersion !== 1 || JSON.stringify(snapshot.productConfigurations) !==
-      JSON.stringify(ANALGESIC_PRODUCT_CONFIGURATIONS)) throw new Error("ANALGESIA_CONFIGURATION_MISMATCH");
+    if (snapshot.schemaVersion !== 1 || stableJson(snapshot.productConfigurations) !==
+      stableJson(ANALGESIC_PRODUCT_CONFIGURATIONS)) throw new Error("ANALGESIA_CONFIGURATION_MISMATCH");
     snapshot.administrations.forEach(item => this.administrations.set(item.administrationId, structuredClone(item)));
     snapshot.painStates.forEach(item => this.painStates.set(item.patientId, structuredClone(item)));
     snapshot.commandResults.forEach(item => this.commandResults.set(item.commandId, structuredClone(item)));

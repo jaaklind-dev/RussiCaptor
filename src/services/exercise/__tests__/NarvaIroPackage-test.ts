@@ -5,6 +5,14 @@ import { NARVA_IRO_REQUIRED_CAPABILITY_GAPS } from "../NarvaPatientDatasets";
 import { createPatientMaterializationPlan } from "../PackagePatientMaterializationService";
 import { exercisePackageRegistry, exercisePackageValidator } from "../ExercisePackageService";
 
+function reorderJsonObjects(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(reorderJsonObjects);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => right.localeCompare(left))
+    .map(([key, child]) => [key, reorderJsonObjects(child)]));
+}
+
 describe("WP-NARVA-02 IRO full package readiness", () => {
   const record = () => packagePatientDatasetRegistry.resolve("patients.narva-iro-evacuation.v2").patients[0];
   const fixture = () => record().runtimeFixture!;
@@ -70,6 +78,30 @@ describe("WP-NARVA-02 IRO full package readiness", () => {
     restored.rehydrateRuntimePayload(payload);
     expect(restored.captureRuntimePayload()).toEqual(payload);
     expect(restored.getNarvaIroScenarioState()).toEqual(source.getNarvaIroScenarioState());
+  });
+
+  test("cooperatively restores active IRO faults after a JSONB-equivalent object-key reorder", async () => {
+    const source = new ClinicalScenarioEngine(); source.reset(structuredClone(fixture()));
+    source.triggerNarvaIroVasopressorFault(0);
+    source.triggerNarvaIroVentilationFault("CIRCUIT_DISCONNECT", 15);
+    source.advanceTo(45); source.setNarvaIroHold(true, 45);
+    const payload = source.captureRuntimePayload();
+    const jsonbEquivalent = reorderJsonObjects(payload) as typeof payload;
+    expect(JSON.stringify(jsonbEquivalent.medication.norepinephrine?.configuration))
+      .not.toBe(JSON.stringify(payload.medication.norepinephrine?.configuration));
+    expect(JSON.stringify(jsonbEquivalent.medication.analgesia?.productConfigurations))
+      .not.toBe(JSON.stringify(payload.medication.analgesia?.productConfigurations));
+    expect(JSON.stringify(jsonbEquivalent.mechanicalVentilation?.configuration))
+      .not.toBe(JSON.stringify(payload.mechanicalVentilation?.configuration));
+    const restored = new ClinicalScenarioEngine();
+    await restored.rehydrateRuntimePayloadAsync(jsonbEquivalent, async () => Promise.resolve());
+    expect(restored.captureRuntimePayload()).toEqual(payload);
+    expect(restored.getNarvaIroScenarioState()).toEqual(source.getNarvaIroScenarioState());
+    expect(restored.getAssessmentPublicationDiagnostics()).toMatchObject({
+      publishedGeneration: 1, buildCount: 1, staleDiscardCount: 0, publicationCount: 1,
+    });
+    restored.advanceTo(60);
+    expect(restored.captureRuntimePayload().simulationTimeSec).toBe(60);
   });
 
   test("materializes PEA in the accepted cardiac-arrest Runtime and grants ROSC only after CPR and cause correction", () => {

@@ -21,6 +21,7 @@ import {
 } from "@/models/MechanicalVentilation";
 import type { VitalSignContributor } from "@/models/VitalSign";
 import type { ClinicalFeatureContract } from "@/models/ClinicalFeatureContract";
+import { stableJson } from "@/utils/stableJson";
 
 export const DEFAULT_MECHANICAL_VENTILATION_CONFIGURATION: MechanicalVentilationConfiguration = Object.freeze({
   schemaVersion: 1,
@@ -301,7 +302,7 @@ export class MechanicalVentilationRuntime {
   restore(snapshot?: MechanicalVentilationRuntimeSnapshot): void {
     this.reset();
     if (!snapshot) return;
-    if (snapshot.schemaVersion !== 1 || JSON.stringify(snapshot.configuration) !== JSON.stringify(this.configuration)) {
+    if (snapshot.schemaVersion !== 1 || stableJson(snapshot.configuration) !== stableJson(this.configuration)) {
       throw new Error("MECHANICAL_VENTILATION_CONFIGURATION_MISMATCH");
     }
     snapshot.supports.forEach(item => this.supports.set(item.supportId, structuredClone(item)));

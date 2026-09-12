@@ -954,20 +954,20 @@ export class ClinicalScenarioEngine {
   }
   triggerNarvaIroVasopressorFault(atSimulationTimeSec = this.simulationTimeSec): NarvaIroScenarioProjection {
     const result = this.narvaIroScenario.triggerVasopressorFault(atSimulationTimeSec);
-    this.aggregateProcesses(); return result;
+    this.aggregateProcesses(); this.publishResourceDebugSnapshot(false); return result;
   }
   triggerNarvaIroVentilationFault(type: NarvaIroVentilationFault,
     atSimulationTimeSec = this.simulationTimeSec): NarvaIroScenarioProjection {
     const result = this.narvaIroScenario.triggerVentilationFault(type, atSimulationTimeSec);
-    this.aggregateProcesses(); return result;
+    this.aggregateProcesses(); this.publishResourceDebugSnapshot(false); return result;
   }
   correctNarvaIroVasopressorFault(atSimulationTimeSec = this.simulationTimeSec): NarvaIroScenarioProjection {
     const result = this.narvaIroScenario.correctVasopressor(atSimulationTimeSec);
-    this.aggregateProcesses(); return result;
+    this.aggregateProcesses(); this.publishResourceDebugSnapshot(false); return result;
   }
   correctNarvaIroVentilationFault(atSimulationTimeSec = this.simulationTimeSec): NarvaIroScenarioProjection {
     const result = this.narvaIroScenario.correctVentilation(atSimulationTimeSec);
-    this.aggregateProcesses(); return result;
+    this.aggregateProcesses(); this.publishResourceDebugSnapshot(false); return result;
   }
   setNarvaIroHold(hold: boolean, atSimulationTimeSec = this.simulationTimeSec): NarvaIroScenarioProjection {
     const result = this.narvaIroScenario.setHold(hold, atSimulationTimeSec);

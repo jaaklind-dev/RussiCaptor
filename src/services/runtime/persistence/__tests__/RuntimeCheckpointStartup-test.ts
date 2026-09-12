@@ -9,6 +9,7 @@ import {
   renewalFailureRevokesWriter,
   renewRuntimeWriterTerminal,
   resolveRuntimeAuthSession,
+  runtimeWriterAppStateAction,
   shouldResetRuntimeCheckpointSyncForPrincipal,
   shouldRestartRuntimeCheckpointSync,
   startRuntimeWriterRenewalLoop,
@@ -856,10 +857,15 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(source).toContain('stopNativeHeartbeat("GENERATION_CLEANUP")');
   });
 
-  test("native background deliberately relinquishes the lease instead of leaving a phantom writer", () => {
+  test("ordinary background preserves the native-heartbeat writer and foreground reconciles it", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     expect(source).toContain('AppState.addEventListener("change",nextState=>');
-    expect(source).toContain('code:"WRITER_BACKGROUND_RELINQUISHED"');
+    expect(runtimeWriterAppStateAction("background")).toBe("PRESERVE");
+    expect(runtimeWriterAppStateAction("inactive")).toBe("PRESERVE");
+    expect(runtimeWriterAppStateAction("active")).toBe("RECONCILE");
+    expect(source).not.toContain('code:"WRITER_BACKGROUND_RELINQUISHED"');
+    expect(source).not.toContain('releaseWriter(releasedLease)');
+    expect(source).toContain("renewalLoop?.wake()");
     expect(source).toContain('runtime_checkpoint_notifications.app_foreground_metadata');
     expect(source).toContain("appStateSubscription.remove()");
   });

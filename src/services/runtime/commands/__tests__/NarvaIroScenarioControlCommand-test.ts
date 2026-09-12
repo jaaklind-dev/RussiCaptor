@@ -8,6 +8,7 @@ import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
 import { packagePatientDatasetRegistry } from "@/services/exercise/CanonicalPatientDatasets";
 import { NARVA_IRO_EXERCISE_PACKAGE } from "@/services/exercise/NarvaExercisePackages";
 import { exercisePackageRegistry } from "@/services/exercise/ExercisePackageService";
+import { getPatientResourceDebugSnapshot } from "@/services/ResourceRuntimeDebugService";
 import { clearInstructorRuntimeOwners, registerInstructorRuntimeOwner } from
   "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
 import { createScenarioEngineInstructorRuntimeOwner } from
@@ -62,11 +63,16 @@ describe("WP-NARVA-10B1 durable IRO scenario controls", () => {
   test("routes vasopressor START/CORRECT through the writer and preserves reference progression", () => {
     const engine = setup();
     expect(materializeRuntimePatientCommand(command("IRO_VASOPRESSOR_FAULT_START"))).toMatchObject({ status: "MATERIALIZED" });
+    expect(getPatientResourceDebugSnapshot(patientId).narvaIroScenario).toMatchObject({
+      vasopressorFault: { startedAtSimulationTimeSec: 0 }, vasopressorStage: "S0",
+    });
     engine.advanceTo(60);
     expect(engine.getNarvaIroScenarioState()).toMatchObject({ vasopressorStage: "S2", systolicBp: 75,
       diastolicBp: 40, etco2: 4.8 });
     expect(materializeRuntimePatientCommand(command("IRO_VASOPRESSOR_FAULT_CORRECT", {}, 2, 60)))
       .toMatchObject({ status: "MATERIALIZED" });
+    expect(getPatientResourceDebugSnapshot(patientId).narvaIroScenario)
+      .toMatchObject({ vasopressorFault: { correctedAtSimulationTimeSec: 60 }, vasopressorStage: "S2R" });
     engine.advanceTo(180);
     expect(engine.getNarvaIroScenarioState().vasopressorStage).toBe("S2R");
   });

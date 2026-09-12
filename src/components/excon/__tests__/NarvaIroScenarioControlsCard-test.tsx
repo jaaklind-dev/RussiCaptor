@@ -57,5 +57,32 @@ describe("IRO EXCON scenario-control presentation", () => {
     await act(async () => { resolveResult?.({ status: "MATERIALIZED", result: { ok: true } }); await result; });
     expect(renderer.root.findAllByType("Text" as never).some(node =>
       String(node.props.children).includes("rakendati autoritaarses Runtime’is"))).toBe(true);
+    await act(async () => renderer.unmount());
+  });
+
+  test("uses the patient-scoped authoritative projection after another global snapshot publishes", async () => {
+    const activeScenario = { schemaVersion: 1 as const, patientId: "PT-IRO-001", enabled: true as const, hold: true,
+      arrest: false, cprQuality: false, rosc: false, goNoGoRequired: false, lastUpdatedSimulationTimeSec: 75,
+      vasopressorFault: { startedAtSimulationTimeSec: 15, accumulatedHoldSec: 0, heldAtSimulationTimeSec: 75 },
+      ventilationFault: { type: "CIRCUIT_DISCONNECT" as const, startedAtSimulationTimeSec: 45,
+        accumulatedHoldSec: 0, heldAtSimulationTimeSec: 75 }, vasopressorStage: "S2" as const,
+      ventilationStage: "DETERIORATING" as const, heartRate: 120, systolicBp: 75, diastolicBp: 40,
+      spo2: 90, pulsePresent: true, etco2WaveformPresent: false, exhaledVolumeReduced: true,
+      oxygenSourceAdequate: true, ventilatorRunning: true, causesCorrected: false, roscEligible: false };
+    publishResourceRuntimeDebugSnapshot({ resources: [], activeInterventions: [], recentEvents: [], updatedAt: 75,
+      narvaIroScenario: activeScenario }, "PT-IRO-001");
+    publishResourceRuntimeDebugSnapshot({ resources: [], activeInterventions: [], recentEvents: [], updatedAt: 0 });
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<NarvaIroScenarioControlsCard
+      exerciseId="EX-IRO-UI" patientId="PT-IRO-001" />); });
+    const text = renderer.root.findAllByType("Text" as never).map(node =>
+      Array.isArray(node.props.children) ? node.props.children.join("") : String(node.props.children)).join("\n");
+    expect(text).toContain("Vasopressor: aktiivne · S2");
+    expect(text).toContain("Ventilatsioon: aktiivne · Kontuuri ühenduse katkemine · DETERIORATING");
+    expect(text).toContain("Stsenaariumikell: HOLD");
+    expect(text).toContain("T+75s");
+    expect(renderer.root.findByProps({ accessibilityLabel: "Taasta vasopressor" }).props.disabled).toBe(false);
+    expect(renderer.root.findByProps({ accessibilityLabel: "RESUME" }).props.disabled).toBe(false);
+    await act(async () => renderer.unmount());
   });
 });

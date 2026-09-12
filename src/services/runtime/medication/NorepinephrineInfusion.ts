@@ -13,6 +13,7 @@ import {
   type NorepinephrineRuntimeSnapshot,
 } from "@/models/NorepinephrineInfusion";
 import type { VitalSignContributor } from "@/models/VitalSign";
+import { stableJson } from "@/utils/stableJson";
 
 export const DEFAULT_NOREPINEPHRINE_CONFIGURATION: NorepinephrineConfiguration = Object.freeze({
   version: "NOREPINEPHRINE_PD_V1",
@@ -209,7 +210,7 @@ export class NorepinephrineInfusionRuntime {
   restore(snapshot?: NorepinephrineRuntimeSnapshot): void {
     this.reset();
     if (!snapshot) return;
-    if (snapshot.schemaVersion !== 1 || JSON.stringify(snapshot.configuration) !== JSON.stringify(this.configuration)) {
+    if (snapshot.schemaVersion !== 1 || stableJson(snapshot.configuration) !== stableJson(this.configuration)) {
       throw new Error("NOREPINEPHRINE_CONFIGURATION_MISMATCH");
     }
     snapshot.infusions.forEach(item => this.infusions.set(item.infusionId, structuredClone(item)));
