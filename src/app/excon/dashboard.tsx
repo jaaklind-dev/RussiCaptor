@@ -100,7 +100,7 @@ export default function ExerciseDashboardScreen() {
           <CloudSyncStatusCard lifecycleState={completionPresentation.lifecycleState} />
           {!recoveryRequired && <ExerciseControlsCard snapshot={exerciseSnapshot} onApplied={refreshPresentation}
             awaitingTerminalAck={completionPresentation.awaitingAuthoritativeAck} />}
-          {showIroControls && iroPatientId && <NarvaIroScenarioControlsCard
+          {showIroControls && iroPatientId && <NarvaIroScenarioControlsCard key={`${exerciseSnapshot.exerciseId}:${iroPatientId}`}
             exerciseId={exerciseSnapshot.exerciseId} patientId={iroPatientId} />}
           <PrepareNewExerciseCard snapshot={{ ...exerciseSnapshot, lifecycleState: completionPresentation.lifecycleState }} onPrepared={refreshPresentation} />
           <ExercisePackageInformationCard exercisePackage={exercisePackage} compatibility={exercisePackageValidator.compatibility(exercisePackage)} />

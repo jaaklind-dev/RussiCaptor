@@ -1,7 +1,9 @@
 import {
   getPatientResourceDebugSnapshot,
   getResourceRuntimeDebugVersion,
+  getPatientResourceDebugVersion,
   publishResourceRuntimeDebugSnapshot,
+  subscribeToPatientResourceRuntimeDebug,
   subscribeToResourceRuntimeDebug,
 } from "@/services/ResourceRuntimeDebugService";
 import { summarizeResources } from "@/services/runtime/selectors/ResourceSelectors";
@@ -33,6 +35,24 @@ test("resource developer read model filters patient data and keeps ten newest ev
   expect(snapshot.recentEvents).toHaveLength(10);
   expect(snapshot.recentEvents[0].timestamp).toBe(11);
   unsubscribe();
+});
+
+test("patient-scoped subscriptions notify only their selected patient and clean up", () => {
+  const patientA = jest.fn();
+  const patientB = jest.fn();
+  const stopA = subscribeToPatientResourceRuntimeDebug("PT-A", patientA);
+  const stopB = subscribeToPatientResourceRuntimeDebug("PT-B", patientB);
+  const beforeA = getPatientResourceDebugVersion("PT-A");
+  const beforeB = getPatientResourceDebugVersion("PT-B");
+  publishResourceRuntimeDebugSnapshot({ resources: [], activeInterventions: [], recentEvents: [], updatedAt: 1 }, "PT-A");
+  expect(getPatientResourceDebugVersion("PT-A")).toBe(beforeA + 1);
+  expect(getPatientResourceDebugVersion("PT-B")).toBe(beforeB);
+  expect(patientA).toHaveBeenCalledTimes(1);
+  expect(patientB).not.toHaveBeenCalled();
+  stopA();
+  publishResourceRuntimeDebugSnapshot({ resources: [], activeInterventions: [], recentEvents: [], updatedAt: 2 }, "PT-A");
+  expect(patientA).toHaveBeenCalledTimes(1);
+  stopB();
 });
 
 test("dashboard resource monitor aggregates total, free and in-use counts by type", () => {

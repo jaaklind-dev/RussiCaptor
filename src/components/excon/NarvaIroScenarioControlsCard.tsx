@@ -1,10 +1,10 @@
 import type { NarvaIroScenarioControlCommandType, NarvaIroVentilationFault } from "@/models/NarvaIroScenario";
-import { getPatientResourceDebugSnapshot, getResourceRuntimeDebugVersion,
-  subscribeToResourceRuntimeDebug } from "@/services/ResourceRuntimeDebugService";
+import { getPatientResourceDebugSnapshot, getPatientResourceDebugVersion,
+  subscribeToPatientResourceRuntimeDebug } from "@/services/ResourceRuntimeDebugService";
 import { createNarvaIroScenarioControlCommandId, submitNarvaIroScenarioControlCommand,
   waitForNarvaIroScenarioControlMaterialization } from
   "@/services/runtime/instructor/NarvaIroScenarioControlCommandService";
-import { useState, useSyncExternalStore } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 const faultLabels: Readonly<Record<NarvaIroVentilationFault, string>> = Object.freeze({
@@ -36,7 +36,10 @@ export function NarvaIroScenarioControlsCard({ exerciseId, patientId }: Readonly
   exerciseId: string;
   patientId: string;
 }>) {
-  useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
+  const subscribe = useCallback((listener: () => void) =>
+    subscribeToPatientResourceRuntimeDebug(patientId, listener), [patientId]);
+  const getVersion = useCallback(() => getPatientResourceDebugVersion(patientId), [patientId]);
+  useSyncExternalStore(subscribe, getVersion, getVersion);
   const scenario = getPatientResourceDebugSnapshot(patientId).narvaIroScenario;
   const [ventilationFault, setVentilationFault] = useState<NarvaIroVentilationFault>("CIRCUIT_DISCONNECT");
   const [action, setAction] = useState<ActionState>();
