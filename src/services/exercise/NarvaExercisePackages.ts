@@ -7,7 +7,8 @@ import { PLEURAL_INJURY_MODULE_ID, PLEURAL_INJURY_MODULE_VERSION } from "@/modul
 import { RESPIRATORY_FAILURE_MODULE_ID, RESPIRATORY_FAILURE_MODULE_VERSION } from "@/modules/respiratoryFailure/RespiratoryFailureManifest";
 import { createExercisePackage } from "./ExercisePackageHash";
 import { DEFAULT_EXERCISE_DEFINITION } from "./ExerciseDefinitionService";
-import { NARVA_IRO_DATASET_ID, NARVA_TRAUMA_DATASET_ID } from "./NarvaPatientDatasets";
+import { NARVA_IRO_DATASET_ID, NARVA_IRO_HISTORICAL_DATASET_ID,
+  NARVA_TRAUMA_DATASET_ID } from "./NarvaPatientDatasets";
 
 const definition = (exerciseTypeId: string, name: string, description: string): ExerciseDefinition =>
   Object.freeze({ ...structuredClone(DEFAULT_EXERCISE_DEFINITION), exerciseTypeId, name, description,
@@ -62,11 +63,37 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
     tags: ["narva", "trauma", "two-patient", "transport", "blood-inventory-finalized"] },
 });
 
-const iroDefinition = definition("RUSSICAPTOR_NARVA_IRO_EVACUATION", "Narva IRO evakuatsiooniõppus",
-  "Intubeeritud ja vasopressorsõltuva patsiendi evakuatsiooni täisstsenaarium.");
+const historicalIroDefinition = definition("RUSSICAPTOR_NARVA_IRO_EVACUATION", "Narva IRO evakuatsiooniõppus",
+  "Intubeeritud ja vasopressorsõltuva patsiendi evakuatsiooni konfiguratsioon; täisstsenaarium ootab päris Runtime võimekusi.");
+
+/** Exact immutable package content introduced by bf0d76e. */
+export const NARVA_IRO_HISTORICAL_EXERCISE_PACKAGE_V1 = createExercisePackage({
+  packageId: "russicaptor.narva-iro-evacuation", packageVersion: "1.0.0",
+  definition: historicalIroDefinition,
+  patientDatasetId: NARVA_IRO_HISTORICAL_DATASET_ID,
+  enabledPatientProcesses: historicalIroDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: historicalIroDefinition.enabledAnalyticsProviders,
+  enabledMetricProviders: historicalIroDefinition.enabledMetricProviders,
+  requiredClinicalModules: Object.freeze([
+    { moduleId: RESPIRATORY_FAILURE_MODULE_ID, version: RESPIRATORY_FAILURE_MODULE_VERSION },
+    { moduleId: ALS_MODULE_ID, version: ALS_MODULE_VERSION },
+  ]),
+  availableClinicalTreatments: Object.freeze(["REMIFENTANIL", "NOREPINEPHRINE",
+    "MECHANICAL_VENTILATION", "ADRENALINE", "AMIODARONE", "LIDOCAINE", "ATROPINE",
+    "ADENOSINE", "MAGNESIUM_SULFATE", "CALCIUM_CHLORIDE", "SODIUM_BICARBONATE"]),
+  metadata: { name: "Narva IRO evakuatsioon", description: "Toetatud IRO konfiguratsiooniosa; ei väida valmisolekut enne puuduva sedatsiooni, NMB ja fault-state-machine võimekuse lisamist.",
+    author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "1.0.0", exerciseType: "CUSTOM",
+    tags: ["narva", "iro", "evacuation", "capability-gaps-explicit", "not-full-scenario-ready"] },
+});
+
+const iroDefinition = Object.freeze({
+  ...definition("RUSSICAPTOR_NARVA_IRO_EVACUATION", "Narva IRO evakuatsiooniõppus",
+    "Intubeeritud ja vasopressorsõltuva patsiendi evakuatsiooni täisstsenaarium."),
+  definitionVersion: 2,
+});
 
 export const NARVA_IRO_EXERCISE_PACKAGE = createExercisePackage({
-  packageId: "russicaptor.narva-iro-evacuation", packageVersion: "1.0.0", definition: iroDefinition,
+  packageId: "russicaptor.narva-iro-evacuation", packageVersion: "1.0.1", definition: iroDefinition,
   patientDatasetId: NARVA_IRO_DATASET_ID,
   enabledPatientProcesses: iroDefinition.enabledPatientProcesses,
   enabledAnalyticsProviders: iroDefinition.enabledAnalyticsProviders,

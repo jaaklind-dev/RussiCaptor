@@ -1,25 +1,39 @@
 import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
 import { packagePatientDatasetRegistry } from "../CanonicalPatientDatasets";
-import { NARVA_IRO_EXERCISE_PACKAGE } from "../NarvaExercisePackages";
+import { NARVA_IRO_EXERCISE_PACKAGE, NARVA_IRO_HISTORICAL_EXERCISE_PACKAGE_V1 } from "../NarvaExercisePackages";
 import { NARVA_IRO_REQUIRED_CAPABILITY_GAPS } from "../NarvaPatientDatasets";
 import { createPatientMaterializationPlan } from "../PackagePatientMaterializationService";
 import { exercisePackageRegistry, exercisePackageValidator } from "../ExercisePackageService";
 
 describe("WP-NARVA-02 IRO full package readiness", () => {
-  const record = () => packagePatientDatasetRegistry.resolve("patients.narva-iro-evacuation.v1").patients[0];
+  const record = () => packagePatientDatasetRegistry.resolve("patients.narva-iro-evacuation.v2").patients[0];
   const fixture = () => record().runtimeFixture!;
   const initial = () => fixture().initialState as Record<string, any>;
 
   test("registers the ready immutable package and one 70 kg P1 patient", () => {
     expect(exercisePackageValidator.validate(NARVA_IRO_EXERCISE_PACKAGE)).toEqual([]);
-    expect(exercisePackageRegistry.require("russicaptor.narva-iro-evacuation", "1.0.0"))
-      .toMatchObject({ patientDatasetId: "patients.narva-iro-evacuation.v1" });
+    expect(exercisePackageRegistry.require("russicaptor.narva-iro-evacuation", "1.0.1"))
+      .toMatchObject({ patientDatasetId: "patients.narva-iro-evacuation.v2" });
     expect(NARVA_IRO_EXERCISE_PACKAGE.metadata.tags).toContain("full-scenario-ready");
     expect(createPatientMaterializationPlan("EX-NARVA-IRO", NARVA_IRO_EXERCISE_PACKAGE,
       packagePatientDatasetRegistry).patients).toHaveLength(1);
     expect(initial()).toMatchObject({ patientWeightKg: 70, scenarioReadiness: "READY_FOR_PHYSICAL_REHEARSAL",
       narvaIroScenario: true, narvaIroInitialTreatments: true });
     expect(NARVA_IRO_REQUIRED_CAPABILITY_GAPS).toEqual([]);
+  });
+
+  test("preserves the exact historical 1.0.0 package and incomplete v1 fixture", () => {
+    expect(exercisePackageValidator.validate(NARVA_IRO_HISTORICAL_EXERCISE_PACKAGE_V1)).toEqual([]);
+    expect(exercisePackageRegistry.require("russicaptor.narva-iro-evacuation", "1.0.0"))
+      .toMatchObject({ packageVersion: "1.0.0", patientDatasetId: "patients.narva-iro-evacuation.v1",
+        metadata: { tags: expect.arrayContaining(["not-full-scenario-ready"]) } });
+    const historical = packagePatientDatasetRegistry.resolve("patients.narva-iro-evacuation.v1");
+    expect(historical.version).toBe("1");
+    expect(historical.patients[0].runtimeFixture?.initialState).toMatchObject({
+      patientWeightKg: 70, scenarioReadiness: "INCOMPLETE_REQUIRED_CAPABILITIES",
+    });
+    expect((historical.patients[0].runtimeFixture?.initialState as Record<string, unknown>))
+      .not.toHaveProperty("narvaIroInitialTreatments");
   });
 
   test("offers the real alternative treatment palette rather than a golden path", () => {

@@ -2,10 +2,15 @@
 
 ## Scope and provenance
 
-This change registers two immutable package identities:
+This original change registered two immutable package identities:
 
 - `russicaptor.narva-trauma@1.0.0` with `patients.narva-trauma.v1`;
 - `russicaptor.narva-iro-evacuation@1.0.0` with `patients.narva-iro-evacuation.v1`.
+
+The IRO identity above is retained as the exact historical, capability-incomplete
+artifact introduced by `bf0d76e`. The later clinically complete IRO content is
+published separately as `russicaptor.narva-iro-evacuation@1.0.1` with
+`patients.narva-iro-evacuation.v2`; see `WP_NARVA_10B0_IRO_PACKAGE_IMMUTABILITY.md`.
 
 The approved `Narva_scenario_input_matrix.docx` and the two referenced source-scenario files were not present in the supplied workspace or attachment set. Values explicitly repeated in the WP-NARVA-01 contract were used. No unavailable Narva-specific value was invented.
 

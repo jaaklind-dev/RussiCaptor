@@ -6,7 +6,8 @@ import { PELVIC_INJURY_REFERENCE_PATIENT } from "@/modules/pelvicInjury/PelvicIn
 import { PLEURAL_INJURY_REFERENCE } from "@/modules/pleuralInjury/PleuralInjuryReference";
 
 export const NARVA_TRAUMA_DATASET_ID = "patients.narva-trauma.v1";
-export const NARVA_IRO_DATASET_ID = "patients.narva-iro-evacuation.v1";
+export const NARVA_IRO_HISTORICAL_DATASET_ID = "patients.narva-iro-evacuation.v1";
+export const NARVA_IRO_DATASET_ID = "patients.narva-iro-evacuation.v2";
 
 export const NARVA_PELVIC_INJURY_TIME_SEC = -5 * 60;
 export const NARVA_CHEST_INJURY_TIME_SEC = -30 * 60;
@@ -119,10 +120,55 @@ export const NARVA_TRAUMA_PATIENT_DATASET: PackagePatientDataset = Object.freeze
   ]),
 });
 
+export const NARVA_IRO_HISTORICAL_REQUIRED_CAPABILITY_GAPS = Object.freeze([
+  "PROPOFOL", "ROCURONIUM_NEUROMUSCULAR_BLOCKADE", "TOF_RASS_BIS",
+  "PACKAGE_BOUND_VASOPRESSOR_FAULT_STATE_MACHINE", "PACKAGE_BOUND_VENTILATION_FAULT_STATE_MACHINE",
+  "CAUSE_GATED_PEA_ROSC", "ACTIVE_TREATMENT_FIXTURE_BOOTSTRAP",
+] as const);
+
+/** Exact historical IRO fixture introduced by bf0d76e. */
+export const NARVA_IRO_HISTORICAL_FIXTURE: GoldenFixture = Object.freeze({
+  fixtureId: "FX-NARVA-IRO-EVACUATION-1.0.0", fixtureType: "PROCESS", patientId: "PT-IRO-001",
+  seed: 4510, clockState: "RUNNING", ownershipVersion: 1,
+  loadedModules: Object.freeze(["AIRWAY_V1", "RESPIRATORY_FAILURE_V1", "HYPOXIA_V1", "MEDICATION_CORE_V1", "ALS_V1", "CARDIAC_ARREST_V1"]),
+  activeResources: Object.freeze({ resources: Object.freeze([
+    resource("ETT-IRO-1", "endotrachealTube", { initiallyInUse: true }),
+    resource("VENT-IRO-1", "ventilator", { initiallyInUse: true }),
+    resource("PIV-IRO-1", "peripheralIV", { initiallyEstablished: true }),
+    resource("CVC-IRO-1", "centralVenousCatheter", { initiallyEstablished: true }),
+    resource("PUMP-IRO-1", "infusionPump"), resource("PUMP-IRO-2", "infusionPump"),
+    resource("PUMP-IRO-3", "infusionPump"), resource("MONITOR-IRO-1", "monitor"),
+    resource("CAPNO-IRO-1", "capnography"), resource("OXYGEN-IRO-1", "oxygen"),
+  ]) }),
+  initialState: Object.freeze({
+    baselineVitals: Object.freeze({ hr: 92, sbp: 105, dbp: 62, rr: 14, spo2: 96, etco2: 4.8, gcs: 3 }),
+    patientWeightKg: 70,
+    requiredInitialSupport: Object.freeze({
+      airway: "INTUBATED", ventilation: Object.freeze({ mode: "VOLUME_CONTROL", tidalVolumeMl: 420,
+        respiratoryRate: 14, fio2: 0.4, peepCmH2O: 8 }),
+      norepinephrineMicrogramsPerKgMin: 0.08, remifentanil: "CONTINUOUS_INFUSION",
+      vascularAccessCount: 2, monitoring: Object.freeze(["ECG", "SPO2", "NIBP", "ETCO2"]),
+      nonDigitalChecklist: Object.freeze(["URINARY_CATHETER", "NGT_OPTIONAL"]),
+    }),
+    scenarioReadiness: "INCOMPLETE_REQUIRED_CAPABILITIES",
+    missingCapabilities: NARVA_IRO_HISTORICAL_REQUIRED_CAPABILITY_GAPS,
+  }),
+});
+
+export const NARVA_IRO_HISTORICAL_PATIENT_DATASET: PackagePatientDataset = Object.freeze({
+  datasetId: NARVA_IRO_HISTORICAL_DATASET_ID, version: "1",
+  patients: Object.freeze([Object.freeze({ patient: Object.freeze({ id: "PT-IRO-001",
+    isikukood: "NARVA-IRO-001", name: "Narva IRO evakuatsioonipatsient", triage: "P1" as const,
+    status: "Active" as const, location: "IRO", lastSeen: "T+0", mist: Object.freeze({
+      mechanism: "IRO evakuatsioon", injuries: "Kriitiliselt haige intubeeritud patsient",
+      signs: "Ventilaator- ja vasopressorsõltuv", treatment: "Intubatsioon, ventilatsioon ja norepinefriin" }) }),
+    initialLocationId: "IRO", runtimeFixture: NARVA_IRO_HISTORICAL_FIXTURE })]),
+});
+
 export const NARVA_IRO_REQUIRED_CAPABILITY_GAPS = Object.freeze([] as const);
 
 export const NARVA_IRO_FIXTURE: GoldenFixture = Object.freeze({
-  fixtureId: "FX-NARVA-IRO-EVACUATION-1.0.0", fixtureType: "PROCESS", patientId: "PT-IRO-001",
+  fixtureId: "FX-NARVA-IRO-EVACUATION-1.0.1", fixtureType: "PROCESS", patientId: "PT-IRO-001",
   seed: 4510, clockState: "RUNNING", ownershipVersion: 1,
   loadedModules: Object.freeze(["AIRWAY_V1", "RESPIRATORY_FAILURE_V1", "HYPOXIA_V1", "MEDICATION_CORE_V1", "ALS_V1", "CARDIAC_ARREST_V1"]),
   activeResources: Object.freeze({ resources: Object.freeze([
@@ -154,7 +200,7 @@ export const NARVA_IRO_FIXTURE: GoldenFixture = Object.freeze({
 });
 
 export const NARVA_IRO_PATIENT_DATASET: PackagePatientDataset = Object.freeze({
-  datasetId: NARVA_IRO_DATASET_ID, version: "1",
+  datasetId: NARVA_IRO_DATASET_ID, version: "2",
   patients: Object.freeze([Object.freeze({ patient: Object.freeze({ id: "PT-IRO-001",
     isikukood: "NARVA-IRO-001", name: "Narva IRO evakuatsioonipatsient", triage: "P1" as const,
     status: "Active" as const, location: "IRO", lastSeen: "T+0", mist: Object.freeze({

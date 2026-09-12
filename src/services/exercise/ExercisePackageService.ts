@@ -19,7 +19,8 @@ import { protocolConfigurationRegistry } from "@/services/protocol/ProtocolConfi
 import { ProtocolCompositionService } from "@/services/protocol/ProtocolCompositionService";
 import { ExerciseEvaluationCompositionService } from "@/services/evaluation/ExerciseEvaluationCompositionService";
 import { exerciseEvaluationProfileRegistry } from "@/services/evaluation/ExerciseEvaluationProfileService";
-import { NARVA_IRO_EXERCISE_PACKAGE, NARVA_TRAUMA_EXERCISE_PACKAGE } from "./NarvaExercisePackages";
+import { NARVA_IRO_EXERCISE_PACKAGE, NARVA_IRO_HISTORICAL_EXERCISE_PACKAGE_V1,
+  NARVA_TRAUMA_EXERCISE_PACKAGE } from "./NarvaExercisePackages";
 
 export const exercisePackageValidator = new ExercisePackageValidator(EXERCISE_DEFINITION_CATALOG);
 export const exercisePackageRegistry = new ExercisePackageRegistry(exercisePackageValidator);
@@ -52,6 +53,7 @@ exercisePackageLoader.load(TRANSPORT_REFERENCE_EXERCISE_PACKAGE);
 exercisePackageLoader.load(PHYSIOLOGIC_DECOMPENSATION_REFERENCE_EXERCISE_PACKAGE);
 exercisePackageLoader.load(PRESSURE_DEPENDENT_HEMORRHAGE_REFERENCE_EXERCISE_PACKAGE);
 exercisePackageLoader.load(NARVA_TRAUMA_EXERCISE_PACKAGE);
+exercisePackageLoader.load(NARVA_IRO_HISTORICAL_EXERCISE_PACKAGE_V1);
 exercisePackageLoader.load(NARVA_IRO_EXERCISE_PACKAGE);
 exercisePackageLoader.bind("demo", DEFAULT_EXERCISE_PACKAGE);
 export function getExercisePackage(exerciseId: string): ExercisePackage { return exercisePackageLoader.getBound(exerciseId) ?? DEFAULT_EXERCISE_PACKAGE; }
