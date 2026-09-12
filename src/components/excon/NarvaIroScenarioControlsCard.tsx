@@ -4,7 +4,8 @@ import { getPatientResourceDebugSnapshot, getPatientResourceDebugVersion,
 import { createNarvaIroScenarioControlCommandId, submitNarvaIroScenarioControlCommand,
   waitForNarvaIroScenarioControlMaterialization } from
   "@/services/runtime/instructor/NarvaIroScenarioControlCommandService";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { memo, useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 const faultLabels: Readonly<Record<NarvaIroVentilationFault, string>> = Object.freeze({
@@ -44,29 +45,53 @@ export function NarvaIroScenarioControlsCard({ exerciseId, patientId }: Readonly
   const [ventilationFault, setVentilationFault] = useState<NarvaIroVentilationFault>("CIRCUIT_DISCONNECT");
   const [action, setAction] = useState<ActionState>();
   const busy = action?.status === "SUBMITTING" || action?.status === "ACCEPTED";
-  const apply = async (commandType: NarvaIroScenarioControlCommandType, payload: Readonly<Record<string, unknown>> = {}) => {
-    if (busy) return;
+  const submissionActive = useRef(false);
+  const apply = useCallback(async (commandType: NarvaIroScenarioControlCommandType,
+    payload: Readonly<Record<string, unknown>> = {}) => {
+    traceRuntimeLeaseLifecycle("IRO_CONTROL_PRESS", { detail: { commandType, exerciseId, patientId,
+      enabled: !submissionActive.current } });
+    if (submissionActive.current) return;
+    submissionActive.current = true;
     const commandId = createNarvaIroScenarioControlCommandId(exerciseId, patientId, commandType);
     setAction({ commandId, status: "SUBMITTING" });
-    const submitted = await submitNarvaIroScenarioControlCommand({ commandId, exerciseId, patientId,
-      commandType, payload, issuedBy: "EXCON" });
-    if (submitted.status === "REJECTED") {
-      setAction({ commandId, status: "REJECTED", message: submitted.message }); return;
+    traceRuntimeLeaseLifecycle("IRO_CONTROL_SUBMIT_STARTED", { detail: { commandType, exerciseId, patientId,
+      commandId } });
+    try {
+      const submitted = await submitNarvaIroScenarioControlCommand({ commandId, exerciseId, patientId,
+        commandType, payload, issuedBy: "EXCON" });
+      if (submitted.status === "REJECTED") {
+        submissionActive.current = false;
+        setAction({ commandId, status: "REJECTED", message: submitted.message }); return;
+      }
+      if (submitted.status === "MATERIALIZED") {
+        submissionActive.current = false;
+        setAction({ commandId, status: "MATERIALIZED" }); return;
+      }
+      setAction({ commandId, status: "ACCEPTED" });
+      if (submitted.commandSequence === undefined) return;
+      const materialized = await waitForNarvaIroScenarioControlMaterialization(exerciseId, submitted.commandSequence);
+      if (!materialized) return;
+      submissionActive.current = false;
+      setAction({ commandId, status: materialized.status,
+        ...(materialized.status === "REJECTED" ? { message: String(materialized.result.reason ?? "Runtime lükkas käsu tagasi.") } : {}) });
+    } catch {
+      submissionActive.current = false;
+      setAction({ commandId, status: "REJECTED", message: "IRO stsenaariumikäsku ei saanud saata." });
     }
-    if (submitted.status === "MATERIALIZED") {
-      setAction({ commandId, status: "MATERIALIZED" }); return;
-    }
-    setAction({ commandId, status: "ACCEPTED" });
-    if (submitted.commandSequence === undefined) return;
-    const materialized = await waitForNarvaIroScenarioControlMaterialization(exerciseId, submitted.commandSequence);
-    if (!materialized) return;
-    setAction({ commandId, status: materialized.status,
-      ...(materialized.status === "REJECTED" ? { message: String(materialized.result.reason ?? "Runtime lükkas käsu tagasi.") } : {}) });
-  };
+  }, [exerciseId, patientId]);
   const vasoActive = Boolean(scenario?.vasopressorFault && scenario.vasopressorFault.correctedAtSimulationTimeSec === undefined);
   const ventilationActive = Boolean(scenario?.ventilationFault && scenario.ventilationFault.correctedAtSimulationTimeSec === undefined);
   const vasoStatus = !scenario?.vasopressorFault ? "puudub" : vasoActive ? "aktiivne" : "parandatud";
   const ventilationStatus = !scenario?.ventilationFault ? "puudub" : ventilationActive ? "aktiivne" : "parandatud";
+  const startVasopressor = useCallback(() => { void apply("IRO_VASOPRESSOR_FAULT_START"); }, [apply]);
+  const correctVasopressor = useCallback(() => { void apply("IRO_VASOPRESSOR_FAULT_CORRECT"); }, [apply]);
+  const startVentilation = useCallback(() => {
+    void apply("IRO_VENTILATION_FAULT_START", { faultType: ventilationFault });
+  }, [apply, ventilationFault]);
+  const correctVentilation = useCallback(() => { void apply("IRO_VENTILATION_FAULT_CORRECT"); }, [apply]);
+  const hold = useCallback(() => { void apply("IRO_HOLD"); }, [apply]);
+  const resume = useCallback(() => { void apply("IRO_RESUME"); }, [apply]);
+  const selectVentilationFault = useCallback((fault: NarvaIroVentilationFault) => setVentilationFault(fault), []);
   return <View style={styles.card} testID="narva-iro-scenario-controls">
     <Text style={styles.title}>IRO stsenaariumi juhtimine</Text>
     <Text style={styles.help}>Autenditud EXCON-käsk liigub püsivasse tööjärjekorda ja rakendub ainult autoritaarses Runtime’is.</Text>
@@ -80,26 +105,23 @@ export function NarvaIroScenarioControlsCard({ exerciseId, patientId }: Readonly
     <Text style={styles.section}>Vasopressor</Text>
     <View style={styles.row}>
       <ActionButton label="Alusta katkestust" disabled={busy || vasoActive}
-        onPress={() => void apply("IRO_VASOPRESSOR_FAULT_START")} />
+        commandType="IRO_VASOPRESSOR_FAULT_START" onPress={startVasopressor} />
       <ActionButton label="Taasta vasopressor" disabled={busy || !vasoActive}
-        onPress={() => void apply("IRO_VASOPRESSOR_FAULT_CORRECT")} />
+        commandType="IRO_VASOPRESSOR_FAULT_CORRECT" onPress={correctVasopressor} />
     </View>
     <Text style={styles.section}>Ventilatsioonirike</Text>
-    <View style={styles.faults}>{faults.map(fault => <Pressable key={fault} disabled={busy || ventilationActive}
-      accessibilityRole="radio" accessibilityState={{ selected: ventilationFault === fault, disabled: busy || ventilationActive }}
-      onPress={() => setVentilationFault(fault)} style={[styles.fault, ventilationFault === fault && styles.faultSelected]}>
-      <Text style={[styles.faultText, ventilationFault === fault && styles.faultSelectedText]}>{faultLabels[fault]}</Text>
-    </Pressable>)}</View>
+    <View style={styles.faults}>{faults.map(fault => <FaultOption key={fault} fault={fault}
+      disabled={busy || ventilationActive} selected={ventilationFault === fault} onSelect={selectVentilationFault} />)}</View>
     <View style={styles.row}>
       <ActionButton label="Alusta ventilatsiooniriket" disabled={busy || ventilationActive}
-        onPress={() => void apply("IRO_VENTILATION_FAULT_START", { faultType: ventilationFault })} />
+        commandType="IRO_VENTILATION_FAULT_START" onPress={startVentilation} />
       <ActionButton label="Taasta ventilatsioon" disabled={busy || !ventilationActive}
-        onPress={() => void apply("IRO_VENTILATION_FAULT_CORRECT")} />
+        commandType="IRO_VENTILATION_FAULT_CORRECT" onPress={correctVentilation} />
     </View>
     <Text style={styles.section}>Stsenaariumikell</Text>
     <View style={styles.row}>
-      <ActionButton label="HOLD" disabled={busy || Boolean(scenario?.hold)} onPress={() => void apply("IRO_HOLD")} />
-      <ActionButton label="RESUME" disabled={busy || !scenario?.hold} onPress={() => void apply("IRO_RESUME")} />
+      <ActionButton label="HOLD" disabled={busy || Boolean(scenario?.hold)} commandType="IRO_HOLD" onPress={hold} />
+      <ActionButton label="RESUME" disabled={busy || !scenario?.hold} commandType="IRO_RESUME" onPress={resume} />
     </View>
     {action && <Text accessibilityLiveRegion="polite" style={action.status === "REJECTED" ? styles.error : styles.result}>
       {action.status === "SUBMITTING" ? "Saadan käsku…" : action.status === "ACCEPTED" ? "Käsk vastu võetud; ootan Runtime’i kinnitust…"
@@ -109,10 +131,30 @@ export function NarvaIroScenarioControlsCard({ exerciseId, patientId }: Readonly
   </View>;
 }
 
-function ActionButton({ label, disabled, onPress }: Readonly<{ label: string; disabled: boolean; onPress: () => void }>) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress}
-    style={[styles.button, disabled && styles.disabled]}><Text style={styles.buttonText}>{label}</Text></Pressable>;
-}
+const ActionButton = memo(function ActionButton({ label, disabled, commandType, onPress }: Readonly<{
+  label: string;
+  disabled: boolean;
+  commandType: NarvaIroScenarioControlCommandType;
+  onPress: () => void;
+}>) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }}
+    testID={`iro-control-${commandType}`} disabled={disabled} onPress={onPress}
+    style={[styles.button, disabled && styles.disabled]}><Text pointerEvents="none" style={styles.buttonText}>{label}</Text></Pressable>;
+});
+
+const FaultOption = memo(function FaultOption({ fault, disabled, selected, onSelect }: Readonly<{
+  fault: NarvaIroVentilationFault;
+  disabled: boolean;
+  selected: boolean;
+  onSelect: (fault: NarvaIroVentilationFault) => void;
+}>) {
+  const onPress = useCallback(() => onSelect(fault), [fault, onSelect]);
+  return <Pressable disabled={disabled} accessibilityRole="radio"
+    accessibilityState={{ selected, disabled }} onPress={onPress}
+    style={[styles.fault, selected && styles.faultSelected]}>
+    <Text pointerEvents="none" style={[styles.faultText, selected && styles.faultSelectedText]}>{faultLabels[fault]}</Text>
+  </Pressable>;
+});
 
 const styles = StyleSheet.create({
   card: { backgroundColor: "#eff6ff", borderColor: "#93c5fd", borderWidth: 1, borderRadius: 14,

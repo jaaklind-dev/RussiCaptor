@@ -1,5 +1,5 @@
 import React from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import TestRenderer, { act, type ReactTestInstance } from "react-test-renderer";
 
 import { NarvaIroScenarioControlsCard, narvaIroScenarioControlsAvailable } from
   "@/components/excon/NarvaIroScenarioControlsCard";
@@ -25,6 +25,30 @@ const publishScenario = (scenario: NarvaIroScenarioProjection) => publishResourc
 
 const renderedText = (renderer: TestRenderer.ReactTestRenderer): string => renderer.root.findAllByType("Text" as never)
   .map(node => Array.isArray(node.props.children) ? node.props.children.join("") : String(node.props.children)).join("\n");
+
+const pressRenderedControl = async (renderer: TestRenderer.ReactTestRenderer, accessibilityLabel: string): Promise<void> => {
+  const responder = renderer.root.findAll((node: ReactTestInstance) => node.props.accessibilityLabel === accessibilityLabel &&
+    typeof node.props.onStartShouldSetResponder === "function")[0];
+  if (!responder) throw new Error(`No rendered responder for ${accessibilityLabel}`);
+  const target = { measure: (callback: (left: number, top: number, width: number, height: number,
+    pageX: number, pageY: number) => void) => callback(0, 0, 100, 100, 0, 0) };
+  const event = { currentTarget: target, target, persist: jest.fn(), stopPropagation: jest.fn(),
+    nativeEvent: { pageX: 10, pageY: 10, locationX: 10, locationY: 10, timestamp: Date.now() } };
+  await act(async () => {
+    expect(responder.props.onStartShouldSetResponder()).toBe(true);
+    responder.props.onResponderGrant(event);
+    responder.props.onResponderRelease(event);
+    await Promise.resolve();
+  });
+};
+
+const gatewayWithResult = (result: RuntimePatientCommandGateway["submit"] extends (...args: never[]) => Promise<infer R> ? R : never,
+  materialization?: { status: "MATERIALIZED" | "REJECTED"; result: Readonly<Record<string, unknown>> }) => ({
+    submit: jest.fn(async () => result),
+    loadAfter: jest.fn(async () => []),
+    loadResult: jest.fn(async () => materialization),
+    record: jest.fn(async () => undefined),
+  } satisfies RuntimePatientCommandGateway);
 
 describe("IRO EXCON scenario-control presentation", () => {
   afterEach(() => setRuntimePatientCommandGateway(undefined));
@@ -67,8 +91,7 @@ describe("IRO EXCON scenario-control presentation", () => {
     expect(renderer.root.findAllByType("Text" as never).some(node =>
       (Array.isArray(node.props.children) ? node.props.children.join("") : String(node.props.children))
         .includes("Vasopressor: puudub"))).toBe(true);
-    const start = renderer.root.findByProps({ accessibilityLabel: "Alusta katkestust" });
-    await act(async () => { start.props.onPress(); await Promise.resolve(); });
+    await pressRenderedControl(renderer, "Alusta katkestust");
     expect(renderer.root.findAllByType("Text" as never).some(node =>
       String(node.props.children).includes("ootan Runtime’i kinnitust"))).toBe(true);
     await act(async () => { resolveResult?.({ status: "MATERIALIZED", result: { ok: true } }); await result; });
@@ -180,6 +203,117 @@ describe("IRO EXCON scenario-control presentation", () => {
     expect(renderedText(renderer)).toContain("Ventilatsioon: aktiivne · Kontuuri ühenduse katkemine · DETERIORATING");
     await act(async () => publishScenario(iroScenario("PT-A", { lastUpdatedSimulationTimeSec: 90 })));
     expect(renderedText(renderer)).toContain("T+60s");
+    await act(async () => renderer.unmount());
+  });
+
+  test("real START press crosses the rendered responder and submits exactly one canonical command", async () => {
+    replaceCanonicalExerciseSnapshot({ exerciseId: "EX-IRO-PRESS", lifecycleState: "RUNNING",
+      simulationTimeSec: 12, speed: 1, version: 2, clockVersion: 1, clockInitializedAtSimulationTimeSec: 0 });
+    observeSharedWorkflowHead("EX-IRO-PRESS", "PT-IRO-001", 0);
+    publishScenario(iroScenario("PT-IRO-001", { lastUpdatedSimulationTimeSec: 12 }));
+    const gateway = gatewayWithResult({ status: "APPLIED", patientRevision: 1, commandSequence: 7 },
+      { status: "MATERIALIZED", result: { ok: true } });
+    setRuntimePatientCommandGateway(gateway);
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<NarvaIroScenarioControlsCard
+      exerciseId="EX-IRO-PRESS" patientId="PT-IRO-001" />); });
+    await pressRenderedControl(renderer, "Alusta katkestust");
+    expect(gateway.submit).toHaveBeenCalledTimes(1);
+    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({ exerciseId: "EX-IRO-PRESS",
+      patientId: "PT-IRO-001", commandType: "IRO_VASOPRESSOR_FAULT_START", payload: {} }));
+    expect(renderedText(renderer)).toContain("Käsk rakendati autoritaarses Runtime’is.");
+    await act(async () => renderer.unmount());
+  });
+
+  test("keeps the enabled responder stable across live projection rerenders", async () => {
+    replaceCanonicalExerciseSnapshot({ exerciseId: "EX-IRO-STABLE-PRESS", lifecycleState: "RUNNING",
+      simulationTimeSec: 12, speed: 1, version: 2, clockVersion: 1, clockInitializedAtSimulationTimeSec: 0 });
+    observeSharedWorkflowHead("EX-IRO-STABLE-PRESS", "PT-IRO-001", 0);
+    publishScenario(iroScenario("PT-IRO-001"));
+    const gateway = gatewayWithResult({ status: "APPLIED", patientRevision: 1, commandSequence: 1 },
+      { status: "MATERIALIZED", result: { ok: true } });
+    setRuntimePatientCommandGateway(gateway);
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<NarvaIroScenarioControlsCard
+      exerciseId="EX-IRO-STABLE-PRESS" patientId="PT-IRO-001" />); });
+    const before = renderer.root.findByProps({ testID: "iro-control-IRO_VASOPRESSOR_FAULT_START" });
+    const beforeOnPress = before.props.onPress;
+    await act(async () => publishScenario(iroScenario("PT-IRO-001", { lastUpdatedSimulationTimeSec: 1 })));
+    const after = renderer.root.findByProps({ testID: "iro-control-IRO_VASOPRESSOR_FAULT_START" });
+    expect(after.props.onPress).toBe(beforeOnPress);
+    await pressRenderedControl(renderer, "Alusta katkestust");
+    expect(gateway.submit).toHaveBeenCalledTimes(1);
+    await act(async () => renderer.unmount());
+  });
+
+  test("shows submitting immediately, coalesces rapid duplicate presses, and reports rejection", async () => {
+    replaceCanonicalExerciseSnapshot({ exerciseId: "EX-IRO-PENDING", lifecycleState: "RUNNING",
+      simulationTimeSec: 12, speed: 1, version: 2, clockVersion: 1, clockInitializedAtSimulationTimeSec: 0 });
+    observeSharedWorkflowHead("EX-IRO-PENDING", "PT-IRO-001", 0);
+    publishScenario(iroScenario("PT-IRO-001"));
+    let resolveSubmit!: (result: { status: "AUTHORIZATION_DENIED"; patientRevision: number }) => void;
+    const pending = new Promise<{ status: "AUTHORIZATION_DENIED"; patientRevision: number }>(resolve => { resolveSubmit = resolve; });
+    const gateway: RuntimePatientCommandGateway = { submit: jest.fn(() => pending), loadAfter: jest.fn(async () => []),
+      loadResult: jest.fn(async () => undefined), record: jest.fn(async () => undefined) };
+    setRuntimePatientCommandGateway(gateway);
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<NarvaIroScenarioControlsCard
+      exerciseId="EX-IRO-PENDING" patientId="PT-IRO-001" />); });
+    await pressRenderedControl(renderer, "Alusta katkestust");
+    expect(renderedText(renderer)).toContain("Saadan käsku…");
+    const disabledStart = renderer.root.findByProps({ testID: "iro-control-IRO_VASOPRESSOR_FAULT_START" });
+    expect(disabledStart.props.disabled).toBe(true);
+    expect(disabledStart.props.accessibilityState.disabled).toBe(true);
+    expect(gateway.submit).toHaveBeenCalledTimes(1);
+    expect(renderer.root.findAll((node: ReactTestInstance) => node.props.accessibilityLabel === "Alusta katkestust" &&
+      typeof node.props.onStartShouldSetResponder === "function")[0].props.onStartShouldSetResponder()).toBe(false);
+    await act(async () => { resolveSubmit({ status: "AUTHORIZATION_DENIED", patientRevision: 0 }); await pending; });
+    expect(renderedText(renderer)).toContain("Käsk lükati tagasi: IRO juhtimiseks on vajalik aktiivne õppuse EXCON-õigus.");
+    await act(async () => renderer.unmount());
+  });
+
+  test.each([
+    ["Taasta vasopressor", "IRO_VASOPRESSOR_FAULT_CORRECT" as const,
+      { vasopressorFault: { startedAtSimulationTimeSec: 1, accumulatedHoldSec: 0 } }],
+    ["Alusta ventilatsiooniriket", "IRO_VENTILATION_FAULT_START" as const, {}],
+    ["Taasta ventilatsioon", "IRO_VENTILATION_FAULT_CORRECT" as const,
+      { ventilationFault: { type: "CIRCUIT_DISCONNECT" as const, startedAtSimulationTimeSec: 1, accumulatedHoldSec: 0 } }],
+    ["HOLD", "IRO_HOLD" as const, {}],
+    ["RESUME", "IRO_RESUME" as const, { hold: true }],
+  ])("real %s press submits %s", async (label, commandType, overrides) => {
+    replaceCanonicalExerciseSnapshot({ exerciseId: "EX-IRO-CONTROLS", lifecycleState: "RUNNING",
+      simulationTimeSec: 12, speed: 1, version: 2, clockVersion: 1, clockInitializedAtSimulationTimeSec: 0 });
+    observeSharedWorkflowHead("EX-IRO-CONTROLS", "PT-IRO-001", 0);
+    publishScenario(iroScenario("PT-IRO-001", overrides));
+    const gateway = gatewayWithResult({ status: "APPLIED", patientRevision: 1, commandSequence: 1 },
+      { status: "MATERIALIZED", result: { ok: true } });
+    setRuntimePatientCommandGateway(gateway);
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<NarvaIroScenarioControlsCard
+      exerciseId="EX-IRO-CONTROLS" patientId="PT-IRO-001" />); });
+    await pressRenderedControl(renderer, label);
+    expect(gateway.submit).toHaveBeenCalledTimes(1);
+    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({ commandType,
+      ...(commandType === "IRO_VENTILATION_FAULT_START" ? { payload: { faultType: "CIRCUIT_DISCONNECT" } } : { payload: {} }) }));
+    await act(async () => renderer.unmount());
+  });
+
+  test("disabled controls expose matching visual and accessibility state and do not submit", async () => {
+    publishScenario(iroScenario("PT-IRO-001", { vasopressorFault: { startedAtSimulationTimeSec: 1,
+      accumulatedHoldSec: 0 }, ventilationFault: { type: "CIRCUIT_DISCONNECT", startedAtSimulationTimeSec: 1,
+        accumulatedHoldSec: 0 }, hold: true }));
+    const gateway = gatewayWithResult({ status: "APPLIED", patientRevision: 1, commandSequence: 1 },
+      { status: "MATERIALIZED", result: { ok: true } });
+    setRuntimePatientCommandGateway(gateway);
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<NarvaIroScenarioControlsCard
+      exerciseId="EX-IRO-DISABLED" patientId="PT-IRO-001" />); });
+    for (const commandType of ["IRO_VASOPRESSOR_FAULT_START", "IRO_VENTILATION_FAULT_START", "IRO_HOLD"] as const) {
+      const control = renderer.root.findByProps({ testID: `iro-control-${commandType}` });
+      expect(control.props.disabled).toBe(true);
+      expect(control.props.accessibilityState.disabled).toBe(true);
+    }
+    expect(gateway.submit).not.toHaveBeenCalled();
     await act(async () => renderer.unmount());
   });
 });
