@@ -6,8 +6,8 @@ import {
   type RuntimeProvenance,
 } from "@/models/PersistedRuntimeState";
 import type { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
-import { sha256Text, sha256TextAsync } from "@/utils/sha256";
-import { stableJson, stableJsonAsync } from "@/utils/stableJson";
+import { sha256Text } from "@/utils/sha256";
+import { stableJson, stableJsonHashAsync } from "@/utils/stableJson";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
@@ -18,7 +18,6 @@ const capturedCanonicalArtifacts = new WeakSet<object>();
 // inherit it.
 const checkpointValidatedRuntimeArtifacts = new WeakSet<object>();
 const UI_VALUES_PER_SLICE = 128;
-const UI_CHARACTERS_PER_SLICE = 8_192;
 const UI_SHA_BLOCKS_PER_SLICE = 16;
 const UI_MAX_SLICE_MS = 8;
 
@@ -89,14 +88,15 @@ export class CanonicalRuntimePersistenceService {
     });
     await yieldControl();
     const endSerialization = startRuntimeWorkTrace("RUNTIME_PAYLOAD_SERIALIZATION");
-    const canonical = await stableJsonAsync(payload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS,
-      traceCategory: "RUNTIME_PAYLOAD", objectTraversal: "NATIVE_JSON_SHAPE_TRIE" });
-    endSerialization({ serializedBytes: canonical.length });
+    let serializedBytes = 0;
     const endHash = startRuntimeWorkTrace("RUNTIME_PAYLOAD_HASH");
-    const payloadHash = await sha256TextAsync(canonical, {
-      yieldControl, charactersPerSlice: UI_CHARACTERS_PER_SLICE, blocksPerSlice: UI_SHA_BLOCKS_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "RUNTIME_PAYLOAD",
+    const payloadHash = await stableJsonHashAsync(payload, {
+      yieldControl, yieldEvery: UI_VALUES_PER_SLICE, hashBlocksPerSlice: UI_SHA_BLOCKS_PER_SLICE,
+      maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "RUNTIME_PAYLOAD", objectTraversal: "NATIVE_JSON_SHAPE_TRIE",
+      onHashComplete: metrics => { serializedBytes = metrics.canonicalCharacters; },
     });
-    endHash({ serializedBytes: canonical.length });
+    endSerialization({ serializedBytes });
+    endHash({ serializedBytes });
     await yieldControl();
     const endFreeze = startRuntimeWorkTrace("RUNTIME_PAYLOAD_FREEZE");
     const artifact = await deepFreezeAsync({
@@ -107,7 +107,7 @@ export class CanonicalRuntimePersistenceService {
       payloadHash,
     }, yieldControl);
     endFreeze();
-    endCapture({ serializedBytes: canonical.length });
+    endCapture({ serializedBytes });
     capturedCanonicalArtifacts.add(artifact);
     return artifact;
   }

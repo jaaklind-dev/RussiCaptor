@@ -1,4 +1,5 @@
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { IncrementalSha256, type Sha256AsyncOptions } from "@/utils/sha256";
 
 const MAX_ARRAY_INDEX = 0xffff_fffe;
 
@@ -104,11 +105,29 @@ export type StableJsonAsyncOptions = Readonly<{
    * remain included without Object.keys or per-object signature allocation.
    */
   objectTraversal?: "ITERATIVE" | "NATIVE_JSON_SHAPE_TRIE";
+  /** Bounded canonical output chunk target. Tokens are never split unsafely. */
+  chunkCharacters?: number;
 }>;
 
 type StableJsonWorkItem =
-  | Readonly<{ kind: "VALUE"; value: unknown; inArray: boolean; depth: number }>
-  | Readonly<{ kind: "CHUNK"; value: string }>;
+  | Readonly<{ kind: "VALUE"; value: unknown; inArray: boolean; depth: number; prefix: string }>
+  | Readonly<{ kind: "END"; value: "]" | "}" }>;
+
+export type StableJsonHashMetrics = Readonly<{
+  canonicalCharacters: number;
+  utf8Bytes: number;
+  tokenWriteCount: number;
+  chunkCount: number;
+  averageChunkCharacters: number;
+  maxChunkCharacters: number;
+  utf8DurationMs: number;
+  shaDurationMs: number;
+}>;
+
+export type StableJsonHashOptions = StableJsonAsyncOptions & Readonly<{
+  hashBlocksPerSlice?: number;
+  onHashComplete?: (metrics: StableJsonHashMetrics) => void;
+}>;
 
 let stableJsonAsyncInvocation = 0;
 
@@ -179,9 +198,10 @@ function keysFromShape(shape: CanonicalShapeNode): string[] {
  * sliced by visited values; the final string remains identical to the legacy
  * canonicalize + JSON.stringify contract.
  */
-export async function stableJsonAsync(
+async function buildStableJsonAsync(
   value: unknown,
-  options: StableJsonAsyncOptions = {},
+  options: StableJsonHashOptions,
+  hashOnly: boolean,
 ): Promise<string> {
   const category = options.traceCategory ?? "OTHER";
   stableJsonAsyncInvocation += 1;
@@ -199,21 +219,72 @@ export async function stableJsonAsync(
     });
   }
   const chunks: string[] = [];
-  let sliceChunks: string[] = [];
+  const hashQueue: string[] = [];
+  const hash = hashOnly ? new IncrementalSha256() : undefined;
+  const encoder = hashOnly ? new TextEncoder() : undefined;
+  const chunkTarget = Math.max(1_024, options.chunkCharacters ?? 32_768);
+  let bufferedTokens: string[] = [];
+  let bufferedCharacters = 0;
   let totalChunkCharacters = 0;
   let maxChunkCharacters = 0;
   let tokenCount = 0;
-  const pushChunk = (chunk: string): void => {
-    sliceChunks.push(chunk);
-    tokenCount += 1;
-    chunkPushesSinceYield += 1;
+  let outputChunkCount = 0;
+  let utf8Bytes = 0;
+  let utf8DurationMs = 0;
+  let shaDurationMs = 0;
+  const acceptOutputChunk = (chunk: string): void => {
+    if (!chunk.length) return;
+    outputChunkCount += 1;
     totalChunkCharacters += chunk.length;
     maxChunkCharacters = Math.max(maxChunkCharacters, chunk.length);
+    if (hashOnly) hashQueue.push(chunk);
+    else chunks.push(chunk);
   };
-  const flushChunks = (): void => {
-    if (!sliceChunks.length) return;
-    chunks.push(sliceChunks.join(""));
-    sliceChunks = [];
+  const flushBufferedTokens = (): void => {
+    if (!bufferedTokens.length) return;
+    acceptOutputChunk(bufferedTokens.join(""));
+    bufferedTokens = [];
+    bufferedCharacters = 0;
+  };
+  const pushChunk = (chunk: string): void => {
+    if (!chunk.length) return;
+    tokenCount += 1;
+    chunkPushesSinceYield += 1;
+    if (chunk.length >= chunkTarget) {
+      flushBufferedTokens();
+      for (let start = 0; start < chunk.length;) {
+        let end = Math.min(chunk.length, start + chunkTarget);
+        if (end < chunk.length && chunk.charCodeAt(end - 1) >= 0xd800 && chunk.charCodeAt(end - 1) <= 0xdbff &&
+          chunk.charCodeAt(end) >= 0xdc00 && chunk.charCodeAt(end) <= 0xdfff) end += 1;
+        acceptOutputChunk(chunk.slice(start, end));
+        start = end;
+      }
+      return;
+    }
+    if (bufferedCharacters + chunk.length > chunkTarget) flushBufferedTokens();
+    bufferedTokens.push(chunk);
+    bufferedCharacters += chunk.length;
+  };
+  const flushHashQueue = async (): Promise<void> => {
+    flushBufferedTokens();
+    if (!hash || !encoder) return;
+    const shaOptions: Sha256AsyncOptions = {
+      yieldControl: options.yieldControl,
+      blocksPerSlice: options.hashBlocksPerSlice ?? 16,
+      maxSliceMs: options.maxSliceMs,
+      onSlice: options.onSlice,
+      traceCategory: options.traceCategory,
+    };
+    while (hashQueue.length) {
+      const chunk = hashQueue.shift()!;
+      const encodeStarted = performance.now();
+      const bytes = encoder.encode(chunk);
+      utf8DurationMs += performance.now() - encodeStarted;
+      utf8Bytes += bytes.length;
+      const shaStarted = performance.now();
+      await hash.updateAsync(bytes, shaOptions);
+      shaDurationMs += performance.now() - shaStarted;
+    }
   };
   const yieldEvery = Math.max(1, options.yieldEvery ?? 4_096);
   const maxSliceMs = options.maxSliceMs;
@@ -280,13 +351,14 @@ export async function stableJsonAsync(
   // value. Hermes amplifies that overhead dramatically for large checkpoint
   // event arrays. This explicit work stack performs the same traversal while
   // crossing an async boundary only at cooperative slice boundaries.
-  const work: StableJsonWorkItem[] = [{ kind: "VALUE", value, inArray: false, depth: 0 }];
+  const work: StableJsonWorkItem[] = [{ kind: "VALUE", value, inArray: false, depth: 0, prefix: "" }];
   while (work.length) {
     const item = work.pop()!;
-    if (item.kind === "CHUNK") {
+    if (item.kind === "END") {
       pushChunk(item.value);
       continue;
     }
+    pushChunk(item.prefix);
     const current = item.value;
     appendCalls += 1;
     maxRecursionDepth = Math.max(maxRecursionDepth, item.depth);
@@ -295,7 +367,7 @@ export async function stableJsonAsync(
       (maxSliceMs === undefined || performance.now() - sliceStarted >= maxSliceMs)) {
       const durationMs = performance.now() - sliceStarted;
       finishBatch(durationMs);
-      flushChunks();
+      await flushHashQueue();
       options.onSlice?.(durationMs);
       await yieldControl();
       yieldCount += 1;
@@ -320,12 +392,12 @@ export async function stableJsonAsync(
       arrayCount += 1;
       maxArrayLength = Math.max(maxArrayLength, current.length);
       const arrayStarted = performance.now();
-      work.push({ kind: "CHUNK", value: "]" });
+      work.push({ kind: "END", value: "]" });
       for (let index = current.length - 1; index >= 0; index -= 1) {
-        work.push({ kind: "VALUE", value: current[index], inArray: true, depth: item.depth + 1 });
-        if (index > 0) work.push({ kind: "CHUNK", value: "," });
+        work.push({ kind: "VALUE", value: current[index], inArray: true, depth: item.depth + 1,
+          prefix: index > 0 ? "," : "" });
       }
-      work.push({ kind: "CHUNK", value: "[" });
+      pushChunk("[");
       maxArrayTraversalDurationMs = Math.max(maxArrayTraversalDurationMs, performance.now() - arrayStarted);
       continue;
     }
@@ -401,23 +473,21 @@ export async function stableJsonAsync(
         serializableKeyCount += 1;
       }
     }
-    work.push({ kind: "CHUNK", value: "}" });
+    work.push({ kind: "END", value: "}" });
     let serializableKeyIndex = serializableKeyCount - 1;
     for (let index = keys.length - 1; index >= 0; index -= 1) {
       const key = keys[index];
       const nested = record[key];
       if (nested === undefined || typeof nested === "function" || typeof nested === "symbol") continue;
-      work.push({ kind: "VALUE", value: record[key], inArray: false, depth: item.depth + 1 });
-      work.push({ kind: "CHUNK", value: ":" });
-      work.push({ kind: "CHUNK", value: JSON.stringify(key) });
-      if (serializableKeyIndex > 0) work.push({ kind: "CHUNK", value: "," });
+      work.push({ kind: "VALUE", value: record[key], inArray: false, depth: item.depth + 1,
+        prefix: `${serializableKeyIndex > 0 ? "," : ""}${JSON.stringify(key)}:` });
       serializableKeyIndex -= 1;
     }
-    work.push({ kind: "CHUNK", value: "{" });
+    pushChunk("{");
   }
   const finalBatchDurationMs = performance.now() - sliceStarted;
   finishBatch(finalBatchDurationMs);
-  flushChunks();
+  await flushHashQueue();
   options.onSlice?.(finalBatchDurationMs);
   await yieldControl();
   const metrics: StableJsonMetrics = {
@@ -471,13 +541,58 @@ export async function stableJsonAsync(
     maxBatchDurationMs,
     maxNodesBetweenYields,
     maxChunkPushBurst,
-    chunkCount: chunks.length,
+    chunkCount: outputChunkCount,
     tokenCount,
     totalChunkCharacters,
     maxChunkCharacters,
+    utf8Bytes,
+    utf8DurationMs,
+    shaDurationMs,
+    hashOnly,
   });
-  const endJoin = startRuntimeWorkTrace("STABLE_JSON_JOIN", { category, invocation, chunkCount: chunks.length, tokenCount, totalChunkCharacters, maxChunkCharacters });
+  if (hash && hashOnly) {
+    const digestStarted = performance.now();
+    const digest = hash.digest();
+    shaDurationMs += performance.now() - digestStarted;
+    const hashMetrics: StableJsonHashMetrics = {
+      canonicalCharacters: totalChunkCharacters,
+      utf8Bytes,
+      tokenWriteCount: tokenCount,
+      chunkCount: outputChunkCount,
+      averageChunkCharacters: outputChunkCount ? totalChunkCharacters / outputChunkCount : 0,
+      maxChunkCharacters,
+      utf8DurationMs,
+      shaDurationMs,
+    };
+    options.onHashComplete?.(hashMetrics);
+    const endHash = startRuntimeWorkTrace("STABLE_JSON_STREAM_HASH", {
+      category, invocation, chunkCount: outputChunkCount, canonicalCharacters: totalChunkCharacters, utf8Bytes,
+    });
+    endHash({ utf8DurationMs, shaDurationMs });
+    return digest;
+  }
+  const endJoin = startRuntimeWorkTrace("STABLE_JSON_JOIN", { category, invocation, chunkCount: outputChunkCount, tokenCount, totalChunkCharacters, maxChunkCharacters });
   const result = chunks.join("");
   endJoin({ category, outputBytes: result.length });
   return result;
+}
+
+export function stableJsonAsync(
+  value: unknown,
+  options: StableJsonAsyncOptions = {},
+): Promise<string> {
+  return buildStableJsonAsync(value, options, false);
+}
+
+/**
+ * SHA-256 of UTF8(stableJson(value)) without retaining either the full
+ * canonical string or a whole-payload UTF-8 array. Canonical chunks are
+ * complete JSON token segments, so native UTF-8 encoding cannot split a
+ * surrogate pair at a flush boundary.
+ */
+export function stableJsonHashAsync(
+  value: unknown,
+  options: StableJsonHashOptions = {},
+): Promise<string> {
+  return buildStableJsonAsync(value, options, true);
 }

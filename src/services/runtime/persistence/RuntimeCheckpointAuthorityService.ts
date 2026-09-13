@@ -4,15 +4,14 @@ import {
   type RuntimeCheckpointEnvelope,
 } from "@/models/RuntimeCheckpointAuthority";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
-import { sha256Text, sha256TextAsync } from "@/utils/sha256";
-import { stableJson, stableJsonAsync } from "@/utils/stableJson";
+import { sha256Text } from "@/utils/sha256";
+import { stableJson, stableJsonHashAsync } from "@/utils/stableJson";
 import { isCapturedCanonicalRuntimeArtifact, markCheckpointValidatedRuntimeArtifacts } from "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
 const validatedImmutableCheckpoints = new WeakSet<object>();
 const UI_VALUES_PER_SLICE = 128;
-const UI_CHARACTERS_PER_SLICE = 8_192;
 const UI_SHA_BLOCKS_PER_SLICE = 16;
 const UI_MAX_SLICE_MS = 8;
 
@@ -96,12 +95,13 @@ async function hasValidRuntimeItemsAsync(state: SharedExerciseState, yieldContro
       return false;
     }
     if (!isCapturedCanonicalRuntimeArtifact(item)) {
-      const canonical = await stableJsonAsync(item.payload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS,
-        traceCategory: "RUNTIME_PAYLOAD", objectTraversal: "NATIVE_JSON_SHAPE_TRIE" });
-      const valid = item.payloadHash === await sha256TextAsync(canonical, {
-        yieldControl, charactersPerSlice: UI_CHARACTERS_PER_SLICE, blocksPerSlice: UI_SHA_BLOCKS_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "RUNTIME_PAYLOAD",
-      });
-      endRuntimeHash({ valid, canonicalCharacters: canonical.length });
+      let canonicalCharacters = 0;
+      const hash = await stableJsonHashAsync(item.payload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE,
+        maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "RUNTIME_PAYLOAD", objectTraversal: "NATIVE_JSON_SHAPE_TRIE",
+        hashBlocksPerSlice: UI_SHA_BLOCKS_PER_SLICE,
+        onHashComplete: metrics => { canonicalCharacters = metrics.canonicalCharacters; } });
+      const valid = item.payloadHash === hash;
+      endRuntimeHash({ valid, canonicalCharacters });
       if (!valid) return false;
     } else {
       endRuntimeHash({ valid: true, reusedCapturedProof: true });
@@ -151,14 +151,14 @@ export async function createRuntimeCheckpointAsync(
   endClone();
   await yieldControl();
   const endSerialization = startRuntimeWorkTrace("CHECKPOINT_SERIALIZATION");
-  const canonical = await stableJsonAsync(frozenPayload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS,
-    traceCategory: "FULL_CHECKPOINT", objectTraversal: "NATIVE_JSON_SHAPE_TRIE" });
-  endSerialization({ serializedBytes: canonical.length });
+  let serializedBytes = 0;
   const endHash = startRuntimeWorkTrace("CHECKPOINT_HASH");
-  const payloadHash = await sha256TextAsync(canonical, {
-    yieldControl, charactersPerSlice: UI_CHARACTERS_PER_SLICE, blocksPerSlice: UI_SHA_BLOCKS_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "FULL_CHECKPOINT",
-  });
-  endHash({ serializedBytes: canonical.length });
+  const payloadHash = await stableJsonHashAsync(frozenPayload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE,
+    maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "FULL_CHECKPOINT", objectTraversal: "NATIVE_JSON_SHAPE_TRIE",
+    hashBlocksPerSlice: UI_SHA_BLOCKS_PER_SLICE,
+    onHashComplete: metrics => { serializedBytes = metrics.canonicalCharacters; } });
+  endSerialization({ serializedBytes });
+  endHash({ serializedBytes });
   const checkpoint = {
     envelopeVersion: RUNTIME_CHECKPOINT_ENVELOPE_VERSION,
     exerciseId: exerciseIdOf(frozenPayload),
@@ -171,7 +171,7 @@ export async function createRuntimeCheckpointAsync(
   const endFreeze = startRuntimeWorkTrace("CHECKPOINT_FREEZE");
   const validated = await markCheckpointValidatedAsync(checkpoint, yieldControl);
   endFreeze();
-  endCheckpoint({ serializedBytes: canonical.length });
+  endCheckpoint({ serializedBytes });
   return validated;
 }
 
@@ -225,19 +225,18 @@ export async function isValidRuntimeCheckpointAsync(
   const endPayloadHash = startRuntimeWorkTrace("STARTUP_CHECKPOINT_FULL_HASH_ASYNC", {
     checkpointRevision: value.checkpointRevision,
   });
-  const canonical = await stableJsonAsync(value.payload, {
+  let canonicalCharacters = 0;
+  const payloadHash = await stableJsonHashAsync(value.payload, {
     yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "FULL_CHECKPOINT",
     objectTraversal: "NATIVE_JSON_SHAPE_TRIE",
-  });
-  const payloadHash = await sha256TextAsync(canonical, {
-    yieldControl, charactersPerSlice: UI_CHARACTERS_PER_SLICE, blocksPerSlice: UI_SHA_BLOCKS_PER_SLICE,
-    maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "FULL_CHECKPOINT",
+    hashBlocksPerSlice: UI_SHA_BLOCKS_PER_SLICE,
+    onHashComplete: metrics => { canonicalCharacters = metrics.canonicalCharacters; },
   });
   if (value.payloadHash !== payloadHash) {
-    endPayloadHash({ valid: false, canonicalCharacters: canonical.length });
+    endPayloadHash({ valid: false, canonicalCharacters });
     return false;
   }
-  endPayloadHash({ valid: true, canonicalCharacters: canonical.length });
+  endPayloadHash({ valid: true, canonicalCharacters });
   const endCoverage = startRuntimeWorkTrace("STARTUP_CHECKPOINT_RUNTIME_COVERAGE_ASYNC");
   if (!hasValidActiveRuntimeCoverage(value.payload)) {
     endCoverage({ valid: false });
