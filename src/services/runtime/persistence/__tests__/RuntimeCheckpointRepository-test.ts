@@ -1,5 +1,5 @@
 import { loadCheckpointFreshness, SupabaseRuntimeCheckpointRepository } from "../RuntimeCheckpointRepository";
-import { createRuntimeCheckpoint } from "../RuntimeCheckpointAuthorityService";
+import { createRuntimeCheckpoint, getRuntimeCheckpointCanonicalRepresentation } from "../RuntimeCheckpointAuthorityService";
 
 const sharedState = (time: number) => ({
   exerciseSession: { exerciseId: "E", lifecycleState: "COMPLETED", simulationTimeSec: time },
@@ -49,7 +49,7 @@ describe("WP-44B Supabase repository diagnostics",()=>{
     const repository=new SupabaseRuntimeCheckpointRepository(mockClient as never);
     await expect(repository.publish({leaseId:"L",exerciseId:"E",writerInstanceId:"W",userId:"U",expiresAt:"x"},4,checkpoint,base))
       .resolves.toMatchObject({status:"PUBLISHED"});
-    expect(mockClient.rpc.mock.calls.map(call=>call[0])).toEqual(["publish_runtime_checkpoint_delta","publish_runtime_checkpoint_metadata"]);
+    expect(mockClient.rpc.mock.calls.map(call=>call[0])).toEqual(["publish_runtime_checkpoint_canonical_delta","publish_runtime_checkpoint_metadata"]);
   });
   test("lifecycle supersession cancels routine delta preparation before RPC submission",async()=>{
     const base=createRuntimeCheckpoint(sharedState(1),4); const checkpoint=createRuntimeCheckpoint(sharedState(2),5);
@@ -96,6 +96,26 @@ describe("WP-44B Supabase repository diagnostics",()=>{
     const repository={loadLatestMetadata:jest.fn(async()=>undefined),loadLatest:jest.fn(async()=>({exerciseId:"E",checkpointRevision:5,payloadHash:"H",provenanceHash:"P"}))};
     await expect(loadCheckpointFreshness(repository as never,"E","recovery")).resolves.toMatchObject({checkpointRevision:5,payloadHash:"H"});
     expect(repository.loadLatest).toHaveBeenCalledWith("E","runtime_checkpoints.recovery_fallback_payload");
+  });
+  test("loads and executes the verified canonical authority without fetching structured JSON",async()=>{
+    const checkpoint=createRuntimeCheckpoint(sharedState(9),6);
+    const representation=getRuntimeCheckpointCanonicalRepresentation(checkpoint)!;
+    const selects:string[]=[];
+    const mockClient={from:jest.fn((table:string)=>({
+      select:(columns:string)=>{
+        selects.push(`${table}:${columns}`);
+        return {eq:()=>({maybeSingle:async()=>({data:{
+          canonical_format_version:representation.canonicalFormatVersion,exercise_id:representation.exerciseId,
+          checkpoint_revision:representation.checkpointRevision,persisted_runtime_version:representation.persistedRuntimeVersion,
+          payload_hash:representation.payloadHash,provenance_hash:representation.provenanceHash,
+          canonical_payload_text:representation.canonicalPayloadText,derivation_method:"WRITER",
+        },error:null})})};
+      },
+    }))};
+    const repository=new SupabaseRuntimeCheckpointRepository(mockClient as never);
+    await expect(repository.loadLatest("E")).resolves.toEqual(checkpoint);
+    expect(selects).toHaveLength(1);
+    expect(selects[0]).toMatch(/^runtime_checkpoint_canonical_artifacts:/);
   });
   test("malformed or rollout-unavailable metadata fails safe through payload fallback",async()=>{
     const checkpoint={exerciseId:"E",checkpointRevision:5,payloadHash:"H",provenanceHash:"P"};

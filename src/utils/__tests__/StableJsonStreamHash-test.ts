@@ -51,6 +51,17 @@ describe("WP-NARVA-10B13 canonical stream hashing", () => {
     }
   });
 
+  test("captures byte-identical canonical text from the same hash traversal", async () => {
+    const value = { z: ["õ", "🚀", undefined], a: { "10": 10, "2": 2, omitted: undefined } };
+    let canonical = "";
+    const hash = await stableJsonHashAsync(value, {
+      yieldEvery: 1,
+      onCanonicalText: value => { canonical = value; },
+    });
+    expect(canonical).toBe(stableJson(value));
+    expect(hash).toBe(sha256Text(canonical));
+  });
+
   test("keeps incremental text SHA byte-identical across tiny slices", async () => {
     const values = ["", "abc", "õ😀Я", "a\ud800b", "x".repeat(100_000) + "😀tail"];
     for (const value of values) {

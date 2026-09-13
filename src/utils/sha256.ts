@@ -1,4 +1,5 @@
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import * as Crypto from "expo-crypto";
 
 const SHA256_CONSTANTS = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
@@ -204,6 +205,18 @@ export function sha256Text(value: string): string {
     start = end;
   }
   return hash.digest();
+}
+
+/** Native text hashing for already-canonical persisted representations. */
+export async function sha256TextNative(value: string): Promise<string> {
+  const endHash = startRuntimeWorkTrace("NATIVE_CANONICAL_TEXT_HASH", {
+    inputCharacters: value.length,
+  });
+  const digest = process.env.NODE_ENV === "test" ? sha256Text(value) : await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value, {
+    encoding: Crypto.CryptoEncoding.HEX,
+  });
+  endHash({ inputCharacters: value.length });
+  return digest;
 }
 
 let sha256TextAsyncInvocation = 0;

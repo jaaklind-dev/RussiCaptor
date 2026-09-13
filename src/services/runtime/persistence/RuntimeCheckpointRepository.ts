@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   CheckpointPublishResult,
   RuntimeCheckpointEnvelope,
+  RuntimeCheckpointCanonicalRepresentation,
   RuntimeWriterLease,
   WriterAcquisitionResult,
 } from "@/models/RuntimeCheckpointAuthority";
@@ -15,6 +16,10 @@ import {
 } from "@/services/runtime/persistence/RuntimeCheckpointDeltaService";
 import { startRuntimeWorkTrace, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
+import {
+  getRuntimeCheckpointCanonicalRepresentation,
+  restoreRuntimeCheckpointCanonicalRepresentation,
+} from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 
 export type RuntimeCheckpointPublicationControl = Readonly<{
   priority: "ROUTINE" | "LIFECYCLE_CRITICAL";
@@ -100,6 +105,33 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
   constructor(private readonly client: SupabaseClient) {}
   async loadLatest(exerciseId: string, trafficEndpoint = "runtime_checkpoints.payload") {
     const endFetch = startRuntimeWorkTrace("STARTUP_CHECKPOINT_FETCH", { endpoint: trafficEndpoint });
+    const canonical = await this.client.from("runtime_checkpoint_canonical_artifacts")
+      .select("canonical_format_version,exercise_id,checkpoint_revision,persisted_runtime_version,payload_hash,provenance_hash,canonical_payload_text,derivation_method")
+      .eq("exercise_id", exerciseId).maybeSingle();
+    if (!canonical.error && canonical.data?.canonical_payload_text) {
+      const row = canonical.data;
+      recordSupabaseTraffic({ operation: "SELECT", endpoint: `${trafficEndpoint}.canonical`, data: row, fullSnapshot: true });
+      const representation: RuntimeCheckpointCanonicalRepresentation = Object.freeze({
+        canonicalFormatVersion: Number(row.canonical_format_version) as 1,
+        exerciseId: String(row.exercise_id),
+        checkpointRevision: Number(row.checkpoint_revision),
+        persistedRuntimeVersion: Number(row.persisted_runtime_version),
+        payloadHash: String(row.payload_hash),
+        provenanceHash: String(row.provenance_hash),
+        canonicalPayloadText: String(row.canonical_payload_text),
+        derivationMethod: row.derivation_method === "LEGACY_DERIVATION" ? "LEGACY_DERIVATION" : "WRITER",
+      });
+      const checkpoint = await restoreRuntimeCheckpointCanonicalRepresentation(
+        representation,
+        () => new Promise(resolve => setTimeout(resolve, 0)),
+      );
+      endFetch({ payloadBytes: estimateSupabasePayloadBytes(row), representation: "CANONICAL_V1" });
+      return checkpoint;
+    }
+    if (canonical.error && !["42P01", "PGRST205"].includes(canonical.error.code ?? "") &&
+      !canonical.error.message.includes("runtime_checkpoint_canonical_artifacts")) {
+      throw new Error("AUTHORITY_UNAVAILABLE");
+    }
     const { data, error } = await this.client.from("runtime_checkpoints").select("payload")
       .eq("exercise_id", exerciseId).maybeSingle();
     recordSupabaseTraffic({ operation: "SELECT", endpoint: trafficEndpoint, data, fullSnapshot: true });
@@ -179,11 +211,24 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
   }
   async finalizeCompletion(completionCommandId: string, lease: RuntimeWriterLease, expectedRevision: number,
     checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>): Promise<CheckpointPublishResult<SharedExerciseState>> {
-    const { data, error } = await this.client.rpc("finalize_runtime_completion", {
+    const canonical = getRuntimeCheckpointCanonicalRepresentation(checkpoint);
+    const rpcName = canonical ? "finalize_runtime_completion_canonical" : "finalize_runtime_completion";
+    const rpcArgs = {
       p_exercise_id: checkpoint.exerciseId, p_command_id: completionCommandId, p_lease_id: lease.leaseId,
       p_writer_instance_id: lease.writerInstanceId, p_expected_checkpoint_revision: expectedRevision,
       p_checkpoint: checkpoint,
-    });
+      ...(canonical ? { p_canonical_format_version: canonical.canonicalFormatVersion,
+        p_canonical_payload_text: canonical.canonicalPayloadText } : {}),
+    };
+    let response = await this.client.rpc(rpcName, rpcArgs);
+    if (response.error && canonical && (response.error.code === "PGRST202" || response.error.message.includes(rpcName))) {
+      response = await this.client.rpc("finalize_runtime_completion", {
+        p_exercise_id: checkpoint.exerciseId, p_command_id: completionCommandId, p_lease_id: lease.leaseId,
+        p_writer_instance_id: lease.writerInstanceId, p_expected_checkpoint_revision: expectedRevision,
+        p_checkpoint: checkpoint,
+      });
+    }
+    const { data, error } = response;
     recordSupabaseTraffic({ operation: "RPC", endpoint: "finalize_runtime_completion", data,
       requestBytes: isSupabaseTrafficMetricsEnabled() ? estimateSupabasePayloadBytes(checkpoint) : 0 });
     if (error) {
@@ -212,23 +257,38 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
         })
       : undefined;
     ensureActive();
-    let rpcName = delta && deltaRpcAvailable !== false ? "publish_runtime_checkpoint_delta" : "publish_runtime_checkpoint_metadata";
-    let rpcArgs = { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_expected_revision: expectedRevision, p_checkpoint: checkpoint, ...(delta && rpcName === "publish_runtime_checkpoint_delta" ? { p_delta: delta } : {}) };
+    const canonical = getRuntimeCheckpointCanonicalRepresentation(checkpoint);
+    let rpcName = canonical
+      ? delta && deltaRpcAvailable !== false ? "publish_runtime_checkpoint_canonical_delta" : "publish_runtime_checkpoint_canonical"
+      : delta && deltaRpcAvailable !== false ? "publish_runtime_checkpoint_delta" : "publish_runtime_checkpoint_metadata";
+    let rpcArgs = { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId,
+      p_expected_revision: expectedRevision, p_checkpoint: checkpoint,
+      ...(canonical ? { p_canonical_format_version: canonical.canonicalFormatVersion,
+        p_canonical_payload_text: canonical.canonicalPayloadText } : {}),
+      ...(delta && rpcName.includes("delta") ? { p_delta: delta } : {}) };
     endRequestObject({ rpcName, deltaOperationCount: delta?.operations.length ?? 0, priority: control?.priority });
     ensureActive();
     const endSupabaseCall = startRuntimeWorkTrace("REMOTE_PUB_SUPABASE_CALL", { rpcName });
     control?.onRpcSubmitted?.();
     let response = await this.client.rpc(rpcName, rpcArgs);
     endSupabaseCall({ rpcName, errorPresent: Boolean(response.error) });
-    if (response.error && rpcName === "publish_runtime_checkpoint_delta" && (response.error.code === "PGRST202" || response.error.message.includes("publish_runtime_checkpoint_delta"))) {
+    if (response.error && rpcName.includes("delta") && (response.error.code === "PGRST202" || response.error.message.includes(rpcName))) {
       deltaRpcAvailable = false;
       rpcName = "publish_runtime_checkpoint_metadata";
-      rpcArgs = { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_expected_revision: expectedRevision, p_checkpoint: checkpoint };
+      rpcArgs = { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId,
+        p_expected_revision: expectedRevision, p_checkpoint: checkpoint };
       const endFallbackCall = startRuntimeWorkTrace("REMOTE_PUB_SUPABASE_CALL", { rpcName, fallback: true });
       control?.onRpcSubmitted?.();
       response = await this.client.rpc(rpcName, rpcArgs);
       endFallbackCall({ rpcName, fallback: true, errorPresent: Boolean(response.error) });
-    } else if (!response.error && rpcName === "publish_runtime_checkpoint_delta") deltaRpcAvailable = true;
+    } else if (!response.error && rpcName.includes("delta")) deltaRpcAvailable = true;
+    if (response.error && canonical && rpcName === "publish_runtime_checkpoint_canonical" &&
+      (response.error.code === "PGRST202" || response.error.message.includes(rpcName))) {
+      rpcName = "publish_runtime_checkpoint_metadata";
+      rpcArgs = { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId,
+        p_expected_revision: expectedRevision, p_checkpoint: checkpoint };
+      response = await this.client.rpc(rpcName, rpcArgs);
+    }
     const endResponseProcess = startRuntimeWorkTrace("REMOTE_PUB_RESPONSE_PROCESS", { rpcName });
     const { data, error } = response;
     const endTrafficMeasurement = startRuntimeWorkTrace("REMOTE_PUB_REQUEST_SERIALIZE", { rpcName, measurementOnly: true });

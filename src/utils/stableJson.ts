@@ -127,6 +127,8 @@ export type StableJsonHashMetrics = Readonly<{
 export type StableJsonHashOptions = StableJsonAsyncOptions & Readonly<{
   hashBlocksPerSlice?: number;
   onHashComplete?: (metrics: StableJsonHashMetrics) => void;
+  /** Captures the exact canonical text from the same traversal that hashes it. */
+  onCanonicalText?: (canonicalText: string) => void;
 }>;
 
 let stableJsonAsyncInvocation = 0;
@@ -237,7 +239,10 @@ async function buildStableJsonAsync(
     outputChunkCount += 1;
     totalChunkCharacters += chunk.length;
     maxChunkCharacters = Math.max(maxChunkCharacters, chunk.length);
-    if (hashOnly) hashQueue.push(chunk);
+    if (hashOnly) {
+      hashQueue.push(chunk);
+      if (options.onCanonicalText) chunks.push(chunk);
+    }
     else chunks.push(chunk);
   };
   const flushBufferedTokens = (): void => {
@@ -565,6 +570,7 @@ async function buildStableJsonAsync(
       shaDurationMs,
     };
     options.onHashComplete?.(hashMetrics);
+    if (options.onCanonicalText) options.onCanonicalText(chunks.join(""));
     const endHash = startRuntimeWorkTrace("STABLE_JSON_STREAM_HASH", {
       category, invocation, chunkCount: outputChunkCount, canonicalCharacters: totalChunkCharacters, utf8Bytes,
     });

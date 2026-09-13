@@ -30,8 +30,12 @@ import {
 import { installCurrentExercise } from "@/repositories/ExerciseRepository";
 import { getPatientMaterialization, restorePatientMaterialization } from "@/services/exercise/PackagePatientMaterializationService";
 import { captureActiveClinicalReferenceRuntimes, captureActiveClinicalReferenceRuntimesAsync, clearActiveClinicalReferenceRuntime, isClinicalReferenceRuntimeReadReady, prepareActiveClinicalReferenceRuntime, prepareActiveClinicalReferenceRuntimeAsync } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
-import type { RuntimeCheckpointEnvelope } from "@/models/RuntimeCheckpointAuthority";
-import { localRuntimeCheckpointStore } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
+import type { RuntimeCheckpointCanonicalRepresentation, RuntimeCheckpointEnvelope } from "@/models/RuntimeCheckpointAuthority";
+import {
+  getRuntimeCheckpointCanonicalRepresentation,
+  localRuntimeCheckpointStore,
+  restoreRuntimeCheckpointCanonicalRepresentation,
+} from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { getRuntimeWriterAuthorityState, runtimeWritesAllowed, type RuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
@@ -54,6 +58,7 @@ type PersistedState = SharedExerciseState & {
   savedAt: string;
   currentCaseManager: CaseManager;
   runtimeCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>;
+  runtimeCheckpointCanonical?: RuntimeCheckpointCanonicalRepresentation;
 };
 
 let saveInFlight = false;
@@ -284,7 +289,9 @@ export function acceptAuthoritativeRuntimeCheckpoint(checkpoint: RuntimeCheckpoi
     version: STATE_VERSION,
     savedAt,
     currentCaseManager: { ...getCurrentCaseManager() },
-    runtimeCheckpoint: checkpoint,
+    ...(getRuntimeCheckpointCanonicalRepresentation(checkpoint)
+      ? { runtimeCheckpointCanonical: getRuntimeCheckpointCanonicalRepresentation(checkpoint) }
+      : { runtimeCheckpoint: checkpoint }),
   };
   setLocalSaveStatus({ state: "saving", savedAt: localSaveStatus.savedAt });
   void flushLatestSnapshot();
@@ -301,7 +308,10 @@ export async function acceptAuthoritativeRuntimeCheckpointAsync(
   localRuntimeCheckpointStore.restore(checkpoint);
   const savedAt = new Date().toISOString();
   pendingSnapshot = { ...checkpoint.payload, version: STATE_VERSION, savedAt,
-    currentCaseManager: { ...getCurrentCaseManager() }, runtimeCheckpoint: checkpoint };
+    currentCaseManager: { ...getCurrentCaseManager() },
+    ...(getRuntimeCheckpointCanonicalRepresentation(checkpoint)
+      ? { runtimeCheckpointCanonical: getRuntimeCheckpointCanonicalRepresentation(checkpoint) }
+      : { runtimeCheckpoint: checkpoint }) };
   setLocalSaveStatus({ state: "saving", savedAt: localSaveStatus.savedAt });
   void flushLatestSnapshot();
 }
@@ -440,8 +450,19 @@ export async function loadPersistedState(): Promise<void> {
     });
     const endIdentity = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_IDENTITY");
     const endLocalCheckpoint = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_CHECKPOINT_CACHE");
-    await localRuntimeCheckpointStore.restoreAsync(restored.runtimeCheckpoint, () => new Promise(resolve => setTimeout(resolve, 0)));
-    const runtimeRestore = runtimeRestoreSource(restored, localRuntimeCheckpointStore.get());
+    if (restored.runtimeCheckpointCanonical) {
+      const checkpoint = await restoreRuntimeCheckpointCanonicalRepresentation(
+        restored.runtimeCheckpointCanonical,
+        () => new Promise(resolve => setTimeout(resolve, 0)),
+      );
+      await localRuntimeCheckpointStore.restoreAsync(checkpoint, () => new Promise(resolve => setTimeout(resolve, 0)));
+    }
+    // Legacy local checkpoint payloads remain preserved in the snapshot, but
+    // are not synchronously recanonicalized before durable remote discovery.
+    // A remote legacy fallback can still validate them when no canonical
+    // artifact exists; command readiness remains fenced in the meantime.
+    const validatedLocal = localRuntimeCheckpointStore.get();
+    const runtimeRestore = runtimeRestoreSource(restored, validatedLocal);
     endLocalCheckpoint();
 
     setLocalSaveStatus({ state: "saved", savedAt: restored.savedAt });
@@ -507,7 +528,14 @@ export async function loadPersistedState(): Promise<void> {
     // resolved. The authority startup rehydrates with startRuntime=true only
     // after that gate succeeds.
     const endRuntime = startRuntimeWorkTrace("STARTUP_LOCAL_RESTORE_RUNTIME");
-    await restoreCanonicalRuntimeAsync(runtimeRestore, false, yieldToEventLoop);
+    if (validatedLocal || !restored.runtimeCheckpoint) {
+      await restoreCanonicalRuntimeAsync(runtimeRestore, false, yieldToEventLoop);
+    } else {
+      clearActiveClinicalReferenceRuntime();
+      startRuntimeWorkTrace("STARTUP_LEGACY_CHECKPOINT_DEFERRED")({
+        checkpointRevision: restored.runtimeCheckpoint.checkpointRevision,
+      });
+    }
     endRuntime({ persistedRuntimeCount: restored.persistedRuntimeStates?.length ?? 0 });
     setRuntimePersistenceFailure(undefined);
     endRestore();
@@ -595,7 +623,11 @@ export function startStatePersistence(): () => void {
         version: STATE_VERSION,
         savedAt: new Date().toISOString(),
         currentCaseManager: { ...getCurrentCaseManager() },
-        ...(checkpointForSnapshot ? { runtimeCheckpoint: checkpointForSnapshot } : {}),
+        ...(checkpointForSnapshot
+          ? getRuntimeCheckpointCanonicalRepresentation(checkpointForSnapshot)
+            ? { runtimeCheckpointCanonical: getRuntimeCheckpointCanonicalRepresentation(checkpointForSnapshot) }
+            : { runtimeCheckpoint: checkpointForSnapshot }
+          : {}),
       };
       pendingSnapshot = snapshot;
       setLocalSaveStatus({ state: "saving", savedAt: localSaveStatus.savedAt });

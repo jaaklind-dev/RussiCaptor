@@ -697,11 +697,20 @@ describe("WP-44B checkpoint startup coordination", () => {
     const end = source.indexOf("export function assertRuntimeCheckpointClockConsistency", start);
     const accept = source.slice(start, end);
     const restore = accept.indexOf("localRuntimeCheckpointStore.restore(checkpoint)");
-    const durable = accept.indexOf("runtimeCheckpoint: checkpoint", restore);
+    const durable = accept.indexOf("runtimeCheckpointCanonical: getRuntimeCheckpointCanonicalRepresentation(checkpoint)", restore);
     const flush = accept.indexOf("void flushLatestSnapshot()", durable);
     expect(restore).toBeGreaterThan(-1);
     expect(durable).toBeGreaterThan(restore);
     expect(flush).toBeGreaterThan(durable);
+  });
+
+  test("legacy local cache is deferred until durable canonical discovery instead of blocking startup", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/StatePersistenceService.ts"), "utf8");
+    const load = source.slice(source.indexOf("export async function loadPersistedState"),
+      source.indexOf("function restoreCanonicalRuntime", source.indexOf("export async function loadPersistedState")));
+    expect(load).toContain("if (restored.runtimeCheckpointCanonical)");
+    expect(load).toContain("STARTUP_LEGACY_CHECKPOINT_DEFERRED");
+    expect(load).not.toContain("restoreAsync(restored.runtimeCheckpoint,");
   });
 
   test("transient discovery save cannot erase a validated same-exercise checkpoint cache", () => {
@@ -709,7 +718,8 @@ describe("WP-44B checkpoint startup coordination", () => {
     const persistence = source.slice(source.indexOf("export function startStatePersistence"));
     expect(persistence).toContain("const acceptedCheckpoint = preparedCheckpoint ?? localRuntimeCheckpointStore.get()");
     expect(persistence).toContain("acceptedCheckpoint?.exerciseId === shared.exerciseSession.exerciseId");
-    expect(persistence).toContain("checkpointForSnapshot ? { runtimeCheckpoint: checkpointForSnapshot }");
+    expect(persistence).toContain("runtimeCheckpointCanonical: getRuntimeCheckpointCanonicalRepresentation(checkpointForSnapshot)");
+    expect(persistence).toContain(": { runtimeCheckpoint: checkpointForSnapshot }");
   });
 
   test("remote exercise discovery preserves only validated same-exercise reader Runtime", () => {

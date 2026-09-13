@@ -1,16 +1,19 @@
 import {
+  RUNTIME_CHECKPOINT_CANONICAL_FORMAT_VERSION,
   RUNTIME_CHECKPOINT_ENVELOPE_VERSION,
   type CheckpointResolution,
+  type RuntimeCheckpointCanonicalRepresentation,
   type RuntimeCheckpointEnvelope,
 } from "@/models/RuntimeCheckpointAuthority";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
-import { sha256Text } from "@/utils/sha256";
+import { sha256Text, sha256TextNative } from "@/utils/sha256";
 import { stableJson, stableJsonHashAsync } from "@/utils/stableJson";
 import { isCapturedCanonicalRuntimeArtifact, markCheckpointValidatedRuntimeArtifacts } from "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
 const validatedImmutableCheckpoints = new WeakSet<object>();
+const canonicalRepresentationByCheckpoint = new WeakMap<object, RuntimeCheckpointCanonicalRepresentation>();
 const UI_VALUES_PER_SLICE = 128;
 const UI_SHA_BLOCKS_PER_SLICE = 16;
 const UI_MAX_SLICE_MS = 8;
@@ -57,6 +60,140 @@ function exerciseIdOf(state: SharedExerciseState): string {
 function provenanceHashOf(state: SharedExerciseState): string {
   return sha256Text(stableJson((state.persistedRuntimeStates ?? []).map(item => item.provenance)
     .sort((a, b) => a.patientId.localeCompare(b.patientId))));
+}
+
+function skipJsonString(source: string, start: number): number {
+  if (source[start] !== '"') throw new Error("CANONICAL_CHECKPOINT_MALFORMED");
+  for (let index = start + 1; index < source.length; index += 1) {
+    if (source[index] === "\\") { index += 1; continue; }
+    if (source[index] === '"') return index + 1;
+  }
+  throw new Error("CANONICAL_CHECKPOINT_MALFORMED");
+}
+
+function skipJsonValue(source: string, start: number): number {
+  if (source[start] === '"') return skipJsonString(source, start);
+  if (source[start] !== "{" && source[start] !== "[") {
+    let index = start;
+    while (index < source.length && !",]}".includes(source[index])) index += 1;
+    return index;
+  }
+  const stack: string[] = [source[start] === "{" ? "}" : "]"];
+  for (let index = start + 1; index < source.length; index += 1) {
+    if (source[index] === '"') { index = skipJsonString(source, index) - 1; continue; }
+    if (source[index] === "{") stack.push("}");
+    else if (source[index] === "[") stack.push("]");
+    else if (source[index] === stack.at(-1)) {
+      stack.pop();
+      if (!stack.length) return index + 1;
+    }
+  }
+  throw new Error("CANONICAL_CHECKPOINT_MALFORMED");
+}
+
+function objectPropertyRange(source: string, objectStart: number, property: string): readonly [number, number] | undefined {
+  if (source[objectStart] !== "{") throw new Error("CANONICAL_CHECKPOINT_MALFORMED");
+  let index = objectStart + 1;
+  while (source[index] !== "}") {
+    const keyEnd = skipJsonString(source, index);
+    const key = JSON.parse(source.slice(index, keyEnd)) as string;
+    if (source[keyEnd] !== ":") throw new Error("CANONICAL_CHECKPOINT_MALFORMED");
+    const valueStart = keyEnd + 1;
+    const valueEnd = skipJsonValue(source, valueStart);
+    if (key === property) return [valueStart, valueEnd];
+    index = valueEnd;
+    if (source[index] === ",") index += 1;
+    else if (source[index] !== "}") throw new Error("CANONICAL_CHECKPOINT_MALFORMED");
+  }
+  return undefined;
+}
+
+/** Extracts exact inner canonical bytes without parsing or traversing their JS objects. */
+export function extractCanonicalRuntimePayloadTexts(canonicalPayloadText: string): readonly string[] {
+  const runtimes = objectPropertyRange(canonicalPayloadText, 0, "persistedRuntimeStates");
+  if (!runtimes) return Object.freeze([]);
+  const [arrayStart, arrayEnd] = runtimes;
+  if (canonicalPayloadText[arrayStart] !== "[" || canonicalPayloadText[arrayEnd - 1] !== "]") {
+    throw new Error("CANONICAL_CHECKPOINT_MALFORMED");
+  }
+  const result: string[] = [];
+  let index = arrayStart + 1;
+  while (index < arrayEnd - 1) {
+    const itemEnd = skipJsonValue(canonicalPayloadText, index);
+    const payload = objectPropertyRange(canonicalPayloadText, index, "payload");
+    if (!payload) throw new Error("CANONICAL_RUNTIME_PAYLOAD_MISSING");
+    result.push(canonicalPayloadText.slice(payload[0], payload[1]));
+    index = itemEnd;
+    if (canonicalPayloadText[index] === ",") index += 1;
+    else if (index !== arrayEnd - 1) throw new Error("CANONICAL_CHECKPOINT_MALFORMED");
+  }
+  return Object.freeze(result);
+}
+
+export function getRuntimeCheckpointCanonicalRepresentation(
+  checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>,
+): RuntimeCheckpointCanonicalRepresentation | undefined {
+  return canonicalRepresentationByCheckpoint.get(checkpoint);
+}
+
+export function transferRuntimeCheckpointCanonicalRepresentation(
+  source: RuntimeCheckpointEnvelope<SharedExerciseState>,
+  target: RuntimeCheckpointEnvelope<SharedExerciseState>,
+): void {
+  const representation = canonicalRepresentationByCheckpoint.get(source);
+  if (representation) canonicalRepresentationByCheckpoint.set(target, representation);
+}
+
+export async function restoreRuntimeCheckpointCanonicalRepresentation(
+  representation: RuntimeCheckpointCanonicalRepresentation,
+  yieldControl: PipelineYield,
+): Promise<RuntimeCheckpointEnvelope<SharedExerciseState>> {
+  const endIntegrity = startRuntimeWorkTrace("STARTUP_CANONICAL_CHECKPOINT_INTEGRITY", {
+    checkpointRevision: representation.checkpointRevision,
+    canonicalCharacters: representation.canonicalPayloadText.length,
+  });
+  if (representation.canonicalFormatVersion !== RUNTIME_CHECKPOINT_CANONICAL_FORMAT_VERSION ||
+    !Number.isSafeInteger(representation.checkpointRevision) || representation.checkpointRevision < 1 ||
+    !representation.exerciseId || !representation.payloadHash || !representation.provenanceHash) {
+    throw new Error("CANONICAL_CHECKPOINT_METADATA_INVALID");
+  }
+  if (await sha256TextNative(representation.canonicalPayloadText) !== representation.payloadHash) {
+    throw new Error("CHECKPOINT_HASH_INVALID");
+  }
+  await yieldControl();
+  const endParse = startRuntimeWorkTrace("STARTUP_CANONICAL_CHECKPOINT_PARSE", {
+    canonicalCharacters: representation.canonicalPayloadText.length,
+  });
+  const payload = JSON.parse(representation.canonicalPayloadText) as SharedExerciseState;
+  endParse();
+  if (exerciseIdOf(payload) !== representation.exerciseId || !hasValidActiveRuntimeCoverage(payload)) {
+    throw new Error("CHECKPOINT_PROVENANCE_INVALID");
+  }
+  const runtimeTexts = extractCanonicalRuntimePayloadTexts(representation.canonicalPayloadText);
+  const runtimes = payload.persistedRuntimeStates ?? [];
+  if (runtimeTexts.length !== runtimes.length) throw new Error("CANONICAL_RUNTIME_PAYLOAD_MISMATCH");
+  for (const [index, runtime] of runtimes.entries()) {
+    if (runtime.provenance.exerciseId !== representation.exerciseId ||
+      await sha256TextNative(runtimeTexts[index]) !== runtime.payloadHash) {
+      throw new Error("RUNTIME_PAYLOAD_HASH_MISMATCH");
+    }
+    await yieldControl();
+  }
+  if (provenanceHashOf(payload) !== representation.provenanceHash) {
+    throw new Error("CHECKPOINT_PROVENANCE_INVALID");
+  }
+  const checkpoint = await markCheckpointValidatedAsync({
+    envelopeVersion: RUNTIME_CHECKPOINT_ENVELOPE_VERSION,
+    exerciseId: representation.exerciseId,
+    checkpointRevision: representation.checkpointRevision,
+    persistedRuntimeVersion: representation.persistedRuntimeVersion,
+    payload,
+    payloadHash: representation.payloadHash,
+    provenanceHash: representation.provenanceHash,
+  }, yieldControl);
+  canonicalRepresentationByCheckpoint.set(checkpoint, representation);
+  endIntegrity({ valid: true, runtimePayloadCount: runtimeTexts.length, objectRecanonicalizationCount: 0 });
+  return checkpoint;
 }
 
 function hasValidActiveRuntimeCoverage(state: SharedExerciseState): boolean {
@@ -121,15 +258,27 @@ export function createRuntimeCheckpoint(
     throw new Error("ACTIVE_RUNTIME_PERSISTENCE_MISSING");
   }
   const frozenPayload = structuredClone(payload);
-  return markCheckpointValidated({
+  const canonicalPayloadText = stableJson(frozenPayload);
+  const checkpoint = markCheckpointValidated({
     envelopeVersion: RUNTIME_CHECKPOINT_ENVELOPE_VERSION,
     exerciseId: exerciseIdOf(frozenPayload),
     checkpointRevision,
     persistedRuntimeVersion: frozenPayload.persistedRuntimeStates?.[0]?.schemaVersion ?? 1,
     payload: frozenPayload,
-    payloadHash: sha256Text(stableJson(frozenPayload)),
+    payloadHash: sha256Text(canonicalPayloadText),
     provenanceHash: provenanceHashOf(frozenPayload),
   });
+  canonicalRepresentationByCheckpoint.set(checkpoint, Object.freeze({
+    canonicalFormatVersion: RUNTIME_CHECKPOINT_CANONICAL_FORMAT_VERSION,
+    exerciseId: checkpoint.exerciseId,
+    checkpointRevision: checkpoint.checkpointRevision,
+    persistedRuntimeVersion: checkpoint.persistedRuntimeVersion,
+    payloadHash: checkpoint.payloadHash,
+    provenanceHash: checkpoint.provenanceHash,
+    canonicalPayloadText,
+    derivationMethod: "WRITER",
+  }));
+  return checkpoint;
 }
 
 export async function createRuntimeCheckpointAsync(
@@ -153,10 +302,12 @@ export async function createRuntimeCheckpointAsync(
   const endSerialization = startRuntimeWorkTrace("CHECKPOINT_SERIALIZATION");
   let serializedBytes = 0;
   const endHash = startRuntimeWorkTrace("CHECKPOINT_HASH");
+  let canonicalPayloadText = "";
   const payloadHash = await stableJsonHashAsync(frozenPayload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE,
     maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "FULL_CHECKPOINT", objectTraversal: "NATIVE_JSON_SHAPE_TRIE",
     hashBlocksPerSlice: UI_SHA_BLOCKS_PER_SLICE,
-    onHashComplete: metrics => { serializedBytes = metrics.canonicalCharacters; } });
+    onHashComplete: metrics => { serializedBytes = metrics.canonicalCharacters; },
+    onCanonicalText: text => { canonicalPayloadText = text; } });
   endSerialization({ serializedBytes });
   endHash({ serializedBytes });
   const checkpoint = {
@@ -170,6 +321,16 @@ export async function createRuntimeCheckpointAsync(
   };
   const endFreeze = startRuntimeWorkTrace("CHECKPOINT_FREEZE");
   const validated = await markCheckpointValidatedAsync(checkpoint, yieldControl);
+  canonicalRepresentationByCheckpoint.set(validated, Object.freeze({
+    canonicalFormatVersion: RUNTIME_CHECKPOINT_CANONICAL_FORMAT_VERSION,
+    exerciseId: validated.exerciseId,
+    checkpointRevision: validated.checkpointRevision,
+    persistedRuntimeVersion: validated.persistedRuntimeVersion,
+    payloadHash: validated.payloadHash,
+    provenanceHash: validated.provenanceHash,
+    canonicalPayloadText,
+    derivationMethod: "WRITER",
+  }));
   endFreeze();
   endCheckpoint({ serializedBytes });
   return validated;
@@ -445,7 +606,10 @@ class LocalRuntimeCheckpointStore {
     }
     const resolved = resolveAgainstValidatedLocalCheckpoint(this.checkpoint, acknowledged);
     if (resolved.status === "CONFLICT") throw new Error(resolved.code);
-    if (resolved.status === "REMOTE" || resolved.status === "EQUIVALENT") this.checkpoint = acknowledged;
+    if (resolved.status === "REMOTE" || resolved.status === "EQUIVALENT") {
+      transferRuntimeCheckpointCanonicalRepresentation(submitted, acknowledged);
+      this.checkpoint = acknowledged;
+    }
   }
 }
 

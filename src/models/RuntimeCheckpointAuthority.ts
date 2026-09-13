@@ -10,6 +10,19 @@ export type RuntimeCheckpointEnvelope<TPayload = unknown> = Readonly<{
   provenanceHash: string;
 }>;
 
+export const RUNTIME_CHECKPOINT_CANONICAL_FORMAT_VERSION = 1 as const;
+
+export type RuntimeCheckpointCanonicalRepresentation = Readonly<{
+  canonicalFormatVersion: typeof RUNTIME_CHECKPOINT_CANONICAL_FORMAT_VERSION;
+  exerciseId: string;
+  checkpointRevision: number;
+  persistedRuntimeVersion: number;
+  payloadHash: string;
+  provenanceHash: string;
+  canonicalPayloadText: string;
+  derivationMethod: "WRITER" | "LEGACY_DERIVATION";
+}>;
+
 export type RuntimeWriterLease = Readonly<{
   leaseId: string;
   exerciseId: string;
