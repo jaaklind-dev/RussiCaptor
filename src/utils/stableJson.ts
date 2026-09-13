@@ -1,16 +1,80 @@
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalize);
+const MAX_ARRAY_INDEX = 0xffff_fffe;
+
+// String#localeCompare constructs/resolves locale collation for every call on
+// Hermes. A single retained checkpoint can contain tens of thousands of
+// repeated small object shapes, turning those few-key sorts into minutes of
+// JS-thread work. ECMA-402 defines the no-argument forms through the same
+// default Collator; retain one bound comparator instead of resolving it for
+// every comparison.
+const compareLocaleCanonicalKeys = new Intl.Collator().compare;
+
+function arrayIndexOf(key: string): number | undefined {
+  if (!key.length) return undefined;
+  const value = Number(key);
+  return Number.isInteger(value) && value >= 0 && value <= MAX_ARRAY_INDEX && String(value) === key
+    ? value
+    : undefined;
+}
+
+function compareCanonicalKeys(left: string, right: string): number {
+  // JSON.stringify enumerates own array-index keys numerically before other
+  // string keys, even when Object.fromEntries inserted them in collated order.
+  // Model that established output directly so the async emitter remains byte
+  // equivalent for numerically-looking keys as well.
+  const leftIndex = arrayIndexOf(left);
+  const rightIndex = arrayIndexOf(right);
+  if (leftIndex !== undefined || rightIndex !== undefined) {
+    if (leftIndex === undefined) return 1;
+    if (rightIndex === undefined) return -1;
+    return leftIndex - rightIndex;
+  }
+  return compareLocaleCanonicalKeys(left, right);
+}
+
+function keyShape(keys: readonly string[]): string {
+  // Length-prefixing is collision-free even when a property name contains a
+  // separator. The cache is scoped to one canonicalization call, so mutable
+  // objects and later calls cannot observe stale structural metadata.
+  return `${keys.length}|${keys.map(key => `${key.length}:${key}`).join("")}`;
+}
+
+function orderedKeys(
+  record: Record<string, unknown>,
+  cache: Map<string, readonly string[]>,
+): readonly string[] {
+  const keys = Object.keys(record);
+  const shape = keyShape(keys);
+  const cached = cache.get(shape);
+  if (cached) return cached;
+  keys.sort(compareCanonicalKeys);
+  cache.set(shape, keys);
+  return keys;
+}
+
+function canonicalize(value: unknown, keyOrderCache: Map<string, readonly string[]>): unknown {
+  if (Array.isArray(value)) return value.map(item => canonicalize(item, keyOrderCache));
   if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, nested]) => [key, canonicalize(nested)]));
+  const record = value as Record<string, unknown>;
+  return Object.fromEntries(orderedKeys(record, keyOrderCache)
+    .map(key => [key, canonicalize(record[key], keyOrderCache)]));
 }
 
 export function stableJson(value: unknown): string {
-  return JSON.stringify(canonicalize(value));
+  return JSON.stringify(canonicalize(value, new Map()));
 }
+
+export type StableJsonMetrics = Readonly<{
+  nodesVisited: number;
+  objectCount: number;
+  sortCount: number;
+  comparatorInvocationCount: number;
+  keyOrderCacheHits: number;
+  keyOrderCacheMisses: number;
+  totalKeySortDurationMs: number;
+  maxKeySortDurationMs: number;
+}>;
 
 export type StableJsonAsyncOptions = Readonly<{
   /** Validation-only opaque category; never serialized into checkpoint data. */
@@ -20,6 +84,7 @@ export type StableJsonAsyncOptions = Readonly<{
   maxSliceMs?: number;
   yieldControl?: () => Promise<void>;
   onSlice?: (durationMs: number) => void;
+  onComplete?: (metrics: StableJsonMetrics) => void;
 }>;
 
 type StableJsonWorkItem =
@@ -76,7 +141,12 @@ export async function stableJsonAsync(
   let maxObjectKeys = 0;
   let maxObjectKeysDurationMs = 0;
   let maxKeySortDurationMs = 0;
+  let totalKeySortDurationMs = 0;
   let sortCount = 0;
+  let comparatorInvocationCount = 0;
+  let keyOrderCacheHits = 0;
+  let keyOrderCacheMisses = 0;
+  const keyOrderCache = new Map<string, readonly string[]>();
   let maxArrayLength = 0;
   let maxArrayTraversalDurationMs = 0;
   let appendCalls = 0;
@@ -157,15 +227,29 @@ export async function stableJsonAsync(
     objectCount += 1;
     const record = current as Record<string, unknown>;
     const keysStarted = performance.now();
-    const keys = Object.keys(record);
+    let keys = Object.keys(record);
     maxObjectKeys = Math.max(maxObjectKeys, keys.length);
     totalKeys += keys.length;
     const keysDurationMs = performance.now() - keysStarted;
     maxObjectKeysDurationMs = Math.max(maxObjectKeysDurationMs, keysDurationMs);
-    const sortStarted = performance.now();
-    keys.sort((left, right) => left.localeCompare(right));
-    const sortDurationMs = performance.now() - sortStarted;
-    sortCount += 1;
+    const shape = keyShape(keys);
+    const cachedKeys = keyOrderCache.get(shape);
+    let sortDurationMs = 0;
+    if (cachedKeys) {
+      keys = cachedKeys.slice();
+      keyOrderCacheHits += 1;
+    } else {
+      keyOrderCacheMisses += 1;
+      const sortStarted = performance.now();
+      keys.sort((left, right) => {
+        comparatorInvocationCount += 1;
+        return compareCanonicalKeys(left, right);
+      });
+      sortDurationMs = performance.now() - sortStarted;
+      totalKeySortDurationMs += sortDurationMs;
+      sortCount += 1;
+      keyOrderCache.set(shape, keys.slice());
+    }
     maxKeySortDurationMs = Math.max(maxKeySortDurationMs, sortDurationMs);
     if (keys.length >= 1_000 || sortDurationMs >= 50 || keysDurationMs >= 50) {
       const endObjectKeys = startRuntimeWorkTrace("STABLE_JSON_OBJECT_KEYS", { category, keyCount: keys.length });
@@ -190,6 +274,17 @@ export async function stableJsonAsync(
   flushChunks();
   options.onSlice?.(finalBatchDurationMs);
   await yieldControl();
+  const metrics: StableJsonMetrics = {
+    nodesVisited: visited,
+    objectCount,
+    sortCount,
+    comparatorInvocationCount,
+    keyOrderCacheHits,
+    keyOrderCacheMisses,
+    totalKeySortDurationMs,
+    maxKeySortDurationMs,
+  };
+  options.onComplete?.(metrics);
   endBuild({
     category,
     invocation,
@@ -203,7 +298,11 @@ export async function stableJsonAsync(
     maxObjectKeys,
     maxObjectKeysDurationMs,
     maxKeySortDurationMs,
+    totalKeySortDurationMs,
     sortCount,
+    comparatorInvocationCount,
+    keyOrderCacheHits,
+    keyOrderCacheMisses,
     maxArrayLength,
     maxArrayTraversalDurationMs,
     maxRecursionDepth,
