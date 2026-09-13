@@ -1,13 +1,18 @@
 import { router } from "expo-router";
 
+import { useSyncExternalStore } from "react";
+
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import AppHeader from "@/components/AppHeader";
 
 import { getMyPatients } from "@/services/AssignmentRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
+import { getSyncVersion, subscribeToSync } from "@/services/SyncService";
 
 export default function PatientsScreen() {
+
+  useSyncExternalStore(subscribeToSync, getSyncVersion, getSyncVersion);
 
   const myPatients = getMyPatients();
 

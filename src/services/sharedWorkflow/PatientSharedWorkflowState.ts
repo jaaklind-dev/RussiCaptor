@@ -1,5 +1,5 @@
 import { dataProvider, clinicalDataProvider } from "@/providers/ProviderFactory";
-import { getAssignmentState, restoreAssignmentState } from "@/services/AssignmentRepository";
+import { getAssignmentState, restoreAssignmentState, restoreAuthoritativePatientOwnershipProjection } from "@/services/AssignmentRepository";
 
 export type PatientSharedWorkflowState = Readonly<Record<string, unknown>> & Readonly<{
   patient?: Readonly<Record<string,unknown>>;
@@ -53,4 +53,24 @@ export function restorePatientSharedWorkflowState(patientId:string,state:Patient
   replacePatientItems(clinicalDataProvider.getInterventions(),patientId,state.interventions);
   replacePatientItems(clinicalDataProvider.getMedicationAdministrations(),patientId,state.medicationAdministrations);
   replacePatientItems(clinicalDataProvider.getVitalSigns(),patientId,state.vitalSigns);
+}
+
+export function restoreAuthoritativePatientSharedWorkflowState(input: Readonly<{
+  exerciseId: string;
+  patientId: string;
+  revision: number;
+  ownerUserId?: string;
+  state: PatientSharedWorkflowState;
+}>): boolean {
+  const ownershipAccepted = restoreAuthoritativePatientOwnershipProjection({
+    exerciseId: input.exerciseId,
+    patientId: input.patientId,
+    revision: input.revision,
+    ownerUserId: input.ownerUserId,
+    assignments: input.state.assignments,
+    transfers: input.state.transfers,
+  });
+  if (!ownershipAccepted) return false;
+  restorePatientSharedWorkflowState(input.patientId, input.state);
+  return true;
 }

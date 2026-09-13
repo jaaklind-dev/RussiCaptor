@@ -14,9 +14,160 @@ import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { executeAuthoritativePatientMutation } from "@/services/sharedWorkflow/AuthoritativePatientMutationService";
 import { getSharedWorkflowHead } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { traceCmOwnership } from "@/services/sharedWorkflow/CmOwnershipDiagnosticsService";
 
 let assignments: PatientAssignment[] = [];
 let transfers: PatientTransfer[] = [];
+
+type CmOwnershipClassification = "SELF" | "OTHER_CM" | "UNOWNED" | "UNRESOLVED";
+type AuthoritativeOwnershipProjection = Readonly<{
+  exerciseId: string;
+  patientId: string;
+  revision: number;
+  ownerUserId?: string;
+  assignments: readonly PatientAssignment[];
+  transfers: readonly PatientTransfer[];
+}>;
+
+const authoritativeOwnership = new Map<string, AuthoritativeOwnershipProjection>();
+let managedOwnershipExerciseId: string | undefined;
+let ownershipProjectionReady = true;
+
+const ownershipKey = (exerciseId: string, patientId: string): string => `${exerciseId}\u0000${patientId}`;
+
+function isPatientAssignment(value: unknown, patientId: string): value is PatientAssignment {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<PatientAssignment>;
+  return candidate.patientId === patientId && typeof candidate.caseManagerId === "string" &&
+    Boolean(candidate.caseManagerId) && typeof candidate.caseManagerName === "string" &&
+    typeof candidate.assignedAt === "string";
+}
+
+function isPatientTransfer(value: unknown, patientId: string): value is PatientTransfer {
+  return Boolean(value && typeof value === "object" &&
+    (value as Partial<PatientTransfer>).patientId === patientId);
+}
+
+function applyAuthoritativeOwnershipProjection(projection: AuthoritativeOwnershipProjection): void {
+  assignments = [
+    ...assignments.filter(item => item.patientId !== projection.patientId),
+    ...projection.assignments.map(item => ({ ...item })),
+  ];
+  transfers = [
+    ...transfers.filter(item => item.patientId !== projection.patientId),
+    ...projection.transfers.map(item => ({ ...item })),
+  ];
+}
+
+function reapplyAuthoritativeOwnershipProjections(exerciseId: string): void {
+  const projections = [...authoritativeOwnership.values()].filter(item => item.exerciseId === exerciseId);
+  if (managedOwnershipExerciseId === exerciseId && !ownershipProjectionReady && projections.length === 0) {
+    assignments = assignments.filter(item => Boolean(item.endedAt));
+    transfers = [];
+  }
+  for (const projection of projections) applyAuthoritativeOwnershipProjection(projection);
+}
+
+export function beginCmOwnershipProjectionHydration(exerciseId: string): void {
+  if (managedOwnershipExerciseId !== exerciseId) authoritativeOwnership.clear();
+  managedOwnershipExerciseId = exerciseId;
+  ownershipProjectionReady = false;
+  reapplyAuthoritativeOwnershipProjections(exerciseId);
+  notifySync("remote");
+}
+
+export function restoreAuthoritativePatientOwnershipProjection(input: Readonly<{
+  exerciseId: string;
+  patientId: string;
+  revision: number;
+  ownerUserId?: string;
+  assignments: readonly unknown[];
+  transfers: readonly unknown[];
+}>): boolean {
+  if (!Number.isInteger(input.revision) || input.revision < 0 ||
+    !input.assignments.every(item => isPatientAssignment(item, input.patientId)) ||
+    !input.transfers.every(item => isPatientTransfer(item, input.patientId))) return false;
+  const active = input.assignments.filter((item): item is PatientAssignment =>
+    isPatientAssignment(item, input.patientId) && !item.endedAt);
+  if (input.ownerUserId ? active.length !== 1 || active[0].caseManagerId !== input.ownerUserId : active.length !== 0) {
+    return false;
+  }
+  const key = ownershipKey(input.exerciseId, input.patientId);
+  const current = authoritativeOwnership.get(key);
+  if (current && input.revision < current.revision) return false;
+  if (current && input.revision === current.revision && current.ownerUserId !== input.ownerUserId) return false;
+  const projection = Object.freeze({
+    exerciseId: input.exerciseId,
+    patientId: input.patientId,
+    revision: input.revision,
+    ownerUserId: input.ownerUserId,
+    assignments: Object.freeze(input.assignments.map(item => Object.freeze({ ...(item as PatientAssignment) }))),
+    transfers: Object.freeze(input.transfers.map(item => Object.freeze({ ...(item as PatientTransfer) }))),
+  });
+  authoritativeOwnership.set(key, projection);
+  applyAuthoritativeOwnershipProjection(projection);
+  traceCmOwnership("CM_OWNERSHIP_FETCHED", {
+    patientId: input.patientId,
+    ownerPrincipalId: input.ownerUserId,
+    revision: input.revision,
+  });
+  return true;
+}
+
+export function completeCmOwnershipProjectionHydration(exerciseId: string): boolean {
+  if (managedOwnershipExerciseId !== exerciseId) return false;
+  const authoritativePatientIds = new Set([...authoritativeOwnership.values()]
+    .filter(item => item.exerciseId === exerciseId).map(item => item.patientId));
+  assignments = assignments.filter(item => item.endedAt || authoritativePatientIds.has(item.patientId));
+  transfers = transfers.filter(item => authoritativePatientIds.has(item.patientId));
+  reapplyAuthoritativeOwnershipProjections(exerciseId);
+  ownershipProjectionReady = true;
+  const operatorId = getCurrentCaseManager().id;
+  const ownedPatientCount = [...authoritativeOwnership.values()].filter(item =>
+    item.exerciseId === exerciseId && item.ownerUserId === operatorId).length;
+  traceCmOwnership("CM_OWNERSHIP_PROJECTION_READY", { ownedPatientCount });
+  return true;
+}
+
+export function getCmOwnershipProjectionReadiness(exerciseId: string): Readonly<{
+  managed: boolean;
+  ready: boolean;
+}> {
+  const managed = managedOwnershipExerciseId === exerciseId;
+  return Object.freeze({ managed, ready: !managed || ownershipProjectionReady });
+}
+
+export function getAuthoritativePatientOwnershipProjection(exerciseId: string, patientId: string):
+  AuthoritativeOwnershipProjection | undefined {
+  const projection = authoritativeOwnership.get(ownershipKey(exerciseId, patientId));
+  return projection ? Object.freeze({ ...projection,
+    assignments: Object.freeze(projection.assignments.map(item => Object.freeze({ ...item }))),
+    transfers: Object.freeze(projection.transfers.map(item => Object.freeze({ ...item }))),
+  }) : undefined;
+}
+
+export function classifyCurrentCmPatientOwnership(patientId: string): CmOwnershipClassification {
+  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  const readiness = getCmOwnershipProjectionReadiness(exerciseId);
+  if (readiness.managed && !readiness.ready) {
+    traceCmOwnership("CM_OWNERSHIP_CLASSIFIED", { patientId, classification: "UNRESOLVED" });
+    return "UNRESOLVED";
+  }
+  const projection = readiness.managed
+    ? authoritativeOwnership.get(ownershipKey(exerciseId, patientId))
+    : undefined;
+  const assignment = projection?.assignments.find(item => !item.endedAt) ?? getPatientAssignment(patientId);
+  const ownerUserId = projection?.ownerUserId ?? (!assignment?.endedAt ? assignment?.caseManagerId : undefined);
+  const classification: CmOwnershipClassification = !ownerUserId ? "UNOWNED" :
+    ownerUserId === getCurrentCaseManager().id ? "SELF" : "OTHER_CM";
+  traceCmOwnership("CM_OWNERSHIP_CLASSIFIED", {
+    patientId,
+    ownerPrincipalId: ownerUserId,
+    revision: projection?.revision,
+    classification,
+  });
+  return classification;
+}
 
 export type AssignmentResult =
   | { status: "assigned" | "already-assigned"; assignment: PatientAssignment }
@@ -32,6 +183,35 @@ export function assignPatientToMeConflictSafe(patientId:string){
   const existing=getPatientAssignment(patientId);
   const exerciseId=getCanonicalExerciseSnapshot().exerciseId;
   const head=getSharedWorkflowHead(exerciseId,patientId);
+  const ownership=classifyCurrentCmPatientOwnership(patientId);
+  if(ownership==="UNRESOLVED")return Promise.resolve(Object.freeze({
+    result:Object.freeze({status:"RECONNECT_REQUIRED" as const,revision:head.revision,ownerUserId:head.ownerUserId}),
+    value:undefined,
+    message:"Patsiendi vastutuse kinnitamiseks taasta võrguühendus.",
+  }));
+  if(ownership==="SELF"){
+    if(!existing||existing.endedAt||existing.caseManagerId!==operator.id)return Promise.resolve(Object.freeze({
+      result:Object.freeze({status:"RECONNECT_REQUIRED" as const,revision:head.revision,ownerUserId:head.ownerUserId}),
+      value:undefined,
+      message:"Patsiendi vastutuse projektsioon pole veel valmis.",
+    }));
+    const value=assignPatient(patientId,operator);return Promise.resolve(Object.freeze({
+      result:Object.freeze({status:"IDEMPOTENT" as const,revision:head.revision,ownerUserId:head.ownerUserId}),value,
+      message:"Patsient on juba sinu vastutusel.",
+    }));
+  }
+  if(ownership==="OTHER_CM"){
+    if(!existing||existing.endedAt||existing.caseManagerId===operator.id)return Promise.resolve(Object.freeze({
+      result:Object.freeze({status:"RECONNECT_REQUIRED" as const,revision:head.revision,ownerUserId:head.ownerUserId}),
+      value:undefined,
+      message:"Patsiendi vastutuse projektsioon pole veel valmis.",
+    }));
+    const value:AssignmentResult={status:"assigned-to-other",assignment:existing};
+    return Promise.resolve(Object.freeze({
+      result:Object.freeze({status:"ALREADY_OWNED" as const,revision:head.revision,ownerUserId:head.ownerUserId}),value,
+      message:"Patsient on juba teise CM-i vastutusel.",
+    }));
+  }
   if(existing&&!existing.endedAt&&existing.caseManagerId!==operator.id){const value=assignPatient(patientId,operator);return Promise.resolve(Object.freeze({
     result:Object.freeze({status:"ALREADY_OWNED" as const,revision:head.revision,ownerUserId:head.ownerUserId??existing.caseManagerId}),
     value,message:"Patsient on juba teise CM-i vastutusel.",
@@ -306,6 +486,8 @@ export function getPatientAssignment(
 }
 
 export function canCurrentCaseManagerEditPatient(patientId: string): boolean {
+  const readiness = getCmOwnershipProjectionReadiness(getCanonicalExerciseSnapshot().exerciseId);
+  if (readiness.managed && !readiness.ready) return false;
   const assignment = getPatientAssignment(patientId);
 
   return Boolean(
@@ -387,6 +569,9 @@ export function getDashboardStats() {
 export function clearAssignments(): void {
   assignments = [];
   transfers = [];
+  authoritativeOwnership.clear();
+  managedOwnershipExerciseId = undefined;
+  ownershipProjectionReady = true;
 }
 
 export function getAssignmentState(): {
@@ -405,4 +590,5 @@ export function restoreAssignmentState(state: {
 }): void {
   assignments = state.assignments.map((assignment) => ({ ...assignment }));
   transfers = state.transfers.map((transfer) => ({ ...transfer }));
+  reapplyAuthoritativeOwnershipProjections(getCanonicalExerciseSnapshot().exerciseId);
 }

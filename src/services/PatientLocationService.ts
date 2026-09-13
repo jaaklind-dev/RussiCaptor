@@ -6,6 +6,8 @@ import { getCurrentLocationZone } from "@/services/CurrentLocationService";
 import { notifySync } from "@/services/SyncService";
 import { createId } from "@/utils/id";
 import { executeAuthoritativePatientMutation } from "@/services/sharedWorkflow/AuthoritativePatientMutationService";
+import { getSharedWorkflowHead } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 
 export function updatePatientLocationFromCurrentCm(patientId: string): boolean {
   const patient = findPatientById(patientId);
@@ -38,5 +40,17 @@ export function updatePatientLocationFromCurrentCm(patientId: string): boolean {
 }
 
 export function updatePatientLocationFromCurrentCmConflictSafe(patientId:string){
+  const patient = findPatientById(patientId);
+  const zone = getCurrentLocationZone();
+  if (!patient || !zone || patient.location === zone.name) {
+    const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+    const head = getSharedWorkflowHead(exerciseId, patientId);
+    return Promise.resolve(Object.freeze({
+      result: Object.freeze({ status: "IDEMPOTENT" as const, revision: head.revision,
+        ownerUserId: head.ownerUserId }),
+      value: false,
+      message: "Patsiendi asukoht on juba ajakohane.",
+    }));
+  }
   return executeAuthoritativePatientMutation({patientId,commandId:createId("SW-LOCATION"),kind:"MUTABLE",mutate:()=>updatePatientLocationFromCurrentCm(patientId)});
 }

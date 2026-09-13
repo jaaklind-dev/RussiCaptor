@@ -13,6 +13,7 @@ import { getInstructorRuntimeOwner } from "@/services/runtime/instructor/Instruc
 import { runtimeWritesAllowed } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { getRuntimePatientCommandGateway, submitPatientRuntimeCommand } from "@/services/runtime/commands/RuntimePatientCommandService";
 import { runtimeReaderCommandReadiness } from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
+import { canCurrentCaseManagerEditPatient, getCmOwnershipProjectionReadiness } from "@/services/AssignmentRepository";
 
 export type ClinicalTreatmentBuildResult = Readonly<{ ok: true; command: ClinicalTreatmentCommand }> |
   Readonly<{ ok: false; errors: readonly string[] }>;
@@ -143,6 +144,12 @@ function resultMessage(status: string, rejectionReason?: string, protocolClassif
 
 export function clinicalTreatmentMutationReadiness(exerciseId: string, patientId: string):
 Readonly<{ ready: boolean; reason?: string }> {
+  const ownership = getCmOwnershipProjectionReadiness(exerciseId);
+  if (ownership.managed && (!ownership.ready || !canCurrentCaseManagerEditPatient(patientId))) {
+    return Object.freeze({ ready: false, reason: ownership.ready
+      ? "Patsiendi vastutus ei kuulu sellele CM-ile."
+      : "Patsiendi vastutust sünkroonitakse." });
+  }
   if (getRuntimePatientCommandGateway()) {
     return runtimeReaderCommandReadiness(exerciseId);
   }

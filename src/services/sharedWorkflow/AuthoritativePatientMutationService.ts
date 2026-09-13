@@ -1,7 +1,7 @@
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { notifySync, runWithoutSyncNotifications } from "@/services/SyncService";
-import { capturePatientSharedWorkflowState, restorePatientSharedWorkflowState } from "./PatientSharedWorkflowState";
+import { capturePatientSharedWorkflowState, restoreAuthoritativePatientSharedWorkflowState, restorePatientSharedWorkflowState } from "./PatientSharedWorkflowState";
 import { getSharedWorkflowHead, sharedWorkflowStatusMessage, submitSharedWorkflowMutation,
   type SharedWorkflowMutationKind, type SharedWorkflowMutationResult } from "./SharedWorkflowMutationService";
 
@@ -28,7 +28,9 @@ export async function executeAuthoritativePatientMutation<T>(input:Readonly<{
   const nextOwnerUserId=input.kind==="RELEASE"?undefined:input.nextOwnerUserId??expectedOwnerUserId;
   const result=await submitSharedWorkflowMutation({exerciseId,patientId:input.patientId,commandId:input.commandId,kind:input.kind,
     expectedRevision:head.revision,expectedOwnerUserId,nextOwnerUserId,state:proposed});
-  if(result.state){restorePatientSharedWorkflowState(input.patientId,result.state as ReturnType<typeof capturePatientSharedWorkflowState>);notifySync(result.status==="APPLIED"||result.status==="IDEMPOTENT"?"device":"remote");}
+  if(result.state){restoreAuthoritativePatientSharedWorkflowState({exerciseId,patientId:input.patientId,revision:result.revision,
+    ownerUserId:result.ownerUserId,state:result.state as ReturnType<typeof capturePatientSharedWorkflowState>});
+    notifySync(result.status==="APPLIED"||result.status==="IDEMPOTENT"?"device":"remote");}
   return Object.freeze({result,value:result.status==="APPLIED"||result.status==="IDEMPOTENT"?value:undefined,
     message:sharedWorkflowStatusMessage(result.status)+(operator.id===result.ownerUserId?"":"")});
 }

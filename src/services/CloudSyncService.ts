@@ -36,7 +36,8 @@ import {
   type ExerciseProjectionCandidate,
 } from "@/services/exercise/ExerciseProjectionWriteCoordinator";
 import { getSharedWorkflowHead, observeSharedWorkflowHead, setSharedWorkflowConnectivity, setSharedWorkflowRealtimeLifecycle } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
-import { restorePatientSharedWorkflowState, type PatientSharedWorkflowState } from "@/services/sharedWorkflow/PatientSharedWorkflowState";
+import { restoreAuthoritativePatientSharedWorkflowState, type PatientSharedWorkflowState } from "@/services/sharedWorkflow/PatientSharedWorkflowState";
+import { beginCmOwnershipProjectionHydration, completeCmOwnershipProjectionHydration } from "@/services/AssignmentRepository";
 import { getOperatorSession, hasActiveRole, type OperatorSessionState } from "@/services/authorization/OperatorSessionService";
 import {
   canPublishProjectionWithPackageAuthority,
@@ -301,6 +302,7 @@ function applyRemoteRow(row: ExerciseStateRow): void {
 async function refreshSharedWorkflowPatients(cloudClient: NonNullable<typeof supabase>): Promise<boolean> {
   if (remoteSelectionState !== "RESOLVED") return false;
   const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  beginCmOwnershipProjectionHydration(exerciseId);
   const { data, error } = await cloudClient.from("shared_workflow_patient_states")
     .select("exercise_id,patient_id,revision,owner_user_id,state")
     .eq("exercise_id", exerciseId);
@@ -310,9 +312,11 @@ async function refreshSharedWorkflowPatients(cloudClient: NonNullable<typeof sup
     const authoritative = candidate as {exercise_id:string;patient_id:string;revision:number;owner_user_id?:string;state:PatientSharedWorkflowState};
     const known = getSharedWorkflowHead(authoritative.exercise_id, authoritative.patient_id);
     if (authoritative.revision < known.revision) continue;
+    if (!restoreAuthoritativePatientSharedWorkflowState({exerciseId:authoritative.exercise_id,patientId:authoritative.patient_id,
+      revision:authoritative.revision,ownerUserId:authoritative.owner_user_id,state:authoritative.state})) return false;
     observeSharedWorkflowHead(authoritative.exercise_id,authoritative.patient_id,authoritative.revision,authoritative.owner_user_id);
-    restorePatientSharedWorkflowState(authoritative.patient_id,authoritative.state);
   }
+  completeCmOwnershipProjectionHydration(exerciseId);
   notifySync("remote");
   return true;
 }
@@ -662,8 +666,10 @@ export async function startCloudSync(): Promise<() => void> {
         .eq("exercise_id",row.exercise_id).eq("patient_id",row.patient_id).single().then(({data,error})=>{
           recordSupabaseTraffic({operation:"SELECT",endpoint:"shared_workflow.patient_state",data});if(error||!data)return;
           const authoritative=data as {exercise_id:string;patient_id:string;revision:number;owner_user_id?:string;state:PatientSharedWorkflowState};
+          if(!restoreAuthoritativePatientSharedWorkflowState({exerciseId:authoritative.exercise_id,patientId:authoritative.patient_id,
+            revision:authoritative.revision,ownerUserId:authoritative.owner_user_id,state:authoritative.state}))return;
           observeSharedWorkflowHead(authoritative.exercise_id,authoritative.patient_id,authoritative.revision,authoritative.owner_user_id);
-          restorePatientSharedWorkflowState(authoritative.patient_id,authoritative.state);notifySync("remote");
+          notifySync("remote");
         });
     }).subscribe(channelStatus=>{
       setSharedWorkflowRealtimeLifecycle(channelStatus);
@@ -684,7 +690,8 @@ export async function startCloudSync(): Promise<() => void> {
     previousAppState = nextState;
     if (returnedToForeground) {
       recordSupabaseTraffic({ operation: "DISCOVERY_FOREGROUND_INVALIDATION", endpoint: "exercise_states.discovery_foreground" });
-      void refreshRemoteCurrentExercise("foreground");
+      void refreshRemoteCurrentExercise("foreground").then(() =>
+        refreshSharedWorkflowPatients(cloudClient).then(hydrated=>setSharedWorkflowConnectivity(hydrated)));
       scheduleCloudSave();
     } else if (nextState !== "active") {
       void projectionWriteCoordinator.flush();
