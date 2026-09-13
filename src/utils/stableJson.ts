@@ -68,6 +68,18 @@ export function stableJson(value: unknown): string {
 export type StableJsonMetrics = Readonly<{
   nodesVisited: number;
   objectCount: number;
+  objectKeysCalls: number;
+  objectEntriesCalls: number;
+  keyArrayAllocations: number;
+  shapeSignatureBuilds: number;
+  fastPathObjectCount: number;
+  genericFallbackObjectCount: number;
+  uniqueCanonicalKeyCount: number;
+  propertyVisitCount: number;
+  totalKeyExtractionDurationMs: number;
+  totalShapeSignatureDurationMs: number;
+  nativeDiscoveryDurationMs: number;
+  nativeSerializationDurationMs: number;
   sortCount: number;
   comparatorInvocationCount: number;
   keyOrderCacheHits: number;
@@ -85,6 +97,13 @@ export type StableJsonAsyncOptions = Readonly<{
   yieldControl?: () => Promise<void>;
   onSlice?: (durationMs: number) => void;
   onComplete?: (metrics: StableJsonMetrics) => void;
+  /**
+   * Checkpoint-only fast path for plain JSON-compatible data. Native
+   * JSON.stringify discovers each holder's key sequence into a compact shape
+   * trie. Repeated objects then share one canonical key array. Unknown keys
+   * remain included without Object.keys or per-object signature allocation.
+   */
+  objectTraversal?: "ITERATIVE" | "NATIVE_JSON_SHAPE_TRIE";
 }>;
 
 type StableJsonWorkItem =
@@ -92,6 +111,67 @@ type StableJsonWorkItem =
   | Readonly<{ kind: "CHUNK"; value: string }>;
 
 let stableJsonAsyncInvocation = 0;
+
+type CanonicalShapeNode = {
+  readonly parent?: CanonicalShapeNode;
+  readonly key?: string;
+  readonly children: Map<string, CanonicalShapeNode>;
+  orderedKeys?: readonly string[];
+};
+
+type NativeShapeDiscovery = Readonly<{
+  shapeByObject: WeakMap<object, CanonicalShapeNode>;
+  propertyVisitCount: number;
+  uniqueKeyCount: number;
+  durationMs: number;
+}>;
+
+function discoverCanonicalShapes(value: unknown): NativeShapeDiscovery {
+  const rootShape: CanonicalShapeNode = { children: new Map() };
+  const shapeByObject = new WeakMap<object, CanonicalShapeNode>();
+  const uniqueKeys = new Set<string>();
+  let root = true;
+  let propertyVisitCount = 0;
+  const started = performance.now();
+
+  // JSON.stringify performs object enumeration natively on Hermes. The
+  // replacer sees keys in each holder's native enumeration order, allowing a
+  // compact trie to intern repeated shapes without Object.keys, Object.entries,
+  // per-object key arrays, or per-object signature strings. Objects with a
+  // custom toJSON are intentionally not associated with the transformed value
+  // and therefore take the generic fail-safe path during canonicalization.
+  JSON.stringify(value, function discoverShape(key, nested) {
+    if (!root && !Array.isArray(this)) {
+      const holder = this as object;
+      const current = shapeByObject.get(holder) ?? rootShape;
+      let next = current.children.get(key);
+      if (!next) {
+        next = { parent: current, key, children: new Map() };
+        current.children.set(key, next);
+      }
+      shapeByObject.set(holder, next);
+      uniqueKeys.add(key);
+      propertyVisitCount += 1;
+    }
+    root = false;
+    if (nested !== null && typeof nested === "object" && !Array.isArray(nested) &&
+      typeof (nested as { toJSON?: unknown }).toJSON !== "function") {
+      shapeByObject.set(nested, rootShape);
+    }
+    return nested;
+  });
+  return { shapeByObject, propertyVisitCount, uniqueKeyCount: uniqueKeys.size,
+    durationMs: performance.now() - started };
+}
+
+function keysFromShape(shape: CanonicalShapeNode): string[] {
+  const keys: string[] = [];
+  for (let current: CanonicalShapeNode | undefined = shape; current?.key !== undefined; current = current.parent) {
+    keys.push(current.key);
+  }
+  keys.reverse();
+  return keys;
+}
 
 /**
  * Byte-equivalent yielding form of stableJson. It emits canonical JSON
@@ -107,6 +187,17 @@ export async function stableJsonAsync(
   stableJsonAsyncInvocation += 1;
   const invocation = stableJsonAsyncInvocation;
   const endBuild = startRuntimeWorkTrace("STABLE_JSON_BUILD", { category, invocation });
+  let nativeDiscovery: NativeShapeDiscovery | undefined;
+  if (options.objectTraversal === "NATIVE_JSON_SHAPE_TRIE") {
+    const endDiscovery = startRuntimeWorkTrace("STABLE_JSON_SHAPE_DISCOVERY", { category, invocation });
+    nativeDiscovery = discoverCanonicalShapes(value);
+    endDiscovery({
+      category,
+      invocation,
+      propertyVisitCount: nativeDiscovery.propertyVisitCount,
+      uniqueCanonicalKeyCount: nativeDiscovery.uniqueKeyCount,
+    });
+  }
   const chunks: string[] = [];
   let sliceChunks: string[] = [];
   let totalChunkCharacters = 0;
@@ -138,6 +229,13 @@ export async function stableJsonAsync(
   let scalarCount = 0;
   let stringCount = 0;
   let totalKeys = 0;
+  let totalKeyExtractionDurationMs = 0;
+  let totalShapeSignatureDurationMs = 0;
+  let objectKeysCalls = 0;
+  let keyArrayAllocations = 0;
+  let shapeSignatureBuilds = 0;
+  let fastPathObjectCount = 0;
+  let genericFallbackObjectCount = 0;
   let maxObjectKeys = 0;
   let maxObjectKeysDurationMs = 0;
   let maxKeySortDurationMs = 0;
@@ -154,6 +252,13 @@ export async function stableJsonAsync(
   let maxChunkPushBurst = 0;
   let chunkPushesSinceYield = 0;
   let batchId = 0;
+
+  if (nativeDiscovery) {
+    options.onSlice?.(nativeDiscovery.durationMs);
+    await yieldControl();
+    yieldCount += 1;
+    sliceStarted = performance.now();
+  }
 
   const finishBatch = (durationMs: number): void => {
     const nodesInBatch = visited - nodesAtLastYield;
@@ -226,46 +331,87 @@ export async function stableJsonAsync(
     }
     objectCount += 1;
     const record = current as Record<string, unknown>;
-    const keysStarted = performance.now();
-    let keys = Object.keys(record);
+    const discoveredShape = nativeDiscovery?.shapeByObject.get(record);
+    let keys: readonly string[];
+    let sortDurationMs = 0;
+    let keysDurationMs = 0;
+    if (discoveredShape) {
+      fastPathObjectCount += 1;
+      if (discoveredShape.orderedKeys) {
+        keys = discoveredShape.orderedKeys;
+        keyOrderCacheHits += 1;
+      } else {
+        keyOrderCacheMisses += 1;
+        keys = keysFromShape(discoveredShape);
+        keyArrayAllocations += 1;
+        const sortStarted = performance.now();
+        (keys as string[]).sort((left, right) => {
+          comparatorInvocationCount += 1;
+          return compareCanonicalKeys(left, right);
+        });
+        sortDurationMs = performance.now() - sortStarted;
+        totalKeySortDurationMs += sortDurationMs;
+        sortCount += 1;
+        discoveredShape.orderedKeys = keys;
+      }
+    } else {
+      genericFallbackObjectCount += 1;
+      objectKeysCalls += 1;
+      keyArrayAllocations += 1;
+      const keysStarted = performance.now();
+      let genericKeys = Object.keys(record);
+      keysDurationMs = performance.now() - keysStarted;
+      totalKeyExtractionDurationMs += keysDurationMs;
+      maxObjectKeysDurationMs = Math.max(maxObjectKeysDurationMs, keysDurationMs);
+      const shapeStarted = performance.now();
+      const shape = keyShape(genericKeys);
+      shapeSignatureBuilds += 1;
+      totalShapeSignatureDurationMs += performance.now() - shapeStarted;
+      const cachedKeys = keyOrderCache.get(shape);
+      if (cachedKeys) {
+        genericKeys = cachedKeys.slice();
+        keyArrayAllocations += 1;
+        keyOrderCacheHits += 1;
+      } else {
+        keyOrderCacheMisses += 1;
+        const sortStarted = performance.now();
+        genericKeys.sort((left, right) => {
+          comparatorInvocationCount += 1;
+          return compareCanonicalKeys(left, right);
+        });
+        sortDurationMs = performance.now() - sortStarted;
+        totalKeySortDurationMs += sortDurationMs;
+        sortCount += 1;
+        keyOrderCache.set(shape, genericKeys.slice());
+        keyArrayAllocations += 1;
+      }
+      keys = genericKeys;
+    }
     maxObjectKeys = Math.max(maxObjectKeys, keys.length);
     totalKeys += keys.length;
-    const keysDurationMs = performance.now() - keysStarted;
-    maxObjectKeysDurationMs = Math.max(maxObjectKeysDurationMs, keysDurationMs);
-    const shape = keyShape(keys);
-    const cachedKeys = keyOrderCache.get(shape);
-    let sortDurationMs = 0;
-    if (cachedKeys) {
-      keys = cachedKeys.slice();
-      keyOrderCacheHits += 1;
-    } else {
-      keyOrderCacheMisses += 1;
-      const sortStarted = performance.now();
-      keys.sort((left, right) => {
-        comparatorInvocationCount += 1;
-        return compareCanonicalKeys(left, right);
-      });
-      sortDurationMs = performance.now() - sortStarted;
-      totalKeySortDurationMs += sortDurationMs;
-      sortCount += 1;
-      keyOrderCache.set(shape, keys.slice());
-    }
     maxKeySortDurationMs = Math.max(maxKeySortDurationMs, sortDurationMs);
     if (keys.length >= 1_000 || sortDurationMs >= 50 || keysDurationMs >= 50) {
       const endObjectKeys = startRuntimeWorkTrace("STABLE_JSON_OBJECT_KEYS", { category, keyCount: keys.length });
       endObjectKeys({ keysDurationMs, sortDurationMs });
     }
-    const serializableKeys = keys.filter(key => {
+    let serializableKeyCount = 0;
+    for (const key of keys) {
       const nested = record[key];
-      return nested !== undefined && typeof nested !== "function" && typeof nested !== "symbol";
-    });
+      if (nested !== undefined && typeof nested !== "function" && typeof nested !== "symbol") {
+        serializableKeyCount += 1;
+      }
+    }
     work.push({ kind: "CHUNK", value: "}" });
-    for (let index = serializableKeys.length - 1; index >= 0; index -= 1) {
-      const key = serializableKeys[index];
+    let serializableKeyIndex = serializableKeyCount - 1;
+    for (let index = keys.length - 1; index >= 0; index -= 1) {
+      const key = keys[index];
+      const nested = record[key];
+      if (nested === undefined || typeof nested === "function" || typeof nested === "symbol") continue;
       work.push({ kind: "VALUE", value: record[key], inArray: false, depth: item.depth + 1 });
       work.push({ kind: "CHUNK", value: ":" });
       work.push({ kind: "CHUNK", value: JSON.stringify(key) });
-      if (index > 0) work.push({ kind: "CHUNK", value: "," });
+      if (serializableKeyIndex > 0) work.push({ kind: "CHUNK", value: "," });
+      serializableKeyIndex -= 1;
     }
     work.push({ kind: "CHUNK", value: "{" });
   }
@@ -277,6 +423,18 @@ export async function stableJsonAsync(
   const metrics: StableJsonMetrics = {
     nodesVisited: visited,
     objectCount,
+    objectKeysCalls,
+    objectEntriesCalls: 0,
+    keyArrayAllocations,
+    shapeSignatureBuilds,
+    fastPathObjectCount,
+    genericFallbackObjectCount,
+    uniqueCanonicalKeyCount: nativeDiscovery?.uniqueKeyCount ?? 0,
+    propertyVisitCount: nativeDiscovery?.propertyVisitCount ?? totalKeys,
+    totalKeyExtractionDurationMs,
+    totalShapeSignatureDurationMs,
+    nativeDiscoveryDurationMs: nativeDiscovery?.durationMs ?? 0,
+    nativeSerializationDurationMs: 0,
     sortCount,
     comparatorInvocationCount,
     keyOrderCacheHits,
@@ -288,6 +446,7 @@ export async function stableJsonAsync(
   endBuild({
     category,
     invocation,
+    traversal: nativeDiscovery ? "NATIVE_JSON_SHAPE_TRIE" : "ITERATIVE",
     nodesVisited: visited,
     appendCalls,
     objectCount,
@@ -295,6 +454,8 @@ export async function stableJsonAsync(
     scalarCount,
     stringCount,
     totalKeys,
+    totalKeyExtractionDurationMs,
+    totalShapeSignatureDurationMs,
     maxObjectKeys,
     maxObjectKeysDurationMs,
     maxKeySortDurationMs,

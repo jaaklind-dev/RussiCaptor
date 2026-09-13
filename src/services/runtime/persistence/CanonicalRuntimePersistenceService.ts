@@ -89,7 +89,8 @@ export class CanonicalRuntimePersistenceService {
     });
     await yieldControl();
     const endSerialization = startRuntimeWorkTrace("RUNTIME_PAYLOAD_SERIALIZATION");
-    const canonical = await stableJsonAsync(payload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "RUNTIME_PAYLOAD" });
+    const canonical = await stableJsonAsync(payload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS,
+      traceCategory: "RUNTIME_PAYLOAD", objectTraversal: "NATIVE_JSON_SHAPE_TRIE" });
     endSerialization({ serializedBytes: canonical.length });
     const endHash = startRuntimeWorkTrace("RUNTIME_PAYLOAD_HASH");
     const payloadHash = await sha256TextAsync(canonical, {

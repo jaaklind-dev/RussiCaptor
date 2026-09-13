@@ -62,6 +62,7 @@ describe("WP-NARVA-10B10 large checkpoint restore", () => {
         yieldControl: async () => Promise.resolve(),
         onSlice: duration => slices.push(duration),
         traceCategory: "RUNTIME_PAYLOAD",
+        objectTraversal: "NATIVE_JSON_SHAPE_TRIE",
       });
       const canonicalMs = performance.now() - started;
       const hashStarted = performance.now();

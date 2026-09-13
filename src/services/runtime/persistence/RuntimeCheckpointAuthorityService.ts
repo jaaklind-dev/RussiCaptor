@@ -96,7 +96,8 @@ async function hasValidRuntimeItemsAsync(state: SharedExerciseState, yieldContro
       return false;
     }
     if (!isCapturedCanonicalRuntimeArtifact(item)) {
-      const canonical = await stableJsonAsync(item.payload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "RUNTIME_PAYLOAD" });
+      const canonical = await stableJsonAsync(item.payload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS,
+        traceCategory: "RUNTIME_PAYLOAD", objectTraversal: "NATIVE_JSON_SHAPE_TRIE" });
       const valid = item.payloadHash === await sha256TextAsync(canonical, {
         yieldControl, charactersPerSlice: UI_CHARACTERS_PER_SLICE, blocksPerSlice: UI_SHA_BLOCKS_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "RUNTIME_PAYLOAD",
       });
@@ -150,7 +151,8 @@ export async function createRuntimeCheckpointAsync(
   endClone();
   await yieldControl();
   const endSerialization = startRuntimeWorkTrace("CHECKPOINT_SERIALIZATION");
-  const canonical = await stableJsonAsync(frozenPayload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "FULL_CHECKPOINT" });
+  const canonical = await stableJsonAsync(frozenPayload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS,
+    traceCategory: "FULL_CHECKPOINT", objectTraversal: "NATIVE_JSON_SHAPE_TRIE" });
   endSerialization({ serializedBytes: canonical.length });
   const endHash = startRuntimeWorkTrace("CHECKPOINT_HASH");
   const payloadHash = await sha256TextAsync(canonical, {
@@ -225,6 +227,7 @@ export async function isValidRuntimeCheckpointAsync(
   });
   const canonical = await stableJsonAsync(value.payload, {
     yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "FULL_CHECKPOINT",
+    objectTraversal: "NATIVE_JSON_SHAPE_TRIE",
   });
   const payloadHash = await sha256TextAsync(canonical, {
     yieldControl, charactersPerSlice: UI_CHARACTERS_PER_SLICE, blocksPerSlice: UI_SHA_BLOCKS_PER_SLICE,
