@@ -49,7 +49,39 @@ describe("WP-44B Supabase repository diagnostics",()=>{
     const repository=new SupabaseRuntimeCheckpointRepository(mockClient as never);
     await expect(repository.publish({leaseId:"L",exerciseId:"E",writerInstanceId:"W",userId:"U",expiresAt:"x"},4,checkpoint,base))
       .resolves.toMatchObject({status:"PUBLISHED"});
-    expect(mockClient.rpc.mock.calls.map(call=>call[0])).toEqual(["publish_runtime_checkpoint_canonical_delta","publish_runtime_checkpoint_metadata"]);
+    expect(mockClient.rpc.mock.calls.map(call=>call[0])).toEqual([
+      "publish_runtime_checkpoint_canonical_payload_delta","publish_runtime_checkpoint_canonical_payload",
+    ]);
+    expect(mockClient.rpc.mock.calls[1][1]).not.toHaveProperty("p_checkpoint");
+  });
+  test("canonical publication transports one semantic payload instead of structured plus canonical copies",async()=>{
+    const checkpoint=createRuntimeCheckpoint(sharedState(2),5);
+    const canonical=getRuntimeCheckpointCanonicalRepresentation(checkpoint)!;
+    const mockClient=client({data:{checkpoint_revision:5,payload_hash:checkpoint.payloadHash,provenance_hash:checkpoint.provenanceHash}}) as never;
+    const repository=new SupabaseRuntimeCheckpointRepository(mockClient);
+    await expect(repository.publish({leaseId:"L",exerciseId:"E",writerInstanceId:"W",userId:"U",expiresAt:"x"},4,checkpoint))
+      .resolves.toMatchObject({status:"PUBLISHED"});
+    expect((mockClient as {rpc:jest.Mock}).rpc).toHaveBeenCalledWith(
+      "publish_runtime_checkpoint_canonical_payload",
+      expect.objectContaining({p_canonical_payload_text:canonical.canonicalPayloadText,p_checkpoint_revision:5}),
+    );
+    const args=(mockClient as {rpc:jest.Mock}).rpc.mock.calls[0][1];
+    expect(args).not.toHaveProperty("p_checkpoint");
+    expect(JSON.stringify(args).length).toBeLessThan(
+      JSON.stringify({...args,p_checkpoint:checkpoint}).length-canonical.canonicalPayloadText.length/2,
+    );
+  });
+  test("old backend fallback preserves canonical authority even though it temporarily uses the combined rollout RPC",async()=>{
+    const checkpoint=createRuntimeCheckpoint(sharedState(2),5);
+    const mockClient={rpc:jest.fn()
+      .mockResolvedValueOnce({data:null,error:{code:"PGRST202",message:"Could not find publish_runtime_checkpoint_canonical_payload"}})
+      .mockResolvedValueOnce({data:{checkpoint_revision:5,payload_hash:checkpoint.payloadHash,provenance_hash:checkpoint.provenanceHash},error:null})};
+    const repository=new SupabaseRuntimeCheckpointRepository(mockClient as never);
+    await expect(repository.publish({leaseId:"L",exerciseId:"E",writerInstanceId:"W",userId:"U",expiresAt:"x"},4,checkpoint))
+      .resolves.toMatchObject({status:"PUBLISHED"});
+    expect(mockClient.rpc.mock.calls.map(call=>call[0])).toEqual([
+      "publish_runtime_checkpoint_canonical_payload","publish_runtime_checkpoint_canonical",
+    ]);
   });
   test("lifecycle supersession cancels routine delta preparation before RPC submission",async()=>{
     const base=createRuntimeCheckpoint(sharedState(1),4); const checkpoint=createRuntimeCheckpoint(sharedState(2),5);

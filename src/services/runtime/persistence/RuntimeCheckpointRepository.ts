@@ -101,6 +101,25 @@ function terminalPublicationDiagnostic(error: Readonly<{ code?: string; message:
   return "BACKEND_ERROR";
 }
 
+function canonicalPayloadRpcArgs(
+  checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>,
+  canonical: RuntimeCheckpointCanonicalRepresentation,
+): Readonly<Record<string, unknown>> {
+  return {
+    p_exercise_id: checkpoint.exerciseId,
+    p_checkpoint_revision: checkpoint.checkpointRevision,
+    p_persisted_runtime_version: checkpoint.persistedRuntimeVersion,
+    p_payload_hash: checkpoint.payloadHash,
+    p_provenance_hash: checkpoint.provenanceHash,
+    p_canonical_format_version: canonical.canonicalFormatVersion,
+    p_canonical_payload_text: canonical.canonicalPayloadText,
+  };
+}
+
+function rpcUnavailable(error: Readonly<{ code?: string; message: string }> | null, rpcName: string): boolean {
+  return Boolean(error && (error.code === "PGRST202" || error.message.includes(rpcName)));
+}
+
 export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRepository {
   constructor(private readonly client: SupabaseClient) {}
   async loadLatest(exerciseId: string, trafficEndpoint = "runtime_checkpoints.payload") {
@@ -212,25 +231,26 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
   async finalizeCompletion(completionCommandId: string, lease: RuntimeWriterLease, expectedRevision: number,
     checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>): Promise<CheckpointPublishResult<SharedExerciseState>> {
     const canonical = getRuntimeCheckpointCanonicalRepresentation(checkpoint);
-    const rpcName = canonical ? "finalize_runtime_completion_canonical" : "finalize_runtime_completion";
-    const rpcArgs = {
+    let rpcName = canonical ? "finalize_runtime_completion_canonical_payload" : "finalize_runtime_completion";
+    let rpcArgs: Record<string, unknown> = {
       p_exercise_id: checkpoint.exerciseId, p_command_id: completionCommandId, p_lease_id: lease.leaseId,
       p_writer_instance_id: lease.writerInstanceId, p_expected_checkpoint_revision: expectedRevision,
-      p_checkpoint: checkpoint,
-      ...(canonical ? { p_canonical_format_version: canonical.canonicalFormatVersion,
-        p_canonical_payload_text: canonical.canonicalPayloadText } : {}),
+      ...(canonical ? canonicalPayloadRpcArgs(checkpoint, canonical) : { p_checkpoint: checkpoint }),
     };
     let response = await this.client.rpc(rpcName, rpcArgs);
-    if (response.error && canonical && (response.error.code === "PGRST202" || response.error.message.includes(rpcName))) {
-      response = await this.client.rpc("finalize_runtime_completion", {
+    if (canonical && rpcUnavailable(response.error, rpcName)) {
+      rpcName = "finalize_runtime_completion_canonical";
+      rpcArgs = {
         p_exercise_id: checkpoint.exerciseId, p_command_id: completionCommandId, p_lease_id: lease.leaseId,
         p_writer_instance_id: lease.writerInstanceId, p_expected_checkpoint_revision: expectedRevision,
-        p_checkpoint: checkpoint,
-      });
+        p_checkpoint: checkpoint, p_canonical_format_version: canonical.canonicalFormatVersion,
+        p_canonical_payload_text: canonical.canonicalPayloadText,
+      };
+      response = await this.client.rpc(rpcName, rpcArgs);
     }
     const { data, error } = response;
-    recordSupabaseTraffic({ operation: "RPC", endpoint: "finalize_runtime_completion", data,
-      requestBytes: isSupabaseTrafficMetricsEnabled() ? estimateSupabasePayloadBytes(checkpoint) : 0 });
+    recordSupabaseTraffic({ operation: "RPC", endpoint: rpcName, data,
+      requestBytes: isSupabaseTrafficMetricsEnabled() ? estimateSupabasePayloadBytes(rpcArgs) : 0 });
     if (error) {
       const diagnostic = terminalPublicationDiagnostic(error);
       traceRuntimeLeaseLifecycle("TERMINAL_PUBLICATION_RPC_FAILED", {
@@ -259,34 +279,38 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
     ensureActive();
     const canonical = getRuntimeCheckpointCanonicalRepresentation(checkpoint);
     let rpcName = canonical
-      ? delta && deltaRpcAvailable !== false ? "publish_runtime_checkpoint_canonical_delta" : "publish_runtime_checkpoint_canonical"
+      ? delta && deltaRpcAvailable !== false ? "publish_runtime_checkpoint_canonical_payload_delta" : "publish_runtime_checkpoint_canonical_payload"
       : delta && deltaRpcAvailable !== false ? "publish_runtime_checkpoint_delta" : "publish_runtime_checkpoint_metadata";
-    let rpcArgs = { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId,
-      p_expected_revision: expectedRevision, p_checkpoint: checkpoint,
-      ...(canonical ? { p_canonical_format_version: canonical.canonicalFormatVersion,
-        p_canonical_payload_text: canonical.canonicalPayloadText } : {}),
+    let rpcArgs: Record<string, unknown> = { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId,
+      p_expected_revision: expectedRevision,
+      ...(canonical ? canonicalPayloadRpcArgs(checkpoint, canonical) : { p_checkpoint: checkpoint }),
       ...(delta && rpcName.includes("delta") ? { p_delta: delta } : {}) };
-    endRequestObject({ rpcName, deltaOperationCount: delta?.operations.length ?? 0, priority: control?.priority });
+    endRequestObject({ rpcName, deltaOperationCount: delta?.operations.length ?? 0, priority: control?.priority,
+      structuredPayloadTransported: canonical ? false : true,
+      canonicalPayloadCharacters: canonical?.canonicalPayloadText.length ?? 0 });
     ensureActive();
     const endSupabaseCall = startRuntimeWorkTrace("REMOTE_PUB_SUPABASE_CALL", { rpcName });
     control?.onRpcSubmitted?.();
     let response = await this.client.rpc(rpcName, rpcArgs);
     endSupabaseCall({ rpcName, errorPresent: Boolean(response.error) });
-    if (response.error && rpcName.includes("delta") && (response.error.code === "PGRST202" || response.error.message.includes(rpcName))) {
+    if (response.error && rpcName.includes("delta") && rpcUnavailable(response.error, rpcName)) {
       deltaRpcAvailable = false;
-      rpcName = "publish_runtime_checkpoint_metadata";
+      rpcName = canonical ? "publish_runtime_checkpoint_canonical_payload" : "publish_runtime_checkpoint_metadata";
       rpcArgs = { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId,
-        p_expected_revision: expectedRevision, p_checkpoint: checkpoint };
+        p_expected_revision: expectedRevision,
+        ...(canonical ? canonicalPayloadRpcArgs(checkpoint, canonical) : { p_checkpoint: checkpoint }) };
       const endFallbackCall = startRuntimeWorkTrace("REMOTE_PUB_SUPABASE_CALL", { rpcName, fallback: true });
       control?.onRpcSubmitted?.();
       response = await this.client.rpc(rpcName, rpcArgs);
       endFallbackCall({ rpcName, fallback: true, errorPresent: Boolean(response.error) });
     } else if (!response.error && rpcName.includes("delta")) deltaRpcAvailable = true;
-    if (response.error && canonical && rpcName === "publish_runtime_checkpoint_canonical" &&
-      (response.error.code === "PGRST202" || response.error.message.includes(rpcName))) {
-      rpcName = "publish_runtime_checkpoint_metadata";
+    if (response.error && canonical && rpcName === "publish_runtime_checkpoint_canonical_payload" &&
+      rpcUnavailable(response.error, rpcName)) {
+      rpcName = "publish_runtime_checkpoint_canonical";
       rpcArgs = { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId,
-        p_expected_revision: expectedRevision, p_checkpoint: checkpoint };
+        p_expected_revision: expectedRevision, p_checkpoint: checkpoint,
+        p_canonical_format_version: canonical.canonicalFormatVersion,
+        p_canonical_payload_text: canonical.canonicalPayloadText };
       response = await this.client.rpc(rpcName, rpcArgs);
     }
     const endResponseProcess = startRuntimeWorkTrace("REMOTE_PUB_RESPONSE_PROCESS", { rpcName });

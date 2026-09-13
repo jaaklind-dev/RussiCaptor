@@ -70,6 +70,20 @@ describe("WP-NARVA-06 Runtime terminal convergence integration", () => {
     expect(source).not.toMatch(/terminalAuthorityFinalizer[\s\S]{0,300}releaseWriter/);
   });
 
+  test("pending completion recovery uses the canonical-primary single-flight terminal boundary", () => {
+    const sync = fs.readFileSync(path.resolve(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const repository = fs.readFileSync(path.resolve(process.cwd(),
+      "src/services/runtime/persistence/RuntimeCheckpointRepository.ts"), "utf8");
+    expect(sync).toContain("completionProcessing:Promise<void>|undefined");
+    expect(sync).toContain("activeCompletion?.status===\"PENDING\"");
+    expect(sync).toContain("repository.finalizeCompletion!");
+    expect(repository).toContain("finalize_runtime_completion_canonical_payload");
+    const preferred = repository.indexOf("finalize_runtime_completion_canonical_payload");
+    const combinedFallback = repository.indexOf("finalize_runtime_completion_canonical\"", preferred);
+    expect(preferred).toBeGreaterThan(-1);
+    expect(combinedFallback).toBeGreaterThan(preferred);
+  });
+
   test("CloudSync cannot publish terminal projection outside the fenced checkpoint transaction", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/services/CloudSyncService.ts"), "utf8");
     expect(source).toContain("terminalProjectionOwnedByCheckpointProtocol(exerciseId)");
