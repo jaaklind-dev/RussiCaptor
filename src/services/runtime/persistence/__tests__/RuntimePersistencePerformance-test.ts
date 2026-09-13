@@ -32,6 +32,9 @@ describe("WP-44B canonical persistence performance", () => {
       expect(await stableJsonAsync(value, { yieldEvery: 1 })).toBe(synchronous);
       expect(await sha256TextAsync(synchronous, { charactersPerSlice: 2, blocksPerSlice: 1 })).toBe(sha256Text(synchronous));
     }
+    for (const value of ["", "ascii", "õ", "😀", "a😀b", "\ud800", "\udc00"]) {
+      expect(await sha256TextAsync(value, { charactersPerSlice: 1, blocksPerSlice: 1 })).toBe(sha256Text(value));
+    }
   });
 
   test("latest-generation pipeline is one-active, coalesces mutations and yields to timers", async () => {

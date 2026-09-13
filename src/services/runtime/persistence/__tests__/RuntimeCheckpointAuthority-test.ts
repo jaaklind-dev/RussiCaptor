@@ -94,6 +94,17 @@ describe("WP-44B checkpoint authority resolver",()=>{
     await expect(resolveAuthoritativeCheckpointAsync(local,corrupt,yieldControl))
       .resolves.toEqual(resolveAuthoritativeCheckpoint(local,corrupt));
   });
+  test("envelope-identical startup publication reuses only the validated local object", async()=>{
+    const local=structuredClone(createRuntimeCheckpoint(state(),12));
+    const remote=structuredClone(local);
+    const yieldControl=jest.fn(async()=>Promise.resolve());
+    await expect(resolveAuthoritativeCheckpointAsync(local,remote,yieldControl))
+      .resolves.toEqual({status:"EQUIVALENT",checkpoint:local});
+    const altered={...structuredClone(remote),payload:{...remote.payload,notes:[{id:"ALTERED"} as never]}};
+    await expect(resolveAuthoritativeCheckpointAsync(local,altered,yieldControl))
+      .resolves.toEqual({status:"EQUIVALENT",checkpoint:local});
+    expect(isValidRuntimeCheckpoint(altered)).toBe(false);
+  });
   test("validated same-exercise checkpoint is the Runtime source; other cases keep the fail-closed fallback",()=>{
     const local=state("EX-1"); const checkpoint=createRuntimeCheckpoint(state("EX-1"),12);
     expect(runtimeRestoreSource(local,checkpoint)).toBe(checkpoint.payload);

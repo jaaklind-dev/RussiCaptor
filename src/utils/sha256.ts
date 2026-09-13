@@ -105,6 +105,41 @@ export type Sha256AsyncOptions = Readonly<{
   onSlice?: (durationMs: number) => void;
 }>;
 
+let sha256TextAsyncInvocation = 0;
+
+function utf8Slice(value: string, start: number, end: number): Uint8Array {
+  // Three bytes per UTF-16 code unit is a strict upper bound (a surrogate
+  // pair uses four bytes for two units). Preserve the legacy lone-surrogate
+  // encoding rather than delegating to TextEncoder replacement semantics.
+  const target = new Uint8Array(Math.max(0, end - start) * 3);
+  let offset = 0;
+  for (let index = start; index < end; index += 1) {
+    let codePoint = value.charCodeAt(index);
+    if (codePoint >= 0xd800 && codePoint <= 0xdbff && index + 1 < end) {
+      const low = value.charCodeAt(index + 1);
+      if (low >= 0xdc00 && low <= 0xdfff) {
+        codePoint = 0x10000 + ((codePoint - 0xd800) << 10) + (low - 0xdc00);
+        index += 1;
+      }
+    }
+    if (codePoint <= 0x7f) target[offset++] = codePoint;
+    else if (codePoint <= 0x7ff) {
+      target[offset++] = 0xc0 | (codePoint >>> 6);
+      target[offset++] = 0x80 | (codePoint & 0x3f);
+    } else if (codePoint <= 0xffff) {
+      target[offset++] = 0xe0 | (codePoint >>> 12);
+      target[offset++] = 0x80 | ((codePoint >>> 6) & 0x3f);
+      target[offset++] = 0x80 | (codePoint & 0x3f);
+    } else {
+      target[offset++] = 0xf0 | (codePoint >>> 18);
+      target[offset++] = 0x80 | ((codePoint >>> 12) & 0x3f);
+      target[offset++] = 0x80 | ((codePoint >>> 6) & 0x3f);
+      target[offset++] = 0x80 | (codePoint & 0x3f);
+    }
+  }
+  return target.slice(0, offset);
+}
+
 async function sha256HexAsync(bytesSource: Uint8Array, options: Sha256AsyncOptions): Promise<string> {
   const category = options.traceCategory ?? "OTHER";
   const bitLength = bytesSource.length * 8;
@@ -157,31 +192,28 @@ export async function sha256TextAsync(
   options: Sha256AsyncOptions = {},
 ): Promise<string> {
   const category = options.traceCategory ?? "OTHER";
-  const endParts = startRuntimeWorkTrace("SHA_PARTS", { category, inputCharacters: value.length });
+  sha256TextAsyncInvocation += 1;
+  const invocation = sha256TextAsyncInvocation;
+  const endParts = startRuntimeWorkTrace("SHA_PARTS", { category, invocation, inputCharacters: value.length });
   const charactersPerSlice = Math.max(1, options.charactersPerSlice ?? 65_536);
   const yieldControl = options.yieldControl ?? (() => new Promise(resolve => setTimeout(resolve, 0)));
-  const parts: number[][] = [];
-  let current: number[] = [];
-  let processed = 0;
+  const parts: Uint8Array[] = [];
   let sliceStarted = performance.now();
-  for (const character of value) {
-    const codePoint = character.codePointAt(0)!;
-    if (codePoint <= 0x7f) current.push(codePoint);
-    else if (codePoint <= 0x7ff) current.push(0xc0 | (codePoint >>> 6), 0x80 | (codePoint & 0x3f));
-    else if (codePoint <= 0xffff) current.push(0xe0 | (codePoint >>> 12), 0x80 | ((codePoint >>> 6) & 0x3f), 0x80 | (codePoint & 0x3f));
-    else current.push(0xf0 | (codePoint >>> 18), 0x80 | ((codePoint >>> 12) & 0x3f), 0x80 | ((codePoint >>> 6) & 0x3f), 0x80 | (codePoint & 0x3f));
-    processed += character.length;
-    if (processed < charactersPerSlice ||
-      (options.maxSliceMs !== undefined && performance.now() - sliceStarted < options.maxSliceMs)) continue;
-    parts.push(current); current = []; processed = 0;
+  for (let start = 0; start < value.length;) {
+    let end = Math.min(value.length, start + charactersPerSlice);
+    // Never divide a valid pair between slices. Lone surrogates retain the
+    // established dependency-free encoder semantics in utf8Slice.
+    if (end < value.length && value.charCodeAt(end - 1) >= 0xd800 && value.charCodeAt(end - 1) <= 0xdbff &&
+      value.charCodeAt(end) >= 0xdc00 && value.charCodeAt(end) <= 0xdfff) end += 1;
+    parts.push(utf8Slice(value, start, end));
+    start = end;
     options.onSlice?.(performance.now() - sliceStarted);
     await yieldControl();
     sliceStarted = performance.now();
   }
-  parts.push(current);
+  if (!value.length) parts.push(new Uint8Array());
   options.onSlice?.(performance.now() - sliceStarted);
-  await yieldControl();
-  endParts({ category, partCount: parts.length });
+  endParts({ category, invocation, partCount: parts.length });
   const endReduce = startRuntimeWorkTrace("SHA_PARTS_REDUCE", { category, partCount: parts.length });
   const length = parts.reduce((total, part) => total + part.length, 0);
   endReduce({ category, totalBytes: length, maxContiguousJsBlockMs: 0 });

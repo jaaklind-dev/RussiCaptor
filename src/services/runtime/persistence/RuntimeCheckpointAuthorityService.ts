@@ -89,13 +89,21 @@ function hasValidRuntimeItems(state: SharedExerciseState): boolean {
 }
 
 async function hasValidRuntimeItemsAsync(state: SharedExerciseState, yieldControl: PipelineYield): Promise<boolean> {
-  for (const item of state.persistedRuntimeStates ?? []) {
-    if (item.provenance.exerciseId !== state.exerciseSession.exerciseId) return false;
+  for (const [runtimeIndex, item] of (state.persistedRuntimeStates ?? []).entries()) {
+    const endRuntimeHash = startRuntimeWorkTrace("STARTUP_CHECKPOINT_RUNTIME_HASH_ASYNC", { runtimeIndex });
+    if (item.provenance.exerciseId !== state.exerciseSession.exerciseId) {
+      endRuntimeHash({ valid: false, reason: "EXERCISE_IDENTITY" });
+      return false;
+    }
     if (!isCapturedCanonicalRuntimeArtifact(item)) {
       const canonical = await stableJsonAsync(item.payload, { yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "RUNTIME_PAYLOAD" });
-      if (item.payloadHash !== await sha256TextAsync(canonical, {
+      const valid = item.payloadHash === await sha256TextAsync(canonical, {
         yieldControl, charactersPerSlice: UI_CHARACTERS_PER_SLICE, blocksPerSlice: UI_SHA_BLOCKS_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "RUNTIME_PAYLOAD",
-      })) return false;
+      });
+      endRuntimeHash({ valid, canonicalCharacters: canonical.length });
+      if (!valid) return false;
+    } else {
+      endRuntimeHash({ valid: true, reusedCapturedProof: true });
     }
   }
   return true;
@@ -202,9 +210,19 @@ export async function isValidRuntimeCheckpointAsync(
   yieldControl: PipelineYield,
 ): Promise<boolean> {
   if (value && validatedImmutableCheckpoints.has(value)) return true;
+  const endEnvelope = startRuntimeWorkTrace("STARTUP_CHECKPOINT_ENVELOPE_VALIDATE_ASYNC", {
+    checkpointRevision: value?.checkpointRevision,
+  });
   if (!value || value.envelopeVersion !== RUNTIME_CHECKPOINT_ENVELOPE_VERSION ||
     !Number.isSafeInteger(value.checkpointRevision) || value.checkpointRevision < 1 ||
-    value.exerciseId !== exerciseIdOf(value.payload)) return false;
+    value.exerciseId !== exerciseIdOf(value.payload)) {
+    endEnvelope({ valid: false });
+    return false;
+  }
+  endEnvelope({ valid: true });
+  const endPayloadHash = startRuntimeWorkTrace("STARTUP_CHECKPOINT_FULL_HASH_ASYNC", {
+    checkpointRevision: value.checkpointRevision,
+  });
   const canonical = await stableJsonAsync(value.payload, {
     yieldControl, yieldEvery: UI_VALUES_PER_SLICE, maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "FULL_CHECKPOINT",
   });
@@ -212,11 +230,44 @@ export async function isValidRuntimeCheckpointAsync(
     yieldControl, charactersPerSlice: UI_CHARACTERS_PER_SLICE, blocksPerSlice: UI_SHA_BLOCKS_PER_SLICE,
     maxSliceMs: UI_MAX_SLICE_MS, traceCategory: "FULL_CHECKPOINT",
   });
-  if (value.payloadHash !== payloadHash || !hasValidActiveRuntimeCoverage(value.payload) ||
-    !await hasValidRuntimeItemsAsync(value.payload, yieldControl) ||
-    value.provenanceHash !== provenanceHashOf(value.payload)) return false;
+  if (value.payloadHash !== payloadHash) {
+    endPayloadHash({ valid: false, canonicalCharacters: canonical.length });
+    return false;
+  }
+  endPayloadHash({ valid: true, canonicalCharacters: canonical.length });
+  const endCoverage = startRuntimeWorkTrace("STARTUP_CHECKPOINT_RUNTIME_COVERAGE_ASYNC");
+  if (!hasValidActiveRuntimeCoverage(value.payload)) {
+    endCoverage({ valid: false });
+    return false;
+  }
+  endCoverage({ valid: true });
+  const endRuntimeItems = startRuntimeWorkTrace("STARTUP_CHECKPOINT_RUNTIME_ITEMS_ASYNC", {
+    runtimeCount: value.payload.persistedRuntimeStates?.length ?? 0,
+  });
+  if (!await hasValidRuntimeItemsAsync(value.payload, yieldControl)) {
+    endRuntimeItems({ valid: false });
+    return false;
+  }
+  endRuntimeItems({ valid: true });
+  const endProvenance = startRuntimeWorkTrace("STARTUP_CHECKPOINT_PROVENANCE_HASH_ASYNC");
+  if (value.provenanceHash !== provenanceHashOf(value.payload)) {
+    endProvenance({ valid: false });
+    return false;
+  }
+  endProvenance({ valid: true });
+  const endFreeze = startRuntimeWorkTrace("STARTUP_CHECKPOINT_FREEZE_ASYNC");
   await markCheckpointValidatedAsync(value, yieldControl);
+  endFreeze({ valid: true });
   return true;
+}
+
+function sameCheckpointEnvelopeIdentity(
+  left: RuntimeCheckpointEnvelope<SharedExerciseState>,
+  right: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined,
+): boolean {
+  return Boolean(right && left.envelopeVersion === right.envelopeVersion && left.exerciseId === right.exerciseId &&
+    left.checkpointRevision === right.checkpointRevision && left.persistedRuntimeVersion === right.persistedRuntimeVersion &&
+    left.payloadHash === right.payloadHash && left.provenanceHash === right.provenanceHash);
 }
 
 /**
@@ -237,6 +288,21 @@ export async function resolveAuthoritativeCheckpointAsync(
   });
   const localValid = await isValidRuntimeCheckpointAsync(local, localYield);
   endLocal({ valid: localValid, yieldCount: localYields });
+
+  // Once the local object has been fully validated, an envelope-identical
+  // remote publication can safely reuse that exact immutable object. The
+  // remote payload is not installed, so an altered body carrying copied
+  // metadata cannot cross the trust boundary. This mirrors the established
+  // published-acknowledgement fast path and avoids validating the same 3 MB
+  // revision twice during startup.
+  if (localValid && sameCheckpointEnvelopeIdentity(local!, remote)) {
+    const endRemoteEquivalent = startRuntimeWorkTrace("STARTUP_CHECKPOINT_REMOTE_VALIDATE_ASYNC", {
+      checkpointRevision: remote?.checkpointRevision,
+      persistedRuntimeCount: remote?.payload.persistedRuntimeStates?.length ?? 0,
+    });
+    endRemoteEquivalent({ valid: true, reusedValidatedLocalProof: true, yieldCount: 0 });
+    return { status: "EQUIVALENT", checkpoint: local! };
+  }
 
   let remoteYields = 0;
   const remoteYield: PipelineYield = async () => { remoteYields += 1; await yieldControl(); };

@@ -22,6 +22,12 @@ export type StableJsonAsyncOptions = Readonly<{
   onSlice?: (durationMs: number) => void;
 }>;
 
+type StableJsonWorkItem =
+  | Readonly<{ kind: "VALUE"; value: unknown; inArray: boolean; depth: number }>
+  | Readonly<{ kind: "CHUNK"; value: string }>;
+
+let stableJsonAsyncInvocation = 0;
+
 /**
  * Byte-equivalent yielding form of stableJson. It emits canonical JSON
  * directly instead of allocating a second canonical object tree. Work is
@@ -33,15 +39,25 @@ export async function stableJsonAsync(
   options: StableJsonAsyncOptions = {},
 ): Promise<string> {
   const category = options.traceCategory ?? "OTHER";
-  const endBuild = startRuntimeWorkTrace("STABLE_JSON_BUILD", { category });
+  stableJsonAsyncInvocation += 1;
+  const invocation = stableJsonAsyncInvocation;
+  const endBuild = startRuntimeWorkTrace("STABLE_JSON_BUILD", { category, invocation });
   const chunks: string[] = [];
+  let sliceChunks: string[] = [];
   let totalChunkCharacters = 0;
   let maxChunkCharacters = 0;
+  let tokenCount = 0;
   const pushChunk = (chunk: string): void => {
-    chunks.push(chunk);
+    sliceChunks.push(chunk);
+    tokenCount += 1;
     chunkPushesSinceYield += 1;
     totalChunkCharacters += chunk.length;
     maxChunkCharacters = Math.max(maxChunkCharacters, chunk.length);
+  };
+  const flushChunks = (): void => {
+    if (!sliceChunks.length) return;
+    chunks.push(sliceChunks.join(""));
+    sliceChunks = [];
   };
   const yieldEvery = Math.max(1, options.yieldEvery ?? 4_096);
   const maxSliceMs = options.maxSliceMs;
@@ -85,56 +101,60 @@ export async function stableJsonAsync(
     }
   };
 
-  const checkpoint = async (): Promise<void> => {
-    visited += 1;
-    if (visited % yieldEvery !== 0 ||
-      (maxSliceMs !== undefined && performance.now() - sliceStarted < maxSliceMs)) return;
-    const durationMs = performance.now() - sliceStarted;
-    finishBatch(durationMs);
-    options.onSlice?.(durationMs);
-    await yieldControl();
-    yieldCount += 1;
-    nodesAtLastYield = visited;
-    chunkPushesSinceYield = 0;
-    batchId += 1;
-    sliceStarted = performance.now();
-  };
-
-  const append = async (current: unknown, inArray: boolean, depth = 0): Promise<boolean> => {
+  // A recursive async serializer creates one Promise and continuation per
+  // value. Hermes amplifies that overhead dramatically for large checkpoint
+  // event arrays. This explicit work stack performs the same traversal while
+  // crossing an async boundary only at cooperative slice boundaries.
+  const work: StableJsonWorkItem[] = [{ kind: "VALUE", value, inArray: false, depth: 0 }];
+  while (work.length) {
+    const item = work.pop()!;
+    if (item.kind === "CHUNK") {
+      pushChunk(item.value);
+      continue;
+    }
+    const current = item.value;
     appendCalls += 1;
-    maxRecursionDepth = Math.max(maxRecursionDepth, depth);
-    await checkpoint();
+    maxRecursionDepth = Math.max(maxRecursionDepth, item.depth);
+    visited += 1;
+    if (visited % yieldEvery === 0 &&
+      (maxSliceMs === undefined || performance.now() - sliceStarted >= maxSliceMs)) {
+      const durationMs = performance.now() - sliceStarted;
+      finishBatch(durationMs);
+      flushChunks();
+      options.onSlice?.(durationMs);
+      await yieldControl();
+      yieldCount += 1;
+      nodesAtLastYield = visited;
+      chunkPushesSinceYield = 0;
+      batchId += 1;
+      sliceStarted = performance.now();
+    }
     if (current === undefined || typeof current === "function" || typeof current === "symbol") {
-      if (inArray) pushChunk("null");
-      return inArray;
+      if (item.inArray) pushChunk("null");
+      continue;
     }
     if (current === null || typeof current !== "object") {
       scalarCount += 1;
       if (typeof current === "string") stringCount += 1;
       const serialized = JSON.stringify(current);
-      if (serialized === undefined) {
-        if (inArray) pushChunk("null");
-        return inArray;
-      }
-      pushChunk(serialized);
-      return true;
+      if (serialized !== undefined) pushChunk(serialized);
+      else if (item.inArray) pushChunk("null");
+      continue;
     }
     if (Array.isArray(current)) {
       arrayCount += 1;
       maxArrayLength = Math.max(maxArrayLength, current.length);
       const arrayStarted = performance.now();
-      pushChunk("[");
-      for (let index = 0; index < current.length; index += 1) {
-        if (index) pushChunk(",");
-        await append(current[index], true, depth + 1);
+      work.push({ kind: "CHUNK", value: "]" });
+      for (let index = current.length - 1; index >= 0; index -= 1) {
+        work.push({ kind: "VALUE", value: current[index], inArray: true, depth: item.depth + 1 });
+        if (index > 0) work.push({ kind: "CHUNK", value: "," });
       }
-      pushChunk("]");
+      work.push({ kind: "CHUNK", value: "[" });
       maxArrayTraversalDurationMs = Math.max(maxArrayTraversalDurationMs, performance.now() - arrayStarted);
-      return true;
+      continue;
     }
     objectCount += 1;
-    pushChunk("{");
-    let emitted = 0;
     const record = current as Record<string, unknown>;
     const keysStarted = performance.now();
     const keys = Object.keys(record);
@@ -148,31 +168,31 @@ export async function stableJsonAsync(
     sortCount += 1;
     maxKeySortDurationMs = Math.max(maxKeySortDurationMs, sortDurationMs);
     if (keys.length >= 1_000 || sortDurationMs >= 50 || keysDurationMs >= 50) {
-      const endObjectKeys = startRuntimeWorkTrace("STABLE_JSON_OBJECT_KEYS", {
-        category,
-        keyCount: keys.length,
-      });
+      const endObjectKeys = startRuntimeWorkTrace("STABLE_JSON_OBJECT_KEYS", { category, keyCount: keys.length });
       endObjectKeys({ keysDurationMs, sortDurationMs });
     }
-    for (const key of keys) {
+    const serializableKeys = keys.filter(key => {
       const nested = record[key];
-      if (nested === undefined || typeof nested === "function" || typeof nested === "symbol") continue;
-      if (emitted) pushChunk(",");
-      pushChunk(JSON.stringify(key)); pushChunk(":");
-      await append(nested, false, depth + 1);
-      emitted += 1;
+      return nested !== undefined && typeof nested !== "function" && typeof nested !== "symbol";
+    });
+    work.push({ kind: "CHUNK", value: "}" });
+    for (let index = serializableKeys.length - 1; index >= 0; index -= 1) {
+      const key = serializableKeys[index];
+      work.push({ kind: "VALUE", value: record[key], inArray: false, depth: item.depth + 1 });
+      work.push({ kind: "CHUNK", value: ":" });
+      work.push({ kind: "CHUNK", value: JSON.stringify(key) });
+      if (index > 0) work.push({ kind: "CHUNK", value: "," });
     }
-    pushChunk("}");
-    return true;
-  };
-
-  await append(value, false);
+    work.push({ kind: "CHUNK", value: "{" });
+  }
   const finalBatchDurationMs = performance.now() - sliceStarted;
   finishBatch(finalBatchDurationMs);
+  flushChunks();
   options.onSlice?.(finalBatchDurationMs);
   await yieldControl();
   endBuild({
     category,
+    invocation,
     nodesVisited: visited,
     appendCalls,
     objectCount,
@@ -192,10 +212,11 @@ export async function stableJsonAsync(
     maxNodesBetweenYields,
     maxChunkPushBurst,
     chunkCount: chunks.length,
+    tokenCount,
     totalChunkCharacters,
     maxChunkCharacters,
   });
-  const endJoin = startRuntimeWorkTrace("STABLE_JSON_JOIN", { category, chunkCount: chunks.length, totalChunkCharacters, maxChunkCharacters });
+  const endJoin = startRuntimeWorkTrace("STABLE_JSON_JOIN", { category, invocation, chunkCount: chunks.length, tokenCount, totalChunkCharacters, maxChunkCharacters });
   const result = chunks.join("");
   endJoin({ category, outputBytes: result.length });
   return result;
