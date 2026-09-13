@@ -33,7 +33,7 @@ import { captureActiveClinicalReferenceRuntimes, captureActiveClinicalReferenceR
 import type { RuntimeCheckpointEnvelope } from "@/models/RuntimeCheckpointAuthority";
 import { localRuntimeCheckpointStore } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
-import { getRuntimeWriterAuthorityState, type RuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
+import { getRuntimeWriterAuthorityState, runtimeWritesAllowed, type RuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
 import { BoundedObsoleteGenerationGate, LatestGenerationPipeline, yieldToEventLoop, type PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { capturePatientTransportRuntime, preparePatientTransportRuntime } from "@/services/runtime/exercise/PatientTransportRuntimeService";
@@ -301,8 +301,9 @@ export async function acceptAuthoritativeRuntimeCheckpointAsync(
   localRuntimeCheckpointStore.restore(checkpoint);
   const savedAt = new Date().toISOString();
   pendingSnapshot = { ...checkpoint.payload, version: STATE_VERSION, savedAt,
-    currentCaseManager: { ...getCurrentCaseManager() } };
-  setLocalSaveStatus({ state: "saved", savedAt });
+    currentCaseManager: { ...getCurrentCaseManager() }, runtimeCheckpoint: checkpoint };
+  setLocalSaveStatus({ state: "saving", savedAt: localSaveStatus.savedAt });
+  void flushLatestSnapshot();
 }
 
 /**
@@ -565,7 +566,11 @@ export function startStatePersistence(): () => void {
         generation,
         persistedRuntimeCount: shared.persistedRuntimeStates?.length ?? 0,
       });
-      const preparedCheckpoint = hasCanonicalRuntime
+      // A reader persists the exact validated authoritative checkpoint it
+      // accepted. It must never mint a local revision from read-only state:
+      // such a revision can outrank the next durable notification after a cold
+      // restart even though it was never published by the sole writer.
+      const preparedCheckpoint = hasCanonicalRuntime && runtimeWritesAllowed()
         ? await localRuntimeCheckpointStore.prepareCaptureAsync(shared, yieldForGeneration)
         : undefined;
       endPreparation({ prepared: Boolean(preparedCheckpoint) });

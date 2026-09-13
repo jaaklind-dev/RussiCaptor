@@ -12,6 +12,7 @@ import type { SupportedFluidTherapyCommand } from "@/models/FluidTherapy";
 import { getInstructorRuntimeOwner } from "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
 import { runtimeWritesAllowed } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { getRuntimePatientCommandGateway, submitPatientRuntimeCommand } from "@/services/runtime/commands/RuntimePatientCommandService";
+import { runtimeReaderCommandReadiness } from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
 
 export type ClinicalTreatmentBuildResult = Readonly<{ ok: true; command: ClinicalTreatmentCommand }> |
   Readonly<{ ok: false; errors: readonly string[] }>;
@@ -143,7 +144,7 @@ function resultMessage(status: string, rejectionReason?: string, protocolClassif
 export function clinicalTreatmentMutationReadiness(exerciseId: string, patientId: string):
 Readonly<{ ready: boolean; reason?: string }> {
   if (getRuntimePatientCommandGateway()) {
-    return Object.freeze({ ready: true });
+    return runtimeReaderCommandReadiness(exerciseId);
   }
   if (!runtimeWritesAllowed()) {
     return Object.freeze({ ready: false, reason: "Ravikorralduse saatmine ei ole ühendatud." });

@@ -51,6 +51,12 @@ describe("WP-44B checkpoint authority resolver",()=>{
     const local=createRuntimeCheckpoint(state("EX-1",["PT-A"]),12); const remote=createRuntimeCheckpoint(state("EX-1",["PT-B"]),12);
     expect(resolveSubscribedCheckpoint(local,remote,false)).toEqual({status:"REMOTE",checkpoint:remote});
   });
+  test("lease-free reader replaces a historically inflated local-only revision with durable authority",()=>{
+    const inflatedReaderCache=createRuntimeCheckpoint(state("EX-1",["PT-A"]),27);
+    const durableWriterCheckpoint=createRuntimeCheckpoint(state("EX-1",["PT-B"]),26);
+    expect(resolveSubscribedCheckpoint(inflatedReaderCache,durableWriterCheckpoint,false))
+      .toEqual({status:"REMOTE",checkpoint:durableWriterCheckpoint});
+  });
   test("writer keeps same-revision subscription divergence fail-closed",()=>{
     const local=createRuntimeCheckpoint(state("EX-1",["PT-A"]),12); const remote=createRuntimeCheckpoint(state("EX-1",["PT-B"]),12);
     expect(resolveSubscribedCheckpoint(local,remote,true)).toEqual({status:"CONFLICT",code:"CHECKPOINT_REVISION_DIVERGENCE"});

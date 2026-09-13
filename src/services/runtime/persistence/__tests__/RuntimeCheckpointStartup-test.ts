@@ -732,14 +732,29 @@ describe("WP-44B checkpoint startup coordination", () => {
       source.indexOf("let publishInFlight=false"),
     );
     const rejectedAcquisition = startup.indexOf("else {", startup.indexOf('if ("lease" in acquired)'));
-    const reader = startup.indexOf('setStatus({state:"READER",code:acquired.code', rejectedAcquisition);
-    const hydrate = startup.indexOf("acceptAuthoritativeRuntimeCheckpointForReaderAsync(resolved.checkpoint", reader);
+    const reader = startup.indexOf('setStatus({state:"READER",code:"READER_CHECKPOINT_SYNCHRONIZING"', rejectedAcquisition);
+    const durableSelection = startup.indexOf("if(remote)", reader);
+    const hydrate = startup.indexOf("acceptReaderCheckpoint(remote", durableSelection);
     const stop = startup.indexOf("stopClockRunner()", hydrate);
     expect(rejectedAcquisition).toBeGreaterThan(-1);
     expect(reader).toBeGreaterThan(rejectedAcquisition);
-    expect(hydrate).toBeGreaterThan(reader);
+    expect(durableSelection).toBeGreaterThan(reader);
+    expect(hydrate).toBeGreaterThan(durableSelection);
     expect(stop).toBeGreaterThan(hydrate);
     expect(startup.slice(rejectedAcquisition, stop)).not.toContain('setRuntimeWriterAuthorityState("WRITER")');
+  });
+
+  test("reader persistence keeps the accepted durable envelope and never mints a local-only revision", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/StatePersistenceService.ts"), "utf8");
+    const asyncAccept = source.slice(
+      source.indexOf("export async function acceptAuthoritativeRuntimeCheckpointAsync"),
+      source.indexOf("export async function acceptAuthoritativeRuntimeCheckpointForReaderAsync"),
+    );
+    expect(asyncAccept).toContain("runtimeCheckpoint: checkpoint");
+    expect(asyncAccept).toContain("void flushLatestSnapshot()");
+    const persistence = source.slice(source.indexOf("export function startStatePersistence"));
+    expect(persistence).toContain("hasCanonicalRuntime && runtimeWritesAllowed()");
+    expect(persistence).toContain("preparedCheckpoint ?? localRuntimeCheckpointStore.get()");
   });
 
   test("reader checkpoint hydration is protected from same-exercise discovery echoes", () => {
@@ -761,7 +776,7 @@ describe("WP-44B checkpoint startup coordination", () => {
       restore.indexOf("restoreExerciseIdentity(restored, false)"));
     const syncSource = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     const realtimeReader = syncSource.slice(syncSource.indexOf("const metadataCoordinator"));
-    expect(realtimeReader).toContain("acceptAuthoritativeRuntimeCheckpointForReaderAsync(decision.checkpoint");
+    expect(realtimeReader).toContain("acceptReaderCheckpoint(decision.checkpoint");
   });
 
   test("checkpoint publication is serialized and coalesces overlapping local ticks", () => {

@@ -12,6 +12,7 @@ import { supabase } from "@/services/SupabaseService";
 import { notifySync } from "@/services/SyncService";
 import type { RuntimeWriterLease } from "@/models/RuntimeCheckpointAuthority";
 import { advanceRuntimePatientCommandCursor, getRuntimePatientCommandCursor } from "./RuntimePatientCommandCursor";
+import { runtimeReaderCommandReadiness } from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
 
 export interface RuntimePatientCommandGateway {
   submit(command: RuntimePatientCommandSubmission): Promise<RuntimePatientCommandSubmissionResult>;
@@ -97,8 +98,13 @@ Readonly<{ simulationTimeSec?: number }>): Promise<RuntimePatientCommandSubmissi
   if (exercise.exerciseId !== input.exerciseId || exercise.lifecycleState !== "RUNNING") {
     return Object.freeze({ status: "EXERCISE_NOT_ACTIVE", patientRevision: head.revision, ownerUserId: head.ownerUserId });
   }
+  const simulationTimeSec = input.simulationTimeSec ?? exercise.simulationTimeSec;
+  const commandReadiness = runtimeReaderCommandReadiness(input.exerciseId, simulationTimeSec, true);
+  if (!commandReadiness.ready) {
+    return Object.freeze({ status: "RECONNECT_REQUIRED", patientRevision: head.revision, ownerUserId: head.ownerUserId });
+  }
   const result = await gateway.submit(Object.freeze({ ...input, patientBaseRevision: head.revision,
-    simulationTimeSec: input.simulationTimeSec ?? exercise.simulationTimeSec }));
+    simulationTimeSec }));
   if (result.status === "APPLIED" || result.status === "IDEMPOTENT") {
     observeSharedWorkflowHead(input.exerciseId, input.patientId, result.patientRevision, result.ownerUserId);
   }

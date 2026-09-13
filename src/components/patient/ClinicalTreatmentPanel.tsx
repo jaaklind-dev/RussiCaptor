@@ -33,6 +33,8 @@ import {
 import { SingleFlightActionGate } from "@/services/ui/InteractionSafety";
 import { getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots } from
   "@/services/RuntimeSnapshotService";
+import { getRuntimeReaderConvergenceVersion, subscribeToRuntimeReaderConvergence } from
+  "@/services/runtime/persistence/RuntimeReaderConvergenceService";
 
 type Props = Readonly<{
   patientId: string;
@@ -62,6 +64,8 @@ export function ClinicalTreatmentPanel({ patientId, readOnly = false, exercisePa
     getResourceRuntimeDebugVersion);
   const runtimeVersion = useSyncExternalStore(subscribeToRuntimeSnapshots, getRuntimeSnapshotVersion,
     getRuntimeSnapshotVersion);
+  useSyncExternalStore(subscribeToRuntimeReaderConvergence, getRuntimeReaderConvergenceVersion,
+    getRuntimeReaderConvergenceVersion);
   const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
   const pkg = exercisePackage ?? getExercisePackage(exerciseId);
   const descriptors = availableClinicalTreatmentDescriptors(pkg);
