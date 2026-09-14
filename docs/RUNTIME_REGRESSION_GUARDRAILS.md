@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H15 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H16 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Performance and physical acceptance
 
@@ -119,6 +119,7 @@ Required release checks remain the unchanged persistence-performance test, Runti
 | H13 | Post-restart CM ownership projection loss | I/J/Y | `CmOwnershipProjectionRestore-test.ts`, `CmOwnershipProjectionPresentation-test.ts` | Self-owned patient restart/open gate |
 | H14 | READY reader rejected behind continuously advancing writer | D/E/H | `ClinicalTreatmentRuntimePatientCommandMaterializer-test.ts` | Reader-intent lag gate |
 | H15 | HOLD/RESUME near an irreversible threshold lost a timely durable CORRECT intent to materialization latency | D/G/L/X | `NarvaIroScenarioControlCommand-test.ts`, `NarvaIroScenarioRuntime-test.ts`, `NarvaIroScenarioControlsCard-test.tsx` | Two-device near-threshold RESUME/CORRECT gate |
+| H16 | Lost publication response followed by a same-lineage CAS conflict manufactured publication authority loss and stranded accepted durable commands | A/G/P/U | `RuntimeCheckpointPublication-test.ts`, `RuntimeCheckpointStartup-test.ts` | Same-lineage lost-response reconciliation gate |
 
 No historical blocker may be removed from the manifest or left without an executable regression and a documented physical acceptance boundary.
 
