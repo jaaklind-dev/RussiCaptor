@@ -9,6 +9,10 @@ import { subscribeOperatorSession } from "@/services/authorization/OperatorSessi
 import { captureOperationalDiagnosticSnapshot, exportOperationalDiagnostics, type OperationalSeverity } from "@/services/operations/LiveOperationsDiagnostics";
 import { subscribeToSharedWorkflowConflicts } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
 import { terminalizePackageProjectionDivergence, terminateStaleRuntimeAfterExpiredLease } from "@/services/ExerciseRuntimeRecoveryFoundationService";
+import {
+  armNextRuntimeCheckpointPublicationLostResponseForValidation,
+  isRuntimeCheckpointPublicationLostResponseArmedForValidation,
+} from "@/services/runtime/persistence/RuntimeCheckpointPublicationValidationHarness";
 
 const severityLabel: Readonly<Record<OperationalSeverity,string>> = {INFO:"INFO",DEGRADED:"HÄIRITUD",ACTION_REQUIRED:"VAJAB TEGEVUST",EXERCISE_BLOCKING:"ÕPPUST BLOKEERIV"};
 
@@ -16,7 +20,9 @@ export default function LiveOperationsDiagnosticsScreen() {
   const [snapshot,setSnapshot]=useState(captureOperationalDiagnosticSnapshot);
   const [pending,setPending]=useState<string>();
   const [validationRenewal,setValidationRenewal]=useState<string>();
-  const refresh=()=>setSnapshot(captureOperationalDiagnosticSnapshot());
+  const [lostResponseArmed,setLostResponseArmed]=useState(()=>isRuntimeCheckpointPublicationLostResponseArmedForValidation(snapshot.exercise.exerciseId));
+  const refresh=()=>{const next=captureOperationalDiagnosticSnapshot();setSnapshot(next);
+    setLostResponseArmed(isRuntimeCheckpointPublicationLostResponseArmedForValidation(next.exercise.exerciseId));};
   useEffect(()=>{
     const stops=[subscribeToCloudSyncStatus(refresh),subscribeToRuntimeCheckpointSync(refresh),subscribeOperatorSession(refresh),subscribeToSharedWorkflowConflicts(refresh)];
     return()=>stops.forEach(stop=>stop());
@@ -44,6 +50,10 @@ export default function LiveOperationsDiagnosticsScreen() {
       if(result.code!=="TERMINALIZED_DIVERGENT_STATE"&&result.code!=="ALREADY_TERMINAL")throw new Error(result.code);
     })}/></>}
     {isSharedWorkflowValidationHarnessEnabled()&&snapshot.runtime.state==="WRITER"&&<><Action label={pending==="validation-renew"?"Uuendan lease’i…":"Uuenda lease kohe (validation)"} disabled={Boolean(pending)} onPress={()=>void run("validation-renew",async()=>{const renewed=await renewRuntimeLeaseNowForValidation();setValidationRenewal(renewed?"Lease uuendati.":"Lease’i uuendamine keelati.");})}/>{validationRenewal&&<Text style={styles.warning}>{validationRenewal}</Text>}</>}
+    {isSharedWorkflowValidationHarnessEnabled()&&snapshot.runtime.state==="WRITER"&&<Action
+      label={lostResponseArmed?"Järgmise kontrollpunkti vastuse kadu on aktiveeritud":"Järgmine kontrollpunkt: simuleeri vastuse kadu pärast commit’i"}
+      disabled={Boolean(pending)||lostResponseArmed}
+      onPress={()=>setLostResponseArmed(armNextRuntimeCheckpointPublicationLostResponseForValidation(snapshot.exercise.exerciseId))}/>}
     {snapshot.runtime.durableCache==="MISSING_OR_DIFFERENT_EXERCISE"&&<Text style={styles.warning}>Puuduva kontrollpunktiga RUNNING õppust ei taastata lokaalselt. Kasuta töölaua auditeeritud lõpetamist, kui recovery õigus on olemas.</Text>}
     <Action label="Jaga ohutu diagnostikasnapshot" disabled={Boolean(pending)} onPress={()=>void Share.share({title:"RussiCaptor operatsioonidiagnostika",message:exportOperationalDiagnostics(captureOperationalDiagnosticSnapshot())})}/>
     <Pressable style={styles.back} onPress={()=>router.back()}><Text style={styles.backText}>Tagasi</Text></Pressable>

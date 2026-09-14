@@ -119,7 +119,7 @@ Required release checks remain the unchanged persistence-performance test, Runti
 | H13 | Post-restart CM ownership projection loss | I/J/Y | `CmOwnershipProjectionRestore-test.ts`, `CmOwnershipProjectionPresentation-test.ts` | Self-owned patient restart/open gate |
 | H14 | READY reader rejected behind continuously advancing writer | D/E/H | `ClinicalTreatmentRuntimePatientCommandMaterializer-test.ts` | Reader-intent lag gate |
 | H15 | HOLD/RESUME near an irreversible threshold lost a timely durable CORRECT intent to materialization latency | D/G/L/X | `NarvaIroScenarioControlCommand-test.ts`, `NarvaIroScenarioRuntime-test.ts`, `NarvaIroScenarioControlsCard-test.tsx` | Two-device near-threshold RESUME/CORRECT gate |
-| H16 | Lost publication response followed by a same-lineage CAS conflict manufactured publication authority loss and stranded accepted durable commands | A/G/P/U | `RuntimeCheckpointPublication-test.ts`, `RuntimeCheckpointStartup-test.ts` | Same-lineage lost-response reconciliation gate |
+| H16 | Lost publication response followed by a same-lineage CAS conflict manufactured publication authority loss and stranded accepted durable commands | A/G/P/U | `RuntimeCheckpointPublication-test.ts`, `RuntimeCheckpointPublicationValidationHarness-test.ts`, `RuntimeCheckpointStartup-test.ts` | Same-lineage lost-response reconciliation gate |
 
 No historical blocker may be removed from the manifest or left without an executable regression and a documented physical acceptance boundary.
 

@@ -543,6 +543,20 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(publicationResultRevokesWriter("REVISION_CONFLICT")).toBe(true);
   });
 
+  test("validation lost-response injection rejoins the normal published writer branch", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const publication = source.slice(source.indexOf("const publicationRepository:"), source.indexOf("const publishNow="));
+    expect(publication).toContain("isSharedWorkflowValidationHarnessEnabled()");
+    expect(publication).toContain("interceptRuntimeCheckpointPublicationResponseForValidation");
+    expect(publication.indexOf("interceptRuntimeCheckpointPublicationResponseForValidation")).toBeLessThan(
+      publication.indexOf("publishRuntimeCheckpointTerminal(activePublicationRepository"),
+    );
+    const published = publication.slice(publication.indexOf('if(result.state==="PUBLISHED")'),
+      publication.indexOf('else if(result.state==="RECONCILED_FORWARD")'));
+    expect(published).toContain('setStatus({state:"WRITER"');
+    expect(published).not.toContain("releaseRuntimeOwner");
+  });
+
   test("an accepted command remains consumable exactly once during benign publication reconciliation", async () => {
     resetRuntimePatientCommandCursor();
     const actor = { userId:"CM-A", role:"CM" as const, exerciseIds:["EX-1"] };

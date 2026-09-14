@@ -21,6 +21,7 @@ import {
   loadCheckpointFreshness,
   type RuntimeCheckpointRepository,
 } from "@/services/runtime/persistence/RuntimeCheckpointRepository";
+import { interceptRuntimeCheckpointPublicationResponseForValidation } from "@/services/runtime/persistence/RuntimeCheckpointPublicationValidationHarness";
 import { getRuntimeWriterInstanceId } from "@/services/runtime/persistence/RuntimeWriterIdentityService";
 import { runtimeWritesAllowed, setRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { publishRuntimeCheckpointTerminal, type RuntimeCheckpointPublicationTerminal } from "@/services/runtime/persistence/RuntimeCheckpointPublicationService";
@@ -913,13 +914,19 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         });
         const completionForCheckpoint=priority==="LIFECYCLE_CRITICAL"&&activeCompletion?.status==="PENDING"
           ? activeCompletion : undefined;
-        const publicationRepository=completionForCheckpoint&&repository.finalizeCompletion ? {
+        const publicationRepository:Pick<RuntimeCheckpointRepository,"loadLatest"|"loadLatestMetadata"|"publish">=completionForCheckpoint&&repository.finalizeCompletion ? {
           loadLatest:repository.loadLatest.bind(repository),
           loadLatestMetadata:repository.loadLatestMetadata.bind(repository),
           publish:(publicationLease:RuntimeWriterLease,expectedRevision:number,terminalCheckpoint:RuntimeCheckpointEnvelope<SharedExerciseState>)=>
             repository.finalizeCompletion!(completionForCheckpoint.commandId,publicationLease,expectedRevision,terminalCheckpoint),
         } : repository;
-        const publication=publishRuntimeCheckpointTerminal(publicationRepository,lease,remoteRevision,checkpoint,undefined,lastPublishedCheckpoint,{
+        const activePublicationRepository=isSharedWorkflowValidationHarnessEnabled() ? {
+          loadLatest:publicationRepository.loadLatest.bind(publicationRepository),
+          loadLatestMetadata:publicationRepository.loadLatestMetadata.bind(publicationRepository),
+          publish:(...args:Parameters<RuntimeCheckpointRepository["publish"]>)=>
+            interceptRuntimeCheckpointPublicationResponseForValidation(publicationRepository.publish(...args),checkpoint.exerciseId),
+        } : publicationRepository;
+        const publication=publishRuntimeCheckpointTerminal(activePublicationRepository,lease,remoteRevision,checkpoint,undefined,lastPublishedCheckpoint,{
           priority,
           yieldControl:yieldToEventLoop,
           shouldContinue:()=>!generationStopped()&&!publicationSuperseded&&(priority==="LIFECYCLE_CRITICAL"||terminalIntentGeneration===undefined)&&intentGeneration===publicationIntentGeneration,

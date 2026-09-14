@@ -2,6 +2,7 @@ import type { RuntimeCheckpointEnvelope, RuntimeWriterLease } from "@/models/Run
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { loadCheckpointFreshness, type RuntimeCheckpointFreshness, type RuntimeCheckpointPublicationControl, type RuntimeCheckpointRepository } from "./RuntimeCheckpointRepository";
 import { RuntimeCheckpointDeltaBuildCancelledError } from "./RuntimeCheckpointDeltaService";
+import { traceRuntimeLeaseLifecycle } from "./RuntimeLeaseLifecycleTrace";
 
 export type RuntimeCheckpointPublicationTerminal = Readonly<
   | { state: "PUBLISHED"; checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>; reconciled: boolean }
@@ -108,8 +109,28 @@ export async function publishRuntimeCheckpointTerminal(
     if (directConflict.state !== "REVISION_CONFLICT") return directConflict;
   }
 
+  traceRuntimeLeaseLifecycle("PUBLICATION_RECONCILE_START", {
+    detail: {
+      checkpointRevision: checkpoint.checkpointRevision,
+      expectedRevision,
+      trigger: directConflict ? "REVISION_CONFLICT" : "TRANSPORT_TIMEOUT",
+    },
+  });
   const lookup = await bounded(loadCheckpointFreshness(repository, checkpoint.exerciseId, "cas"), timeoutMs);
-  if (!lookup.ok) return directConflict ?? { state: "TRANSPORT_TIMEOUT", code: "CHECKPOINT_RECONCILIATION_TIMEOUT" };
+  if (!lookup.ok) {
+    traceRuntimeLeaseLifecycle("PUBLICATION_RECONCILE_UNRESOLVED", {
+      detail: { checkpointRevision: checkpoint.checkpointRevision, reason: "LOOKUP_TIMEOUT" },
+    });
+    return directConflict ?? { state: "TRANSPORT_TIMEOUT", code: "CHECKPOINT_RECONCILIATION_TIMEOUT" };
+  }
   const reconciled = reconcileRuntimeCheckpointPublication(lookup.value, lease, expectedRevision, checkpoint);
+  traceRuntimeLeaseLifecycle(
+    reconciled.state === "PUBLISHED" && reconciled.reconciled
+      ? "PUBLICATION_RECONCILE_COMMITTED_MATCH"
+      : reconciled.state === "RECONCILED_FORWARD"
+        ? "PUBLICATION_RECONCILE_FORWARD"
+        : "PUBLICATION_RECONCILE_UNRESOLVED",
+    { detail: { checkpointRevision: checkpoint.checkpointRevision, remoteRevision: lookup.value?.checkpointRevision } },
+  );
   return directConflict && reconciled.state === "TRANSPORT_TIMEOUT" ? directConflict : reconciled;
 }
