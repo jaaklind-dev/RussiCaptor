@@ -17,6 +17,10 @@ import {
 import type { RuntimeCheckpointEnvelope, RuntimeWriterLease } from "@/models/RuntimeCheckpointAuthority";
 import { isRemoteRuntimeLifecycleActive } from "@/services/CloudSyncService";
 import { clearRuntimeLeaseTraceForValidation, getRuntimeLeaseLifecycleTrace } from "../RuntimeLeaseLifecycleTrace";
+import { InMemoryRuntimePatientCommandGateway } from "../../commands/InMemoryRuntimePatientCommandGateway";
+import { RuntimePatientCommandConsumer } from "../../commands/RuntimePatientCommandService";
+import { resetRuntimePatientCommandCursor } from "../../commands/RuntimePatientCommandCursor";
+import { reconcileRuntimeCheckpointPublication } from "../RuntimeCheckpointPublicationService";
 
 describe("WP-44B checkpoint startup coordination", () => {
   const writerLease: RuntimeWriterLease = Object.freeze({
@@ -531,11 +535,34 @@ describe("WP-44B checkpoint startup coordination", () => {
   });
   test("only proven authority loss revokes writer after publication", () => {
     expect(publicationResultRevokesWriter("PUBLISHED")).toBe(false);
+    expect(publicationResultRevokesWriter("RECONCILED_FORWARD")).toBe(false);
     expect(publicationResultRevokesWriter("TRANSPORT_TIMEOUT")).toBe(false);
     expect(publicationResultRevokesWriter("BACKEND_ERROR")).toBe(false);
     expect(publicationResultRevokesWriter("AUTH_UNAVAILABLE")).toBe(false);
     expect(publicationResultRevokesWriter("STALE_WRITER")).toBe(true);
     expect(publicationResultRevokesWriter("REVISION_CONFLICT")).toBe(true);
+  });
+
+  test("an accepted command remains consumable exactly once during benign publication reconciliation", async () => {
+    resetRuntimePatientCommandCursor();
+    const actor = { userId:"CM-A", role:"CM" as const, exerciseIds:["EX-1"] };
+    const gateway = new InMemoryRuntimePatientCommandGateway(() => actor);
+    gateway.seed("EX-1", "PT-1", "CM-A");
+    await gateway.submit({ exerciseId:"EX-1", patientId:"PT-1", commandId:"PARACETAMOL-82",
+      commandType:"RESOURCE_APPLY", patientBaseRevision:0, simulationTimeSec:1150,
+      payload:Object.freeze({resourceId:"PARACETAMOL"}) });
+    const retry = { exerciseId:"EX-1", checkpointRevision:402, payloadHash:"H402",
+      provenanceHash:"P402" } as RuntimeCheckpointEnvelope<never>;
+    const reconciled = reconcileRuntimeCheckpointPublication({ exerciseId:"EX-1", checkpointRevision:399,
+      payloadHash:"H399", provenanceHash:"P399", writerInstanceId:"WRITER-A" }, writerLease, 398, retry as never);
+    expect(reconciled.state).toBe("RECONCILED_FORWARD");
+    expect(publicationResultRevokesWriter(reconciled.state)).toBe(false);
+    const materialize = jest.fn(() => ({status:"MATERIALIZED" as const, result:{ok:true}}));
+    const consumer = new RuntimePatientCommandConsumer(gateway, materialize);
+    await consumer.drain("EX-1", writerLease);
+    await consumer.drain("EX-1", writerLease);
+    expect(materialize).toHaveBeenCalledTimes(1);
+    expect(gateway.materialized(1)).toEqual({status:"MATERIALIZED", result:{ok:true}});
   });
 
   test("writer realtime self-echo does not revoke its own authority", () => {

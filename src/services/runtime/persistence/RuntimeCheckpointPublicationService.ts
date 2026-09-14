@@ -1,10 +1,11 @@
 import type { RuntimeCheckpointEnvelope, RuntimeWriterLease } from "@/models/RuntimeCheckpointAuthority";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
-import { loadCheckpointFreshness, type RuntimeCheckpointPublicationControl, type RuntimeCheckpointRepository } from "./RuntimeCheckpointRepository";
+import { loadCheckpointFreshness, type RuntimeCheckpointFreshness, type RuntimeCheckpointPublicationControl, type RuntimeCheckpointRepository } from "./RuntimeCheckpointRepository";
 import { RuntimeCheckpointDeltaBuildCancelledError } from "./RuntimeCheckpointDeltaService";
 
 export type RuntimeCheckpointPublicationTerminal = Readonly<
   | { state: "PUBLISHED"; checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>; reconciled: boolean }
+  | { state: "RECONCILED_FORWARD"; checkpointRevision: number; payloadHash: string; provenanceHash: string; code: "CHECKPOINT_PUBLICATION_RECONCILED_FORWARD" }
   | { state: "STALE_WRITER" | "REVISION_CONFLICT" | "BACKEND_ERROR" | "TRANSPORT_TIMEOUT" | "AUTH_UNAVAILABLE" | "GENERATION_STOPPED"; code: string }
 >;
 
@@ -27,6 +28,38 @@ function failure(code: string): RuntimeCheckpointPublicationTerminal {
   if (code === "CHECKPOINT_REVISION_CONFLICT") return { state: "REVISION_CONFLICT", code };
   if (code === "AUTHORITY_UNAVAILABLE") return { state: "AUTH_UNAVAILABLE", code };
   return { state: "BACKEND_ERROR", code };
+}
+
+/** A CAS conflict can be the delayed observation of this writer's own earlier,
+ * successfully committed publication.  Only server metadata cryptographically
+ * bound to the same installation writer lineage may advance the local CAS
+ * cursor; an equal revision additionally has to identify the exact payload. */
+export function reconcileRuntimeCheckpointPublication(
+  remote: RuntimeCheckpointFreshness | undefined,
+  lease: RuntimeWriterLease,
+  expectedRevision: number,
+  checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>,
+): RuntimeCheckpointPublicationTerminal {
+  if (checkpoint.exerciseId !== lease.exerciseId || remote?.exerciseId !== checkpoint.exerciseId) {
+    return { state: "REVISION_CONFLICT", code: "CHECKPOINT_REVISION_CONFLICT" };
+  }
+  if (!remote || remote.checkpointRevision <= expectedRevision) {
+    return { state: "TRANSPORT_TIMEOUT", code: "CHECKPOINT_PUBLICATION_UNCERTAIN" };
+  }
+  const sameWriter = remote.writerInstanceId === lease.writerInstanceId;
+  if (remote.checkpointRevision === checkpoint.checkpointRevision) {
+    if (sameWriter && remote.payloadHash === checkpoint.payloadHash &&
+      remote.provenanceHash === checkpoint.provenanceHash) {
+      return { state: "PUBLISHED", checkpoint, reconciled: true };
+    }
+    return { state: "REVISION_CONFLICT", code: "CHECKPOINT_REVISION_CONFLICT" };
+  }
+  if (sameWriter) {
+    return { state: "RECONCILED_FORWARD", checkpointRevision: remote.checkpointRevision,
+      payloadHash: remote.payloadHash, provenanceHash: remote.provenanceHash,
+      code: "CHECKPOINT_PUBLICATION_RECONCILED_FORWARD" };
+  }
+  return { state: "REVISION_CONFLICT", code: "CHECKPOINT_REVISION_CONFLICT" };
 }
 
 export async function publishRuntimeCheckpointTerminal(
@@ -68,19 +101,15 @@ export async function publishRuntimeCheckpointTerminal(
     }
     throw error;
   }
+  let directConflict: RuntimeCheckpointPublicationTerminal | undefined;
   if (rpc.ok) {
     if (rpc.value.status === "PUBLISHED") return { state: "PUBLISHED", checkpoint: rpc.value.checkpoint, reconciled: false };
-    return failure(rpc.value.code);
+    directConflict = failure(rpc.value.code);
+    if (directConflict.state !== "REVISION_CONFLICT") return directConflict;
   }
 
   const lookup = await bounded(loadCheckpointFreshness(repository, checkpoint.exerciseId, "cas"), timeoutMs);
-  if (!lookup.ok) return { state: "TRANSPORT_TIMEOUT", code: "CHECKPOINT_RECONCILIATION_TIMEOUT" };
-  const remote = lookup.value;
-  if (remote?.checkpointRevision === checkpoint.checkpointRevision && remote.payloadHash === checkpoint.payloadHash) {
-    return { state: "PUBLISHED", checkpoint, reconciled: true };
-  }
-  if (!remote || remote.checkpointRevision === expectedRevision) {
-    return { state: "TRANSPORT_TIMEOUT", code: "CHECKPOINT_PUBLICATION_UNCERTAIN" };
-  }
-  return { state: "REVISION_CONFLICT", code: "CHECKPOINT_REVISION_CONFLICT" };
+  if (!lookup.ok) return directConflict ?? { state: "TRANSPORT_TIMEOUT", code: "CHECKPOINT_RECONCILIATION_TIMEOUT" };
+  const reconciled = reconcileRuntimeCheckpointPublication(lookup.value, lease, expectedRevision, checkpoint);
+  return directConflict && reconciled.state === "TRANSPORT_TIMEOUT" ? directConflict : reconciled;
 }

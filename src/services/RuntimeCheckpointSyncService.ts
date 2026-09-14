@@ -958,6 +958,21 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
           if(!terminalFinalized)setStatus({state:"WRITER",revision:remoteRevision});
           endPublish({ outcome: "PUBLISHED",priority,intentGeneration,rpcSubmitted });
         }
+        else if(result.state==="RECONCILED_FORWARD") {
+          // The server advanced on this same writer lineage while an earlier
+          // response was lost.  Move only the CAS cursor: without the matching
+          // payload object a delta base would be unsafe, so the retry publishes
+          // the newest local checkpoint as a canonical full snapshot.
+          remoteRevision=result.checkpointRevision;
+          lastPublishedCheckpoint=undefined;
+          const currentLocal=getLocalRuntimeCheckpoint();
+          publicationDirty=Boolean(currentLocal&&currentLocal.checkpointRevision>remoteRevision);
+          publishQueued=publicationDirty;
+          setStatus({state:"WRITER",code:result.code,revision:remoteRevision});
+          endPublish({outcome:"RECONCILED_FORWARD",priority,intentGeneration,rpcSubmitted,
+            reconciledRevision:result.checkpointRevision});
+          continue;
+        }
         else if(publicationResultRevokesWriter(result.state)) { endPublish({ outcome: result.state }); releaseRuntimeOwner("PUBLICATION_AUTHORITY_LOST"); lease=undefined; stopClockRunner(); setStatus({state:"CONFLICT",code:result.code}); return; }
         else { endPublish({ outcome: result.state }); publicationDirty=true;setStatus({state:"WRITER",code:result.code,revision:remoteRevision});schedulePublicationRetry(); }
       } while(publishQueued);
