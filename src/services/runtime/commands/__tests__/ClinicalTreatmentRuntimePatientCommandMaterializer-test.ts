@@ -43,6 +43,13 @@ function accepted(treatmentId: ClinicalTreatmentId, treatmentCommand: ClinicalTr
 const lease: RuntimeWriterLease = Object.freeze({ leaseId: "LEASE", exerciseId,
   writerInstanceId: "WRITER", userId: "CM-A", expiresAt: "2099-01-01T00:00:00.000Z" });
 
+function paracetamol(commandId: string, simulationTimeSec: number): ClinicalTreatmentCommand {
+  return Object.freeze({ kind: "ANALGESIC", command: Object.freeze({ commandId,
+    administrationId: `${commandId}-ADMIN`, patientId, drugId: "PARACETAMOL",
+    action: "START", route: "IV", mode: "BOLUS", dose: 1000, doseUnit: "MG",
+    vascularAccessId: "IV-1", simulationTimeSec }) });
+}
+
 describe("durable clinical-treatment simulation-time authority", () => {
   afterEach(() => { clearInstructorRuntimeOwners(); setRuntimeWriterAuthorityState("UNRESOLVED");
     resetRuntimePatientCommandCursor(); });
@@ -80,6 +87,95 @@ describe("durable clinical-treatment simulation-time authority", () => {
       timestamp: 120 }));
     expect(engine.getTranexamicAcidState()).toContainEqual(expect.objectContaining({
       startedAtSimulationTimeSec: 120, timingClassification: "WITHIN_WINDOW" }));
+  });
+
+  test.each([0, 1, 5, 8, 10, 30, 60, 120])(
+    "materializes Paracetamol from an accepted reader snapshot after %i seconds of writer-only clock advance",
+    lagSec => {
+      const intentTime = 1774;
+      const engine = setup(intentTime + lagSec);
+      const treatment = paracetamol(`PARACETAMOL-READER-${lagSec}`, intentTime);
+      const command = accepted("PARACETAMOL", treatment, intentTime, 63);
+
+      expect(materializeRuntimePatientCommand(command))
+        .toMatchObject({ status: "MATERIALIZED", result: { status: "APPLIED", runtimeResult: {
+          state: { startedAtSimulationTimeSec: intentTime, prescribedDose: 1000, doseUnit: "MG" },
+        } } });
+      expect(materializeRuntimePatientCommand(command))
+        .toMatchObject({ status: "MATERIALIZED", result: { status: "IDEMPOTENT" } });
+      expect(engine.getAnalgesicState(patientId)).toEqual([expect.objectContaining({
+        administrationId: `PARACETAMOL-READER-${lagSec}-ADMIN`, startedAtSimulationTimeSec: intentTime,
+      })]);
+    });
+
+  test("keeps a future Paracetamol intent queued until the recovered writer reaches it", async () => {
+    const engine = setup(100);
+    const treatment = paracetamol("PARACETAMOL-FUTURE-120", 120);
+    const command = accepted("PARACETAMOL", treatment, 120, 1);
+    const record = jest.fn(async () => undefined);
+    const gateway: RuntimePatientCommandGateway = {
+      submit: jest.fn(), loadAfter: jest.fn(async () => [command]), record,
+    };
+    const consumer = new RuntimePatientCommandConsumer(gateway, materializeRuntimePatientCommand,
+      () => engine.captureRuntimePayload().simulationTimeSec);
+
+    await expect(consumer.drain(exerciseId, lease)).resolves.toBe(0);
+    expect(record).not.toHaveBeenCalled();
+    engine.advanceTo(120);
+    await expect(consumer.drain(exerciseId, lease)).resolves.toBe(1);
+    expect(record).toHaveBeenCalledWith(exerciseId, 1, lease,
+      expect.objectContaining({ status: "MATERIALIZED", result: expect.objectContaining({ status: "APPLIED" }) }));
+    expect(engine.getAnalgesicState(patientId)).toContainEqual(expect.objectContaining({
+      administrationId: "PARACETAMOL-FUTURE-120-ADMIN", startedAtSimulationTimeSec: 120,
+    }));
+  });
+
+  test("uses the same accepted-intent rule for delayed crystalloid bolus and vasopressor infusion", () => {
+    const engine = setup(180);
+    const fluid = Object.freeze({ kind: "FLUID", command: Object.freeze({ commandId: "RINGER-DELAYED",
+      action: "START", administrationId: "RINGER-DELAYED-ADMIN", patientId, fluidType: "RINGER",
+      simulationTimeSec: 120, mode: "BOLUS", prescribedVolumeMl: 500, volumeUnit: "ML",
+      rateMlHour: 1000, rateUnit: "ML_H", vascularAccessId: "IV-1",
+    }) }) satisfies ClinicalTreatmentCommand;
+    const norepinephrine = Object.freeze({ kind: "NOREPINEPHRINE", command: Object.freeze({
+      commandId: "NOREPINEPHRINE-DELAYED", action: "START", infusionId: "NOREPINEPHRINE-DELAYED-ADMIN",
+      patientId, simulationTimeSec: 120, doseMicrogramsPerKgMin: 0.1, unit: "MCG_KG_MIN",
+      vascularAccessId: "IV-1",
+    }) }) satisfies ClinicalTreatmentCommand;
+
+    expect(materializeRuntimePatientCommand(accepted("RINGER", fluid, 120, 1)))
+      .toMatchObject({ status: "MATERIALIZED", result: { status: "APPLIED", runtimeResult: {
+        state: { startedAtSimulationTimeSec: 120, prescribedVolumeMl: 500 },
+      } } });
+    expect(materializeRuntimePatientCommand(accepted("NOREPINEPHRINE", norepinephrine, 120, 2)))
+      .toMatchObject({ status: "MATERIALIZED", result: { status: "APPLIED", runtimeResult: {
+        state: { startedAtSimulationTimeSec: 120, doseMicrogramsPerKgMin: 0.1 },
+      } } });
+    expect(engine.getFluidTherapyState(patientId)).toContainEqual(expect.objectContaining({
+      administrationId: "RINGER-DELAYED-ADMIN", startedAtSimulationTimeSec: 120,
+    }));
+    expect(engine.getNorepinephrineState(patientId)).toContainEqual(expect.objectContaining({
+      infusionId: "NOREPINEPHRINE-DELAYED-ADMIN", startedAtSimulationTimeSec: 120,
+    }));
+  });
+
+  test.each([
+    ["future intent", 601, 601],
+    ["payload/envelope mismatch", 599, 600],
+    ["malformed intent", Number.NaN, 600],
+  ])("rejects a genuinely invalid durable Paracetamol %s", (_label, commandTime, acceptedTime) => {
+    setup(600);
+    const treatment = paracetamol(`PARACETAMOL-BAD-${_label}`, commandTime);
+    expect(materializeRuntimePatientCommand(accepted("PARACETAMOL", treatment, acceptedTime)))
+      .toMatchObject({ status: "REJECTED", result: { rejectionReason: "STALE_SIMULATION_TIME" } });
+  });
+
+  test("rejects a durable treatment bound to a different exercise lineage", () => {
+    setup(600);
+    const treatment = paracetamol("PARACETAMOL-WRONG-EXERCISE", 600);
+    expect(materializeRuntimePatientCommand(Object.freeze({
+      ...accepted("PARACETAMOL", treatment, 600), exerciseId: "EX-OTHER-LINEAGE",
+    }))).toMatchObject({ status: "REJECTED" });
   });
 
   test("materializes a delayed canonical 5 g IV Fibryga command without weakening dose or access validation", () => {

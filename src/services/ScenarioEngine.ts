@@ -806,6 +806,14 @@ export class ClinicalScenarioEngine {
     for (const event of result.events) this.logEvent(event.eventType, event, event.patientId);
     this.publishResourceDebugSnapshot();
   }
+  private acceptsClinicalIntentTime(intentSimulationTimeSec: number,
+    acceptedDurableSimulationTimeSec?: number): boolean {
+    if (!Number.isFinite(intentSimulationTimeSec) || intentSimulationTimeSec < 0 ||
+      intentSimulationTimeSec > this.simulationTimeSec) return false;
+    return intentSimulationTimeSec === this.simulationTimeSec ||
+      acceptedDurableSimulationTimeSec === intentSimulationTimeSec;
+  }
+
   executeMedicationCommand(command: MedicationAdministration & Readonly<{ commandId: string }>,
     acceptedDurableSimulationTimeSec?: number): MedicationCommandResult {
     const idempotencyKey = `MEDICATION_COMMAND:${command.commandId}`;
@@ -813,10 +821,7 @@ export class ClinicalScenarioEngine {
       const state = this.medicationEngine.snapshot().instances.find(item => item.administrationId === command.administrationId);
       return Object.freeze({ status: "IDEMPOTENT", commandId: command.commandId, ...(state ? { state } : {}) });
     }
-    const acceptedDurableTime = acceptedDurableSimulationTimeSec === command.timestamp &&
-      Number.isFinite(acceptedDurableSimulationTimeSec) && acceptedDurableSimulationTimeSec >= 0 &&
-      acceptedDurableSimulationTimeSec <= this.simulationTimeSec;
-    if ((command.timestamp !== this.simulationTimeSec && !acceptedDurableTime) ||
+    if (!this.acceptsClinicalIntentTime(command.timestamp, acceptedDurableSimulationTimeSec) ||
       command.patientId !== this.requireProcess().encounterId) {
       return Object.freeze({ status: "REJECTED", commandId: command.commandId,
         rejectionReason: "INVALID_ADMINISTRATION" });
@@ -842,8 +847,9 @@ export class ClinicalScenarioEngine {
   getMedicationState(patientId?: string): MedicationInstance[] {
     return this.medicationEngine.snapshot().instances.filter(x => !patientId || x.patientId === patientId);
   }
-  executeNorepinephrineCommand(command: NorepinephrineCommand): NorepinephrineCommandResult {
-    if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
+  executeNorepinephrineCommand(command: NorepinephrineCommand,
+    acceptedDurableSimulationTimeSec?: number): NorepinephrineCommandResult {
+    if (!this.acceptsClinicalIntentTime(command.simulationTimeSec, acceptedDurableSimulationTimeSec)) return Object.freeze({
       status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
     });
     const result = this.medicationEngine.executeNorepinephrine(command, this.getCirculationState(command.patientId));
@@ -859,8 +865,9 @@ export class ClinicalScenarioEngine {
     return this.medicationEngine.norepinephrineProjectionsAt(this.simulationTimeSec)
       .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
   }
-  executeFluidTherapyCommand(command: SupportedFluidTherapyCommand): SupportedFluidTherapyCommandResult {
-    if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
+  executeFluidTherapyCommand(command: SupportedFluidTherapyCommand,
+    acceptedDurableSimulationTimeSec?: number): SupportedFluidTherapyCommandResult {
+    if (!this.acceptsClinicalIntentTime(command.simulationTimeSec, acceptedDurableSimulationTimeSec)) return Object.freeze({
       status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
     });
     if (command.patientId !== this.requireProcess().encounterId) return Object.freeze({
@@ -881,10 +888,7 @@ export class ClinicalScenarioEngine {
   }
   executeTranexamicAcidCommand(command: TranexamicAcidCommand,
     acceptedDurableSimulationTimeSec?: number): TranexamicAcidCommandResult {
-    const acceptedDurableTime = acceptedDurableSimulationTimeSec === command.simulationTimeSec &&
-      Number.isFinite(acceptedDurableSimulationTimeSec) && acceptedDurableSimulationTimeSec >= 0 &&
-      acceptedDurableSimulationTimeSec <= this.simulationTimeSec;
-    if (command.simulationTimeSec !== this.simulationTimeSec && !acceptedDurableTime) return Object.freeze({
+    if (!this.acceptsClinicalIntentTime(command.simulationTimeSec, acceptedDurableSimulationTimeSec)) return Object.freeze({
       status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
     });
     if (command.patientId !== this.requireProcess().encounterId) return Object.freeze({
@@ -904,8 +908,9 @@ export class ClinicalScenarioEngine {
     return this.medicationEngine.tranexamicAcidProjectionsAt(this.simulationTimeSec)
       .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
   }
-  executeAnalgesicCommand(command: AnalgesicCommand): AnalgesicCommandResult {
-    if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
+  executeAnalgesicCommand(command: AnalgesicCommand,
+    acceptedDurableSimulationTimeSec?: number): AnalgesicCommandResult {
+    if (!this.acceptsClinicalIntentTime(command.simulationTimeSec, acceptedDurableSimulationTimeSec)) return Object.freeze({
       status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
     });
     if (command.patientId !== this.requireProcess().encounterId) return Object.freeze({
@@ -924,8 +929,9 @@ export class ClinicalScenarioEngine {
     return this.medicationEngine.analgesicProjectionsAt(this.simulationTimeSec)
       .filter(item => !patientId || item.patientId === patientId).map(item => structuredClone(item));
   }
-  executeMechanicalVentilationCommand(command: MechanicalVentilationCommand): MechanicalVentilationCommandResult {
-    if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
+  executeMechanicalVentilationCommand(command: MechanicalVentilationCommand,
+    acceptedDurableSimulationTimeSec?: number): MechanicalVentilationCommandResult {
+    if (!this.acceptsClinicalIntentTime(command.simulationTimeSec, acceptedDurableSimulationTimeSec)) return Object.freeze({
       status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
     });
     if (command.patientId !== this.requireProcess().encounterId) return Object.freeze({
@@ -1047,8 +1053,9 @@ export class ClinicalScenarioEngine {
     this.replaceLifecycleProcess(bootstrapCardiacArrestPatientProcess({ fixtureId: "NARVA-IRO-ARREST", patientId },
       { processId: `${patientId}:CARDIAC_ARREST:IRO`, instanceKey: `${patientId}:cardiac-arrest:iro` }, configuration));
   }
-  executeAlsMedicationCommand(command: AlsMedicationCommand): AlsMedicationCommandResult {
-    if (command.simulationTimeSec !== this.simulationTimeSec) return Object.freeze({
+  executeAlsMedicationCommand(command: AlsMedicationCommand,
+    acceptedDurableSimulationTimeSec?: number): AlsMedicationCommandResult {
+    if (!this.acceptsClinicalIntentTime(command.simulationTimeSec, acceptedDurableSimulationTimeSec)) return Object.freeze({
       status: "REJECTED", commandId: command.commandId, rejectionReason: "STALE_SIMULATION_TIME",
     });
     if (command.patientId !== this.requireProcess().encounterId) return Object.freeze({

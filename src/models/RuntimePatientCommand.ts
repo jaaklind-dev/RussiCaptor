@@ -26,6 +26,7 @@ export type RuntimePatientCommandSubmission = Readonly<{
 
 export type AcceptedRuntimePatientCommand = RuntimePatientCommandSubmission & Readonly<{
   commandSequence: number;
+  /** Durable shared-workflow/CAS revision reserved at submission, not proof of clinical materialization. */
   patientResultingRevision: number;
   actorUserId: string;
 }>;

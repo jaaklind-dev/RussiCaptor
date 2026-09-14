@@ -107,15 +107,19 @@ export function createScenarioEngineInstructorRuntimeOwner(
     executeClinicalTreatment(request, acceptedDurableSimulationTimeSec) {
       if (!runtimeWritesAllowed()) return Object.freeze({ status: "REJECTED", commandId: request.command.commandId,
         rejectionReason: "INVALID_STATE" }) as ClinicalTreatmentRuntimeResult;
-      const result = request.kind === "FLUID" ? engine.executeFluidTherapyCommand(request.command) :
-        request.kind === "NOREPINEPHRINE" ? engine.executeNorepinephrineCommand(request.command) :
+      const result = request.kind === "FLUID" ? engine.executeFluidTherapyCommand(request.command,
+        acceptedDurableSimulationTimeSec) :
+        request.kind === "NOREPINEPHRINE" ? engine.executeNorepinephrineCommand(request.command,
+          acceptedDurableSimulationTimeSec) :
           request.kind === "TXA" ? engine.executeTranexamicAcidCommand(request.command,
             acceptedDurableSimulationTimeSec) :
-            request.kind === "ANALGESIC" ? engine.executeAnalgesicCommand(request.command) :
+            request.kind === "ANALGESIC" ? engine.executeAnalgesicCommand(request.command,
+              acceptedDurableSimulationTimeSec) :
               request.kind === "MEDICATION" ? engine.executeMedicationCommand(request.command,
                 acceptedDurableSimulationTimeSec) :
-                request.kind === "VENTILATION" ? engine.executeMechanicalVentilationCommand(request.command) :
-                engine.executeAlsMedicationCommand(request.command);
+                request.kind === "VENTILATION" ? engine.executeMechanicalVentilationCommand(request.command,
+                  acceptedDurableSimulationTimeSec) :
+                  engine.executeAlsMedicationCommand(request.command, acceptedDurableSimulationTimeSec);
       if (result.status === "APPLIED") notifySync("local");
       return result;
     },
