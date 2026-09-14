@@ -141,6 +141,96 @@ describe("WP-NARVA-10B1 durable IRO scenario controls", () => {
     expect(restored.getNarvaIroScenarioState()).toEqual(engine.getNarvaIroScenarioState());
   });
 
+  test("reproduces B19 and lets pre-threshold durable CORRECT intent outrank materialization latency", () => {
+    const engine = setup(988);
+    expect(materializeRuntimePatientCommand(command("IRO_VENTILATION_FAULT_START",
+      { faultType: "CIRCUIT_DISCONNECT" }, 1, 988))).toMatchObject({ status: "MATERIALIZED" });
+    engine.advanceTo(1106);
+    expect(materializeRuntimePatientCommand(command("IRO_HOLD", {}, 2, 1106))).toMatchObject({ status: "MATERIALIZED" });
+    engine.advanceTo(1780);
+    const checkpoint = engine.captureRuntimePayload();
+    const restored = new ClinicalScenarioEngine(); restored.rehydrateRuntimePayload(checkpoint);
+    clearInstructorRuntimeOwners();
+    registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(restored, exerciseId, patientId));
+    expect(materializeRuntimePatientCommand(command("IRO_RESUME", {}, 3, 1780))).toMatchObject({ status: "MATERIALIZED" });
+    restored.advanceTo(1793);
+    expect(restored.getNarvaIroScenarioState()).toMatchObject({ arrest: true, ventilationStage: "PEA" });
+    expect(restored.getPatientProcesses().filter(item => item.processType === "CARDIAC_ARREST")).toHaveLength(1);
+    expect(materializeRuntimePatientCommand(command("IRO_VENTILATION_FAULT_CORRECT", {}, 4, 1781)))
+      .toMatchObject({ status: "MATERIALIZED", result: { ok: true, controlAudit: {
+        controlIntentSimulationTimeSec: 1781, controlMaterializationSimulationTimeSec: 1793,
+        faultEffectiveElapsedSec: 119, irreversibleThresholdSec: 120, logicallyCorrectable: true,
+      } } });
+    expect(restored.getNarvaIroScenarioState()).toMatchObject({ arrest: false, ventilationStage: "RECOVERING",
+      ventilationFault: { correctedAtSimulationTimeSec: 1781, accumulatedHoldSec: 674 } });
+    expect(restored.getPatientProcesses().filter(item => item.processType === "CARDIAC_ARREST")).toHaveLength(0);
+    expect(JSON.stringify(restored.captureRuntimePayload())).not.toContain("CARDIAC_ARREST:IRO");
+  });
+
+  test("preserves ordered future CORRECT intent across a writer restart and materializes exactly once", async () => {
+    const source = setup(988);
+    materializeRuntimePatientCommand(command("IRO_VENTILATION_FAULT_START", { faultType: "CIRCUIT_DISCONNECT" }, 1, 988));
+    source.advanceTo(1106); materializeRuntimePatientCommand(command("IRO_HOLD", {}, 2, 1106)); source.advanceTo(1780);
+    const restored = new ClinicalScenarioEngine(); restored.rehydrateRuntimePayload(source.captureRuntimePayload());
+    clearInstructorRuntimeOwners(); registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(restored,
+      exerciseId, patientId));
+    const gateway = new InMemoryRuntimePatientCommandGateway(() => ({ userId: "EXCON-A", role: "EXCON",
+      exerciseIds: [exerciseId] }));
+    gateway.seed(exerciseId, patientId, undefined, 2);
+    const resume = { ...command("IRO_RESUME", {}, 3, 1780), patientBaseRevision: 2, patientResultingRevision: 3 };
+    const correct = { ...command("IRO_VENTILATION_FAULT_CORRECT", {}, 4, 1781),
+      patientBaseRevision: 3, patientResultingRevision: 4 };
+    expect((await gateway.submit(resume)).status).toBe("APPLIED");
+    expect((await gateway.submit(correct)).status).toBe("APPLIED");
+    const consumer = new RuntimePatientCommandConsumer(gateway, materializeRuntimePatientCommand,
+      () => restored.getRuntimeState().exerciseTimeSec);
+    await expect(consumer.drain(exerciseId, lease)).resolves.toBe(1);
+    expect(consumer.hasDeferredCommands()).toBe(true);
+    restored.advanceTo(1793);
+    await expect(consumer.drain(exerciseId, lease)).resolves.toBe(2);
+    expect(gateway.materialized(2)).toMatchObject({ status: "MATERIALIZED", result: { controlAudit: {
+      controlIntentSimulationTimeSec: 1781, controlMaterializationSimulationTimeSec: 1793,
+    } } });
+    await expect(consumer.drain(exerciseId, lease)).resolves.toBe(2);
+    expect(restored.getNarvaIroScenarioState()).toMatchObject({ arrest: false, ventilationStage: "RECOVERING" });
+  });
+
+  test("recovers a lost CORRECT acceptance response idempotently with one durable effect", async () => {
+    const engine = setup();
+    materializeRuntimePatientCommand(command("IRO_VENTILATION_FAULT_START", { faultType: "CIRCUIT_DISCONNECT" }));
+    engine.advanceTo(130);
+    const gateway = new InMemoryRuntimePatientCommandGateway(() => ({ userId: "EXCON-A", role: "EXCON",
+      exerciseIds: [exerciseId] }));
+    gateway.seed(exerciseId, patientId, undefined, 1);
+    const correction = { ...command("IRO_VENTILATION_FAULT_CORRECT", {}, 2, 120),
+      patientBaseRevision: 1, patientResultingRevision: 2 };
+    const acceptedWithoutResponse = await gateway.submit(correction);
+    expect(acceptedWithoutResponse.status).toBe("APPLIED");
+    expect((await gateway.submit(correction)).status).toBe("IDEMPOTENT");
+    const consumer = new RuntimePatientCommandConsumer(gateway, materializeRuntimePatientCommand,
+      () => engine.getRuntimeState().exerciseTimeSec);
+    await expect(consumer.drain(exerciseId, lease)).resolves.toBe(1);
+    expect(gateway.accepted()).toHaveLength(1);
+    expect(gateway.materialized(1)).toMatchObject({ status: "MATERIALIZED", result: { controlAudit: {
+      controlIntentSimulationTimeSec: 120, controlMaterializationSimulationTimeSec: 130,
+      logicallyCorrectable: true,
+    } } });
+    await expect(consumer.drain(exerciseId, lease)).resolves.toBe(1);
+    expect(engine.getNarvaIroScenarioState()).toMatchObject({ arrest: false, ventilationStage: "RECOVERING" });
+  });
+
+  test("corrects the cause after the irreversible boundary without undoing PEA", () => {
+    const engine = setup();
+    materializeRuntimePatientCommand(command("IRO_VENTILATION_FAULT_START", { faultType: "CIRCUIT_DISCONNECT" }));
+    engine.advanceTo(121);
+    expect(materializeRuntimePatientCommand(command("IRO_VENTILATION_FAULT_CORRECT", {}, 2, 121)))
+      .toMatchObject({ status: "MATERIALIZED", result: { ok: true, controlAudit: {
+        faultEffectiveElapsedSec: 121, irreversibleThresholdSec: 120, logicallyCorrectable: false,
+      } } });
+    expect(engine.getNarvaIroScenarioState()).toMatchObject({ arrest: true, ventilationStage: "PEA",
+      ventilationFault: { correctedAtSimulationTimeSec: 121 } });
+  });
+
   test("keeps the immutable IRO package hashes unchanged", () => {
     expect(NARVA_IRO_EXERCISE_PACKAGE).toMatchObject({ packageVersion: "1.0.1",
       packageHash: "31d8267f61a62ccc3423d4ef15ac8f1f566d4603ab4ae0d55c7f21e7126b5cc4",

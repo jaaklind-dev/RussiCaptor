@@ -1,5 +1,6 @@
 import type { RuntimePatientCommandMaterialization, RuntimePatientCommandSubmissionResult } from "@/models/RuntimePatientCommand";
-import type { NarvaIroScenarioControlCommandType, NarvaIroVentilationFault } from "@/models/NarvaIroScenario";
+import type { NarvaIroControlMaterializationAudit, NarvaIroScenarioControlCommandType,
+  NarvaIroVentilationFault } from "@/models/NarvaIroScenario";
 import { isNarvaIroScenarioControlCommandType } from "@/models/NarvaIroScenario";
 import { getInstructorRuntimeOwner } from "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
 import { getRuntimePatientCommandGateway, submitPatientRuntimeCommand,
@@ -16,14 +17,16 @@ export type NarvaIroScenarioControlCommand = Readonly<{
 }>;
 
 export type NarvaIroScenarioControlLocalResult = Readonly<
-  { ok: true; commandId: string; runtimeEventId: string } |
-  { ok: false; commandId: string; errorCode: "INVALID_COMMAND_PAYLOAD" | "RUNTIME_UNAVAILABLE" | "RUNTIME_FAILURE"; message: string }
+  { ok: true; commandId: string; runtimeEventId: string; controlAudit?: NarvaIroControlMaterializationAudit } |
+  { ok: false; commandId: string; errorCode: "INVALID_COMMAND_PAYLOAD" | "RUNTIME_UNAVAILABLE" | "RUNTIME_FAILURE";
+    message: string; controlAudit?: NarvaIroControlMaterializationAudit }
 >;
 
 export type NarvaIroScenarioControlSubmission = Readonly<{
   commandId: string;
   status: "ACCEPTED" | "IDEMPOTENT" | "MATERIALIZED" | "REJECTED";
   commandSequence?: number;
+  intentSimulationTimeSec?: number;
   message?: string;
 }>;
 
@@ -70,8 +73,10 @@ export function handleNarvaIroScenarioControlCommand(
   const result: NarvaIroScenarioControlLocalResult = !applied
     ? { ok: false, commandId: command.commandId, errorCode: "RUNTIME_UNAVAILABLE", message: "IRO Runtime ei ole saadaval." }
     : applied.ok
-      ? { ok: true, commandId: command.commandId, runtimeEventId: applied.runtimeEventId }
-      : { ok: false, commandId: command.commandId, errorCode: "RUNTIME_FAILURE", message: applied.reason };
+      ? { ok: true, commandId: command.commandId, runtimeEventId: applied.runtimeEventId,
+        ...(applied.controlAudit ? { controlAudit: applied.controlAudit } : {}) }
+      : { ok: false, commandId: command.commandId, errorCode: "RUNTIME_FAILURE", message: applied.reason,
+        ...(applied.controlAudit ? { controlAudit: applied.controlAudit } : {}) };
   localResults.set(command.commandId, structuredClone(result));
   return structuredClone(result);
 }
@@ -96,7 +101,7 @@ export async function submitNarvaIroScenarioControlCommand(
   if (submitted.status === "APPLIED" || submitted.status === "IDEMPOTENT") {
     return Object.freeze({ commandId: command.commandId,
       status: submitted.status === "APPLIED" ? "ACCEPTED" : "IDEMPOTENT",
-      commandSequence: submitted.commandSequence });
+      commandSequence: submitted.commandSequence, intentSimulationTimeSec: submitted.intentSimulationTimeSec });
   }
   return Object.freeze({ commandId: command.commandId, status: "REJECTED", message: rejectionMessage(submitted.status) });
 }

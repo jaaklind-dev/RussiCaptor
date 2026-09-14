@@ -30,7 +30,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
     expect(manifest.guardrails.map(guardrail => guardrail.id)).toEqual(alphabet);
     expect(manifest.guardrails.every(guardrail => guardrail.name.length > 0 && guardrail.tests.length > 0)).toBe(true);
     expect(manifest.historicalFailures.map(failure => failure.id))
-      .toEqual(Array.from({ length: 14 }, (_, index) => `H${String(index + 1).padStart(2, "0")}`));
+      .toEqual(Array.from({ length: 15 }, (_, index) => `H${String(index + 1).padStart(2, "0")}`));
     expect(manifest.historicalFailures.every(failure => failure.invariant.length > 0 &&
       failure.tests.length > 0 && failure.physicalGate.length > 0)).toBe(true);
   });

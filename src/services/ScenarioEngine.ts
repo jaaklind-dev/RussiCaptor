@@ -100,7 +100,8 @@ import {
   type MechanicalVentilationProjectionContext,
   type SecuredAirwayReference,
 } from "@/services/runtime/respiratory/MechanicalVentilationRuntime";
-import type { NarvaIroScenarioProjection, NarvaIroVentilationFault } from "@/models/NarvaIroScenario";
+import type { NarvaIroCorrectionIntentDecision, NarvaIroScenarioProjection,
+  NarvaIroVentilationFault } from "@/models/NarvaIroScenario";
 import { NarvaIroScenarioRuntime } from "@/services/runtime/NarvaIroScenarioRuntime";
 
 export function runScenarioEvents(
@@ -967,12 +968,28 @@ export class ClinicalScenarioEngine {
     const result = this.narvaIroScenario.triggerVentilationFault(type, atSimulationTimeSec);
     this.aggregateProcesses(); this.publishResourceDebugSnapshot(false); return result;
   }
-  correctNarvaIroVasopressorFault(atSimulationTimeSec = this.simulationTimeSec): NarvaIroScenarioProjection {
-    const result = this.narvaIroScenario.correctVasopressor(atSimulationTimeSec);
+  getNarvaIroVasopressorCorrectionIntentDecision(
+    atSimulationTimeSec: number,
+  ): NarvaIroCorrectionIntentDecision {
+    return this.narvaIroScenario.vasopressorCorrectionIntentAt(atSimulationTimeSec);
+  }
+  getNarvaIroVentilationCorrectionIntentDecision(
+    atSimulationTimeSec: number,
+  ): NarvaIroCorrectionIntentDecision {
+    return this.narvaIroScenario.ventilationCorrectionIntentAt(atSimulationTimeSec);
+  }
+  correctNarvaIroVasopressorFault(atSimulationTimeSec = this.simulationTimeSec,
+    materializationSimulationTimeSec = this.simulationTimeSec): NarvaIroScenarioProjection {
+    const result = this.narvaIroScenario.correctVasopressor(atSimulationTimeSec,
+      materializationSimulationTimeSec);
+    this.removeLatencyOnlyNarvaIroCardiacArrest(result);
     this.aggregateProcesses(); this.publishResourceDebugSnapshot(false); return result;
   }
-  correctNarvaIroVentilationFault(atSimulationTimeSec = this.simulationTimeSec): NarvaIroScenarioProjection {
-    const result = this.narvaIroScenario.correctVentilation(atSimulationTimeSec);
+  correctNarvaIroVentilationFault(atSimulationTimeSec = this.simulationTimeSec,
+    materializationSimulationTimeSec = this.simulationTimeSec): NarvaIroScenarioProjection {
+    const result = this.narvaIroScenario.correctVentilation(atSimulationTimeSec,
+      materializationSimulationTimeSec);
+    this.removeLatencyOnlyNarvaIroCardiacArrest(result);
     this.aggregateProcesses(); this.publishResourceDebugSnapshot(false); return result;
   }
   setNarvaIroHold(hold: boolean, atSimulationTimeSec = this.simulationTimeSec): NarvaIroScenarioProjection {
@@ -1052,6 +1069,15 @@ export class ClinicalScenarioEngine {
         rosc: { heartRate: 105, systolicBp: 85, diastolicBp: 50, respiratoryRate: 14, gcs: 3 } } };
     this.replaceLifecycleProcess(bootstrapCardiacArrestPatientProcess({ fixtureId: "NARVA-IRO-ARREST", patientId },
       { processId: `${patientId}:CARDIAC_ARREST:IRO`, instanceKey: `${patientId}:cardiac-arrest:iro` }, configuration));
+  }
+
+  private removeLatencyOnlyNarvaIroCardiacArrest(projection: NarvaIroScenarioProjection): void {
+    if (projection.arrest) return;
+    const processId = `${projection.patientId}:CARDIAC_ARREST:IRO`;
+    const process = this.lifecycleProcessStore.get(processId);
+    if (process?.processType === "CARDIAC_ARREST" && process.instanceKey === `${projection.patientId}:cardiac-arrest:iro`) {
+      this.lifecycleProcessStore.delete(processId);
+    }
   }
   executeAlsMedicationCommand(command: AlsMedicationCommand,
     acceptedDurableSimulationTimeSec?: number): AlsMedicationCommandResult {

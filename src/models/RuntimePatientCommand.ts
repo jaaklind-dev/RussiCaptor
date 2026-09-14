@@ -36,6 +36,7 @@ export type RuntimePatientCommandSubmissionResult = Readonly<{
     "COMPLETION_FENCED" | "EXERCISE_NOT_ACTIVE" | "AUTHORIZATION_DENIED" |
     "RECONNECT_REQUIRED" | "UNAVAILABLE";
   commandSequence?: number;
+  intentSimulationTimeSec?: number;
   patientRevision: number;
   ownerUserId?: string;
 }>;

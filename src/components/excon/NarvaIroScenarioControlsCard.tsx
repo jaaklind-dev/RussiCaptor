@@ -18,9 +18,15 @@ const faults = Object.keys(faultLabels) as NarvaIroVentilationFault[];
 
 type ActionState = Readonly<{
   commandId: string;
+  commandType: NarvaIroScenarioControlCommandType;
   status: "SUBMITTING" | "ACCEPTED" | "MATERIALIZED" | "REJECTED";
+  intentSimulationTimeSec?: number;
   message?: string;
 }>;
+
+const correctionTypes = new Set<NarvaIroScenarioControlCommandType>([
+  "IRO_VASOPRESSOR_FAULT_CORRECT", "IRO_VENTILATION_FAULT_CORRECT",
+]);
 
 export function narvaIroScenarioControlsAvailable(input: Readonly<{
   packageId: string;
@@ -43,42 +49,76 @@ export function NarvaIroScenarioControlsCard({ exerciseId, patientId }: Readonly
   useSyncExternalStore(subscribe, getVersion, getVersion);
   const scenario = getPatientResourceDebugSnapshot(patientId).narvaIroScenario;
   const [ventilationFault, setVentilationFault] = useState<NarvaIroVentilationFault>("CIRCUIT_DISCONNECT");
-  const [action, setAction] = useState<ActionState>();
-  const busy = action?.status === "SUBMITTING" || action?.status === "ACCEPTED";
-  const submissionActive = useRef(false);
+  const [actions, setActions] = useState<readonly ActionState[]>([]);
+  const inFlight = useRef(new Map<NarvaIroScenarioControlCommandType, string>());
+  const acceptedResume = useRef(false);
+  const resumeFollowUpReservedRef = useRef(false);
+  const [resumeFollowUpReserved, setResumeFollowUpReserved] = useState(false);
+  const busy = actions.some(item => item.status === "SUBMITTING" || item.status === "ACCEPTED");
+  const resumeAccepted = actions.some(item => item.commandType === "IRO_RESUME" && item.status === "ACCEPTED");
+  const renderedInFlightTypes = new Set(actions.filter(item => item.status === "SUBMITTING" ||
+    item.status === "ACCEPTED").map(item => item.commandType));
+  const updateAction = useCallback((next: ActionState) => setActions(current => Object.freeze([
+    ...current.filter(item => item.commandId !== next.commandId), next,
+  ].slice(-3))), []);
+  const reserveResumeFollowUp = useCallback((reserved: boolean) => {
+    resumeFollowUpReservedRef.current = reserved;
+    setResumeFollowUpReserved(reserved);
+  }, []);
   const apply = useCallback(async (commandType: NarvaIroScenarioControlCommandType,
     payload: Readonly<Record<string, unknown>> = {}) => {
+    const correctionAfterAcceptedResume = correctionTypes.has(commandType) && acceptedResume.current &&
+      !resumeFollowUpReservedRef.current;
     traceRuntimeLeaseLifecycle("IRO_CONTROL_PRESS", { detail: { commandType, exerciseId, patientId,
-      enabled: !submissionActive.current } });
-    if (submissionActive.current) return;
-    submissionActive.current = true;
+      enabled: !inFlight.current.has(commandType) &&
+        (inFlight.current.size === 0 || correctionAfterAcceptedResume) } });
+    if (inFlight.current.has(commandType) || inFlight.current.size > 0 && !correctionAfterAcceptedResume) return;
+    if (correctionAfterAcceptedResume) reserveResumeFollowUp(true);
     const commandId = createNarvaIroScenarioControlCommandId(exerciseId, patientId, commandType);
-    setAction({ commandId, status: "SUBMITTING" });
+    inFlight.current.set(commandType, commandId);
+    updateAction({ commandId, commandType, status: "SUBMITTING" });
     traceRuntimeLeaseLifecycle("IRO_CONTROL_SUBMIT_STARTED", { detail: { commandType, exerciseId, patientId,
       commandId } });
     try {
       const submitted = await submitNarvaIroScenarioControlCommand({ commandId, exerciseId, patientId,
         commandType, payload, issuedBy: "EXCON" });
       if (submitted.status === "REJECTED") {
-        submissionActive.current = false;
-        setAction({ commandId, status: "REJECTED", message: submitted.message }); return;
+        if (correctionAfterAcceptedResume) reserveResumeFollowUp(false);
+        inFlight.current.delete(commandType);
+        updateAction({ commandId, commandType, status: "REJECTED", message: submitted.message }); return;
       }
       if (submitted.status === "MATERIALIZED") {
-        submissionActive.current = false;
-        setAction({ commandId, status: "MATERIALIZED" }); return;
+        inFlight.current.delete(commandType);
+        updateAction({ commandId, commandType, status: "MATERIALIZED",
+          intentSimulationTimeSec: submitted.intentSimulationTimeSec }); return;
       }
-      setAction({ commandId, status: "ACCEPTED" });
+      if (commandType === "IRO_RESUME") acceptedResume.current = true;
+      traceRuntimeLeaseLifecycle("IRO_CONTROL_DURABLE_ACCEPTED", { detail: { commandType, exerciseId, patientId,
+        commandId, commandSequence: submitted.commandSequence,
+        intentSimulationTimeSec: submitted.intentSimulationTimeSec } });
+      updateAction({ commandId, commandType, status: "ACCEPTED",
+        intentSimulationTimeSec: submitted.intentSimulationTimeSec });
       if (submitted.commandSequence === undefined) return;
       const materialized = await waitForNarvaIroScenarioControlMaterialization(exerciseId, submitted.commandSequence);
       if (!materialized) return;
-      submissionActive.current = false;
-      setAction({ commandId, status: materialized.status,
+      inFlight.current.delete(commandType);
+      if (commandType === "IRO_RESUME") {
+        acceptedResume.current = false;
+        reserveResumeFollowUp(false);
+      }
+      updateAction({ commandId, commandType, status: materialized.status,
+        intentSimulationTimeSec: submitted.intentSimulationTimeSec,
         ...(materialized.status === "REJECTED" ? { message: String(materialized.result.reason ?? "Runtime lükkas käsu tagasi.") } : {}) });
     } catch {
-      submissionActive.current = false;
-      setAction({ commandId, status: "REJECTED", message: "IRO stsenaariumikäsku ei saanud saata." });
+      if (correctionAfterAcceptedResume) reserveResumeFollowUp(false);
+      inFlight.current.delete(commandType);
+      if (commandType === "IRO_RESUME") {
+        acceptedResume.current = false;
+        reserveResumeFollowUp(false);
+      }
+      updateAction({ commandId, commandType, status: "REJECTED", message: "IRO stsenaariumikäsku ei saanud saata." });
     }
-  }, [exerciseId, patientId]);
+  }, [exerciseId, patientId, reserveResumeFollowUp, updateAction]);
   const vasoActive = Boolean(scenario?.vasopressorFault && scenario.vasopressorFault.correctedAtSimulationTimeSec === undefined);
   const ventilationActive = Boolean(scenario?.ventilationFault && scenario.ventilationFault.correctedAtSimulationTimeSec === undefined);
   const vasoStatus = !scenario?.vasopressorFault ? "puudub" : vasoActive ? "aktiivne" : "parandatud";
@@ -92,6 +132,9 @@ export function NarvaIroScenarioControlsCard({ exerciseId, patientId }: Readonly
   const hold = useCallback(() => { void apply("IRO_HOLD"); }, [apply]);
   const resume = useCallback(() => { void apply("IRO_RESUME"); }, [apply]);
   const selectVentilationFault = useCallback((fault: NarvaIroVentilationFault) => setVentilationFault(fault), []);
+  const commandBlocked = (commandType: NarvaIroScenarioControlCommandType): boolean =>
+    renderedInFlightTypes.has(commandType) || busy && !(resumeAccepted && !resumeFollowUpReserved &&
+      correctionTypes.has(commandType));
   return <View style={styles.card} testID="narva-iro-scenario-controls">
     <Text style={styles.title}>IRO stsenaariumi juhtimine</Text>
     <Text style={styles.help}>Autenditud EXCON-käsk liigub püsivasse tööjärjekorda ja rakendub ainult autoritaarses Runtime’is.</Text>
@@ -104,30 +147,31 @@ export function NarvaIroScenarioControlsCard({ exerciseId, patientId }: Readonly
     </View>
     <Text style={styles.section}>Vasopressor</Text>
     <View style={styles.row}>
-      <ActionButton label="Alusta katkestust" disabled={busy || vasoActive}
+      <ActionButton label="Alusta katkestust" disabled={commandBlocked("IRO_VASOPRESSOR_FAULT_START") || vasoActive}
         commandType="IRO_VASOPRESSOR_FAULT_START" onPress={startVasopressor} />
-      <ActionButton label="Taasta vasopressor" disabled={busy || !vasoActive}
+      <ActionButton label="Taasta vasopressor" disabled={commandBlocked("IRO_VASOPRESSOR_FAULT_CORRECT") || !vasoActive}
         commandType="IRO_VASOPRESSOR_FAULT_CORRECT" onPress={correctVasopressor} />
     </View>
     <Text style={styles.section}>Ventilatsioonirike</Text>
     <View style={styles.faults}>{faults.map(fault => <FaultOption key={fault} fault={fault}
       disabled={busy || ventilationActive} selected={ventilationFault === fault} onSelect={selectVentilationFault} />)}</View>
     <View style={styles.row}>
-      <ActionButton label="Alusta ventilatsiooniriket" disabled={busy || ventilationActive}
+      <ActionButton label="Alusta ventilatsiooniriket" disabled={commandBlocked("IRO_VENTILATION_FAULT_START") || ventilationActive}
         commandType="IRO_VENTILATION_FAULT_START" onPress={startVentilation} />
-      <ActionButton label="Taasta ventilatsioon" disabled={busy || !ventilationActive}
+      <ActionButton label="Taasta ventilatsioon" disabled={commandBlocked("IRO_VENTILATION_FAULT_CORRECT") || !ventilationActive}
         commandType="IRO_VENTILATION_FAULT_CORRECT" onPress={correctVentilation} />
     </View>
     <Text style={styles.section}>Stsenaariumikell</Text>
     <View style={styles.row}>
-      <ActionButton label="HOLD" disabled={busy || Boolean(scenario?.hold)} commandType="IRO_HOLD" onPress={hold} />
-      <ActionButton label="RESUME" disabled={busy || !scenario?.hold} commandType="IRO_RESUME" onPress={resume} />
+      <ActionButton label="HOLD" disabled={commandBlocked("IRO_HOLD") || Boolean(scenario?.hold)} commandType="IRO_HOLD" onPress={hold} />
+      <ActionButton label="RESUME" disabled={commandBlocked("IRO_RESUME") || !scenario?.hold} commandType="IRO_RESUME" onPress={resume} />
     </View>
-    {action && <Text accessibilityLiveRegion="polite" style={action.status === "REJECTED" ? styles.error : styles.result}>
+    {actions.map(action => <Text key={action.commandId} accessibilityLiveRegion="polite"
+      style={action.status === "REJECTED" ? styles.error : styles.result}>
       {action.status === "SUBMITTING" ? "Saadan käsku…" : action.status === "ACCEPTED" ? "Käsk vastu võetud; ootan Runtime’i kinnitust…"
         : action.status === "MATERIALIZED" ? "Käsk rakendati autoritaarses Runtime’is."
           : `Käsk lükati tagasi: ${action.message ?? "teadmata põhjus"}`}
-    </Text>}
+    </Text>)}
   </View>;
 }
 

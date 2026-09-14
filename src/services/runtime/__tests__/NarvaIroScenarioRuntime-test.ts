@@ -55,6 +55,68 @@ describe("WP-NARVA-02 deterministic IRO fault and recovery process", () => {
     expect(value.advanceTo(520).vasopressorStage).toBe("S2");
   });
 
+  test.each([0, 1, 2, 5, 10, 30, 60])(
+    "honors a valid B19 ventilation CORRECT intent after %ss materialization latency", delaySec => {
+      const value = runtime(); value.triggerVentilationFault("CIRCUIT_DISCONNECT", 988);
+      value.advanceTo(1106); value.setHold(true, 1106); value.advanceTo(1780); value.setHold(false, 1780);
+      const intentTime = 1781;
+      expect(value.ventilationCorrectionIntentAt(intentTime)).toEqual({ accepted: true,
+        faultEffectiveElapsedSec: 119, irreversibleThresholdSec: 120 });
+      value.advanceTo(intentTime + delaySec);
+      const corrected = value.correctVentilation(intentTime, intentTime + delaySec);
+      expect(corrected).toMatchObject({ arrest: false, ventilationStage: "RECOVERING",
+        ventilationFault: { startedAtSimulationTimeSec: 988, accumulatedHoldSec: 674,
+          correctedAtSimulationTimeSec: intentTime } });
+    });
+
+  test.each([[110, true], [115, true], [118, true], [119, true], [120, true], [121, false]] as const)(
+    "defines the ventilation correction intent boundary at %ss as accepted=%s", (intentTime, accepted) => {
+      const value = runtime(); value.triggerVentilationFault("CIRCUIT_DISCONNECT", 0);
+      value.advanceTo(Math.max(121, intentTime + 5));
+      expect(value.ventilationCorrectionIntentAt(intentTime).accepted).toBe(accepted);
+      if (accepted) expect(value.correctVentilation(intentTime, Math.max(121, intentTime + 5)).arrest).toBe(false);
+      else expect(value.correctVentilation(intentTime, 130)).toMatchObject({ arrest: true, ventilationStage: "PEA" });
+    });
+
+  test("still reaches irreversible PEA after RESUME when no correction intent exists", () => {
+    const value = runtime(); value.triggerVentilationFault("CIRCUIT_DISCONNECT", 988);
+    value.advanceTo(1106); value.setHold(true, 1106); value.advanceTo(1780); value.setHold(false, 1780);
+    expect(value.advanceTo(1782)).toMatchObject({ arrest: false, ventilationStage: "CRITICAL" });
+    expect(value.advanceTo(1783)).toMatchObject({ arrest: true, ventilationStage: "PEA",
+      arrestAtSimulationTimeSec: 1783, arrestCause: "VENTILATION" });
+  });
+
+  test("keeps authoritative arrest when a genuinely late correction fixes only its cause", () => {
+    const value = runtime(); value.triggerVentilationFault("CIRCUIT_DISCONNECT", 0); value.advanceTo(121);
+    expect(value.ventilationCorrectionIntentAt(121)).toMatchObject({ accepted: false,
+      faultEffectiveElapsedSec: 121, irreversibleThresholdSec: 120,
+      reason: "IRREVERSIBLE_THRESHOLD_CROSSED" });
+    expect(value.correctVentilation(121, 130)).toMatchObject({ arrest: true, ventilationStage: "PEA",
+      ventilationFault: { correctedAtSimulationTimeSec: 121 } });
+    expect(value.projectionAt(130)).toMatchObject({ arrest: true, ventilationStage: "PEA" });
+  });
+
+  test.each([
+    ["CIRCUIT_DISCONNECT", 120], ["OXYGEN_DEPLETION", 120], ["VENTILATOR_STOP", 120],
+    ["HIGH_PRESSURE_KINK", 180],
+  ] as const)("honors the exact pre-threshold intent boundary for %s", (fault, threshold) => {
+    const value = runtime(); value.triggerVentilationFault(fault, 0); value.advanceTo(threshold + 30);
+    expect(value.ventilationCorrectionIntentAt(threshold)).toEqual({ accepted: true,
+      faultEffectiveElapsedSec: threshold, irreversibleThresholdSec: threshold });
+    expect(value.correctVentilation(threshold, threshold + 30)).toMatchObject({ arrest: false,
+      ventilationStage: "RECOVERING" });
+  });
+
+  test("applies the same accepted-intent rule to vasopressor correction", () => {
+    const value = runtime(); value.triggerVasopressorFault(0); value.advanceTo(220);
+    expect(value.vasopressorCorrectionIntentAt(180)).toEqual({ accepted: true,
+      faultEffectiveElapsedSec: 180, irreversibleThresholdSec: 180 });
+    expect(value.correctVasopressor(180, 220)).toMatchObject({ arrest: false, vasopressorStage: "S3R" });
+    const late = runtime(); late.triggerVasopressorFault(0); late.advanceTo(181);
+    expect(late.correctVasopressor(181, 220)).toMatchObject({ arrest: true, vasopressorStage: "PEA",
+      vasopressorFault: { correctedAtSimulationTimeSec: 181 } });
+  });
+
   test("ROSC remains cause-gated and adrenaline/timer alone cannot grant it", () => {
     const value = runtime(); value.triggerVasopressorFault(0); value.advanceTo(181); value.setCprQuality(true, 181);
     expect(value.attemptRosc(181).status).toBe("REJECTED");

@@ -125,24 +125,38 @@ export function createScenarioEngineInstructorRuntimeOwner(
     },
     executeNarvaIroScenarioControl(commandId, commandType, faultType, acceptedDurableSimulationTimeSec) {
       if (!runtimeWritesAllowed()) return readOnly();
+      const currentSimulationTimeSec = engine.getRuntimeState().exerciseTimeSec;
+      const actionTime = acceptedDurableSimulationTimeSec ?? currentSimulationTimeSec;
+      const correctionDecision = commandType === "IRO_VENTILATION_FAULT_CORRECT"
+        ? engine.getNarvaIroVentilationCorrectionIntentDecision(actionTime)
+        : commandType === "IRO_VASOPRESSOR_FAULT_CORRECT"
+          ? engine.getNarvaIroVasopressorCorrectionIntentDecision(actionTime) : undefined;
+      const controlAudit = Object.freeze({ controlIntentSimulationTimeSec: actionTime,
+        controlMaterializationSimulationTimeSec: currentSimulationTimeSec,
+        ...(correctionDecision ? { faultEffectiveElapsedSec: correctionDecision.faultEffectiveElapsedSec,
+          irreversibleThresholdSec: correctionDecision.irreversibleThresholdSec,
+          logicallyCorrectable: correctionDecision.accepted } : {}) });
       try {
-        const currentSimulationTimeSec = engine.getRuntimeState().exerciseTimeSec;
-        const actionTime = acceptedDurableSimulationTimeSec ?? currentSimulationTimeSec;
         if (!Number.isFinite(actionTime) || actionTime < 0 || actionTime > currentSimulationTimeSec) {
-          return { ok: false, reason: "STALE_SIMULATION_TIME" };
+          return { ok: false, reason: "STALE_SIMULATION_TIME", controlAudit };
         }
         if (commandType === "IRO_VASOPRESSOR_FAULT_START") engine.triggerNarvaIroVasopressorFault(actionTime);
-        else if (commandType === "IRO_VASOPRESSOR_FAULT_CORRECT") engine.correctNarvaIroVasopressorFault(actionTime);
+        else if (commandType === "IRO_VASOPRESSOR_FAULT_CORRECT") {
+          engine.correctNarvaIroVasopressorFault(actionTime, currentSimulationTimeSec);
+        }
         else if (commandType === "IRO_VENTILATION_FAULT_START") {
           if (!faultType) return { ok: false, reason: "INVALID_COMMAND_PAYLOAD" };
           engine.triggerNarvaIroVentilationFault(faultType as NarvaIroVentilationFault, actionTime);
-        } else if (commandType === "IRO_VENTILATION_FAULT_CORRECT") engine.correctNarvaIroVentilationFault(actionTime);
+        } else if (commandType === "IRO_VENTILATION_FAULT_CORRECT") {
+          engine.correctNarvaIroVentilationFault(actionTime, currentSimulationTimeSec);
+        }
         else if (commandType === "IRO_HOLD") engine.setNarvaIroHold(true, actionTime);
         else engine.setNarvaIroHold(false, actionTime);
         notifySync("local");
-        return { ok: true, runtimeEventId: `NARVA-IRO:${commandId}:${commandType}` };
+        return { ok: true, runtimeEventId: `NARVA-IRO:${commandId}:${commandType}`, controlAudit };
       } catch (error) {
-        return { ok: false, reason: error instanceof Error ? error.message : "IRO scenario control failed" };
+        return { ok: false, reason: error instanceof Error ? error.message : "IRO scenario control failed",
+          controlAudit };
       }
     },
     advanceRuntime(commandId, durationSec, canonicalSimulationTimeSec) {

@@ -108,7 +108,7 @@ Readonly<{ simulationTimeSec?: number }>): Promise<RuntimePatientCommandSubmissi
   if (result.status === "APPLIED" || result.status === "IDEMPOTENT") {
     observeSharedWorkflowHead(input.exerciseId, input.patientId, result.patientRevision, result.ownerUserId);
   }
-  return result;
+  return Object.freeze({ ...result, intentSimulationTimeSec: simulationTimeSec });
 }
 
 export async function waitForPatientRuntimeCommandResult(exerciseId: string, commandSequence: number,

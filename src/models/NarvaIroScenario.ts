@@ -34,11 +34,29 @@ export type NarvaIroScenarioState = Readonly<{
   ventilationFault?: NarvaIroFaultClock & Readonly<{ type: NarvaIroVentilationFault }>;
   hold: boolean;
   arrest: boolean;
+  /** Canonical advance that first materialized an IRO arrest. Legacy snapshots may omit it. */
+  arrestAtSimulationTimeSec?: number;
+  arrestCause?: "VASOPRESSOR" | "VENTILATION" | "COMBINED";
   cprQuality: boolean;
   rosc: boolean;
   roscAtSimulationTimeSec?: number;
   goNoGoRequired: boolean;
   lastUpdatedSimulationTimeSec: number;
+}>;
+
+export type NarvaIroCorrectionIntentDecision = Readonly<{
+  accepted: boolean;
+  faultEffectiveElapsedSec: number;
+  irreversibleThresholdSec: number;
+  reason?: "FAULT_NOT_ACTIVE" | "INTENT_BEFORE_FAULT" | "IRREVERSIBLE_THRESHOLD_CROSSED";
+}>;
+
+export type NarvaIroControlMaterializationAudit = Readonly<{
+  controlIntentSimulationTimeSec: number;
+  controlMaterializationSimulationTimeSec: number;
+  faultEffectiveElapsedSec?: number;
+  irreversibleThresholdSec?: number;
+  logicallyCorrectable?: boolean;
 }>;
 
 export type NarvaIroScenarioProjection = NarvaIroScenarioState & Readonly<{

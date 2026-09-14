@@ -2,8 +2,19 @@ import type { InstructorEventType, InstructorPatientCommand } from "@/models/Ins
 import type { CardiacInterventionAction } from "@/models/CardiacInterventionCommand";
 import type { ClinicalTreatmentCommand, ClinicalTreatmentRuntimeResult } from "@/models/ClinicalTreatment";
 import type { ClinicalParameterValue } from "@/models/ClinicalIntegration";
-import type { NarvaIroScenarioControlCommandType, NarvaIroVentilationFault } from "@/models/NarvaIroScenario";
-export type InstructorRuntimeEventResult = { readonly ok: true; readonly runtimeEventId: string; readonly changed?: boolean } | { readonly ok: false; readonly reason: string; readonly code?: string };
+import type { NarvaIroControlMaterializationAudit, NarvaIroScenarioControlCommandType,
+  NarvaIroVentilationFault } from "@/models/NarvaIroScenario";
+export type InstructorRuntimeEventResult = {
+  readonly ok: true;
+  readonly runtimeEventId: string;
+  readonly changed?: boolean;
+  readonly controlAudit?: NarvaIroControlMaterializationAudit;
+} | {
+  readonly ok: false;
+  readonly reason: string;
+  readonly code?: string;
+  readonly controlAudit?: NarvaIroControlMaterializationAudit;
+};
 export type InstructorRuntimeOwner = { readonly exerciseId: string; readonly patientId: string; readonly supportedEvents: readonly InstructorEventType[]; execute(command: InstructorPatientCommand): InstructorRuntimeEventResult; executeClinicalIntervention?(commandId: string, action: CardiacInterventionAction): InstructorRuntimeEventResult; executeResourceIntervention?(commandId: string, resourceId: string, canonicalSimulationTimeSec?: number): InstructorRuntimeEventResult; executeResourceAwareIntervention?(commandId: string, definitionId: string, resourceIds: string[], parameters: Record<string, ClinicalParameterValue>): InstructorRuntimeEventResult; stopResourceIntervention?(commandId: string, sourceInterventionId: string): InstructorRuntimeEventResult; executeMtpAction?(commandId: string, action: "MTP_ACTIVATION" | "RBC_ADMINISTRATION" | "PLASMA_ADMINISTRATION" | "PLATELET_ADMINISTRATION" | "CALCIUM_ADMINISTRATION" | "BLOOD_PRODUCT_DELIVERY_MODE_CHANGE", units: number, options?: Readonly<Record<string, unknown>>): InstructorRuntimeEventResult; executeClinicalTreatment?(command: ClinicalTreatmentCommand, acceptedDurableSimulationTimeSec?: number): ClinicalTreatmentRuntimeResult; executeNarvaIroScenarioControl?(commandId: string, commandType: NarvaIroScenarioControlCommandType, faultType?: NarvaIroVentilationFault, acceptedDurableSimulationTimeSec?: number): InstructorRuntimeEventResult; advanceRuntime?(commandId: string, durationSec: number, canonicalSimulationTimeSec?: number): InstructorRuntimeEventResult };
 const owners = new Map<string, InstructorRuntimeOwner>();
 const key = (exerciseId: string, patientId: string) => `${exerciseId}\u0000${patientId}`;

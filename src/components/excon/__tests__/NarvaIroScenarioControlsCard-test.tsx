@@ -294,6 +294,55 @@ describe("IRO EXCON scenario-control presentation", () => {
     await act(async () => renderer.unmount());
   });
 
+  test("enables one ordered CORRECT follow-up after RESUME is durably accepted", async () => {
+    replaceCanonicalExerciseSnapshot({ exerciseId: "EX-IRO-RESUME-CORRECT", lifecycleState: "RUNNING",
+      simulationTimeSec: 1780, speed: 1, version: 2, clockVersion: 1, clockInitializedAtSimulationTimeSec: 0 });
+    observeSharedWorkflowHead("EX-IRO-RESUME-CORRECT", "PT-IRO-001", 0);
+    publishScenario(iroScenario("PT-IRO-001", { hold: true, lastUpdatedSimulationTimeSec: 1780,
+      ventilationFault: { type: "CIRCUIT_DISCONNECT", startedAtSimulationTimeSec: 988,
+        accumulatedHoldSec: 0, heldAtSimulationTimeSec: 1106 }, ventilationStage: "CRITICAL" }));
+    let resolveResume!: (value: { status: "MATERIALIZED"; result: Readonly<Record<string, unknown>> }) => void;
+    let resolveCorrect!: (value: { status: "MATERIALIZED"; result: Readonly<Record<string, unknown>> }) => void;
+    const resumeResult = new Promise<{ status: "MATERIALIZED"; result: Readonly<Record<string, unknown>> }>(resolve => {
+      resolveResume = resolve;
+    });
+    const correctResult = new Promise<{ status: "MATERIALIZED"; result: Readonly<Record<string, unknown>> }>(resolve => {
+      resolveCorrect = resolve;
+    });
+    const submit = jest.fn(async command => ({ status: "APPLIED" as const,
+        patientRevision: command.commandType === "IRO_RESUME" ? 1 : 2,
+        commandSequence: command.commandType === "IRO_RESUME" ? 100 : 101 }));
+    const gateway: RuntimePatientCommandGateway = {
+      submit,
+      loadAfter: jest.fn(async () => []),
+      loadResult: jest.fn(async (_exercise, sequence) => sequence === 100 ? resumeResult : correctResult),
+      record: jest.fn(async () => undefined),
+    };
+    setRuntimePatientCommandGateway(gateway);
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<NarvaIroScenarioControlsCard
+      exerciseId="EX-IRO-RESUME-CORRECT" patientId="PT-IRO-001" />); });
+    await pressRenderedControl(renderer, "RESUME");
+    expect(renderer.root.findByProps({ accessibilityLabel: "Taasta ventilatsioon" }).props.disabled).toBe(false);
+    await pressRenderedControl(renderer, "Taasta ventilatsioon");
+    expect(gateway.submit).toHaveBeenCalledTimes(2);
+    expect(submit.mock.calls.map(call => call[0].commandType)).toEqual([
+      "IRO_RESUME", "IRO_VENTILATION_FAULT_CORRECT",
+    ]);
+    expect(renderer.root.findByProps({ accessibilityLabel: "Taasta ventilatsioon" }).props.disabled).toBe(true);
+    await act(async () => {
+      resolveCorrect({ status: "MATERIALIZED", result: { ok: true } });
+      await correctResult;
+    });
+    expect(renderer.root.findByProps({ accessibilityLabel: "Taasta ventilatsioon" }).props.disabled).toBe(true);
+    await act(async () => {
+      resolveResume({ status: "MATERIALIZED", result: { ok: true } });
+      await resumeResult;
+    });
+    expect(renderedText(renderer)).toContain("Käsk rakendati autoritaarses Runtime’is.");
+    await act(async () => renderer.unmount());
+  });
+
   test.each([
     ["Taasta vasopressor", "IRO_VASOPRESSOR_FAULT_CORRECT" as const,
       { vasopressorFault: { startedAtSimulationTimeSec: 1, accumulatedHoldSec: 0 } }],

@@ -1,5 +1,5 @@
 import type { NarvaIroFaultClock, NarvaIroScenarioProjection, NarvaIroScenarioSnapshot,
-  NarvaIroScenarioState, NarvaIroVasopressorStage, NarvaIroVentilationFault,
+  NarvaIroCorrectionIntentDecision, NarvaIroScenarioState, NarvaIroVasopressorStage, NarvaIroVentilationFault,
   NarvaIroVentilationStage } from "@/models/NarvaIroScenario";
 import type { VitalSignContributor, VitalSignKey } from "@/models/VitalSign";
 
@@ -7,6 +7,9 @@ const frozen = <T>(value: T): T => Object.freeze(structuredClone(value));
 const elapsed = (clock: NarvaIroFaultClock, now: number): number => Math.max(0,
   (clock.heldAtSimulationTimeSec ?? now) - clock.startedAtSimulationTimeSec - clock.accumulatedHoldSec);
 const corrected = (clock?: NarvaIroFaultClock): boolean => clock?.correctedAtSimulationTimeSec !== undefined;
+const VASOPRESSOR_IRREVERSIBLE_THRESHOLD_SEC = 180;
+const ventilationIrreversibleThresholdSec = (type: NarvaIroVentilationFault): number =>
+  type === "HIGH_PRESSURE_KINK" ? 180 : 120;
 
 export class NarvaIroScenarioRuntime {
   private state?: NarvaIroScenarioState;
@@ -32,18 +35,35 @@ export class NarvaIroScenarioRuntime {
     return this.advanceTo(simulationTimeSec);
   }
 
-  correctVasopressor(simulationTimeSec: number): NarvaIroScenarioProjection {
-    const state = this.require(); if (!state.vasopressorFault) return this.advanceTo(simulationTimeSec);
-    this.state = frozen({ ...state, vasopressorFault: { ...state.vasopressorFault,
-      correctedAtSimulationTimeSec: simulationTimeSec }, lastUpdatedSimulationTimeSec: simulationTimeSec });
-    return this.advanceTo(simulationTimeSec);
+  vasopressorCorrectionIntentAt(simulationTimeSec: number): NarvaIroCorrectionIntentDecision {
+    return this.correctionIntent(this.require().vasopressorFault, simulationTimeSec,
+      VASOPRESSOR_IRREVERSIBLE_THRESHOLD_SEC);
   }
 
-  correctVentilation(simulationTimeSec: number): NarvaIroScenarioProjection {
-    const state = this.require(); if (!state.ventilationFault) return this.advanceTo(simulationTimeSec);
-    this.state = frozen({ ...state, ventilationFault: { ...state.ventilationFault,
-      correctedAtSimulationTimeSec: simulationTimeSec }, lastUpdatedSimulationTimeSec: simulationTimeSec });
-    return this.advanceTo(simulationTimeSec);
+  ventilationCorrectionIntentAt(simulationTimeSec: number): NarvaIroCorrectionIntentDecision {
+    const clock = this.require().ventilationFault;
+    return this.correctionIntent(clock, simulationTimeSec,
+      ventilationIrreversibleThresholdSec(clock?.type ?? "CIRCUIT_DISCONNECT"));
+  }
+
+  correctVasopressor(intentSimulationTimeSec: number,
+    materializationSimulationTimeSec = intentSimulationTimeSec): NarvaIroScenarioProjection {
+    const state = this.require();
+    if (!state.vasopressorFault) return this.advanceTo(materializationSimulationTimeSec);
+    const decision = this.vasopressorCorrectionIntentAt(intentSimulationTimeSec);
+    if (decision.reason === "INTENT_BEFORE_FAULT") throw new Error("IRO_CORRECTION_INTENT_INVALID");
+    this.state = this.correctedState(state, "vasopressorFault", intentSimulationTimeSec, decision.accepted);
+    return this.advanceTo(materializationSimulationTimeSec);
+  }
+
+  correctVentilation(intentSimulationTimeSec: number,
+    materializationSimulationTimeSec = intentSimulationTimeSec): NarvaIroScenarioProjection {
+    const state = this.require();
+    if (!state.ventilationFault) return this.advanceTo(materializationSimulationTimeSec);
+    const decision = this.ventilationCorrectionIntentAt(intentSimulationTimeSec);
+    if (decision.reason === "INTENT_BEFORE_FAULT") throw new Error("IRO_CORRECTION_INTENT_INVALID");
+    this.state = this.correctedState(state, "ventilationFault", intentSimulationTimeSec, decision.accepted);
+    return this.advanceTo(materializationSimulationTimeSec);
   }
 
   setHold(hold: boolean, simulationTimeSec: number): NarvaIroScenarioProjection {
@@ -77,9 +97,10 @@ export class NarvaIroScenarioRuntime {
 
   advanceTo(simulationTimeSec: number): NarvaIroScenarioProjection {
     const state = this.require();
-    const projected = this.projectionAt(simulationTimeSec);
-    if (projected.vasopressorStage === "PEA" || projected.ventilationStage === "PEA") {
-      this.state = frozen({ ...state, arrest: true, lastUpdatedSimulationTimeSec: simulationTimeSec });
+    const arrestCause = this.irreversibleCauseAt(simulationTimeSec);
+    if (!state.arrest && arrestCause) {
+      this.state = frozen({ ...state, arrest: true, arrestAtSimulationTimeSec: simulationTimeSec,
+        arrestCause, lastUpdatedSimulationTimeSec: simulationTimeSec });
     } else this.state = frozen({ ...state, lastUpdatedSimulationTimeSec: simulationTimeSec });
     return this.projectionAt(simulationTimeSec);
   }
@@ -143,14 +164,15 @@ export class NarvaIroScenarioRuntime {
       if (atCorrection < 120) return recoveryElapsed >= 180 ? "S0" : "S2R";
       return recoveryElapsed >= 300 ? "S0" : "S3R";
     }
-    const age = elapsed(clock, now); return age > 180 ? "PEA" : age >= 120 ? "S3" : age >= 60 ? "S2" : age >= 30 ? "S1" : "S0";
+    const age = elapsed(clock, now); return age > VASOPRESSOR_IRREVERSIBLE_THRESHOLD_SEC ? "PEA" :
+      age >= 120 ? "S3" : age >= 60 ? "S2" : age >= 30 ? "S1" : "S0";
   }
 
   private ventilationStage(now: number): NarvaIroVentilationStage {
     const clock = this.require().ventilationFault; if (!clock) return "NORMAL";
     if (corrected(clock)) return now - clock.correctedAtSimulationTimeSec! >= 180 ? "NORMAL" : "RECOVERING";
     const age = elapsed(clock, now);
-    const arrestAt = clock.type === "HIGH_PRESSURE_KINK" ? 180 : 120;
+    const arrestAt = ventilationIrreversibleThresholdSec(clock.type);
     return age > arrestAt ? "PEA" : age >= 60 ? "CRITICAL" : age >= 30 ? "DETERIORATING" : "EARLY";
   }
 
@@ -160,6 +182,44 @@ export class NarvaIroScenarioRuntime {
     const secondStart = Math.max(state.vasopressorFault.startedAtSimulationTimeSec,
       state.ventilationFault.startedAtSimulationTimeSec);
     return now - secondStart > 90;
+  }
+
+  private irreversibleCauseAt(simulationTimeSec: number): NarvaIroScenarioState["arrestCause"] {
+    const vasopressor = this.vasopressorStage(simulationTimeSec) === "PEA";
+    const ventilation = this.ventilationStage(simulationTimeSec) === "PEA";
+    const combined = this.combinedCritical(simulationTimeSec);
+    if (combined || (vasopressor && ventilation)) return "COMBINED";
+    if (vasopressor) return "VASOPRESSOR";
+    if (ventilation) return "VENTILATION";
+    return undefined;
+  }
+
+  private correctionIntent(clock: NarvaIroFaultClock | undefined, simulationTimeSec: number,
+    irreversibleThresholdSec: number): NarvaIroCorrectionIntentDecision {
+    if (!clock || corrected(clock)) return frozen({ accepted: false, faultEffectiveElapsedSec: 0,
+      irreversibleThresholdSec, reason: "FAULT_NOT_ACTIVE" });
+    const faultEffectiveElapsedSec = elapsed(clock, simulationTimeSec);
+    if (!Number.isFinite(simulationTimeSec) || simulationTimeSec < clock.startedAtSimulationTimeSec) {
+      return frozen({ accepted: false, faultEffectiveElapsedSec, irreversibleThresholdSec,
+        reason: "INTENT_BEFORE_FAULT" });
+    }
+    const state = this.require();
+    const crossedAtOrBeforeIntent = this.irreversibleCauseAt(simulationTimeSec) !== undefined || state.arrest &&
+      (state.arrestAtSimulationTimeSec === undefined || state.arrestAtSimulationTimeSec <= simulationTimeSec);
+    return crossedAtOrBeforeIntent
+      ? frozen({ accepted: false, faultEffectiveElapsedSec, irreversibleThresholdSec,
+        reason: "IRREVERSIBLE_THRESHOLD_CROSSED" })
+      : frozen({ accepted: true, faultEffectiveElapsedSec, irreversibleThresholdSec });
+  }
+
+  private correctedState<K extends "vasopressorFault" | "ventilationFault">(state: NarvaIroScenarioState,
+    key: K, intentSimulationTimeSec: number, logicallyCorrectable: boolean): NarvaIroScenarioState {
+    const clock = state[key]!;
+    const latencyOnlyArrest = logicallyCorrectable && state.arrest && state.arrestAtSimulationTimeSec !== undefined &&
+      state.arrestAtSimulationTimeSec > intentSimulationTimeSec;
+    return frozen({ ...state, [key]: { ...clock, correctedAtSimulationTimeSec: intentSimulationTimeSec },
+      ...(latencyOnlyArrest ? { arrest: false, arrestAtSimulationTimeSec: undefined, arrestCause: undefined } : {}),
+      lastUpdatedSimulationTimeSec: intentSimulationTimeSec });
   }
 
   private vitals(vaso: NarvaIroVasopressorStage, vent: NarvaIroVentilationStage, arrest: boolean, rosc: boolean,
