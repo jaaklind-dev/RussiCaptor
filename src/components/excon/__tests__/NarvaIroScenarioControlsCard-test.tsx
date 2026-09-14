@@ -225,6 +225,28 @@ describe("IRO EXCON scenario-control presentation", () => {
     await act(async () => renderer.unmount());
   });
 
+  test("accessibility activation uses the same stable submit path exactly once", async () => {
+    replaceCanonicalExerciseSnapshot({ exerciseId: "EX-IRO-ACCESSIBILITY", lifecycleState: "RUNNING",
+      simulationTimeSec: 12, speed: 1, version: 2, clockVersion: 1, clockInitializedAtSimulationTimeSec: 0 });
+    observeSharedWorkflowHead("EX-IRO-ACCESSIBILITY", "PT-IRO-001", 0);
+    publishScenario(iroScenario("PT-IRO-001", { lastUpdatedSimulationTimeSec: 12 }));
+    const gateway = gatewayWithResult({ status: "APPLIED", patientRevision: 1, commandSequence: 8 },
+      { status: "MATERIALIZED", result: { ok: true } });
+    setRuntimePatientCommandGateway(gateway);
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<NarvaIroScenarioControlsCard
+      exerciseId="EX-IRO-ACCESSIBILITY" patientId="PT-IRO-001" />); });
+    const control = renderer.root.findByProps({ testID: "iro-control-IRO_VASOPRESSOR_FAULT_START" });
+    expect(control.props.accessibilityRole).toBe("button");
+    expect(control.props.accessibilityLabel).toBe("Alusta katkestust");
+    expect(control.props.accessibilityState.disabled).toBe(false);
+    await act(async () => { control.props.onPress(); await Promise.resolve(); });
+    expect(gateway.submit).toHaveBeenCalledTimes(1);
+    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({ exerciseId: "EX-IRO-ACCESSIBILITY",
+      patientId: "PT-IRO-001", commandType: "IRO_VASOPRESSOR_FAULT_START", payload: {} }));
+    await act(async () => renderer.unmount());
+  });
+
   test("keeps the enabled responder stable across live projection rerenders", async () => {
     replaceCanonicalExerciseSnapshot({ exerciseId: "EX-IRO-STABLE-PRESS", lifecycleState: "RUNNING",
       simulationTimeSec: 12, speed: 1, version: 2, clockVersion: 1, clockInitializedAtSimulationTimeSec: 0 });

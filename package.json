@@ -54,6 +54,10 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
+    "test:guardrails": "node scripts/run-runtime-guardrails.mjs all",
+    "test:runtime-guardrails": "node scripts/run-runtime-guardrails.mjs runtime",
+    "test:multi-device-guardrails": "node scripts/run-runtime-guardrails.mjs multi-device",
+    "test:persistence-guardrails": "node scripts/run-runtime-guardrails.mjs persistence",
     "field-release:android": "node scripts/build-field-release.mjs",
     "field-release:verify": "node scripts/verify-field-release-config.mjs"
   },
