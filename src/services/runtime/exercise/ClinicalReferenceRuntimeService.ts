@@ -156,6 +156,12 @@ export async function prepareActiveClinicalReferenceRuntimeAsync(
 
 export function clearActiveClinicalReferenceRuntime(): void { active.forEach(item => item.dispose()); active = []; clearPatientTransportRuntime(); }
 
+/** Applies terminal semantics at the same authoritative Runtime boundary used for terminal checkpoint capture. */
+export function fenceActiveLaboratoryWorkflowsAtTerminal(exerciseId: string, simulationTimeSec: number): void {
+  assertActiveRuntimeExerciseIdentity(active, exerciseId);
+  active.forEach(item => item.engine.fenceLaboratoryAtTerminal(simulationTimeSec));
+}
+
 export function captureActiveClinicalReferenceRuntimes(expectedSimulationTimeSec?: number, expectedExerciseId?: string): readonly PersistedRuntimeState[] {
   if (!active.length) return [];
   if (expectedExerciseId !== undefined) assertActiveRuntimeExerciseIdentity(active, expectedExerciseId);

@@ -7,6 +7,7 @@ import { notifySync } from "@/services/SyncService";
 import type { ClinicalTreatmentRuntimeResult } from "@/models/ClinicalTreatment";
 import { ResourceAwareInterventionError } from "@/services/runtime/clinical/ResourceAwareInterventionError";
 import type { NarvaIroVentilationFault } from "@/models/NarvaIroScenario";
+import { getExercisePackage } from "@/services/exercise/ExercisePackageService";
 
 const readOnly = () => ({ ok: false as const, reason: "Runtime active on another device" });
 
@@ -157,6 +158,30 @@ export function createScenarioEngineInstructorRuntimeOwner(
       } catch (error) {
         return { ok: false, reason: error instanceof Error ? error.message : "IRO scenario control failed",
           controlAudit };
+      }
+    },
+    executeLaboratoryCommand(input) {
+      if (!runtimeWritesAllowed()) return readOnly();
+      try {
+        if (input.commandType === "LAB_ORDER") {
+          if (!input.labPackageId) return { ok: false, reason: "INVALID_COMMAND_PAYLOAD" };
+          const order = engine.orderLaboratory({ orderId: `LAB-ORDER:${input.commandId}`, exerciseId,
+            patientId, exercisePackageId: getExercisePackage(exerciseId).packageId,
+            labPackageId: input.labPackageId, orderedBy: input.actorUserId,
+            orderedAtSimulationTimeSec: input.simulationTimeSec });
+          notifySync("local");
+          return { ok: true, runtimeEventId: order.orderId };
+        }
+        if (!input.orderId) return { ok: false, reason: "INVALID_COMMAND_PAYLOAD" };
+        const collectionTime = engine.getSimulationTimeSec();
+        const sample = engine.collectLaboratorySample({ sampleId: `LAB-SAMPLE:${input.commandId}`,
+          orderId: input.orderId, sampledAtSimulationTimeSec: collectionTime,
+          sourcePatientRevision: input.patientRevision,
+          ...(input.patientBloodIdentity ? { patientBloodIdentity: input.patientBloodIdentity } : {}) });
+        notifySync("local");
+        return { ok: true, runtimeEventId: sample.sampleId };
+      } catch (error) {
+        return { ok: false, reason: error instanceof Error ? error.message : "Laboratory command failed" };
       }
     },
     advanceRuntime(commandId, durationSec, canonicalSimulationTimeSec) {

@@ -29,7 +29,7 @@ import {
 } from "@/services/exercise/ExercisePackageService";
 import { installCurrentExercise } from "@/repositories/ExerciseRepository";
 import { getPatientMaterialization, restorePatientMaterialization } from "@/services/exercise/PackagePatientMaterializationService";
-import { captureActiveClinicalReferenceRuntimes, captureActiveClinicalReferenceRuntimesAsync, clearActiveClinicalReferenceRuntime, isClinicalReferenceRuntimeReadReady, prepareActiveClinicalReferenceRuntime, prepareActiveClinicalReferenceRuntimeAsync } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
+import { captureActiveClinicalReferenceRuntimes, captureActiveClinicalReferenceRuntimesAsync, clearActiveClinicalReferenceRuntime, fenceActiveLaboratoryWorkflowsAtTerminal, isClinicalReferenceRuntimeReadReady, prepareActiveClinicalReferenceRuntime, prepareActiveClinicalReferenceRuntimeAsync } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
 import type { RuntimeCheckpointCanonicalRepresentation, RuntimeCheckpointEnvelope } from "@/models/RuntimeCheckpointAuthority";
 import {
   getRuntimeCheckpointCanonicalRepresentation,
@@ -148,6 +148,9 @@ function collectSharedExerciseState(): SharedExerciseState {
   const shared = collectSharedExerciseProjection();
   const simulationTimeSec = "simulationTimeSec" in shared.exerciseSession
     ? shared.exerciseSession.simulationTimeSec : shared.exerciseSession.currentMinute * 60;
+  if ("lifecycleState" in shared.exerciseSession && shared.exerciseSession.lifecycleState === "COMPLETED") {
+    fenceActiveLaboratoryWorkflowsAtTerminal(shared.exerciseSession.exerciseId, simulationTimeSec);
+  }
   const runtimePatientCommandCursor = getRuntimePatientCommandCursor(shared.exerciseSession.exerciseId);
   return { ...shared, persistedRuntimeStates: captureActiveClinicalReferenceRuntimes(simulationTimeSec, shared.exerciseSession.exerciseId),
     ...(runtimePatientCommandCursor > 0 ? { runtimePatientCommandCursor } : {}) };
@@ -165,6 +168,9 @@ async function collectSharedExerciseStateAsync(yieldControl: () => Promise<void>
   endSnapshot({ stage: "projection" });
   const simulationTimeSec = "simulationTimeSec" in shared.exerciseSession
     ? shared.exerciseSession.simulationTimeSec : shared.exerciseSession.currentMinute * 60;
+  if ("lifecycleState" in shared.exerciseSession && shared.exerciseSession.lifecycleState === "COMPLETED") {
+    fenceActiveLaboratoryWorkflowsAtTerminal(shared.exerciseSession.exerciseId, simulationTimeSec);
+  }
   const endMaterialize = startRuntimeWorkTrace("PRE_CANON_MATERIALIZE", {
     simulationTimeSec,
   });

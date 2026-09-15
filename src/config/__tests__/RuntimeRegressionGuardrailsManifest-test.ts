@@ -10,7 +10,8 @@ type GuardrailManifest = Readonly<{
     id: string;
     name: string;
     description: string;
-    phase: "CONTRACT_ONLY";
+    phase: "FOUNDATION";
+    tests: readonly string[];
   }>[];
   laboratoryContract: Readonly<{
     resultTimingsMinutesFromSample: Readonly<Record<string, number>>;
@@ -54,6 +55,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       manifest.document,
       manifest.runner,
       ...manifest.guardrails.flatMap(guardrail => guardrail.tests),
+      ...manifest.laboratoryGuardrails.flatMap(guardrail => guardrail.tests),
       ...Object.values(manifest.groups).flat(),
       ...manifest.historicalFailures.flatMap(failure => failure.tests),
     ]);
@@ -61,13 +63,14 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
   });
 
   test("exposes stable grouped commands through the manifest-backed runner", () => {
-    expect(Object.keys(manifest.groups).sort()).toEqual(["multi-device", "persistence", "runtime"]);
+    expect(Object.keys(manifest.groups).sort()).toEqual(["laboratory", "multi-device", "persistence", "runtime"]);
     expect(Object.values(manifest.groups).every(files => files.length > 0)).toBe(true);
     expect(packageJson.scripts).toMatchObject({
       "test:guardrails": "node scripts/run-runtime-guardrails.mjs all",
       "test:runtime-guardrails": "node scripts/run-runtime-guardrails.mjs runtime",
       "test:multi-device-guardrails": "node scripts/run-runtime-guardrails.mjs multi-device",
       "test:persistence-guardrails": "node scripts/run-runtime-guardrails.mjs persistence",
+      "test:lab-guardrails": "node scripts/run-runtime-guardrails.mjs laboratory",
     });
   });
 
@@ -85,7 +88,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
     const expectedLabIds = Array.from({ length: 16 }, (_, index) => `LAB-G${String(index + 1).padStart(2, "0")}`);
     expect(manifest.laboratoryGuardrails.map(guardrail => guardrail.id)).toEqual(expectedLabIds);
     expect(manifest.laboratoryGuardrails.every(guardrail => guardrail.name.length > 0 &&
-      guardrail.description.length > 0 && guardrail.phase === "CONTRACT_ONLY")).toBe(true);
+      guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);
     const allIds = [...manifest.guardrails.map(guardrail => guardrail.id),
       ...manifest.historicalFailures.map(failure => failure.id), ...expectedLabIds];
     expect(new Set(allIds).size).toBe(allIds.length);

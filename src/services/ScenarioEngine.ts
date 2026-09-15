@@ -103,6 +103,10 @@ import {
 import type { NarvaIroCorrectionIntentDecision, NarvaIroScenarioProjection,
   NarvaIroVentilationFault } from "@/models/NarvaIroScenario";
 import { NarvaIroScenarioRuntime } from "@/services/runtime/NarvaIroScenarioRuntime";
+import type { LabPatientBloodIdentity, LaboratoryOrder, LaboratoryResultGenerator,
+  LaboratorySample, LaboratoryWorkflowSnapshot, NarvaLabPackageId } from "@/models/LaboratoryWorkflow";
+import { LaboratoryWorkflowRuntime, assertLabPackageAllowed } from
+  "@/services/runtime/laboratory/LaboratoryWorkflowRuntime";
 
 export function runScenarioEvents(
 
@@ -300,6 +304,7 @@ export class ClinicalScenarioEngine {
   private readonly medicationEngine = new MedicationEngine();
   private readonly mechanicalVentilation = new MechanicalVentilationRuntime();
   private readonly narvaIroScenario = new NarvaIroScenarioRuntime();
+  private readonly laboratory: LaboratoryWorkflowRuntime;
   private vitalSignEvents: VitalSignEvent[] = [];
   private assessmentPublicationGeneration = 0;
   private assessmentPendingGeneration = 0;
@@ -308,6 +313,10 @@ export class ClinicalScenarioEngine {
   private assessmentBuildCount = 0;
   private assessmentStaleDiscardCount = 0;
   private assessmentPublicationCount = 0;
+
+  constructor(laboratoryResultGenerator?: LaboratoryResultGenerator) {
+    this.laboratory = new LaboratoryWorkflowRuntime(laboratoryResultGenerator);
+  }
 
   reset(fixture: GoldenFixture): void {
     this.lifecycleProcessStore.clear();
@@ -339,6 +348,7 @@ export class ClinicalScenarioEngine {
     this.circulationManagement.reset();
     this.medicationEngine.reset();
     this.mechanicalVentilation.reset();
+    this.laboratory.reset();
     const fixturePatientId = this.requireProcess().encounterId;
     this.narvaIroScenario.reset(fixtureState.narvaIroScenario === true ? fixturePatientId : undefined);
     if (fixtureState.narvaIroInitialTreatments === true) this.bootstrapNarvaIroInitialTreatments(fixturePatientId);
@@ -359,6 +369,7 @@ export class ClinicalScenarioEngine {
     }
     const targetTime = simulationTimeSec;
     if (this.narvaIroScenario.snapshot()) this.narvaIroScenario.advanceTo(targetTime);
+    this.laboratory.advanceTo(targetTime);
     for (const medicationEvent of this.medicationEngine.advanceTo(targetTime)) this.logEvent(medicationEvent.eventType, { ...medicationEvent }, medicationEvent.patientId);
     const root = this.rootProcess();
     if (root) {
@@ -673,6 +684,7 @@ export class ClinicalScenarioEngine {
       medication: this.medicationEngine.snapshot(),
       ...(this.mechanicalVentilation.snapshot() ? { mechanicalVentilation: this.mechanicalVentilation.snapshot() } : {}),
       ...(this.narvaIroScenario.snapshot() ? { narvaIroScenario: this.narvaIroScenario.snapshot() } : {}),
+      ...(this.laboratory.snapshot().orders.length ? { laboratory: this.laboratory.snapshot() } : {}),
       assessmentRules: this.assessmentRules,
       vitalSignEvents: boundedVitalSignEvents(this.vitalSignEvents),
     }) as PersistedRuntimePayload;
@@ -748,10 +760,46 @@ export class ClinicalScenarioEngine {
     this.medicationEngine.restore(candidate.medication);
     this.mechanicalVentilation.restore(candidate.mechanicalVentilation);
     this.narvaIroScenario.restore(candidate.narvaIroScenario);
+    this.laboratory.restore(candidate.laboratory);
     endClinicalRestore();
     this.assessmentRules = structuredClone(candidate.assessmentRules) as AssessmentRule[];
     this.vitalSignEvents = boundedVitalSignEvents(candidate.vitalSignEvents);
     endSubsystems({ resourceCount: candidate.resources.length, eventCount: candidate.eventLog.length });
+  }
+
+  orderLaboratory(input: Readonly<{ orderId: string; exerciseId: string; patientId: string;
+    exercisePackageId: string; labPackageId: NarvaLabPackageId; orderedBy: string;
+    orderedAtSimulationTimeSec: number }>): LaboratoryOrder {
+    assertLabPackageAllowed(input.exercisePackageId, input.labPackageId);
+    if (input.patientId !== this.requireRuntimeState().encounterId) throw new Error("LAB_PATIENT_IDENTITY_MISMATCH");
+    return this.laboratory.order({ orderId: input.orderId, exerciseId: input.exerciseId,
+      patientId: input.patientId, packageId: input.labPackageId,
+      orderedAtSimulationTimeSec: input.orderedAtSimulationTimeSec, orderedBy: input.orderedBy });
+  }
+
+  collectLaboratorySample(input: Readonly<{ sampleId: string; orderId: string;
+    sampledAtSimulationTimeSec: number; sourcePatientRevision: number;
+    patientBloodIdentity?: LabPatientBloodIdentity }>): LaboratorySample {
+    const runtime = this.getRuntimeState();
+    return this.laboratory.collect({ ...input, sourceRuntimeStateVersion: runtime.stateVersion,
+      snapshot: { displayedVitals: structuredClone(runtime.displayedVitals) as Record<string, number | string | boolean | null>,
+        targetVitals: structuredClone(runtime.targetVitals) as Record<string, number | string | boolean | null>,
+        runtimeFields: structuredClone(runtime.runtimeFields),
+        clinicalProcessInputs: this.orderedLifecycleLeaves("SERIALIZATION").map(process => ({
+          processId: process.processId, processType: process.processType,
+          runtimeContributions: structuredClone(process.outputs.runtimeContributions ?? {}),
+          ...(exposesSnapshotClinicalState(process) ? { clinicalState: structuredClone(process.clinicalState) } : {}),
+        })),
+        medicationState: this.medicationEngine.snapshot() as unknown as Readonly<Record<string, unknown>>,
+        ...(this.mechanicalVentilation.snapshot() ? {
+          ventilationState: this.mechanicalVentilation.snapshot() as unknown as Readonly<Record<string, unknown>> } : {}),
+        ...(input.patientBloodIdentity ? { patientBloodIdentity: input.patientBloodIdentity } : {}) } });
+  }
+
+  getLaboratoryWorkflow(): LaboratoryWorkflowSnapshot { return this.laboratory.snapshot(); }
+  getSimulationTimeSec(): number { return this.simulationTimeSec; }
+  fenceLaboratoryAtTerminal(simulationTimeSec = this.simulationTimeSec): void {
+    this.laboratory.fenceTerminal(simulationTimeSec);
   }
 
   /** Instructor command boundary: process transition first, canonical aggregation second. */

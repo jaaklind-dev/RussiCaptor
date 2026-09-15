@@ -6,6 +6,8 @@ import { handleResourceInterventionCommand, stopResourceInterventionCommand } fr
 import { startPatientTransport } from "@/services/runtime/exercise/PatientTransportRuntimeService";
 import { isNarvaIroScenarioControlCommandType } from "@/models/NarvaIroScenario";
 import { handleNarvaIroScenarioControlCommand } from "@/services/runtime/instructor/NarvaIroScenarioControlCommandService";
+import { handleLaboratoryCommand } from "@/services/runtime/instructor/LaboratoryCommandService";
+import type { LabPatientBloodIdentity, NarvaLabPackageId } from "@/models/LaboratoryWorkflow";
 
 function rejected(reason: string): RuntimePatientCommandMaterialization {
   return Object.freeze({ status: "REJECTED", result: Object.freeze({ ok: false, reason }) });
@@ -63,6 +65,19 @@ export function materializeRuntimePatientCommand(command: AcceptedRuntimePatient
         acceptedDurableSimulationTimeSec: command.simulationTimeSec });
       return Object.freeze({ status: result.ok ? "MATERIALIZED" : "REJECTED",
         result: Object.freeze({ ...result }) as unknown as Readonly<Record<string, unknown>> });
+    }
+    if (command.commandType === "LAB_ORDER" || command.commandType === "LAB_COLLECT") {
+      const labPackageId = command.payload.labPackageId as NarvaLabPackageId | undefined;
+      const orderId = typeof command.payload.orderId === "string" ? command.payload.orderId : undefined;
+      if ((command.commandType === "LAB_ORDER" && !labPackageId) ||
+        (command.commandType === "LAB_COLLECT" && !orderId)) return rejected("INVALID_COMMAND_PAYLOAD");
+      const result = handleLaboratoryCommand({ commandId: command.commandId, exerciseId: command.exerciseId,
+        patientId: command.patientId, commandType: command.commandType, actorUserId: command.actorUserId,
+        simulationTimeSec: command.simulationTimeSec, patientRevision: command.patientResultingRevision,
+        labPackageId, orderId,
+        patientBloodIdentity: command.payload.patientBloodIdentity as LabPatientBloodIdentity | undefined });
+      return Object.freeze({ status: result.ok ? "MATERIALIZED" : "REJECTED",
+        result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
     }
     return rejected("UNSUPPORTED_COMMAND_TYPE");
   } catch {

@@ -52,7 +52,7 @@ Exact paths and group membership are maintained in the executable manifest. A mi
 
 ## Laboratory regression guardrails
 
-Laboratory functionality is not implemented by this guardrail foundation. These contract-only entries freeze the acceptance boundaries that future laboratory architecture and feature work must turn into executable feature coverage.
+The durable laboratory lifecycle foundation is executable and mapped in the guardrail manifest. Clinical result physiology remains intentionally deferred; the tests below protect catalog scope, sample-time snapshots, timing, persistence, authority, exactly-once behavior, and terminal fencing.
 
 | ID | Guardrail | Frozen invariant |
 | --- | --- | --- |
@@ -71,7 +71,7 @@ Laboratory functionality is not implemented by this guardrail foundation. These 
 | LAB-G13 | Dynamic physiology source of truth | Astrup, lactate, iCa, glucose, Hb/Hct, platelets, INR/APTT/fibrinogen, and Na/K derive from authoritative physiology/state, not UI-local calculations. |
 | LAB-G14 | MTP/iCa coherence | Dynamic iCa and the MTP calcium recommendation are separate mechanisms: neither the fourth-RBC protocol trigger nor low iCa may substitute for the other state variable. |
 | LAB-G15 | No local recalculation of resulted sample | A `RESULTED` sample and result payload are immutable and cannot be regenerated from current physiology. |
-| LAB-G16 | Canonical persistence | Future laboratory persistence creates no reader-local revisions, restores deterministically, accepts authoritative persisted state, and introduces no semantic drift through recanonicalization. |
+| LAB-G16 | Canonical persistence | Laboratory persistence creates no reader-local revisions, restores deterministically, accepts authoritative persisted state, and introduces no semantic drift through recanonicalization. |
 
 ### Frozen Narva laboratory timing contract
 

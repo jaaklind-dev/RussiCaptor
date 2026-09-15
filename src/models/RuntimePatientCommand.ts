@@ -10,6 +10,8 @@ export const runtimePatientCommandTypes = [
   "IRO_VENTILATION_FAULT_CORRECT",
   "IRO_HOLD",
   "IRO_RESUME",
+  "LAB_ORDER",
+  "LAB_COLLECT",
 ] as const;
 
 export type RuntimePatientCommandType = typeof runtimePatientCommandTypes[number];

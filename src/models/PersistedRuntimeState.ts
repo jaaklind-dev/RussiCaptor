@@ -11,6 +11,7 @@ import type { VitalSignEvent } from "@/models/VitalSign";
 import type { AssessmentRule } from "@/models/ClinicalAssessment";
 import type { MechanicalVentilationRuntimeSnapshot } from "@/models/MechanicalVentilation";
 import type { NarvaIroScenarioSnapshot } from "@/models/NarvaIroScenario";
+import type { LaboratoryWorkflowSnapshot } from "@/models/LaboratoryWorkflow";
 
 export const LEGACY_PERSISTED_RUNTIME_SCHEMA_VERSION = 1 as const;
 export const PERSISTED_RUNTIME_SCHEMA_VERSION = 2 as const;
@@ -56,6 +57,7 @@ export type PersistedRuntimePayload = Readonly<{
   medication: MedicationRuntimeSnapshot;
   mechanicalVentilation?: MechanicalVentilationRuntimeSnapshot;
   narvaIroScenario?: NarvaIroScenarioSnapshot;
+  laboratory?: LaboratoryWorkflowSnapshot;
   assessmentRules: readonly AssessmentRule[];
   vitalSignEvents: readonly VitalSignEvent[];
 }>;
