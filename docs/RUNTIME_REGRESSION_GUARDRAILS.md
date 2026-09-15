@@ -121,6 +121,7 @@ Required release checks remain the unchanged persistence-performance test, Runti
 | H15 | HOLD/RESUME near an irreversible threshold lost a timely durable CORRECT intent to materialization latency | D/G/L/X | `NarvaIroScenarioControlCommand-test.ts`, `NarvaIroScenarioRuntime-test.ts`, `NarvaIroScenarioControlsCard-test.tsx` | Two-device near-threshold RESUME/CORRECT gate |
 | H16 | Lost publication response followed by a same-lineage CAS conflict manufactured publication authority loss and stranded accepted durable commands | A/G/P/U | `RuntimeCheckpointPublication-test.ts`, `RuntimeCheckpointPublicationValidationHarness-test.ts`, `RuntimeCheckpointStartup-test.ts` | Same-lineage lost-response reconciliation gate |
 | H17 | MTP calcium became due after only three qualifying RBC doses | C/G/K/X | `MtpCalciumReplacement-test.ts`, `GlobalTransfusionCalciumCounter-test.ts` | Single-device third-to-fourth MTP-dose boundary gate |
+| H18 | EXCON-only Runtime patient lacked a durable shared-workflow head and patient commands failed closed | A/G/H/I/S/U/Y | `SharedWorkflowHeadInitialization-test.ts`, `RuntimeCheckpointStartup-test.ts` | Existing-fixture workflow-head initialization and one-command smoke gate |
 
 No historical blocker may be removed from the manifest or left without an executable regression and a documented physical acceptance boundary.
 
