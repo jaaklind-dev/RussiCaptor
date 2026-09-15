@@ -1,4 +1,4 @@
-import { MTP_REFERENCE_CONFIGURATION, type MassiveTransfusionConfiguration, type MassiveTransfusionPatientProcessRuntime } from "@/models/MassiveTransfusion";
+import { MTP_REFERENCE_CONFIGURATION, getMtpCalciumRecommendationThreshold, type MassiveTransfusionConfiguration, type MassiveTransfusionPatientProcessRuntime } from "@/models/MassiveTransfusion";
 import { activateMassiveTransfusion, administerMtpCalcium, bootstrapMassiveTransfusionPatientProcess,
   drainMassiveTransfusionEvidence, startBloodProductAdministration, tickMassiveTransfusionPatientProcess } from "@/services/runtime/MassiveTransfusionPatientProcess";
 import { assessMtpCalcium } from "@/services/runtime/assessment/MtpCalciumAssessment";
@@ -14,19 +14,22 @@ function completeRbc(process: MassiveTransfusionPatientProcessRuntime, number: n
 }
 
 describe("WP-47B MTP calcium replacement", () => {
-  test("0, 1 and 2 completed RBC units do not make calcium due", () => {
+  test("0, 1, 2 and 3 completed RBC units do not make initial calcium due", () => {
     let process = fresh();
     expect(process.clinicalState.transfusionCalcium.calciumRecommended).toBe(false);
     process = completeRbc(process, 1); expect(process.clinicalState.transfusionCalcium.calciumRecommended).toBe(false);
     process = completeRbc(process, 2); expect(process.clinicalState.transfusionCalcium.calciumRecommended).toBe(false);
-    expect(process.clinicalState.transfusionCalcium.completedRbcUnitsTotal).toBe(2);
+    process = completeRbc(process, 3); expect(process.clinicalState.transfusionCalcium.calciumRecommended).toBe(false);
+    expect(process.clinicalState.transfusionCalcium.completedRbcUnitsTotal).toBe(3);
   });
 
-  test("the third completed RBC unit creates exactly one due obligation", () => {
+  test("the fourth completed RBC unit creates exactly one due obligation", () => {
     let process = fresh();
-    process = completeRbc(process, 1); process = completeRbc(process, 2); process = completeRbc(process, 3);
-    expect(process.clinicalState.transfusionCalcium).toMatchObject({ completedRbcUnitsTotal: 3, completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: true });
+    process = completeRbc(process, 1); process = completeRbc(process, 2); process = completeRbc(process, 3); process = completeRbc(process, 4);
+    expect(process.clinicalState.transfusionCalcium).toMatchObject({ completedRbcUnitsTotal: 4, completedRbcUnitsSinceLastCalcium: 4, calciumRecommended: true });
     expect(drainMassiveTransfusionEvidence(process).evidence.filter(item => item.eventType === "MTP_CALCIUM_DUE")).toHaveLength(1);
+    expect(drainMassiveTransfusionEvidence(tickMassiveTransfusionPatientProcess(process, 60)).evidence
+      .filter(item => item.eventType === "MTP_CALCIUM_DUE")).toHaveLength(1);
   });
 
   test("started RBC is not counted until canonical completion", () => {
@@ -77,14 +80,16 @@ describe("WP-47B MTP calcium replacement", () => {
       .toEqual(["CALCIUM-1", "CALCIUM-2", "CALCIUM-3"]);
   });
 
-  test("a second cycle becomes due after RBC six", () => {
-    let process = fresh();
-    for (let unit = 1; unit <= 3; unit += 1) process = completeRbc(process, unit);
+  test("after the corrected initial threshold, the existing three-unit repeat cycle is preserved", () => {
+    const configuration = { ...structuredClone(MTP_REFERENCE_CONFIGURATION),
+      initialInventory: { ...MTP_REFERENCE_CONFIGURATION.initialInventory, RBC: 8 } };
+    let process = fresh(configuration);
+    for (let unit = 1; unit <= 4; unit += 1) process = completeRbc(process, unit);
     process = administerMtpCalcium(process, "CALCIUM-1");
-    process = completeRbc(process, 4); expect(process.clinicalState.transfusionCalcium.calciumRecommended).toBe(false);
     process = completeRbc(process, 5); expect(process.clinicalState.transfusionCalcium.calciumRecommended).toBe(false);
-    process = completeRbc(process, 6); expect(process.clinicalState.transfusionCalcium.calciumRecommended).toBe(true);
-    expect(process.clinicalState.transfusionCalcium.completedRbcUnitsTotal).toBe(6);
+    process = completeRbc(process, 6); expect(process.clinicalState.transfusionCalcium.calciumRecommended).toBe(false);
+    process = completeRbc(process, 7); expect(process.clinicalState.transfusionCalcium.calciumRecommended).toBe(true);
+    expect(process.clinicalState.transfusionCalcium.completedRbcUnitsTotal).toBe(7);
   });
 
   test("overdue RBC units keep one obligation and calcium resets from its administration point", () => {
@@ -99,22 +104,26 @@ describe("WP-47B MTP calcium replacement", () => {
   test("restart and takeover copies preserve a single due obligation", () => {
     let process = fresh();
     process = completeRbc(process, 1); process = completeRbc(process, 2); process = completeRbc(process, 3);
+    const belowThreshold = structuredClone(structuredClone(process));
+    expect(belowThreshold.clinicalState.transfusionCalcium).toMatchObject({ completedRbcUnitsTotal: 3,
+      completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: false });
+    process = completeRbc(belowThreshold, 4);
     const restarted = structuredClone(process); const takenOver = structuredClone(restarted);
-    expect(takenOver.clinicalState.transfusionCalcium).toMatchObject({ completedRbcUnitsTotal: 3, completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: true });
+    expect(takenOver.clinicalState.transfusionCalcium).toMatchObject({ completedRbcUnitsTotal: 4, completedRbcUnitsSinceLastCalcium: 4, calciumRecommended: true });
     expect(administerMtpCalcium(takenOver, "CALCIUM-A").clinicalState.transfusionCalcium.calciumAdministrations).toHaveLength(1);
   });
 
   test("assessment is not applicable below threshold, not met while overdue and met after administration", () => {
     let process = fresh();
-    process = completeRbc(process, 1); process = completeRbc(process, 2);
+    process = completeRbc(process, 1); process = completeRbc(process, 2); process = completeRbc(process, 3);
     expect(assessMtpCalcium(process).status).toBe("NOT_APPLICABLE");
-    process = completeRbc(process, 3); expect(assessMtpCalcium(process).status).toBe("NOT_MET");
+    process = completeRbc(process, 4); expect(assessMtpCalcium(process).status).toBe("NOT_MET");
     process = administerMtpCalcium(process, "CALCIUM"); expect(assessMtpCalcium(process).status).toBe("MET");
   });
 
   test("calcium never changes MTP vital contributions", () => {
     let process = fresh();
-    process = completeRbc(process, 1); process = completeRbc(process, 2); process = completeRbc(process, 3);
+    process = completeRbc(process, 1); process = completeRbc(process, 2); process = completeRbc(process, 3); process = completeRbc(process, 4);
     const before = structuredClone(process.outputs.vitalContributions);
     expect(administerMtpCalcium(process, "CALCIUM").outputs.vitalContributions).toEqual(before);
   });
@@ -122,9 +131,9 @@ describe("WP-47B MTP calcium replacement", () => {
   test("feature-disabled configuration preserves blood-product behaviour and rejects calcium", () => {
     const configuration = { ...structuredClone(MTP_REFERENCE_CONFIGURATION), calciumReplacement: { ...MTP_REFERENCE_CONFIGURATION.calciumReplacement!, calciumEnabled: false } };
     let process = fresh(configuration);
-    process = completeRbc(process, 1); process = completeRbc(process, 2); process = completeRbc(process, 3);
+    process = completeRbc(process, 1); process = completeRbc(process, 2); process = completeRbc(process, 3); process = completeRbc(process, 4);
     expect(process.clinicalState.transfusionCalcium.calciumRecommended).toBe(false);
-    expect(process.clinicalState.administeredUnits.RBC).toBe(3);
+    expect(process.clinicalState.administeredUnits.RBC).toBe(4);
     expect(() => administerMtpCalcium(process, "CALCIUM")).toThrow("MTP_CALCIUM_DISABLED");
   });
 
@@ -141,5 +150,6 @@ describe("WP-47B MTP calcium replacement", () => {
     const engine = new ClinicalScenarioEngine(); engine.reset(fixture);
     expect(getCanonicalPatientRuntimeSnapshot("PT-CALCIUM")?.processes.find(item => item.moduleId === "MASSIVE_TRANSFUSION_V1")?.clinicalState?.transfusionCalcium)
       .toMatchObject({ rbcUnitsPerCalcium: 3, completedRbcUnitsTotal: 0, calciumRecommended: false });
+    expect(getMtpCalciumRecommendationThreshold({ rbcUnitsPerCalcium: 3, calciumAdministrationCount: 0 })).toBe(4);
   });
 });

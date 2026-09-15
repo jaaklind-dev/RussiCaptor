@@ -4,7 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots } from "@/services/RuntimeSnapshotService";
 import { createMtpCommandId, submitMtpCommand, type MtpAction } from "@/services/runtime/instructor/MassiveTransfusionCommandService";
-import type { BloodProductDeliveryMode, BloodProductInventory, VascularAccessLineId } from "@/models/MassiveTransfusion";
+import { getMtpCalciumRecommendationThreshold, type BloodProductDeliveryMode, type BloodProductInventory, type VascularAccessLineId } from "@/models/MassiveTransfusion";
 
 type MtpProjection = Readonly<{
   activated?: boolean;
@@ -14,6 +14,7 @@ type MtpProjection = Readonly<{
     completedRbcUnitsSinceLastCalcium?: number;
     rbcUnitsPerCalcium?: number | null;
     calciumRecommended?: boolean;
+    calciumAdministrationCount?: number;
   }>;
   vascularAccessCount?: number;
   vascularAccessLines?: readonly Readonly<{ lineId: string; status: "MISSING" | "FREE" | "OCCUPIED"; accessType?: string; administrationId?: string }>[];
@@ -34,6 +35,10 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
   const process = runtimeSnapshot?.processes.find(item => item.moduleId === "MASSIVE_TRANSFUSION_V1");
   const state = process?.clinicalState as MtpProjection | undefined;
   const calcium = state?.transfusionCalcium;
+  const calciumThreshold = calcium ? getMtpCalciumRecommendationThreshold({
+    rbcUnitsPerCalcium: calcium.rbcUnitsPerCalcium ?? null,
+    calciumAdministrationCount: calcium.calciumAdministrationCount ?? 0,
+  }) : null;
   const [submitting, setSubmitting] = useState<string>();
   const [message, setMessage] = useState<string>();
   const [selectedLineId, setSelectedLineId] = useState<VascularAccessLineId>();
@@ -89,8 +94,8 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
         </View>; })}
     </View>}
     <Text style={calcium?.calciumRecommended ? styles.due : styles.status}>
-      {calcium?.calciumRecommended ? "Kaltsium on näidustatud" : calcium?.rbcUnitsPerCalcium
-        ? `Kaltsium on näidustatud pärast ${calcium.rbcUnitsPerCalcium} lõpetatud erütrotsüüdiühikut · ${calcium.completedRbcUnitsSinceLastCalcium ?? 0}/${calcium.rbcUnitsPerCalcium}`
+      {calcium?.calciumRecommended ? "Kaltsium on näidustatud" : calciumThreshold
+        ? `Kaltsium on näidustatud pärast ${calciumThreshold} lõpetatud erütrotsüüdiühikut · ${calcium?.completedRbcUnitsSinceLastCalcium ?? 0}/${calciumThreshold}`
         : "Kaltsiumiasendus ei ole selles protokollis kasutusel"}
     </Text>
     {!readOnly && actions.map(({ action, label }) => <Pressable key={action} disabled={Boolean(submitting)}

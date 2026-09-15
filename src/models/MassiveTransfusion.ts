@@ -61,6 +61,11 @@ export type TransfusionCalciumSupportState = {
   calciumLastAdministeredAt: number | null;
   calciumAdministrationCount: number;
 };
+export function getMtpCalciumRecommendationThreshold(state: Pick<TransfusionCalciumSupportState,
+  "rbcUnitsPerCalcium" | "calciumAdministrationCount">): number | null {
+  if (state.rbcUnitsPerCalcium === null) return null;
+  return state.rbcUnitsPerCalcium + (state.calciumAdministrationCount === 0 ? 1 : 0);
+}
 export type MassiveTransfusionPatientProcessRuntime = {
   processId: string; encounterId: string; instanceKey: string; processType: "MASSIVE_TRANSFUSION";
   templateId: string; state: "Active" | "Controlled" | "Resolved"; elapsedTime: number; nextTick: number;

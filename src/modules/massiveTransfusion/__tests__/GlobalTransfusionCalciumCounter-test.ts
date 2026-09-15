@@ -14,14 +14,16 @@ const timed = (lineCount = 3) => reconcileMtpVascularAccess(bootstrapMassiveTran
   site: `SITE-${index + 1}`, establishedAt: index, resourceIds: [`RESOURCE-${index + 1}`] })));
 
 describe("WP-47E global RBC to calcium recommendation", () => {
-  test("three RBC completions count globally without MTP activation", () => {
+  test("four RBC completions count globally before the initial recommendation", () => {
     let process = inactive();
     process = completeRbc(process, "RBC-1");
     expect(state(process)).toMatchObject({ completedRbcUnitsSinceLastCalcium: 1, calciumRecommended: false });
     process = completeRbc(process, "RBC-2");
     expect(state(process)).toMatchObject({ completedRbcUnitsSinceLastCalcium: 2, calciumRecommended: false });
     process = completeRbc(process, "RBC-3");
-    expect(state(process)).toMatchObject({ completedRbcUnitsSinceLastCalcium: 3, completedRbcUnitsTotal: 3, calciumRecommended: true });
+    expect(state(process)).toMatchObject({ completedRbcUnitsSinceLastCalcium: 3, completedRbcUnitsTotal: 3, calciumRecommended: false });
+    process = completeRbc(process, "RBC-4");
+    expect(state(process)).toMatchObject({ completedRbcUnitsSinceLastCalcium: 4, completedRbcUnitsTotal: 4, calciumRecommended: true });
     expect(process.clinicalState.activated).toBe(false);
   });
 
@@ -38,7 +40,9 @@ describe("WP-47E global RBC to calcium recommendation", () => {
     process = activateMassiveTransfusion(process, "ACTIVATE");
     expect(state(process).completedRbcUnitsSinceLastCalcium).toBe(2);
     process = completeRbc(process, "RBC-3");
-    expect(state(process)).toMatchObject({ completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: true });
+    expect(state(process)).toMatchObject({ completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: false });
+    process = completeRbc(process, "RBC-4");
+    expect(state(process)).toMatchObject({ completedRbcUnitsSinceLastCalcium: 4, calciumRecommended: true });
   });
 
   test("early and repeated calcium remain valid without MTP", () => {
@@ -86,21 +90,23 @@ describe("WP-47E global RBC to calcium recommendation", () => {
     process = startBloodProductAdministration(process, "RBC-2", "RBC", 1, "GRAVITY");
     process = startBloodProductAdministration(process, "RBC-3", "RBC", 1, "GRAVITY");
     process = tickMassiveTransfusionPatientProcess(process, 720);
-    expect(state(process)).toMatchObject({ completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: true });
+    expect(state(process)).toMatchObject({ completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: false });
     expect(state(tickMassiveTransfusionPatientProcess(process, 60)).completedRbcUnitsSinceLastCalcium).toBe(3);
   });
 
-  test("restart and takeover preserve counter two and the next completion reaches recommendation", () => {
+  test("restart and takeover preserve the initial fourth-dose boundary", () => {
     const deviceA = completeRbc(completeRbc(inactive(), "RBC-1"), "RBC-2");
     const restarted = structuredClone(deviceA);
     const deviceB = structuredClone(restarted);
     expect(state(deviceB).completedRbcUnitsSinceLastCalcium).toBe(2);
-    expect(state(completeRbc(deviceB, "RBC-3"))).toMatchObject({ completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: true });
+    const afterThree = completeRbc(deviceB, "RBC-3");
+    expect(state(afterThree)).toMatchObject({ completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: false });
+    expect(state(completeRbc(afterThree, "RBC-4"))).toMatchObject({ completedRbcUnitsSinceLastCalcium: 4, calciumRecommended: true });
   });
 
   test("restart preserves an already recommended state", () => {
-    const process = completeRbc(completeRbc(completeRbc(inactive(), "RBC-1"), "RBC-2"), "RBC-3");
-    expect(state(structuredClone(process))).toMatchObject({ completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: true });
+    const process = completeRbc(completeRbc(completeRbc(completeRbc(inactive(), "RBC-1"), "RBC-2"), "RBC-3"), "RBC-4");
+    expect(state(structuredClone(process))).toMatchObject({ completedRbcUnitsSinceLastCalcium: 4, calciumRecommended: true });
   });
 
   test("legacy WP-47B flat checkpoint migrates to one canonical state", () => {
@@ -118,9 +124,9 @@ describe("WP-47E global RBC to calcium recommendation", () => {
   });
 
   test("assessment is driven by global exposure even when MTP was never activated", () => {
-    let process = completeRbc(completeRbc(inactive(), "RBC-1"), "RBC-2");
+    let process = completeRbc(completeRbc(completeRbc(inactive(), "RBC-1"), "RBC-2"), "RBC-3");
     expect(assessMtpCalcium(process).status).toBe("NOT_APPLICABLE");
-    process = completeRbc(process, "RBC-3");
+    process = completeRbc(process, "RBC-4");
     expect(process.clinicalState.activated).toBe(false);
     expect(assessMtpCalcium(process).status).toBe("NOT_MET");
     expect(assessMtpCalcium(administerMtpCalcium(process, "CALCIUM")).status).toBe("MET");

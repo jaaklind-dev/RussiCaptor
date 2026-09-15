@@ -180,7 +180,7 @@ describe("WP-47C delivery rate and vascular access capacity", () => {
     process = tickMassiveTransfusionPatientProcess(process, 719);
     expect(process.clinicalState.transfusionCalcium).toMatchObject({ completedRbcUnitsTotal: 0, calciumRecommended: false });
     process = tickMassiveTransfusionPatientProcess(process, 1);
-    expect(process.clinicalState.transfusionCalcium).toMatchObject({ completedRbcUnitsTotal: 3, completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: true });
+    expect(process.clinicalState.transfusionCalcium).toMatchObject({ completedRbcUnitsTotal: 3, completedRbcUnitsSinceLastCalcium: 3, calciumRecommended: false });
   });
 
   test("restart and takeover preserve occupancy, modes and completion times", () => {

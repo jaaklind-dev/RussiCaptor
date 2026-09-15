@@ -42,7 +42,9 @@
       "src/components/excon/__tests__/NarvaIroScenarioControlsCard-test.tsx",
       "src/services/__tests__/RemoteClinicalSync-test.ts",
       "src/services/clinical/__tests__/ClinicalTreatmentUI-test.tsx",
-      "src/services/runtime/medication/__tests__/TranexamicAcid-test.ts"
+      "src/services/runtime/medication/__tests__/TranexamicAcid-test.ts",
+      "src/modules/massiveTransfusion/__tests__/MtpCalciumReplacement-test.ts",
+      "src/modules/massiveTransfusion/__tests__/GlobalTransfusionCalciumCounter-test.ts"
     ],
     "multi-device": [
       "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts",
@@ -89,6 +91,7 @@
     { "id": "H13", "failure": "post-restart CM ownership projection loss", "invariant": "I/J/Y", "tests": ["src/services/sharedWorkflow/__tests__/CmOwnershipProjectionRestore-test.ts", "src/services/sharedWorkflow/__tests__/CmOwnershipProjectionPresentation-test.ts"], "physicalGate": "self-owned patient restart/open gate" },
     { "id": "H14", "failure": "READY reader rejected behind continuously advancing writer", "invariant": "D/E/H", "tests": ["src/services/runtime/commands/__tests__/ClinicalTreatmentRuntimePatientCommandMaterializer-test.ts"], "physicalGate": "reader-intent lag gate" },
     { "id": "H15", "failure": "HOLD/RESUME near irreversible threshold lost timely durable CORRECT intent to materialization latency", "invariant": "D/G/L/X", "tests": ["src/services/runtime/commands/__tests__/NarvaIroScenarioControlCommand-test.ts", "src/services/runtime/__tests__/NarvaIroScenarioRuntime-test.ts", "src/components/excon/__tests__/NarvaIroScenarioControlsCard-test.tsx"], "physicalGate": "two-device near-threshold RESUME/CORRECT gate" },
-    { "id": "H16", "failure": "lost publication response followed by same-lineage CAS conflict manufactured publication authority loss and stranded accepted durable commands", "invariant": "A/G/P/U", "tests": ["src/services/runtime/persistence/__tests__/RuntimeCheckpointPublication-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointPublicationValidationHarness-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"], "physicalGate": "same-lineage lost-response reconciliation gate" }
+    { "id": "H16", "failure": "lost publication response followed by same-lineage CAS conflict manufactured publication authority loss and stranded accepted durable commands", "invariant": "A/G/P/U", "tests": ["src/services/runtime/persistence/__tests__/RuntimeCheckpointPublication-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointPublicationValidationHarness-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"], "physicalGate": "same-lineage lost-response reconciliation gate" },
+    { "id": "H17", "failure": "MTP calcium became due after only three qualifying RBC doses", "invariant": "C/G/K/X", "tests": ["src/modules/massiveTransfusion/__tests__/MtpCalciumReplacement-test.ts", "src/modules/massiveTransfusion/__tests__/GlobalTransfusionCalciumCounter-test.ts"], "physicalGate": "single-device third-to-fourth MTP-dose boundary gate" }
   ]
 }

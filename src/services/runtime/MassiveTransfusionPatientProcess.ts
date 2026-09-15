@@ -1,4 +1,4 @@
-import { MTP_REFERENCE_CONFIGURATION, isUnlimitedBloodProductInventory, type BloodProductDeliveryMode, type BloodProductInventory, type BloodProductType, type MassiveTransfusionConfiguration, type MassiveTransfusionEvidence, type MassiveTransfusionPatientProcessRuntime, type TransfusionCalciumSupportState, type VascularAccessLineId } from "@/models/MassiveTransfusion";
+import { MTP_REFERENCE_CONFIGURATION, getMtpCalciumRecommendationThreshold, isUnlimitedBloodProductInventory, type BloodProductDeliveryMode, type BloodProductInventory, type BloodProductType, type MassiveTransfusionConfiguration, type MassiveTransfusionEvidence, type MassiveTransfusionPatientProcessRuntime, type TransfusionCalciumSupportState, type VascularAccessLineId } from "@/models/MassiveTransfusion";
 import type { ActiveVascularAccess } from "@/models/CirculationState";
 import type { ProcessOutput } from "@/models/RuntimeAggregation";
 
@@ -231,10 +231,12 @@ export function tickMassiveTransfusionPatientProcess(previous: MassiveTransfusio
         state.completedRbcUnitsTotal = precise(state.completedRbcUnitsTotal + item.units);
         state.completedRbcUnitsSinceLastCalcium = precise(state.completedRbcUnitsSinceLastCalcium + item.units);
         const calcium = calciumConfiguration(base.configuration);
-        if (calcium.calciumEnabled && !state.calciumRecommended && state.completedRbcUnitsSinceLastCalcium >= calcium.rbcUnitsPerCalcium) {
+        const recommendationThreshold = getMtpCalciumRecommendationThreshold(state);
+        if (calcium.calciumEnabled && recommendationThreshold !== null && !state.calciumRecommended &&
+          state.completedRbcUnitsSinceLastCalcium >= recommendationThreshold) {
           state.calciumRecommended = true;
           evidence.push({ eventType: "MTP_CALCIUM_DUE", details: { completedRbcUnitsTotal: state.completedRbcUnitsTotal,
-            completedRbcUnitsSinceLastCalcium: state.completedRbcUnitsSinceLastCalcium, threshold: calcium.rbcUnitsPerCalcium } });
+            completedRbcUnitsSinceLastCalcium: state.completedRbcUnitsSinceLastCalcium, threshold: recommendationThreshold } });
         }
       }
       if (item.vascularAccessLineId) base.clinicalState.vascularAccessLines = base.clinicalState.vascularAccessLines.map(line =>
