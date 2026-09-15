@@ -30,6 +30,38 @@
     { "id": "Y", "name": "multi-cm", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowConcurrency-test.ts", "src/services/sharedWorkflow/__tests__/CmOwnershipProjectionRestore-test.ts", "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts"] },
     { "id": "Z", "name": "physical-acceptance-policy", "tests": ["src/services/operations/__tests__/MultiDeviceRehearsalPreparation-test.ts", "src/config/__tests__/SharedWorkflowValidationHarness-test.ts"] }
   ],
+  "laboratoryGuardrails": [
+    { "id": "LAB-G01", "name": "sample-snapshot-immutability", "description": "A collected sample retains an immutable authoritative physiological source snapshot across later treatment, physiology, restart and takeover changes.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G02", "name": "result-uses-sample-time", "description": "A released result represents physiology at sampledAt rather than resultAvailableAt.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G03", "name": "exactly-once-order-sample-result", "description": "Retry, reconnect, restart, rerender and takeover cannot duplicate an order, sample, result or result-group release.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G04", "name": "single-writer-authority", "description": "Only authoritative Runtime writer state advances laboratory workflow; readers use supported durable commands and never generate authoritative results locally.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G05", "name": "reader-convergence", "description": "Readers converge on the same order, sample time, availability time, result payload and status without local result generation.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G06", "name": "restart-takeover-determinism", "description": "A persisted sample produces the same result after app, writer or reader restart and writer takeover, without rerandomization or later-state recomputation.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G07", "name": "timing-persistence", "description": "Configured result availability remains anchored to sample time and countdowns do not reset during restart or takeover.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G08", "name": "no-early-release", "description": "No result group reaches RESULTED before its configured availability time.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G09", "name": "independent-result-groups", "description": "Releasing one result group neither releases another group early nor changes any group's sample snapshot.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G10", "name": "terminal-fencing", "description": "Terminal exercise fencing prevents new laboratory progression, result generation, prohibited pending release and workflow resurrection.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G11", "name": "package-scope", "description": "Laboratory exposure remains limited to the frozen EMO trauma and IRO package scopes.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G12", "name": "ab0-identity-stability", "description": "Patient AB0 and RhD identity remains stable across repeated sampling, restart and takeover.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G13", "name": "dynamic-physiology-source-of-truth", "description": "Dynamic results derive from authoritative physiology and state rather than UI-local calculations.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G14", "name": "mtp-ica-coherence", "description": "Dynamic ionized calcium and the MTP calcium recommendation remain distinct mechanisms without hard-coded substitution in either direction.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G15", "name": "no-resulted-sample-recalculation", "description": "A RESULTED sample and payload are immutable and cannot be regenerated from current physiology.", "phase": "CONTRACT_ONLY" },
+    { "id": "LAB-G16", "name": "canonical-persistence", "description": "Future laboratory persistence forbids reader-local revisions, restores deterministically and gives authoritative persisted state precedence without semantic drift.", "phase": "CONTRACT_ONLY" }
+  ],
+  "laboratoryContract": {
+    "resultTimingsMinutesFromSample": {
+      "Astrup": 25,
+      "Hematology": 30,
+      "AB0_RhD_AntibodyScreen": 30,
+      "ClinicalChemistry": 40,
+      "Coagulation": 40
+    },
+    "packageScope": {
+      "emoTrauma": { "include": ["POLÜTRAUMA"], "exclude": ["SARS-CoV-2", "influenza", "urine analyses", "U-Narco"] },
+      "iro": { "include": ["Astrup"] }
+    },
+    "futureWorkPackageStatement": "All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G16, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed."
+  },
   "groups": {
     "runtime": [
       "src/services/runtime/persistence/__tests__/RuntimeWriterAuthorityState-test.ts",

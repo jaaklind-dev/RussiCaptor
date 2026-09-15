@@ -48,7 +48,43 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H16 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/LAB-G01–LAB-G16 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+
+## Laboratory regression guardrails
+
+Laboratory functionality is not implemented by this guardrail foundation. These contract-only entries freeze the acceptance boundaries that future laboratory architecture and feature work must turn into executable feature coverage.
+
+| ID | Guardrail | Frozen invariant |
+| --- | --- | --- |
+| LAB-G01 | Sample snapshot immutability | A collected sample retains an immutable authoritative physiological source snapshot. Later transfusion, calcium, fluids, ventilation, hemorrhage, restart, or takeover cannot alter it retroactively. |
+| LAB-G02 | Result uses sample time | Results reflect physiology at `sampledAt`, never physiology at `resultAvailableAt`. |
+| LAB-G03 | Exactly-once order/sample/result | Retry, reconnect, rerender, restart, and takeover cannot duplicate an order, sample, result, or result-group release. |
+| LAB-G04 | Single writer authority | Only authoritative Runtime authority advances laboratory state. Readers use supported durable commands and never generate authoritative results locally. |
+| LAB-G05 | Reader convergence | Readers converge on identical order, sample time, availability time, result payload, and status without local result generation. |
+| LAB-G06 | Restart/takeover determinism | A persisted sample produces the same result after app, writer, or reader restart and writer takeover, without rerandomization or later-state recomputation. |
+| LAB-G07 | Timing persistence | Result countdowns are fixed relative to sample time and do not reset during restart or takeover. |
+| LAB-G08 | No early release | No result group becomes `RESULTED` before its configured availability time. |
+| LAB-G09 | Independent result groups | Releasing one group cannot release another early or modify any group's sample snapshot. |
+| LAB-G10 | Terminal fencing | Established terminal semantics prevent new laboratory progression, new results, prohibited pending release, and workflow resurrection. |
+| LAB-G11 | Package scope | Laboratory exposure remains within the frozen EMO trauma and IRO scopes below. |
+| LAB-G12 | AB0 identity stability | Patient AB0/RhD identity cannot change through repeated sampling, restart, or takeover. |
+| LAB-G13 | Dynamic physiology source of truth | Astrup, lactate, iCa, glucose, Hb/Hct, platelets, INR/APTT/fibrinogen, and Na/K derive from authoritative physiology/state, not UI-local calculations. |
+| LAB-G14 | MTP/iCa coherence | Dynamic iCa and the MTP calcium recommendation are separate mechanisms: neither the fourth-RBC protocol trigger nor low iCa may substitute for the other state variable. |
+| LAB-G15 | No local recalculation of resulted sample | A `RESULTED` sample and result payload are immutable and cannot be regenerated from current physiology. |
+| LAB-G16 | Canonical persistence | Future laboratory persistence creates no reader-local revisions, restores deterministically, accepts authoritative persisted state, and introduces no semantic drift through recanonicalization. |
+
+### Frozen Narva laboratory timing contract
+
+Availability is measured from sample collection time: Astrup 25 minutes; Hematology 30 minutes; AB0/RhD plus antibody screen 30 minutes; Clinical chemistry 40 minutes; Coagulation 40 minutes. Result release time never changes the frozen sample-time physiological source.
+
+### Frozen laboratory package scope
+
+- EMO/trauma includes the POLÜTRAUMA laboratory package and excludes SARS-CoV-2, influenza, all urine analyses, and U-Narco.
+- IRO exposes Astrup only.
+
+### Mandatory statement for every future laboratory WP
+
+> All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G16, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed.
 
 ## Performance and physical acceptance
 

@@ -6,6 +6,20 @@ type GuardrailManifest = Readonly<{
   document: string;
   runner: string;
   guardrails: readonly Readonly<{ id: string; name: string; tests: readonly string[] }>[];
+  laboratoryGuardrails: readonly Readonly<{
+    id: string;
+    name: string;
+    description: string;
+    phase: "CONTRACT_ONLY";
+  }>[];
+  laboratoryContract: Readonly<{
+    resultTimingsMinutesFromSample: Readonly<Record<string, number>>;
+    packageScope: Readonly<{
+      emoTrauma: Readonly<{ include: readonly string[]; exclude: readonly string[] }>;
+      iro: Readonly<{ include: readonly string[] }>;
+    }>;
+    futureWorkPackageStatement: string;
+  }>;
   groups: Readonly<Record<string, readonly string[]>>;
   historicalFailures: readonly Readonly<{
     id: string;
@@ -65,5 +79,35 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
     expect(document).toContain("## Historical blocker mapping");
     expect(document).toContain("da184dfe5e9916fc4f401470cb3715b353746950630d892c3acf33c393fa2b95");
     expect(document).toContain("6c099abc91940639891adb36fa4a1e91e9f0c39336b769ec96622b7f4eecdfd0");
+  });
+
+  test("keeps the complete laboratory contract catalog unique and explicit", () => {
+    const expectedLabIds = Array.from({ length: 16 }, (_, index) => `LAB-G${String(index + 1).padStart(2, "0")}`);
+    expect(manifest.laboratoryGuardrails.map(guardrail => guardrail.id)).toEqual(expectedLabIds);
+    expect(manifest.laboratoryGuardrails.every(guardrail => guardrail.name.length > 0 &&
+      guardrail.description.length > 0 && guardrail.phase === "CONTRACT_ONLY")).toBe(true);
+    const allIds = [...manifest.guardrails.map(guardrail => guardrail.id),
+      ...manifest.historicalFailures.map(failure => failure.id), ...expectedLabIds];
+    expect(new Set(allIds).size).toBe(allIds.length);
+  });
+
+  test("freezes Narva laboratory timing, package scope and future-WP policy", () => {
+    expect(manifest.laboratoryContract.resultTimingsMinutesFromSample).toEqual({
+      Astrup: 25,
+      Hematology: 30,
+      AB0_RhD_AntibodyScreen: 30,
+      ClinicalChemistry: 40,
+      Coagulation: 40,
+    });
+    expect(manifest.laboratoryContract.packageScope).toEqual({
+      emoTrauma: { include: ["POLÜTRAUMA"], exclude: ["SARS-CoV-2", "influenza", "urine analyses", "U-Narco"] },
+      iro: { include: ["Astrup"] },
+    });
+    expect(manifest.laboratoryContract.futureWorkPackageStatement).toBe(
+      "All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G16, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed.",
+    );
+    const document = readFileSync(resolve(root, manifest.document), "utf8");
+    for (const guardrail of manifest.laboratoryGuardrails) expect(document).toContain(`| ${guardrail.id} |`);
+    expect(document).toContain(manifest.laboratoryContract.futureWorkPackageStatement);
   });
 });
