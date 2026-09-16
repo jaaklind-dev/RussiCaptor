@@ -28,6 +28,17 @@ describe("WP-41A authorization foundation", () => {
     expect((await service.authorize(value, "INSTRUCTOR_EVALUATION_READ", { exerciseId: "EX-1" })).status).toBe("AUTHORIZED");
     expect((await service.authorize(value, "INSTRUCTOR_EVALUATION_WRITE", { exerciseId: "EX-1" })).status).toBe("AUTHORIZED");
   });
+  it("grants bootstrap only fresh-exercise creation and no EXCON Runtime authority", async () => {
+    const bootstrap = globalAssignment({ role: "EXERCISE_BOOTSTRAP" });
+    const service = new AuthorizationService({ append: async () => undefined });
+    expect(permissionsForRole("EXERCISE_BOOTSTRAP")).toEqual(["EXERCISE_BOOTSTRAP_CREATE"]);
+    await expect(service.authorize(state(principal([bootstrap])), "EXERCISE_BOOTSTRAP_CREATE"))
+      .resolves.toMatchObject({ status: "AUTHORIZED" });
+    await expect(service.authorize(state(principal([bootstrap])), "EXCON_EXERCISE_CONTROL", { exerciseId: "EX-1" }))
+      .resolves.toMatchObject({ status: "DENIED", reason: "PERMISSION_DENIED" });
+    await expect(service.authorize(state(principal([bootstrap])), "EXERCISE_RUNTIME_RECOVERY", { exerciseId: "EX-1" }))
+      .resolves.toMatchObject({ status: "DENIED", reason: "PERMISSION_DENIED" });
+  });
   it("fails closed for unauthenticated, unavailable, no-role, cached and stale states", async () => {
     const service = new AuthorizationService();
     expect((await service.authorize({ state: "UNAUTHENTICATED" }, "INSTRUCTOR_EVALUATION_WRITE")).status).toBe("DENIED");

@@ -1,7 +1,7 @@
 import type { OperatorSessionState } from "@/services/authorization/OperatorSessionService";
 import { resolveOperatorLandingNavigationTarget, resolveOperatorLandingRoute } from "../OperatorRouteService";
 
-function authenticated(role: "CM" | "EXCON", scopeId?: string): OperatorSessionState {
+function authenticated(role: "CM" | "EXCON" | "EXERCISE_BOOTSTRAP", scopeId?: string): OperatorSessionState {
   return {
     state: "AUTHENTICATED",
     profile: { userId: "USER-1", displayName: "Test Operator" },
@@ -22,6 +22,9 @@ describe("operator landing route", () => {
   });
   test("routes an exercise-scoped EXCON to EXCON for the current exercise", () => {
     expect(resolveOperatorLandingRoute(authenticated("EXCON", "EX-1"), "EX-1")).toBe("/excon");
+  });
+  test("routes a one-shot exercise bootstrap operator only to the EXCON preparation surface", () => {
+    expect(resolveOperatorLandingRoute(authenticated("EXERCISE_BOOTSTRAP"), "EX-OLD")).toBe("/excon");
   });
   test("fails closed for a role scoped to another exercise", () => {
     expect(resolveOperatorLandingRoute(authenticated("CM", "EX-2"), "EX-1")).toBe("/");

@@ -20,8 +20,9 @@ function ProductionRouteGate() {
     if (!root || root === "_sitemap") return;
     if (operator.state !== "AUTHENTICATED") { router.replace("/"); return; }
     const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
-    if (root === "excon" && !hasActiveRole(operator, "EXCON", exerciseId)) router.replace("/");
-    else if (root !== "excon" && !hasActiveRole(operator, "CM", exerciseId)) router.replace(hasActiveRole(operator, "EXCON", exerciseId) ? "/excon" : "/");
+    const bootstrap = hasActiveRole(operator, "EXERCISE_BOOTSTRAP");
+    if (root === "excon" && !hasActiveRole(operator, "EXCON", exerciseId) && !bootstrap) router.replace("/");
+    else if (root !== "excon" && !hasActiveRole(operator, "CM", exerciseId)) router.replace(hasActiveRole(operator, "EXCON", exerciseId) || bootstrap ? "/excon" : "/");
   }, [operator, segments]);
   return null;
 }

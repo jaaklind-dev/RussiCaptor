@@ -9,6 +9,7 @@ export function resolveOperatorLandingRoute(
 ): OperatorLandingRoute {
   if (hasActiveRole(operator, "CM", exerciseId)) return "/dashboard";
   if (hasActiveRole(operator, "EXCON", exerciseId)) return "/excon";
+  if (hasActiveRole(operator, "EXERCISE_BOOTSTRAP")) return "/excon";
   return "/";
 }
 

@@ -153,6 +153,32 @@ export function canOperatorPublishCloudProjection(
   return hasActiveRole(operator, "EXCON", exerciseId);
 }
 
+export function canOperatorBootstrapCloudProjection(
+  operator: OperatorSessionState,
+  exerciseId: string,
+  lifecycleState: string,
+  remoteRevisionKnown: boolean,
+): boolean {
+  return lifecycleState === "READY" && !remoteRevisionKnown
+    && Boolean(exerciseId)
+    && hasActiveRole(operator, "EXERCISE_BOOTSTRAP");
+}
+
+export function cloudProjectionWriteMethod(
+  scopedExerciseControl: boolean,
+  bootstrapCreate: boolean,
+): "INSERT" | "UPSERT" {
+  return bootstrapCreate && !scopedExerciseControl ? "INSERT" : "UPSERT";
+}
+
+export function cloudProjectionReturnsServerRow(writeMethod: "INSERT" | "UPSERT"): boolean {
+  // A bootstrap INSERT is authorized and bound by a BEFORE trigger. Asking
+  // PostgREST for RETURNING data in that same statement re-evaluates SELECT
+  // visibility before the trigger-bound grant is visible to the statement
+  // snapshot. The committed row is already known exactly on this path.
+  return writeMethod !== "INSERT";
+}
+
 export function isRemoteRuntimeLifecycleActive(exerciseId: string): boolean | undefined {
   if (!latestRemoteExercise || latestRemoteExercise.exerciseId !== exerciseId) return undefined;
   return latestRemoteExercise.lifecycleState === "RUNNING" || latestRemoteExercise.lifecycleState === "PAUSED";
@@ -444,6 +470,7 @@ export async function publishExplicitlySelectedTerminalExercise(): Promise<boole
 type PreparedCloudProjection = Readonly<{
   exerciseId: string;
   lifecycleState: string;
+  writeMethod: "INSERT" | "UPSERT";
   savedSession: SharedExerciseState["exerciseSession"];
   sharedProjection: SharedExerciseState;
 }>;
@@ -451,12 +478,20 @@ type PreparedCloudProjection = Readonly<{
 function prepareCloudProjection(): ExerciseProjectionCandidate<PreparedCloudProjection> | undefined {
   if (!supabase || applyingRemoteState || !canPublishCloudProjection(remoteSelectionState)) return undefined;
   const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
-  if (!canOperatorPublishCloudProjection(getOperatorSession(), exerciseId)) return undefined;
   const baseProjection = compactActiveExerciseState(createSharedExerciseProjection());
   const savedSession = baseProjection.exerciseSession;
   const lifecycleState = "lifecycleState" in savedSession
     ? savedSession.lifecycleState
-    : savedSession.state === "running" ? "RUNNING" : savedSession.state === "paused" ? "PAUSED" : "READY";
+      : savedSession.state === "running" ? "RUNNING" : savedSession.state === "paused" ? "PAUSED" : "READY";
+  const operator = getOperatorSession();
+  const scopedExerciseControl = canOperatorPublishCloudProjection(operator, exerciseId);
+  const bootstrapCreate = canOperatorBootstrapCloudProjection(
+    operator,
+    exerciseId,
+    lifecycleState,
+    remoteVersions.has(exerciseId),
+  );
+  if (!scopedExerciseControl && !bootstrapCreate) return undefined;
   // Terminal checkpoint and discovery projection are committed by one fenced
   // RPC; a separate projection write could otherwise reintroduce split-brain.
   if (lifecycleState === "COMPLETED" && terminalProjectionOwnedByCheckpointProtocol(exerciseId)) return undefined;
@@ -474,7 +509,9 @@ function prepareCloudProjection(): ExerciseProjectionCandidate<PreparedCloudProj
   }
   const { identity, payloadBytes } = exerciseProjectionIdentity(sharedProjection);
   return { identity, payloadBytes,
-    value: { exerciseId, lifecycleState, savedSession, sharedProjection } };
+    value: { exerciseId, lifecycleState,
+      writeMethod: cloudProjectionWriteMethod(scopedExerciseControl, bootstrapCreate),
+      savedSession, sharedProjection } };
 }
 
 async function publishCloudProjection(candidate: ExerciseProjectionCandidate<PreparedCloudProjection>): Promise<boolean> {
@@ -484,32 +521,41 @@ async function publishCloudProjection(candidate: ExerciseProjectionCandidate<Pre
   const user = authData.user;
   if (!user) return false;
 
-  const { exerciseId, lifecycleState, savedSession, sharedProjection } = candidate.value;
+  const { exerciseId, lifecycleState, writeMethod, savedSession, sharedProjection } = candidate.value;
   const nextRevision = (remoteVersions.get(exerciseId)?.revision ?? 0) + 1;
   setStatus({ state: "saving", syncedAt: status.syncedAt });
-  const { data, error } = await supabase
-    .from("exercise_states")
-    .upsert(
-      {
-        exercise_id: exerciseId,
-        revision: nextRevision,
-        state: sharedProjection,
-        updated_at: new Date().toISOString(),
-        updated_by: user.id,
-      },
-      { onConflict: "exercise_id" }
-    )
-    .select("exercise_id,revision,updated_at")
-    .single();
-  recordSupabaseTraffic({ operation: "UPSERT", endpoint: "exercise_states.projection", data,
-    requestBytes: candidate.payloadBytes });
-
-  if (error) {
-    setStatus({ state: "offline", syncedAt: status.syncedAt, message: error.message });
-    return false;
+  const projectionRow = {
+    exercise_id: exerciseId,
+    revision: nextRevision,
+    state: sharedProjection,
+    updated_at: new Date().toISOString(),
+    updated_by: user.id,
+  };
+  let row: Pick<ExerciseStateRow, "exercise_id" | "revision" | "updated_at">;
+  if (cloudProjectionReturnsServerRow(writeMethod)) {
+    const { data, error } = await supabase.from("exercise_states")
+      .upsert(projectionRow, { onConflict: "exercise_id" })
+      .select("exercise_id,revision,updated_at")
+      .single();
+    recordSupabaseTraffic({ operation: writeMethod, endpoint: "exercise_states.projection", data,
+      requestBytes: candidate.payloadBytes });
+    if (error) {
+      setStatus({ state: "offline", syncedAt: status.syncedAt, message: error.message });
+      return false;
+    }
+    row = data as Pick<ExerciseStateRow, "exercise_id" | "revision" | "updated_at">;
+  } else {
+    const { error } = await supabase.from("exercise_states").insert(projectionRow);
+    recordSupabaseTraffic({ operation: writeMethod, endpoint: "exercise_states.projection",
+      data: error ? undefined : { exercise_id: exerciseId, revision: nextRevision, updated_at: projectionRow.updated_at },
+      requestBytes: candidate.payloadBytes });
+    if (error) {
+      setStatus({ state: "offline", syncedAt: status.syncedAt, message: error.message });
+      return false;
+    }
+    row = { exercise_id: exerciseId, revision: nextRevision, updated_at: projectionRow.updated_at };
   }
 
-  const row = data as Pick<ExerciseStateRow, "exercise_id" | "revision" | "updated_at">;
   remoteVersions.set(row.exercise_id, { revision: row.revision, updatedAt: row.updated_at });
   if (lifecycleState === "COMPLETED") markCompletedExerciseArchiveDurable(exerciseId);
   latestRemoteExercise = {

@@ -23,4 +23,11 @@ describe("canonical exercise lifecycle projection", () => {
     expect(canPrepareNewExercise(lifecycleState)).toBe(false);
     expect(getPrepareNewExercisePresentation(lifecycleState, true, false)).toMatchObject({ visible: false, enabled: false });
   });
+
+  test("the first-run demo placeholder may prepare one real exercise", () => {
+    expect(canPrepareNewExercise("READY", "demo")).toBe(true);
+    expect(getPrepareNewExercisePresentation("READY", true, false, "demo"))
+      .toMatchObject({ visible: true, enabled: true });
+    expect(canPrepareNewExercise("READY", "EX-REAL-1")).toBe(false);
+  });
 });

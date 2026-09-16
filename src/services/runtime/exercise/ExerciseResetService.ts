@@ -24,7 +24,7 @@ export function executeExerciseReset(command: ExerciseResetCommand, options: Rea
   else if (command.expectedVersion !== current.version || command.currentExerciseId !== current.exerciseId) result = reject("VERSION_CONFLICT");
   else if (!command.newExerciseId.trim() || command.newExerciseId === current.exerciseId) result = reject("INVALID_EXERCISE_ID");
   else if (current.lifecycleState === "RUNNING" || current.lifecycleState === "PAUSED") result = reject("ACTIVE_EXERCISE");
-  else if (current.lifecycleState !== "COMPLETED") result = reject("INVALID_EXERCISE_STATE");
+  else if (current.lifecycleState !== "COMPLETED" && !(current.lifecycleState === "READY" && current.exerciseId === "demo")) result = reject("INVALID_EXERCISE_STATE");
   else {
     stopClockRunner();
     const archivedSnapshot = current.lifecycleState === "COMPLETED" ? structuredClone(current) : undefined;

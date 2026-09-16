@@ -42,7 +42,7 @@ export class ExercisePreparationService {
     if (command.issuedBy !== "Exercise Controller") result = failure("UNAUTHORIZED");
     else if (command.currentExerciseId !== current.exerciseId || command.expectedVersion !== current.version) result = failure("VERSION_CONFLICT");
     else if (current.lifecycleState === "RUNNING" || current.lifecycleState === "PAUSED") result = failure("ACTIVE_EXERCISE");
-    else if (current.lifecycleState !== "COMPLETED") result = failure("INVALID_EXERCISE_STATE");
+    else if (current.lifecycleState !== "COMPLETED" && !(current.lifecycleState === "READY" && current.exerciseId === "demo")) result = failure("INVALID_EXERCISE_STATE");
     else {
       const pkg = this.dependencies.activePackage();
       if (!pkg) result = failure("NO_ACTIVE_PACKAGE");
@@ -52,16 +52,16 @@ export class ExercisePreparationService {
         try { plan = this.dependencies.plan(command.newExerciseId, pkg); }
         catch (error) { result = failure(error instanceof PatientDatasetError ? "PATIENT_DATASET_INVALID" : "PERSISTENCE_FAILURE"); }
         let history: ReturnType<typeof captureCompletedExerciseArchive> | undefined;
-        try { if (plan) history = this.dependencies.capture(); }
+        try { if (plan && current.lifecycleState === "COMPLETED") history = this.dependencies.capture(); }
         catch { result = failure("PERSISTENCE_FAILURE"); }
         let bound = false;
-        if (history) {
+        if (plan && (history || current.exerciseId === "demo")) {
         try { this.dependencies.bind(command.newExerciseId, pkg); bound = true; }
         catch (error) { const text = String(error); result = failure(text.includes("PROTOCOL") ? "PROTOCOL_INCOMPATIBLE" : text.includes("MODULE") ? "MODULE_COMPOSITION_FAILED" : "PACKAGE_BINDING_FAILED"); }
         if (bound) {
           const reset = this.dependencies.reset(command);
           if (!reset.ok) { this.dependencies.unbind(command.newExerciseId); result = failure(reset.audit.reasonCode === "VERSION_CONFLICT" ? "VERSION_CONFLICT" : reset.audit.reasonCode === "UNAUTHORIZED" ? "UNAUTHORIZED" : reset.audit.reasonCode === "ACTIVE_EXERCISE" ? "ACTIVE_EXERCISE" : "INVALID_EXERCISE_STATE"); }
-          else { this.dependencies.archive(history); this.dependencies.clear(); this.dependencies.install(plan!); this.dependencies.publish(); result = Object.freeze({ ok: true, exerciseId: reset.snapshot.exerciseId, exercisePackage: pkg }); }
+          else { if (history) this.dependencies.archive(history); this.dependencies.clear(); this.dependencies.install(plan); this.dependencies.publish(); result = Object.freeze({ ok: true, exerciseId: reset.snapshot.exerciseId, exercisePackage: pkg }); }
         }
         }
       }

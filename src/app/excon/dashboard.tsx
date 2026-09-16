@@ -47,6 +47,7 @@ export default function ExerciseDashboardScreen() {
   const exerciseSnapshot = getCanonicalExerciseSnapshot();
   const exercisePackage = getExercisePackage(exerciseSnapshot.exerciseId);
   const exerciseDefinition = exercisePackage.definition;
+  const isExerciseController = hasActiveRole(operator, "EXCON", exerciseSnapshot.exerciseId);
   const iroPatientId = snapshot.patients.find(patient => patient.patientId === "PT-IRO-001")?.patientId;
   const showIroControls = narvaIroScenarioControlsAvailable({ packageId: exercisePackage.packageId,
     packageVersion: exercisePackage.packageVersion, lifecycleState: exerciseSnapshot.lifecycleState,
@@ -56,7 +57,9 @@ export default function ExerciseDashboardScreen() {
     exerciseSnapshot.exerciseId,
     exerciseSnapshot.lifecycleState,
   );
-  useEffect(() => initializeAuthoritativeExerciseRuntime(exerciseSnapshot.exerciseId), [exerciseSnapshot.exerciseId]);
+  useEffect(() => {
+    if (isExerciseController) initializeAuthoritativeExerciseRuntime(exerciseSnapshot.exerciseId);
+  }, [exerciseSnapshot.exerciseId, isExerciseController]);
   const [filters, setFilters] = useState(initialFilters);
   const [, setPresentationVersion] = useState(0);
   const refreshPresentation = useCallback(() => setPresentationVersion(value => value + 1), []);
@@ -96,9 +99,9 @@ export default function ExerciseDashboardScreen() {
               </Text>
             </View>
           </View>
-          <RuntimeRecoveryCard snapshot={exerciseSnapshot} onRecovered={refreshPresentation} />
+          {isExerciseController && <RuntimeRecoveryCard snapshot={exerciseSnapshot} onRecovered={refreshPresentation} />}
           <CloudSyncStatusCard lifecycleState={completionPresentation.lifecycleState} />
-          {!recoveryRequired && <ExerciseControlsCard snapshot={exerciseSnapshot} onApplied={refreshPresentation}
+          {isExerciseController && !recoveryRequired && <ExerciseControlsCard snapshot={exerciseSnapshot} onApplied={refreshPresentation}
             awaitingTerminalAck={completionPresentation.awaitingAuthoritativeAck} />}
           {showIroControls && iroPatientId && <NarvaIroScenarioControlsCard key={`${exerciseSnapshot.exerciseId}:${iroPatientId}`}
             exerciseId={exerciseSnapshot.exerciseId} patientId={iroPatientId} />}

@@ -1,4 +1,4 @@
-export const authorizationRoles = ["CM", "EXCON"] as const;
+export const authorizationRoles = ["CM", "EXCON", "EXERCISE_BOOTSTRAP"] as const;
 export type AuthorizationRole = (typeof authorizationRoles)[number];
 
 export const authorizationPermissions = [
@@ -8,6 +8,7 @@ export const authorizationPermissions = [
   "INSTRUCTOR_EVALUATION_READ",
   "INSTRUCTOR_EVALUATION_WRITE",
   "EXERCISE_RUNTIME_RECOVERY",
+  "EXERCISE_BOOTSTRAP_CREATE",
 ] as const;
 export type AuthorizationPermission = (typeof authorizationPermissions)[number];
 export type AuthorizationScope = Readonly<

@@ -49,8 +49,11 @@ function refreshSession(): void {
   }, []);
 
   useEffect(() => {
-    if (operator.state !== "LOADING" && !hasActiveRole(operator, "EXCON", snapshot.exerciseId)) router.replace("/");
+    if (operator.state !== "LOADING" && !hasActiveRole(operator, "EXCON", snapshot.exerciseId)
+      && !hasActiveRole(operator, "EXERCISE_BOOTSTRAP")) router.replace("/");
   }, [operator, snapshot.exerciseId]);
+
+  const isExerciseController = hasActiveRole(operator, "EXCON", snapshot.exerciseId);
 
   return (
 
@@ -75,7 +78,7 @@ function refreshSession(): void {
 
       <ExerciseStatusCard snapshot={snapshot} />
 
-      <WorkbookImportCard onImported={refreshSession} />
+      {isExerciseController && <WorkbookImportCard onImported={refreshSession} />}
 
       <ActivePatientsCard />
 

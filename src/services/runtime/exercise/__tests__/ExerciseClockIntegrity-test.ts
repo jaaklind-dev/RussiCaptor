@@ -40,6 +40,13 @@ describe("WP-24A canonical Exercise Clock integrity", () => {
     expect(getExerciseResetAudit()).toHaveLength(3);
   });
 
+  it("allows the first reset only from the demo READY placeholder", () => {
+    replaceCanonicalExerciseSnapshot(canonical({ exerciseId: "demo", lifecycleState: "READY" }));
+    const reset = executeExerciseReset({ commandId: "RESET-DEMO", currentExerciseId: "demo", newExerciseId: "EX-FIRST", issuedBy: "Exercise Controller", expectedVersion: 4 });
+    expect(reset).toMatchObject({ ok: true, snapshot: { exerciseId: "EX-FIRST", lifecycleState: "READY" } });
+    expect(reset.ok && reset.archivedSnapshot).toBeUndefined();
+  });
+
   it("keeps legacy and canonical clock metadata outside existing replay hashes", () => {
     replaceCanonicalExerciseSnapshot(canonical({ clockVersion: undefined, clockInitializedAtSimulationTimeSec: undefined })); const legacyHash = getExerciseControlReplayHash();
     replaceCanonicalExerciseSnapshot(canonical()); expect(getExerciseControlReplayHash()).toBe(legacyHash);

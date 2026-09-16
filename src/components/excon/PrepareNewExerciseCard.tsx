@@ -6,13 +6,27 @@ import { useRef, useState, useSyncExternalStore } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { exercisePackageNameLabel } from "@/localization/et";
 
-export function canPrepareNewExercise(state: CanonicalExerciseSnapshot["lifecycleState"]): boolean { return state === "COMPLETED"; }
-export function getPrepareNewExercisePresentation(state: CanonicalExerciseSnapshot["lifecycleState"], hasActivePackage: boolean, pending: boolean) { return Object.freeze({ visible: canPrepareNewExercise(state), showCatalogGuidance: state === "COMPLETED" && !hasActivePackage, enabled: state === "COMPLETED" && hasActivePackage && !pending, label: pending ? "Valmistan…" : "Valmista uus õppus" }); }
+export function canPrepareNewExercise(
+  state: CanonicalExerciseSnapshot["lifecycleState"],
+  exerciseId?: string,
+): boolean {
+  return state === "COMPLETED" || (state === "READY" && exerciseId === "demo");
+}
+export function getPrepareNewExercisePresentation(
+  state: CanonicalExerciseSnapshot["lifecycleState"],
+  hasActivePackage: boolean,
+  pending: boolean,
+  exerciseId?: string,
+) {
+  const visible = canPrepareNewExercise(state, exerciseId);
+  return Object.freeze({ visible, showCatalogGuidance: visible && !hasActivePackage,
+    enabled: visible && hasActivePackage && !pending, label: pending ? "Valmistan…" : "Valmista uus õppus" });
+}
 export default function PrepareNewExerciseCard({ snapshot, onPrepared }: { snapshot: CanonicalExerciseSnapshot; onPrepared?: () => void }) {
   useSyncExternalStore(listener => activeExercisePackageService.subscribe(listener), () => activeExercisePackageService.getVersion(), () => activeExercisePackageService.getVersion());
   const activePackage = activeExercisePackageService.getActive(); const pending = useRef(false);
   const [submitting, setSubmitting] = useState(false); const [error, setError] = useState<string>();
-  if (!canPrepareNewExercise(snapshot.lifecycleState)) return null;
+  if (!canPrepareNewExercise(snapshot.lifecycleState, snapshot.exerciseId)) return null;
   const prepare = () => {
     if (pending.current) return; pending.current = true; setSubmitting(true); setError(undefined);
     const result = exercisePreparationService.prepare(createExercisePreparationCommand());
