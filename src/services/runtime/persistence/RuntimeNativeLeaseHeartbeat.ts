@@ -10,6 +10,7 @@ export type NativeLeaseHeartbeatContext = Readonly<{
   exerciseId: string;
   writerInstanceId: string;
   leaseSeconds: number;
+  leaseRemainingMs: number;
   heartbeatGeneration: string;
   supabaseUrl: string;
   supabasePublishableKey: string;
@@ -76,6 +77,7 @@ export function nativeLeaseHeartbeatContext(
     exerciseId: lease.exerciseId,
     writerInstanceId: lease.writerInstanceId,
     leaseSeconds,
+    leaseRemainingMs: Math.max(0, Math.min(leaseSeconds * 1_000, Date.parse(lease.expiresAt) - Date.now())),
     heartbeatGeneration,
     accessToken: session.accessToken,
     supabaseUrl: session.supabaseUrl,

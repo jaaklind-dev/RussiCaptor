@@ -15,6 +15,7 @@ import { createScenarioEngineExerciseClockTarget } from "@/services/runtime/exer
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { clearPatientTransportRuntime, preparePatientTransportRuntime } from "./PatientTransportRuntimeService";
+import type { LaboratoryWorkflowSnapshot } from "@/models/LaboratoryWorkflow";
 
 let active: Readonly<{ exerciseId: string; patientId: string; engine: ClinicalScenarioEngine; dispose: () => void }>[] = [];
 
@@ -155,6 +156,15 @@ export async function prepareActiveClinicalReferenceRuntimeAsync(
 }
 
 export function clearActiveClinicalReferenceRuntime(): void { active.forEach(item => item.dispose()); active = []; clearPatientTransportRuntime(); }
+
+/** Read-only canonical laboratory projection. Readers expose restored checkpoint state and never generate results here. */
+export function getActiveLaboratoryWorkflow(
+  exerciseId: string,
+  patientId: string,
+): LaboratoryWorkflowSnapshot | undefined {
+  return active.find(item => item.exerciseId === exerciseId && item.patientId === patientId)
+    ?.engine.getLaboratoryWorkflow();
+}
 
 /** Applies terminal semantics at the same authoritative Runtime boundary used for terminal checkpoint capture. */
 export function fenceActiveLaboratoryWorkflowsAtTerminal(exerciseId: string, simulationTimeSec: number): void {

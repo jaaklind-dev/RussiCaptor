@@ -17,7 +17,8 @@ const validTime = (value: number, name: string): void => {
 
 export class LaboratoryWorkflowRuntime {
   private state: LaboratoryWorkflowSnapshot = emptySnapshot();
-  constructor(private readonly generator?: LaboratoryResultGenerator) {}
+  constructor(private readonly generator?: LaboratoryResultGenerator,
+    private readonly generationAllowed: () => boolean = () => true) {}
 
   reset(): void { this.state = emptySnapshot(); }
   snapshot(): LaboratoryWorkflowSnapshot { return immutableClone(this.state) as LaboratoryWorkflowSnapshot; }
@@ -75,15 +76,16 @@ export class LaboratoryWorkflowRuntime {
 
   advanceTo(simulationTimeSec: number): readonly LaboratoryResultGroup[] {
     validTime(simulationTimeSec, "ADVANCE_TIME");
-    if (this.state.terminalFencedAtSimulationTimeSec !== undefined || !this.generator) return [];
+    if (this.state.terminalFencedAtSimulationTimeSec !== undefined || !this.generator || !this.generationAllowed()) return [];
     const released: LaboratoryResultGroup[] = [];
     const resultGroups = this.state.resultGroups.map(group => {
-      if (group.status === "RESULTED" || group.availableAtSimulationTimeSec > simulationTimeSec || !this.generator) return group;
+      if (group.status !== "PROCESSING" || group.availableAtSimulationTimeSec > simulationTimeSec || !this.generator) return group;
       const sample = this.state.samples.find(item => item.sampleId === group.sampleId)!;
       const order = this.state.orders.find(item => item.orderId === sample.orderId)!;
       const generated = this.generator!({ order, sample, resultGroupType: group.type });
+      if (!generated) return group;
       if (!generated.generationVersion.trim()) throw new Error("LAB_GENERATION_VERSION_REQUIRED");
-      const result = deepFreeze({ ...group, status: "RESULTED" as const,
+      const result = deepFreeze({ ...group, status: generated.status ?? "RESULTED" as const,
         resultPayload: structuredClone(generated.payload), generationVersion: generated.generationVersion,
         generatedAtSimulationTimeSec: simulationTimeSec });
       released.push(result); return result;
@@ -93,7 +95,8 @@ export class LaboratoryWorkflowRuntime {
       if (!sample) return order;
       const groups = resultGroups.filter(item => item.sampleId === sample.sampleId);
       const count = groups.filter(item => item.status === "RESULTED").length;
-      return { ...order, status: count === groups.length ? "RESULTED" as const : count > 0
+      const releasedCount = groups.filter(item => item.status !== "PROCESSING").length;
+      return { ...order, status: count === groups.length ? "RESULTED" as const : releasedCount > 0
         ? "PARTIALLY_RESULTED" as const : "PROCESSING" as const };
     });
     if (released.length || orders.some((item, index) => item.status !== this.state.orders[index]?.status)) {
@@ -156,20 +159,31 @@ export class LaboratoryWorkflowRuntime {
         Array.isArray(sample.snapshot.displayedVitals) || Array.isArray(sample.snapshot.targetVitals) ||
         Array.isArray(sample.snapshot.runtimeFields) ||
         !Array.isArray(sample.snapshot.clinicalProcessInputs)) throw new Error("LAB_INVALID_SAMPLE");
+      const physiology = sample.snapshot.authoritativePhysiology;
+      if (physiology && (![physiology.baselineMinuteVentilationLMin,
+        physiology.effectiveMinuteVentilationLMin, physiology.fio2,
+        physiology.arterialOxygenSaturationPct, physiology.meanArterialPressureMmHg,
+        physiology.temperatureCelsius, physiology.effectiveIntravascularFluidVolumeMl]
+        .every(Number.isFinite) || physiology.baselineMinuteVentilationLMin <= 0 ||
+        physiology.effectiveMinuteVentilationLMin < 0 || physiology.fio2 < 0.21 || physiology.fio2 > 1 ||
+        physiology.arterialOxygenSaturationPct < 0 || physiology.arterialOxygenSaturationPct > 100 ||
+        typeof physiology.oxygenSupplyAdequate !== "boolean" || physiology.effectiveIntravascularFluidVolumeMl < 0)) {
+        throw new Error("LAB_INVALID_PHYSIOLOGY_SNAPSHOT");
+      }
       validTime(sample.sampledAtSimulationTimeSec, "SAMPLE_TIME");
       sampleIds.add(sample.sampleId); sampledOrderIds.add(sample.orderId);
     }
     for (const group of value.resultGroups) {
       const sample = value.samples.find(item => item.sampleId === group.sampleId);
       if (!Object.hasOwn(NARVA_LAB_RESULT_TIMING_SECONDS_FROM_SAMPLE, group.type) ||
-        !["PROCESSING", "RESULTED"].includes(group.status) ||
+        !["PROCESSING", "PARTIALLY_RESULTED", "RESULTED"].includes(group.status) ||
         groupIds.has(group.resultGroupId) || !sample || group.resultGroupId !== `${group.sampleId}:${group.type}` ||
         group.availableAtSimulationTimeSec !==
         sample.sampledAtSimulationTimeSec + NARVA_LAB_RESULT_TIMING_SECONDS_FROM_SAMPLE[group.type] ||
-        (group.status === "RESULTED") !== Boolean(group.resultPayload && group.generationVersion) ||
+        (group.status !== "PROCESSING") !== Boolean(group.resultPayload && group.generationVersion) ||
         (group.status === "PROCESSING" && (group.resultPayload !== undefined || group.generationVersion !== undefined ||
           group.generatedAtSimulationTimeSec !== undefined)) ||
-        (group.status === "RESULTED" && (group.generatedAtSimulationTimeSec === undefined ||
+        (group.status !== "PROCESSING" && (group.generatedAtSimulationTimeSec === undefined ||
           group.generatedAtSimulationTimeSec < group.availableAtSimulationTimeSec))) {
         throw new Error("LAB_INVALID_RESULT_GROUP");
       }
@@ -196,7 +210,8 @@ export class LaboratoryWorkflowRuntime {
       if (expected.some(type => !actual.includes(type)) || actual.length !== expected.length) throw new Error("LAB_RESULT_GROUP_SET_MISMATCH");
       const groups = value.resultGroups.filter(item => item.sampleId === sample.sampleId);
       const resulted = groups.filter(item => item.status === "RESULTED").length;
-      const allowedStatus = resulted === groups.length ? "RESULTED" : resulted > 0 ? "PARTIALLY_RESULTED" : undefined;
+      const released = groups.filter(item => item.status !== "PROCESSING").length;
+      const allowedStatus = resulted === groups.length ? "RESULTED" : released > 0 ? "PARTIALLY_RESULTED" : undefined;
       if (allowedStatus ? order.status !== allowedStatus : !["COLLECTED", "PROCESSING"].includes(order.status)) {
         throw new Error("LAB_ORDER_STATUS_MISMATCH");
       }

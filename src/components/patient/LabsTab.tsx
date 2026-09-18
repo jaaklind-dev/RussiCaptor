@@ -1,6 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { LabResult } from "@/models/LabResult";
 import { et } from "@/locales/et";
+import LaboratoryWorkflowCard from "./LaboratoryWorkflowCard";
+import type { LaboratoryWorkflowSnapshot, NarvaLabPackageId } from "@/models/LaboratoryWorkflow";
 function getStatusLabel(status: LabResult["status"]) {
   switch (status) {
     case "processing":
@@ -20,13 +22,30 @@ type Props = {
   labs: LabResult[];
   onOpenPanel: (panel: string) => void;
   readOnly?: boolean;
+  laboratoryWorkflow?: LaboratoryWorkflowSnapshot;
+  laboratoryPackageId?: NarvaLabPackageId;
+  laboratoryWorkflowScopeKey?: string;
+  laboratoryProjectionRevision?: number;
+  laboratoryProjectionReady?: boolean;
+  laboratoryCommandReadiness?: Readonly<{ ready: boolean; reason?: string }>;
+  onOrderLaboratory?: () => Promise<Readonly<{ ok: boolean; message: string }>>;
+  onCollectLaboratory?: (orderId: string) => Promise<Readonly<{ ok: boolean; message: string }>>;
 };
 
-export default function LabsTab({ labs, onOpenPanel, readOnly = false }: Props) {
+export default function LabsTab({ labs, onOpenPanel, readOnly = false, laboratoryWorkflow,
+  laboratoryPackageId, laboratoryWorkflowScopeKey, laboratoryProjectionRevision,
+  laboratoryProjectionReady, laboratoryCommandReadiness, onOrderLaboratory, onCollectLaboratory }: Props) {
   const panels = [...new Set(labs.map((lab) => lab.panel))];
 
   return (
-    <View style={styles.card}>
+    <View>
+      {laboratoryPackageId && onOrderLaboratory && onCollectLaboratory && (
+        <LaboratoryWorkflowCard workflow={laboratoryWorkflow} packageId={laboratoryPackageId}
+          workflowScopeKey={laboratoryWorkflowScopeKey} projectionRevision={laboratoryProjectionRevision}
+          projectionReady={laboratoryProjectionReady} commandReadiness={laboratoryCommandReadiness}
+          readOnly={readOnly} onOrder={onOrderLaboratory} onCollect={onCollectLaboratory} />
+      )}
+      <View style={styles.card}>
       <Text style={styles.title}>{et.lab.title}</Text>
 
       {labs.length === 0 ? (
@@ -76,6 +95,7 @@ export default function LabsTab({ labs, onOpenPanel, readOnly = false }: Props) 
           );
         })
       )}
+      </View>
     </View>
   );
 }

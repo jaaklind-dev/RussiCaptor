@@ -27,6 +27,17 @@ export type LabSamplePhysiologySnapshot = Readonly<{
   }>[];
   medicationState?: Readonly<Record<string, unknown>>;
   ventilationState?: Readonly<Record<string, unknown>>;
+  /** Small, authoritative collection-time projection used by physiology result generators. */
+  authoritativePhysiology?: Readonly<{
+    baselineMinuteVentilationLMin: number;
+    effectiveMinuteVentilationLMin: number;
+    fio2: number;
+    oxygenSupplyAdequate: boolean;
+    arterialOxygenSaturationPct: number;
+    meanArterialPressureMmHg: number;
+    temperatureCelsius: number;
+    effectiveIntravascularFluidVolumeMl: number;
+  }>;
   patientBloodIdentity?: LabPatientBloodIdentity;
 }>;
 
@@ -56,7 +67,7 @@ export type LaboratoryResultGroup = Readonly<{
   sampleId: string;
   type: LabResultGroupType;
   availableAtSimulationTimeSec: number;
-  status: "PROCESSING" | "RESULTED";
+  status: "PROCESSING" | "PARTIALLY_RESULTED" | "RESULTED";
   resultPayload?: Readonly<Record<string, unknown>>;
   generationVersion?: string;
   generatedAtSimulationTimeSec?: number;
@@ -75,4 +86,5 @@ export type LaboratoryResultGenerator = (input: Readonly<{
   order: LaboratoryOrder;
   sample: LaboratorySample;
   resultGroupType: LabResultGroupType;
-}>) => Readonly<{ payload: Readonly<Record<string, unknown>>; generationVersion: string }>;
+}>) => Readonly<{ payload: Readonly<Record<string, unknown>>; generationVersion: string;
+  status?: "PARTIALLY_RESULTED" | "RESULTED" }> | undefined;

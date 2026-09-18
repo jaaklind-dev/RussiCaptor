@@ -107,6 +107,10 @@ import type { LabPatientBloodIdentity, LaboratoryOrder, LaboratoryResultGenerato
   LaboratorySample, LaboratoryWorkflowSnapshot, NarvaLabPackageId } from "@/models/LaboratoryWorkflow";
 import { LaboratoryWorkflowRuntime, assertLabPackageAllowed } from
   "@/services/runtime/laboratory/LaboratoryWorkflowRuntime";
+import { narvaLabPhysiologyV1Generator } from
+  "@/services/runtime/laboratory/NarvaLabPhysiologyV1Generator";
+import { getRuntimeWriterAuthorityState } from
+  "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 
 export function runScenarioEvents(
 
@@ -314,8 +318,13 @@ export class ClinicalScenarioEngine {
   private assessmentStaleDiscardCount = 0;
   private assessmentPublicationCount = 0;
 
-  constructor(laboratoryResultGenerator?: LaboratoryResultGenerator) {
-    this.laboratory = new LaboratoryWorkflowRuntime(laboratoryResultGenerator);
+  constructor(laboratoryResultGenerator: LaboratoryResultGenerator = narvaLabPhysiologyV1Generator,
+    laboratoryGenerationAllowed?: () => boolean) {
+    const productionGenerator = laboratoryResultGenerator === narvaLabPhysiologyV1Generator;
+    this.laboratory = new LaboratoryWorkflowRuntime(laboratoryResultGenerator,
+      laboratoryGenerationAllowed ?? (productionGenerator
+        ? () => ["WRITER", "OFFLINE"].includes(getRuntimeWriterAuthorityState())
+        : () => true));
   }
 
   reset(fixture: GoldenFixture): void {
@@ -781,6 +790,21 @@ export class ClinicalScenarioEngine {
     sampledAtSimulationTimeSec: number; sourcePatientRevision: number;
     patientBloodIdentity?: LabPatientBloodIdentity }>): LaboratorySample {
     const runtime = this.getRuntimeState();
+    const support = this.getMechanicalVentilationState(runtime.encounterId)
+      .find(item => item.lifecycle === "RUNNING" && item.externalSupportActive);
+    const iro = this.narvaIroScenario.snapshot()
+      ? this.narvaIroScenario.projectionAt(input.sampledAtSimulationTimeSec) : undefined;
+    const baselineMinuteVentilationLMin = support?.mechanicalMinuteVentilationLMin ??
+      ((typeof runtime.displayedVitals.rr === "number" ? runtime.displayedVitals.rr : 14) * 0.42);
+    const effectiveMinuteVentilationLMin = !support ? baselineMinuteVentilationLMin
+      : !iro?.exhaledVolumeReduced ? baselineMinuteVentilationLMin
+        : iro.etco2WaveformPresent && iro.ventilatorRunning ? baselineMinuteVentilationLMin * 0.45
+          : baselineMinuteVentilationLMin * 0.12;
+    const systolic = typeof runtime.displayedVitals.sbp === "number" ? runtime.displayedVitals.sbp : 120;
+    const diastolic = typeof runtime.displayedVitals.dbp === "number" ? runtime.displayedVitals.dbp : 75;
+    const effectiveIntravascularFluidVolumeMl = this.medicationEngine
+      .fluidTherapyProjectionsAt(input.sampledAtSimulationTimeSec)
+      .reduce((sum, item) => sum + item.effectiveIntravascularVolumeMl, 0);
     return this.laboratory.collect({ ...input, sourceRuntimeStateVersion: runtime.stateVersion,
       snapshot: { displayedVitals: structuredClone(runtime.displayedVitals) as Record<string, number | string | boolean | null>,
         targetVitals: structuredClone(runtime.targetVitals) as Record<string, number | string | boolean | null>,
@@ -793,6 +817,18 @@ export class ClinicalScenarioEngine {
         medicationState: this.medicationEngine.snapshot() as unknown as Readonly<Record<string, unknown>>,
         ...(this.mechanicalVentilation.snapshot() ? {
           ventilationState: this.mechanicalVentilation.snapshot() as unknown as Readonly<Record<string, unknown>> } : {}),
+        authoritativePhysiology: {
+          baselineMinuteVentilationLMin,
+          effectiveMinuteVentilationLMin,
+          fio2: iro && !iro.oxygenSourceAdequate ? 0.21 : support?.fio2 ?? 0.21,
+          oxygenSupplyAdequate: iro?.oxygenSourceAdequate ?? true,
+          arterialOxygenSaturationPct: typeof runtime.displayedVitals.spo2 === "number"
+            ? runtime.displayedVitals.spo2 : 97,
+          meanArterialPressureMmHg: (systolic + 2 * diastolic) / 3,
+          temperatureCelsius: typeof runtime.displayedVitals.temperature === "number"
+            ? runtime.displayedVitals.temperature : 37,
+          effectiveIntravascularFluidVolumeMl,
+        },
         ...(input.patientBloodIdentity ? { patientBloodIdentity: input.patientBloodIdentity } : {}) } });
   }
 

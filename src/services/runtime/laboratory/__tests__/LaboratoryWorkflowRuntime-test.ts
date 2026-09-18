@@ -19,7 +19,7 @@ const collect = (runtime: LaboratoryWorkflowRuntime, overrides: Partial<Paramete
       clinicalProcessInputs: [],
       patientBloodIdentity: { ab0: "O", rhd: "POSITIVE", antibodyScreen: "NEGATIVE" } }, ...overrides });
 
-describe("LaboratoryWorkflowRuntime LAB-G01..LAB-G16", () => {
+describe("LaboratoryWorkflowRuntime LAB-G01..LAB-G22", () => {
   test("captures one immutable sample and remains uncontaminated by later physiology (G01/G02/G03/G13)", () => {
     const runtime = new LaboratoryWorkflowRuntime(generator); order(runtime);
     const source = { displayedVitals: { hr: 92 }, targetVitals: { hr: 90 }, runtimeFields: { lactate: 3.2 },
@@ -48,6 +48,32 @@ describe("LaboratoryWorkflowRuntime LAB-G01..LAB-G16", () => {
     expect(runtime.advanceTo(2800).map(item => item.type)).toEqual(["HEMATOLOGY", "AB0"]);
     expect(runtime.advanceTo(3400).map(item => item.type)).toEqual(["CLINICAL_CHEMISTRY", "COAGULATION"]);
     expect(runtime.snapshot().orders[0].status).toBe("RESULTED");
+  });
+
+  test.each([
+    [2500, 1],
+    [2501, 1],
+    [8291, 5],
+  ])("releases due groups exactly once after threshold crossing to T+%i (G22)", (target, expected) => {
+    const runtime = new LaboratoryWorkflowRuntime(generator); order(runtime); collect(runtime);
+    expect(runtime.advanceTo(2499)).toEqual([]);
+    expect(runtime.advanceTo(target)).toHaveLength(expected);
+    expect(runtime.advanceTo(target)).toEqual([]);
+    expect(runtime.snapshot().resultGroups.filter(item => item.status === "RESULTED")).toHaveLength(expected);
+  });
+
+  test("continues traversal from a resulted first sample to an overdue second sample (G03/G09/G22)", () => {
+    const runtime = new LaboratoryWorkflowRuntime(generator); order(runtime); collect(runtime);
+    runtime.advanceTo(3400);
+    order(runtime, "O-2");
+    collect(runtime, { sampleId: "S-2", orderId: "O-2", sampledAtSimulationTimeSec: 5555,
+      sourcePatientRevision: 20, sourceRuntimeStateVersion: 42 });
+    expect(runtime.advanceTo(7054)).toEqual([]);
+    const released = runtime.advanceTo(8291);
+    expect(released.filter(item => item.sampleId === "S-2" && item.type === "ASTRUP")).toHaveLength(1);
+    expect(runtime.advanceTo(8291)).toEqual([]);
+    expect(runtime.snapshot().resultGroups.filter(item => item.sampleId === "S-2" &&
+      item.status === "RESULTED")).toHaveLength(5);
   });
 
   test("restores canonically for reader/restart/takeover and releases exactly once (G03/G05/G06/G16)", () => {

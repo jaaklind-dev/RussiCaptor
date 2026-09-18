@@ -1,5 +1,6 @@
 package com.jaaklind.RussiCaptor
 
+import android.os.SystemClock
 import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -81,7 +82,7 @@ class RuntimeNativeLeaseHeartbeatModule(private val context: ReactApplicationCon
     val heartbeat = synchronized(lock) { active?.takeIf { it.generation == generation } } ?: return
     synchronized(lock) { if (active?.generation == generation) heartbeat.state = "RENEWING" }
     emit("NATIVE_HEARTBEAT_TICK", heartbeat, "RENEWING")
-    val startedAt = System.currentTimeMillis()
+    val startedAt = SystemClock.elapsedRealtime()
     try {
       val connection = (URL("${heartbeat.supabaseUrl.trimEnd('/')}/rest/v1/rpc/renew_runtime_writer").openConnection() as HttpURLConnection).apply {
         requestMethod = "POST"
@@ -107,23 +108,50 @@ class RuntimeNativeLeaseHeartbeatModule(private val context: ReactApplicationCon
           if (active?.generation != generation) return
           heartbeat.state = "ACTIVE"
           heartbeat.lastSuccessExpiresAt = expiresAt
+          // The server starts the renewed TTL before returning. Anchoring the
+          // local fail-closed deadline at request start is conservative and
+          // avoids wall-clock skew while still allowing later native retries.
+          heartbeat.confirmedUntilElapsedRealtimeMs = startedAt + heartbeat.leaseSeconds * 1_000L
           heartbeat.lastFailure = null
           heartbeat.retryScheduled = false
         }
-        emit("NATIVE_RENEW_RPC_SUCCESS", heartbeat, "ACTIVE", System.currentTimeMillis() - startedAt)
+        emit("NATIVE_RENEW_RPC_SUCCESS", heartbeat, "ACTIVE", SystemClock.elapsedRealtime() - startedAt)
         return
       }
       val failure = serverFailure(status, response)
-      if (failure == "NETWORK_FAILURE" && !retry) {
-        scheduleBoundedRetry(heartbeat)
+      val reportedFailure = if (failure == "NETWORK_FAILURE") {
+        handleNetworkFailure(heartbeat, retry)
       } else {
         stopForFailure(heartbeat, failure)
+        failure
       }
-      emit("NATIVE_RENEW_RPC_FAILURE", heartbeat, failure, System.currentTimeMillis() - startedAt)
+      emit("NATIVE_RENEW_RPC_FAILURE", heartbeat, reportedFailure, SystemClock.elapsedRealtime() - startedAt)
     } catch (_: Exception) {
-      if (!retry) scheduleBoundedRetry(heartbeat) else stopForFailure(heartbeat, "NETWORK_FAILURE")
-      emit("NATIVE_RENEW_RPC_FAILURE", heartbeat, "NETWORK_FAILURE", System.currentTimeMillis() - startedAt)
+      val failure = handleNetworkFailure(heartbeat, retry)
+      emit("NATIVE_RENEW_RPC_FAILURE", heartbeat, failure, SystemClock.elapsedRealtime() - startedAt)
     }
+  }
+
+  /**
+   * A transient transport failure must not cancel the process-scoped periodic
+   * heartbeat. One early retry is still scheduled, and later fixed-rate ticks
+   * remain available for recovery. Once the last server-confirmed TTL has
+   * elapsed, the writer fails closed instead of retaining false WRITE_READY.
+   */
+  private fun handleNetworkFailure(heartbeat: Heartbeat, retry: Boolean): String {
+    val expired = synchronized(lock) {
+      if (active?.generation != heartbeat.generation) return "STALE_HEARTBEAT"
+      heartbeat.state = "ACTIVE"
+      heartbeat.lastFailure = "NETWORK_FAILURE"
+      if (retry) heartbeat.retryScheduled = false
+      SystemClock.elapsedRealtime() >= heartbeat.confirmedUntilElapsedRealtimeMs
+    }
+    if (expired) {
+      stopForFailure(heartbeat, "WRITER_LEASE_EXPIRED")
+      return "WRITER_LEASE_EXPIRED"
+    }
+    if (!retry) scheduleBoundedRetry(heartbeat)
+    return "NETWORK_FAILURE"
   }
 
   private fun scheduleBoundedRetry(heartbeat: Heartbeat) {
@@ -195,6 +223,7 @@ class RuntimeNativeLeaseHeartbeatModule(private val context: ReactApplicationCon
     val exerciseId: String,
     val writerInstanceId: String,
     val leaseSeconds: Int,
+    val leaseRemainingMs: Long,
     val supabaseUrl: String,
     val publishableKey: String,
     var accessToken: String,
@@ -202,6 +231,7 @@ class RuntimeNativeLeaseHeartbeatModule(private val context: ReactApplicationCon
     var lastSuccessExpiresAt: String? = null,
     var lastFailure: String? = null,
     var retryScheduled: Boolean = false,
+    var confirmedUntilElapsedRealtimeMs: Long = SystemClock.elapsedRealtime() + leaseRemainingMs,
   ) {
     companion object {
       fun from(input: ReadableMap) = Heartbeat(
@@ -210,6 +240,7 @@ class RuntimeNativeLeaseHeartbeatModule(private val context: ReactApplicationCon
         input.getString("exerciseId") ?: throw IllegalArgumentException(),
         input.getString("writerInstanceId") ?: throw IllegalArgumentException(),
         input.getInt("leaseSeconds"),
+        input.getDouble("leaseRemainingMs").toLong().coerceIn(0L, input.getInt("leaseSeconds") * 1_000L),
         input.getString("supabaseUrl") ?: throw IllegalArgumentException(),
         input.getString("supabasePublishableKey") ?: throw IllegalArgumentException(),
         input.getString("accessToken") ?: throw IllegalArgumentException(),

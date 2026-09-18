@@ -11,6 +11,7 @@ import {
   setRuntimeCommandAuthorityWriter,
 } from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
 import {
+  runtimePatientCommandSubmissionReadiness,
   setRuntimePatientCommandGateway,
   submitPatientRuntimeCommand,
   type RuntimePatientCommandGateway,
@@ -99,12 +100,14 @@ describe("WP-NARVA-10B8 reader checkpoint/time convergence", () => {
     const authoritative = checkpoint(26, 2622, 1456);
     advertiseRuntimeReaderCheckpoint(metadata(authoritative));
 
+    expect(runtimePatientCommandSubmissionReadiness(exerciseId, 2622)).toMatchObject({ ready: false });
     await expect(submitPatientRuntimeCommand({ exerciseId, patientId, commandId: "PARACETAMOL-STALE",
       commandType: "CLINICAL_TREATMENT", simulationTimeSec: 728, payload: {} }))
       .resolves.toMatchObject({ status: "RECONNECT_REQUIRED" });
     expect(submit).not.toHaveBeenCalled();
 
     acceptRuntimeReaderCheckpoint(authoritative, "REMOTE");
+    expect(runtimePatientCommandSubmissionReadiness(exerciseId, 2622)).toEqual({ ready: true });
     await expect(submitPatientRuntimeCommand({ exerciseId, patientId, commandId: "PARACETAMOL-CURRENT",
       commandType: "CLINICAL_TREATMENT", payload: {} }))
       .resolves.toMatchObject({ status: "APPLIED", commandSequence: 63 });

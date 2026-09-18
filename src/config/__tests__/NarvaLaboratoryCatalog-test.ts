@@ -28,8 +28,9 @@ describe("Narva laboratory catalog", () => {
   test("marks dynamic analytes without coupling laboratory iCa to the MTP protocol", () => {
     for (const name of ["pH", "pCO2", "pO2", "HCO3", "BE/ABE", "Lactate", "sO2/O2Hb",
       "Ionized calcium", "Glucose", "Hb", "Hct", "Platelets", "INR", "APTT", "Fibrinogen", "Na", "K"]) {
-      expect(NARVA_LAB_ANALYTES.find(item => item.name === name)?.behavior).toBe("FUTURE_DYNAMIC");
+      expect(NARVA_LAB_ANALYTES.find(item => item.name === name)?.behavior).toBe("PHYSIOLOGY_V1");
     }
+    expect(NARVA_LAB_ANALYTES.find(item => item.id === "LAB_ASTRUP_HB_FR")?.behavior).toBe("SCENARIO_STATIC");
     expect(JSON.stringify(NARVA_LAB_ANALYTES)).not.toMatch(/MTP|fourth qualifying|recommendation/i);
   });
 });

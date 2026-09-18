@@ -1074,7 +1074,11 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
       if (diagnostic.lastSuccessExpiresAt) {
         lease = Object.freeze({ ...currentLease, expiresAt: diagnostic.lastSuccessExpiresAt });
       }
-      if (diagnostic.state === "STOPPED" && diagnostic.lastFailure && diagnostic.lastFailure !== "NETWORK_FAILURE") {
+      // A stopped native scheduler can no longer preserve authority. Transient
+      // network failures remain ACTIVE and retry natively; STOPPED therefore
+      // always means that authority must fail closed, including lease expiry
+      // reached while the network was unavailable.
+      if (diagnostic.state === "STOPPED" && diagnostic.lastFailure) {
         traceRuntimeLeaseLifecycle("AUTHORITY_LOSS", { generation: traceGeneration, detail: { priorAuthority: status.state, nextAuthority: "READER", code: diagnostic.lastFailure } });
         releaseRuntimeOwner("NATIVE_AUTHORITY_LOST");
         lease = undefined;

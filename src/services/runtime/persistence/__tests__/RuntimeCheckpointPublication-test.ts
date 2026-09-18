@@ -105,4 +105,32 @@ describe("WP-44B terminal checkpoint publication", () => {
       priority: "ROUTINE", yieldControl: async () => undefined, shouldContinue: () => true,
     })).resolves.toEqual({ state: "PUBLISHED", checkpoint, reconciled: false });
   });
+  test("repeated pre-commit timeouts keep the CAS cursor old until transport recovers", async () => {
+    let committed: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined = older;
+    let attempts = 0;
+    const recovering = {
+      ...repository(undefined),
+      publish: jest.fn(async () => {
+        attempts += 1;
+        if (attempts <= 2) return never;
+        committed = checkpoint;
+        return { status: "PUBLISHED" as const, checkpoint };
+      }),
+      loadLatestMetadata: async () => committed ? ({
+        exerciseId: committed.exerciseId,
+        checkpointRevision: committed.checkpointRevision,
+        payloadHash: committed.payloadHash,
+        provenanceHash: committed.provenanceHash,
+        writerInstanceId: "W",
+      }) : undefined,
+    } as unknown as RuntimeCheckpointRepository;
+
+    await expect(publishRuntimeCheckpointTerminal(recovering, lease, 10, checkpoint, 2))
+      .resolves.toEqual({ state: "TRANSPORT_TIMEOUT", code: "CHECKPOINT_PUBLICATION_UNCERTAIN" });
+    await expect(publishRuntimeCheckpointTerminal(recovering, lease, 10, checkpoint, 2))
+      .resolves.toEqual({ state: "TRANSPORT_TIMEOUT", code: "CHECKPOINT_PUBLICATION_UNCERTAIN" });
+    await expect(publishRuntimeCheckpointTerminal(recovering, lease, 10, checkpoint, 20))
+      .resolves.toEqual({ state: "PUBLISHED", checkpoint, reconciled: false });
+    expect(attempts).toBe(3);
+  });
 });

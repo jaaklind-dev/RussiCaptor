@@ -90,6 +90,30 @@ export class SupabaseRuntimePatientCommandGateway implements RuntimePatientComma
 let gateway: RuntimePatientCommandGateway | undefined = supabase ? new SupabaseRuntimePatientCommandGateway(supabase) : undefined;
 export function setRuntimePatientCommandGateway(value: RuntimePatientCommandGateway | undefined): void { gateway = value; }
 
+export type RuntimePatientCommandSubmissionReadiness = Readonly<{
+  ready: boolean;
+  reason?: string;
+}>;
+
+/**
+ * The shared client-side gate used both by command submission and command UI.
+ * Backend ownership/CAS checks remain authoritative after this local fail-closed
+ * check; this only prevents offering an action that the same client path knows
+ * it cannot route yet.
+ */
+export function runtimePatientCommandSubmissionReadiness(
+  exerciseId: string,
+  simulationTimeSec?: number,
+): RuntimePatientCommandSubmissionReadiness {
+  if (!gateway) return Object.freeze({ ready: false,
+    reason: "Patsiendi käskude saatmine ei ole ühendatud." });
+  const exercise = getCanonicalExerciseSnapshot();
+  if (exercise.exerciseId !== exerciseId || exercise.lifecycleState !== "RUNNING") {
+    return Object.freeze({ ready: false, reason: "Õppus lõpetatakse või on lõpetatud." });
+  }
+  return runtimeReaderCommandReadiness(exerciseId, simulationTimeSec ?? exercise.simulationTimeSec);
+}
+
 export async function submitPatientRuntimeCommand(input: Omit<RuntimePatientCommandSubmission, "patientBaseRevision" | "simulationTimeSec"> &
 Readonly<{ simulationTimeSec?: number }>): Promise<RuntimePatientCommandSubmissionResult> {
   const head = getSharedWorkflowHead(input.exerciseId, input.patientId);
@@ -99,8 +123,9 @@ Readonly<{ simulationTimeSec?: number }>): Promise<RuntimePatientCommandSubmissi
     return Object.freeze({ status: "EXERCISE_NOT_ACTIVE", patientRevision: head.revision, ownerUserId: head.ownerUserId });
   }
   const simulationTimeSec = input.simulationTimeSec ?? exercise.simulationTimeSec;
-  const commandReadiness = runtimeReaderCommandReadiness(input.exerciseId, simulationTimeSec, true);
+  const commandReadiness = runtimePatientCommandSubmissionReadiness(input.exerciseId, simulationTimeSec);
   if (!commandReadiness.ready) {
+    runtimeReaderCommandReadiness(input.exerciseId, simulationTimeSec, true);
     return Object.freeze({ status: "RECONNECT_REQUIRED", patientRevision: head.revision, ownerUserId: head.ownerUserId });
   }
   const result = await gateway.submit(Object.freeze({ ...input, patientBaseRevision: head.revision,

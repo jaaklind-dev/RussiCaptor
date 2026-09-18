@@ -41,18 +41,18 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | R | Terminal completion | COMPLETED request, terminal checkpoint/artifact, COMPLETED exercise projection, no later RUNNING state, stopped heartbeat, and explicit released lease are one required outcome. | `RuntimeTerminalConvergenceIntegration-test.ts`, `RuntimeCompletionService-test.ts`, `narva_terminal_completion_test.sql` |
 | S | Completion fence | Ordinary mutation rejects after fencing; routine publication cannot starve terminal publication; terminal work is single-flight and idempotent. | `RuntimePatientCommandConcurrency-test.ts`, `TerminalSharedWorkflowFence-test.ts`, `RuntimeCheckpointStartup-test.ts` |
 | T | Pending completion recovery | A supported takeover recovers a pending completion with no writer, publishes terminal state once, completes the request, and explicitly releases authority, including lost-response recovery. | `RuntimeTerminalConvergenceIntegration-test.ts`, `RuntimeCheckpointStartup-test.ts` |
-| U | Heartbeat/lease lifecycle | Heartbeat starts only with authority and stops on completion, authority/session loss, or conflict; healthy foreground/background preserves authority when designed to. | `RuntimeCheckpointStartup-test.ts`, `RuntimeLeaseLifecycleTrace-test.ts` |
+| U | Heartbeat/lease lifecycle | Heartbeat starts only with authority and stops on completion, authority/session loss, or conflict; transient transport failure keeps bounded recovery alive, confirmed expiry fails closed, and healthy foreground/background preserves authority when designed to. | `RuntimeCheckpointStartup-test.ts`, `RuntimeLeaseLifecycleTrace-test.ts`, `RuntimeWriterLeaseContinuity-test.ts` |
 | V | Package immutability | Published package versions are immutable; material changes require new versions and frozen hashes. | `IroPackageImmutability-test.ts`, `ExercisePackageFramework-test.ts` |
 | W | Package hash freeze | Accepted IRO, trauma, dataset, definition, and historical hashes remain exact. | `IroPackageImmutability-test.ts`, `NarvaIroScenarioControlCommand-test.ts` |
 | X | Restart determinism | Supported medications, access/resources, ventilation, faults, HOLD/RESUME, ownership, command cursor, and session time restore without duplicate or phantom state. | `NarvaIroPackage-test.ts`, `RuntimeCheckpointStartup-test.ts`, `ClinicalTreatmentUI-test.tsx` |
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/LAB-G01–LAB-G16 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/LAB-G01–LAB-G22 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Laboratory regression guardrails
 
-The durable laboratory lifecycle foundation is executable and mapped in the guardrail manifest. Clinical result physiology remains intentionally deferred; the tests below protect catalog scope, sample-time snapshots, timing, persistence, authority, exactly-once behavior, and terminal fencing.
+The durable laboratory lifecycle foundation and the versioned Narva trauma/Astrup physiology-v1 generator are executable and mapped in the guardrail manifest. Static/scenario analyte generation remains intentionally deferred; the tests below protect catalog scope, sample-time snapshots, timing, physiology directionality, persistence, authority, exactly-once behavior, and terminal fencing.
 
 | ID | Guardrail | Frozen invariant |
 | --- | --- | --- |
@@ -72,6 +72,12 @@ The durable laboratory lifecycle foundation is executable and mapped in the guar
 | LAB-G14 | MTP/iCa coherence | Dynamic iCa and the MTP calcium recommendation are separate mechanisms: neither the fourth-RBC protocol trigger nor low iCa may substitute for the other state variable. |
 | LAB-G15 | No local recalculation of resulted sample | A `RESULTED` sample and result payload are immutable and cannot be regenerated from current physiology. |
 | LAB-G16 | Canonical persistence | Laboratory persistence creates no reader-local revisions, restores deterministically, accepts authoritative persisted state, and introduces no semantic drift through recanonicalization. |
+| LAB-G17 | Stable lab action identity under rehydration | Reader/writer checkpoint rehydration, rerender, reconnect, or projection replacement cannot change the semantic meaning of an in-progress laboratory action gesture or create duplicate or cross-action durable commands. |
+| LAB-G18 | Latched lab action intent | Once a laboratory gesture begins, its ORDER or COLLECT intent is immutable for that gesture. Rehydration may invalidate and abort it, but can never substitute the other semantic action. |
+| LAB-G19 | Valid lab gesture reaches durable submit | An action valid at gesture start attempts exactly one durable submission despite stale checkpoint or projection rehydration; only a provably newer incompatible authoritative state may abort it. |
+| LAB-G20 | Physical lab press delivery survives rehydration | A visible enabled laboratory action retains one mounted native touch target across ordinary rehydration. Its gesture reaches press-in and exactly one latched durable submission or an explicit newer-authority invalidation; silent gesture loss is forbidden. |
+| LAB-G21 | Lab action enablement requires command-ready reader state | Laboratory ORDER and COLLECT controls are enabled only when the shared durable patient-command path is ready. Authoritative checkpoint reconciliation keeps the stable semantic control disabled until readiness returns automatically. |
+| LAB-G22 | Result release after available-at threshold crossing | Once authoritative simulation time reaches or exceeds a valid non-terminal result group's `availableAtSimulationTimeSec`, the writer releases it exactly once. Large jumps, restart, takeover, or later supported clinical steps cannot strand it in processing. |
 
 ### Frozen Narva laboratory timing contract
 
@@ -84,7 +90,7 @@ Availability is measured from sample collection time: Astrup 25 minutes; Hematol
 
 ### Mandatory statement for every future laboratory WP
 
-> All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G16, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed.
+> All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G22, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed.
 
 ## Performance and physical acceptance
 

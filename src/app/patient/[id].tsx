@@ -53,6 +53,14 @@ import ClinicalAssessmentDeveloperCard from "@/components/patient/ClinicalAssess
 import { getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots } from "@/services/RuntimeSnapshotService";
 import { SingleFlightActionGate } from "@/services/ui/InteractionSafety";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { getActiveLaboratoryWorkflow } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
+import { laboratoryPackageForActiveExercise, submitLaboratoryCollection, submitLaboratoryOrder } from
+  "@/services/runtime/laboratory/LaboratoryWorkflowCommandService";
+import { getRuntimeReaderConvergenceState, getRuntimeReaderConvergenceVersion,
+  subscribeToRuntimeReaderConvergence } from
+  "@/services/runtime/persistence/RuntimeReaderConvergenceService";
+import { runtimePatientCommandSubmissionReadiness } from
+  "@/services/runtime/commands/RuntimePatientCommandService";
 type PatientTab =
   | "overview"
   | "vitals"
@@ -77,9 +85,23 @@ const workflowGate=useRef(new SingleFlightActionGate()).current;
 const runWorkflow=async <T extends {message:string}>(operation:()=>Promise<T>):Promise<T>=>{setWorkflowPending(true);setWorkflowMessage("Muudatus ootab serveri kinnitust…");
   try{const outcome=await workflowGate.run(operation);setWorkflowMessage(outcome.message);return outcome;}finally{setWorkflowPending(false);}};
   const runtimeVersion = useSyncExternalStore(subscribeToRuntimeSnapshots, getRuntimeSnapshotVersion, getRuntimeSnapshotVersion);
+  useSyncExternalStore(subscribeToRuntimeReaderConvergence, getRuntimeReaderConvergenceVersion,
+    getRuntimeReaderConvergenceVersion);
   const patient = findPatientById(id ?? "");
 const isCompleted = patient?.status === "Completed";
-const isExerciseCompleted = getCanonicalExerciseSnapshot().lifecycleState === "COMPLETED";
+const canonicalExercise = getCanonicalExerciseSnapshot();
+const isExerciseCompleted = canonicalExercise.lifecycleState === "COMPLETED";
+const exerciseId = canonicalExercise.exerciseId;
+const laboratoryWorkflow = getActiveLaboratoryWorkflow(exerciseId, patient?.id ?? "");
+const laboratoryPackageId = laboratoryPackageForActiveExercise(exerciseId);
+const laboratoryConvergence = getRuntimeReaderConvergenceState();
+const laboratoryProjectionReady = laboratoryConvergence.phase === "UNTRACKED" ||
+  laboratoryConvergence.phase === "WRITER" ||
+  (laboratoryConvergence.exerciseId === exerciseId && laboratoryConvergence.phase === "READY");
+const laboratoryProjectionRevision = laboratoryConvergence.exerciseId === exerciseId
+  ? laboratoryConvergence.appliedRevision ?? 0 : runtimeVersion;
+const laboratoryCommandReadiness = runtimePatientCommandSubmissionReadiness(
+  exerciseId, canonicalExercise.simulationTimeSec);
 const assignment = patient ? getPatientAssignment(patient.id) : undefined;
 const pendingTransfer = patient ? getPendingPatientTransfer(patient.id) : undefined;
 const isReadOnly = patient
@@ -288,6 +310,15 @@ useEffect(() => {
            onOpenPanel={(panel) => {
              void runWorkflow(()=>openLabPanelConflictSafe(patient.id, panel));
            }}
+           laboratoryWorkflow={laboratoryWorkflow}
+           laboratoryPackageId={laboratoryPackageId}
+           laboratoryWorkflowScopeKey={`${exerciseId}:${patient.id}:${laboratoryPackageId ?? "NONE"}`}
+           laboratoryProjectionRevision={laboratoryProjectionRevision}
+           laboratoryProjectionReady={laboratoryProjectionReady}
+           laboratoryCommandReadiness={laboratoryCommandReadiness}
+           onOrderLaboratory={() => runWorkflow(() => submitLaboratoryOrder(patient.id,
+             getActiveLaboratoryWorkflow(exerciseId, patient.id)))}
+           onCollectLaboratory={(orderId) => runWorkflow(() => submitLaboratoryCollection(patient.id, orderId))}
          />
        )}
 
