@@ -6,6 +6,7 @@ import { NARVA_LAB_RESULT_TIMING_SECONDS_FROM_SAMPLE, resultGroupsForNarvaLabPac
   "@/config/NarvaLaboratoryCatalog";
 import { deepFreeze, immutableClone } from "@/utils/immutable";
 import { stableJson } from "@/utils/stableJson";
+import { deriveNarvaLabPatientBloodIdentity } from "./NarvaLabPatientIdentity";
 
 const emptySnapshot = (): LaboratoryWorkflowSnapshot => deepFreeze({
   schemaVersion: LABORATORY_WORKFLOW_SCHEMA_VERSION, orders: [], samples: [], resultGroups: [],
@@ -58,11 +59,14 @@ export class LaboratoryWorkflowRuntime {
       }
       return immutableClone(duplicate) as LaboratorySample;
     }
-    if (input.snapshot.patientBloodIdentity) this.rememberBloodIdentity(order.patientId, input.snapshot.patientBloodIdentity);
+    const patientBloodIdentity = input.snapshot.patientBloodIdentity ?? (order.packageId === "NARVA_POLYTRAUMA"
+      ? deriveNarvaLabPatientBloodIdentity(order.patientId) : undefined);
+    if (patientBloodIdentity) this.rememberBloodIdentity(order.patientId, patientBloodIdentity);
     const sample = deepFreeze({ sampleId: input.sampleId, orderId: order.orderId, exerciseId: order.exerciseId,
       patientId: order.patientId, sampledAtSimulationTimeSec: input.sampledAtSimulationTimeSec,
       sourcePatientRevision: input.sourcePatientRevision, sourceRuntimeStateVersion: input.sourceRuntimeStateVersion,
-      snapshot: { ...structuredClone(input.snapshot), schemaVersion: LAB_SAMPLE_SNAPSHOT_SCHEMA_VERSION } });
+      snapshot: { ...structuredClone(input.snapshot), schemaVersion: LAB_SAMPLE_SNAPSHOT_SCHEMA_VERSION,
+        ...(patientBloodIdentity ? { patientBloodIdentity } : {}) } });
     const groups = resultGroupsForNarvaLabPackage(order.packageId).map(type => deepFreeze({
       resultGroupId: `${input.sampleId}:${type}`, sampleId: input.sampleId, type,
       availableAtSimulationTimeSec: input.sampledAtSimulationTimeSec + NARVA_LAB_RESULT_TIMING_SECONDS_FROM_SAMPLE[type],

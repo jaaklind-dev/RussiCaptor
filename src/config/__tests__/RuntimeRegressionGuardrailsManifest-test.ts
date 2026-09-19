@@ -85,7 +85,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
   });
 
   test("keeps the complete laboratory contract catalog unique and explicit", () => {
-    const expectedLabIds = Array.from({ length: 22 }, (_, index) => `LAB-G${String(index + 1).padStart(2, "0")}`);
+    const expectedLabIds = Array.from({ length: 34 }, (_, index) => `LAB-G${String(index + 1).padStart(2, "0")}`);
     expect(manifest.laboratoryGuardrails.map(guardrail => guardrail.id)).toEqual(expectedLabIds);
     expect(manifest.laboratoryGuardrails.every(guardrail => guardrail.name.length > 0 &&
       guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);
@@ -107,7 +107,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       iro: { include: ["Astrup"] },
     });
     expect(manifest.laboratoryContract.futureWorkPackageStatement).toBe(
-      "All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G22, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed.",
+      "All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G34, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed.",
     );
     const document = readFileSync(resolve(root, manifest.document), "utf8");
     for (const guardrail of manifest.laboratoryGuardrails) expect(document).toContain(`| ${guardrail.id} |`);

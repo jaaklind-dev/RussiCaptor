@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/LAB-G01–LAB-G22 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/LAB-G01–LAB-G34 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Laboratory regression guardrails
 
@@ -78,6 +78,18 @@ The durable laboratory lifecycle foundation and the versioned Narva trauma/Astru
 | LAB-G20 | Physical lab press delivery survives rehydration | A visible enabled laboratory action retains one mounted native touch target across ordinary rehydration. Its gesture reaches press-in and exactly one latched durable submission or an explicit newer-authority invalidation; silent gesture loss is forbidden. |
 | LAB-G21 | Lab action enablement requires command-ready reader state | Laboratory ORDER and COLLECT controls are enabled only when the shared durable patient-command path is ready. Authoritative checkpoint reconciliation keeps the stable semantic control disabled until readiness returns automatically. |
 | LAB-G22 | Result release after available-at threshold crossing | Once authoritative simulation time reaches or exceeds a valid non-terminal result group's `availableAtSimulationTimeSec`, the writer releases it exactly once. Large jumps, restart, takeover, or later supported clinical steps cannot strand it in processing. |
+| LAB-G23 | Complete POLÜTRAUMA package | Every source-supported reportable POLÜTRAUMA component is represented and explicit Narva exclusions remain absent. |
+| LAB-G24 | Deterministic static generation | Static baseline analytes are deterministic for the same patient and immutable sample snapshot without random, wall-clock, device, or reader-local inputs. |
+| LAB-G25 | Scenario-derived result stability | An explicit authoritative sample-time scenario override wins only for supported static analytes and remains stable after later scenario change. |
+| LAB-G26 | Blood-bank identity persistence | AB0, RhD, and antibody-screen identity is patient-stable across samples, restart, takeover, and rehydration. |
+| LAB-G27 | hCG applicability | hCG is reported only when an authoritative patient applicability fact exists; missing demographic evidence is represented as not applicable, never an invented positive. |
+| LAB-G28 | Narva exclusions | SARS-CoV-2, influenza, urine analyses, and U-Narco remain absent from the Narva POLÜTRAUMA result. |
+| LAB-G29 | Complete CBC coverage | The hematology group contains all CBC/5-diff/NRBC components derived from the authoritative IVKH reference export while Hb, Hct, and platelets remain physiology-driven. |
+| LAB-G30 | Source unit/reference fidelity | Source codes, units, references, conditionality, and explicit ambiguities are preserved exactly where authoritative source metadata exists; gaps are not invented. |
+| LAB-G31 | Static/scenario sample immutability | Static, demographic, blood-bank, and scenario-derived results use only the immutable collection snapshot and cannot change after later treatment or scenario progression. |
+| LAB-G32 | Static restart/takeover determinism | Pending and released B31 results survive restart and produce identical payloads through writer takeover without regeneration drift. |
+| LAB-G33 | Reader restriction for B31 results | Readers may display persisted B31 payloads but cannot generate, revise, or release them locally. |
+| LAB-G34 | Independent complete result groups | Astrup, hematology, blood bank, clinical chemistry, and coagulation retain independent sampledAt-anchored release boundaries after complete package generation. |
 
 ### Frozen Narva laboratory timing contract
 
@@ -90,7 +102,7 @@ Availability is measured from sample collection time: Astrup 25 minutes; Hematol
 
 ### Mandatory statement for every future laboratory WP
 
-> All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G22, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed.
+> All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G34, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed.
 
 ## Performance and physical acceptance
 

@@ -30,7 +30,8 @@ describe("Narva laboratory catalog", () => {
       "Ionized calcium", "Glucose", "Hb", "Hct", "Platelets", "INR", "APTT", "Fibrinogen", "Na", "K"]) {
       expect(NARVA_LAB_ANALYTES.find(item => item.name === name)?.behavior).toBe("PHYSIOLOGY_V1");
     }
-    expect(NARVA_LAB_ANALYTES.find(item => item.id === "LAB_ASTRUP_HB_FR")?.behavior).toBe("SCENARIO_STATIC");
+    expect(NARVA_LAB_ANALYTES.find(item => item.id === "LAB_ASTRUP_HB_FR"))
+      .toMatchObject({ behavior: "SOURCE_AMBIGUOUS", implementationClass: "SOURCE_AMBIGUOUS" });
     expect(JSON.stringify(NARVA_LAB_ANALYTES)).not.toMatch(/MTP|fourth qualifying|recommendation/i);
   });
 });

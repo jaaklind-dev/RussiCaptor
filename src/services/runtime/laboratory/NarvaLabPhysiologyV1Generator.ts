@@ -1,13 +1,18 @@
 import { NARVA_LAB_ANALYTES } from "@/config/NarvaLaboratoryCatalog";
 import type { LabResultGroupType, LabSamplePhysiologySnapshot, LaboratoryResultGenerator } from
   "@/models/LaboratoryWorkflow";
+import { deriveNarvaLabPatientBloodIdentity } from "./NarvaLabPatientIdentity";
 
 export const NARVA_LAB_PHYSIOLOGY_GENERATOR_VERSION = "narva-lab-physiology-v1" as const;
+export const NARVA_LAB_STATIC_GENERATOR_VERSION = "narva-lab-static-v1" as const;
 
 type GeneratedAnalyte = Readonly<{
   analyteId: string;
-  value: number;
+  value: number | string;
   unit: string;
+  sourceCode?: string;
+  referenceRange?: string;
+  valueSource: "PHYSIOLOGY_V1" | "STATIC_BASELINE" | "SCENARIO_OVERRIDE" | "BLOOD_BANK_IDENTITY";
 }>;
 
 type ProductTotals = Readonly<{
@@ -107,7 +112,99 @@ function po2FromSaturation(saturationPct: number): number {
 
 function analyte(analyteId: string, value: number, unit: string, decimals: number): GeneratedAnalyte {
   if (!Number.isFinite(value)) throw new Error(`LAB_PHYSIOLOGY_NON_FINITE:${analyteId}`);
-  return Object.freeze({ analyteId, value: rounded(value, decimals), unit });
+  return Object.freeze({ analyteId, value: rounded(value, decimals), unit, valueSource: "PHYSIOLOGY_V1" });
+}
+
+const STATIC_BASELINES: Readonly<Record<string, Readonly<{ value: number; decimals: number }>>> = Object.freeze({
+  LAB_CRP: Object.freeze({ value: 2, decimals: 0 }),
+  LAB_UREA: Object.freeze({ value: 5, decimals: 1 }),
+  LAB_CREATININE: Object.freeze({ value: 72, decimals: 0 }),
+  LAB_WBC: Object.freeze({ value: 7, decimals: 1 }),
+  LAB_RBC: Object.freeze({ value: 4.8, decimals: 1 }),
+  LAB_MCV: Object.freeze({ value: 90, decimals: 0 }),
+  LAB_MCH: Object.freeze({ value: 30, decimals: 0 }),
+  LAB_MCHC: Object.freeze({ value: 333, decimals: 0 }),
+  LAB_RDW_CV: Object.freeze({ value: 13, decimals: 1 }),
+  LAB_MPV: Object.freeze({ value: 10.5, decimals: 1 }),
+  LAB_PDW: Object.freeze({ value: 12, decimals: 1 }),
+  LAB_PCT: Object.freeze({ value: 0.25, decimals: 2 }),
+  LAB_LCR: Object.freeze({ value: 30, decimals: 1 }),
+  LAB_NEUT_ABS: Object.freeze({ value: 4.2, decimals: 1 }),
+  LAB_NEUT_PCT: Object.freeze({ value: 60, decimals: 1 }),
+  LAB_LYMPH_ABS: Object.freeze({ value: 2.1, decimals: 1 }),
+  LAB_LYMPH_PCT: Object.freeze({ value: 30, decimals: 1 }),
+  LAB_MONO_ABS: Object.freeze({ value: 0.49, decimals: 2 }),
+  LAB_MONO_PCT: Object.freeze({ value: 7, decimals: 1 }),
+  LAB_EO_ABS: Object.freeze({ value: 0.14, decimals: 2 }),
+  LAB_EO_PCT: Object.freeze({ value: 2, decimals: 1 }),
+  LAB_BASO_ABS: Object.freeze({ value: 0.04, decimals: 2 }),
+  LAB_BASO_PCT: Object.freeze({ value: 0.5, decimals: 1 }),
+  LAB_IG_ABS: Object.freeze({ value: 0.02, decimals: 2 }),
+  LAB_IG_PCT: Object.freeze({ value: 0.3, decimals: 1 }),
+  LAB_NRBC_ABS: Object.freeze({ value: 0, decimals: 2 }),
+  LAB_NRBC_PCT: Object.freeze({ value: 0, decimals: 1 }),
+  LAB_TROPONIN_T: Object.freeze({ value: 6, decimals: 0 }),
+  LAB_CK: Object.freeze({ value: 120, decimals: 0 }),
+  LAB_ALAT: Object.freeze({ value: 24, decimals: 0 }),
+  LAB_ASAT: Object.freeze({ value: 25, decimals: 0 }),
+  LAB_GGT: Object.freeze({ value: 25, decimals: 0 }),
+  LAB_ALP: Object.freeze({ value: 75, decimals: 0 }),
+  LAB_BILIRUBIN: Object.freeze({ value: 10, decimals: 0 }),
+  LAB_LIPASE: Object.freeze({ value: 32, decimals: 0 }),
+  LAB_ETHANOL: Object.freeze({ value: 0, decimals: 1 }),
+  LAB_HCG: Object.freeze({ value: 2, decimals: 1 }),
+});
+
+function scenarioOverrides(snapshot: LabSamplePhysiologySnapshot): Readonly<Record<string, unknown>> {
+  return record(snapshot.runtimeFields.laboratoryAnalyteOverrides) ?? Object.freeze({});
+}
+
+function staticAnalytes(input: Parameters<LaboratoryResultGenerator>[0]): Readonly<{
+  analytes: readonly GeneratedAnalyte[];
+  notApplicableAnalyteIds: readonly string[];
+}> {
+  const overrides = scenarioOverrides(input.sample.snapshot);
+  const profile = record(input.sample.snapshot.runtimeFields.laboratoryPatientProfile);
+  const hcgApplicable = profile?.hcgApplicable === true;
+  const notApplicableAnalyteIds = input.resultGroupType === "CLINICAL_CHEMISTRY" && !hcgApplicable
+    ? Object.freeze(["LAB_HCG"]) : Object.freeze([] as string[]);
+  const generated: GeneratedAnalyte[] = [];
+  for (const definition of NARVA_LAB_ANALYTES.filter(item => item.resultGroup === input.resultGroupType)) {
+    if (definition.implementationClass === "STATIC_BASELINE" ||
+      definition.implementationClass === "DEMOGRAPHIC_CONDITIONAL") {
+      if (definition.id === "LAB_HCG" && !hcgApplicable) continue;
+      const baseline = STATIC_BASELINES[definition.id];
+      if (!baseline) continue;
+      const override = overrides[definition.id];
+      const overrideValue = typeof override === "number" && Number.isFinite(override) || typeof override === "string"
+        ? override : undefined;
+      generated.push(Object.freeze({ analyteId: definition.id,
+        value: overrideValue ?? rounded(baseline.value, baseline.decimals), unit: definition.unit ?? "",
+        ...(definition.sourceCode ? { sourceCode: definition.sourceCode } : {}),
+        ...(definition.referenceRange ? { referenceRange: definition.referenceRange } : {}),
+        valueSource: overrideValue === undefined ? "STATIC_BASELINE" : "SCENARIO_OVERRIDE" }));
+    }
+  }
+  if (input.resultGroupType === "AB0") {
+    const identity = input.sample.snapshot.patientBloodIdentity ??
+      deriveNarvaLabPatientBloodIdentity(input.sample.patientId);
+    const values: Readonly<Record<string, string>> = Object.freeze({ LAB_AB0: identity.ab0,
+      LAB_RHD: identity.rhd, LAB_ANTIBODY_SCREEN: identity.antibodyScreen ?? "NEGATIVE" });
+    for (const definition of NARVA_LAB_ANALYTES.filter(item => item.resultGroup === "AB0")) {
+      generated.push(Object.freeze({ analyteId: definition.id, value: values[definition.id],
+        unit: definition.unit ?? "", ...(definition.sourceCode ? { sourceCode: definition.sourceCode } : {}),
+        valueSource: "BLOOD_BANK_IDENTITY" }));
+    }
+  }
+  return Object.freeze({ analytes: Object.freeze(generated), notApplicableAnalyteIds });
+}
+
+function withSourceMetadata(value: GeneratedAnalyte): GeneratedAnalyte {
+  const definition = NARVA_LAB_ANALYTES.find(item => item.id === value.analyteId);
+  if (!definition) return value;
+  return Object.freeze({ ...value, unit: definition.unit ?? value.unit,
+    ...(definition.sourceCode ? { sourceCode: definition.sourceCode } : {}),
+    ...(definition.referenceRange ? { referenceRange: definition.referenceRange } : {}) });
 }
 
 /**
@@ -166,7 +263,7 @@ export function generateNarvaLabPhysiology(input: Parameters<LaboratoryResultGen
   const potassium = bounded(4.1 + 0.16 * Math.max(0, lactate - 4), 3, 6.5);
   const glucose = bounded(5.3 + 1.8 * shockBurden, 2.5, 15);
 
-  const byGroup: Readonly<Record<LabResultGroupType, readonly GeneratedAnalyte[]>> = {
+  const dynamicByGroup: Readonly<Record<LabResultGroupType, readonly GeneratedAnalyte[]>> = {
     ASTRUP: Object.freeze([
       analyte("LAB_PH", ph, "", 2), analyte("LAB_PCO2", pco2, "mmHg", 1),
       analyte("LAB_PO2", po2, "mmHg", 1), analyte("LAB_HCO3", bicarbonate, "mmol/L", 1),
@@ -188,16 +285,32 @@ export function generateNarvaLabPhysiology(input: Parameters<LaboratoryResultGen
     ]),
     AB0: Object.freeze([]),
   };
-  const generated = byGroup[input.resultGroupType];
-  if (!generated.length) return undefined;
-  const generatedIds = new Set(generated.map(item => item.analyteId));
-  const pendingAnalyteIds = NARVA_LAB_ANALYTES.filter(item => item.resultGroup === input.resultGroupType &&
-    !generatedIds.has(item.id)).map(item => item.id);
+  const dynamicGenerated = dynamicByGroup[input.resultGroupType];
+  const staticGenerated = input.order.packageId === "NARVA_POLYTRAUMA"
+    ? staticAnalytes(input) : Object.freeze({ analytes: Object.freeze([] as GeneratedAnalyte[]),
+      notApplicableAnalyteIds: Object.freeze([] as string[]) });
+  const generatedById = new Map([...dynamicGenerated, ...staticGenerated.analytes]
+    .map(item => [item.analyteId, withSourceMetadata(item)]));
+  const groupCatalog = NARVA_LAB_ANALYTES.filter(item => item.resultGroup === input.resultGroupType &&
+    item.reportable !== false);
+  const generated = groupCatalog.flatMap(item => generatedById.get(item.id) ?? []);
+  if (!generated.length && !groupCatalog.some(item => item.implementationClass === "SOURCE_AMBIGUOUS")) return undefined;
+  const notApplicable = new Set(staticGenerated.notApplicableAnalyteIds);
+  const pendingAnalyteIds = groupCatalog.filter(item => !generatedById.has(item.id) && !notApplicable.has(item.id))
+    .map(item => item.id);
+  const hasDynamic = generated.some(item => item.valueSource === "PHYSIOLOGY_V1");
+  const hasStatic = generated.some(item => item.valueSource !== "PHYSIOLOGY_V1");
+  const generationVersion = hasDynamic && hasStatic
+    ? `${NARVA_LAB_PHYSIOLOGY_GENERATOR_VERSION}+${NARVA_LAB_STATIC_GENERATOR_VERSION}`
+    : hasStatic ? NARVA_LAB_STATIC_GENERATOR_VERSION : NARVA_LAB_PHYSIOLOGY_GENERATOR_VERSION;
   return Object.freeze({
-    generationVersion: NARVA_LAB_PHYSIOLOGY_GENERATOR_VERSION,
+    generationVersion,
     status: pendingAnalyteIds.length ? "PARTIALLY_RESULTED" as const : "RESULTED" as const,
     payload: Object.freeze({ schemaVersion: 1, sampledAtSimulationTimeSec: input.sample.sampledAtSimulationTimeSec,
-      analytes: generated, pendingAnalyteIds: Object.freeze(pendingAnalyteIds) }),
+      analytes: Object.freeze(generated), pendingAnalyteIds: Object.freeze(pendingAnalyteIds),
+      notApplicableAnalyteIds: staticGenerated.notApplicableAnalyteIds,
+      generatorVersions: Object.freeze([...(hasDynamic ? [NARVA_LAB_PHYSIOLOGY_GENERATOR_VERSION] : []),
+        ...(hasStatic ? [NARVA_LAB_STATIC_GENERATOR_VERSION] : [])]) }),
   });
 }
 

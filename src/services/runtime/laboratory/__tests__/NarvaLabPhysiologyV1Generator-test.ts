@@ -197,7 +197,8 @@ describe("Narva laboratory physiology v1", () => {
       .find(item => item.analyteId === "LAB_ICA")!.value).toBeGreaterThan(
       (first?.payload.analytes as readonly { analyteId: string; value: number }[])
         .find(item => item.analyteId === "LAB_ICA")!.value);
-    expect(generateNarvaLabPhysiology({ order, sample: before, resultGroupType: "AB0" })).toBeUndefined();
+    expect(generateNarvaLabPhysiology({ order, sample: before, resultGroupType: "AB0" }))
+      .toMatchObject({ status: "RESULTED", generationVersion: "narva-lab-static-v1" });
   });
 
   test("releases pre- and post-treatment samples from their own immutable collection snapshots", () => {
