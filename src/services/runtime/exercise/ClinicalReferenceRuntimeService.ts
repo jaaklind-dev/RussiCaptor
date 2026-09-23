@@ -1,6 +1,5 @@
 import { getAllPatients } from "@/repositories/PatientRepository";
 import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
-import { activeExercisePackageService } from "@/services/exercise/ActiveExercisePackageService";
 import { ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE, CARDIAC_ARREST_EXERCISE_PACKAGE } from "@/services/exercise/CanonicalExercisePackages";
 import { exercisePackageLoader, getExercisePackage } from "@/services/exercise/ExercisePackageService";
 import { CARDIAC_ARREST_REFERENCE_FIXTURE } from "@/services/golden/CardiacArrestReferenceFixture";
@@ -16,8 +15,46 @@ import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerat
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { clearPatientTransportRuntime, preparePatientTransportRuntime } from "./PatientTransportRuntimeService";
 import type { LaboratoryWorkflowSnapshot } from "@/models/LaboratoryWorkflow";
+import type { GoldenFixture } from "@/models/GoldenTest";
+import type { ExercisePackage } from "@/models/exercise/ExercisePackage";
 
 let active: Readonly<{ exerciseId: string; patientId: string; engine: ClinicalScenarioEngine; dispose: () => void }>[] = [];
+
+function deterministicRuntimeSeed(patientId: string): number {
+  let hash = 2166136261;
+  for (const character of patientId) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+/**
+ * Every materialized patient needs a canonical Runtime identity even when the
+ * package intentionally supplies no dynamic clinical fixture.  This stable,
+ * non-progressing baseline is Runtime infrastructure, not package content: an
+ * explicit package fixture always wins unchanged.
+ */
+export function createCanonicalBaselineRuntimeFixture(patientId: string): GoldenFixture {
+  return Object.freeze({
+    fixtureId: `FX-CANONICAL-BASELINE-${patientId}`,
+    fixtureType: "CANONICAL_BASELINE",
+    patientId,
+    seed: deterministicRuntimeSeed(patientId),
+    clockState: "RUNNING",
+    ownershipVersion: 1,
+    loadedModules: Object.freeze(["HYPOVENTILATION_HYPERCAPNIA_V1"]),
+    activeResources: Object.freeze({}),
+    initialState: Object.freeze({
+      processType: "HYPOVENTILATION_HYPERCAPNIA",
+      templateId: `HV-CANONICAL-BASELINE-${patientId}`,
+      ventilationReserve: 100,
+      reserveLossPerMin: 0,
+      co2Burden: 40,
+      co2GainPerMin: 0,
+    }),
+  });
+}
 
 /** Validated Runtime owners may be read on a reader, while their write methods remain authority-gated. */
 export function isClinicalReferenceRuntimeReadReady(exerciseId: string): boolean {
@@ -34,7 +71,7 @@ export function assertActiveRuntimeExerciseIdentity(
 }
 
 /** Connects the selected reference package to the existing authoritative runtime when the exercise starts. */
-function provenance(exerciseId: string, patientId: string, pkg: NonNullable<ReturnType<typeof activeExercisePackageService.getActive>>): RuntimeProvenance {
+function provenance(exerciseId: string, patientId: string, pkg: ExercisePackage): RuntimeProvenance {
   const modules = pkg.definition.clinicalModuleComposition?.modules ?? pkg.requiredClinicalModules ?? [];
   return {
     exerciseId, patientId, packageId: pkg.packageId, packageVersion: pkg.packageVersion,
@@ -45,12 +82,12 @@ function provenance(exerciseId: string, patientId: string, pkg: NonNullable<Retu
 
 export function prepareActiveClinicalReferenceRuntime(exerciseId: string, persisted: readonly PersistedRuntimeState[] = []): void {
   const endPreparation = startRuntimeWorkTrace("STARTUP_RUNTIME_ENGINE_PREPARE", { persistedRuntimeCount: persisted.length });
-  const pkg = persisted.length ? getExercisePackage(exerciseId) : activeExercisePackageService.getActive();
+  const pkg = getExercisePackage(exerciseId);
   const materialized = getPatientMaterialization(exerciseId);
   const endTransport = startRuntimeWorkTrace("STARTUP_RUNTIME_TRANSPORT_RESTORE");
   preparePatientTransportRuntime(exerciseId);
   endTransport();
-  const configured = materialized?.patients.filter(record => record.runtimeFixture) ?? [];
+  const configured = materialized?.patients ?? [];
   const legacyReference = pkg?.packageId === CARDIAC_ARREST_EXERCISE_PACKAGE.packageId || pkg?.packageId === ALS_PROTOCOL_REFERENCE_EXERCISE_PACKAGE.packageId;
   const fallback = legacyReference ? getAllPatients().find(item => item.status === "Active" || item.status === "Incoming") : undefined;
   const records = configured.length ? configured : fallback ? [{ patient: fallback, runtimeFixture: { ...structuredClone(CARDIAC_ARREST_REFERENCE_FIXTURE), patientId: fallback.id } }] : [];
@@ -60,7 +97,9 @@ export function prepareActiveClinicalReferenceRuntime(exerciseId: string, persis
   if (persisted.length && persisted.length !== records.length) throw new Error("RUNTIME_PERSISTENCE_PATIENT_SET_MISMATCH");
   const candidates: { exerciseId: string; patientId: string; engine: ClinicalScenarioEngine }[] = [];
   try { for (const [runtimeIndex, record] of records.entries()) {
-    const patient = record.patient; const fixture = record.runtimeFixture!; const engine = new ClinicalScenarioEngine();
+    const patient = record.patient;
+    const fixture = record.runtimeFixture ?? createCanonicalBaselineRuntimeFixture(patient.id);
+    const engine = new ClinicalScenarioEngine();
     const artifact = persisted.find(item => item.provenance.patientId === patient.id);
     if (persisted.length && !artifact) throw new Error(`RUNTIME_PERSISTENCE_PATIENT_MISSING:${patient.id}`);
     if (artifact) {
@@ -126,7 +165,7 @@ export async function prepareActiveClinicalReferenceRuntimeAsync(
   const pkg = getExercisePackage(exerciseId);
   const materialized = getPatientMaterialization(exerciseId);
   preparePatientTransportRuntime(exerciseId);
-  const records = materialized?.patients.filter(record => record.runtimeFixture) ?? [];
+  const records = materialized?.patients ?? [];
   if (!pkg || !records.length) { endPreparation({ outcome: "NO_RUNTIME_RECORDS" }); return; }
   if (persisted.length !== records.length) throw new Error("RUNTIME_PERSISTENCE_PATIENT_SET_MISMATCH");
   exercisePackageLoader.bind(exerciseId, pkg);

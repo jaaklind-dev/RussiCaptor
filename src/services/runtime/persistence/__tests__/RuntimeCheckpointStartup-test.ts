@@ -804,7 +804,8 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(asyncAccept).toContain("runtimeCheckpoint: checkpoint");
     expect(asyncAccept).toContain("void flushLatestSnapshot()");
     const persistence = source.slice(source.indexOf("export function startStatePersistence"));
-    expect(persistence).toContain("hasCanonicalRuntime && runtimeWritesAllowed()");
+    expect(persistence).toContain("checkpointEnvelopePreparationDecision(");
+    expect(persistence).toContain("const preparedCheckpoint = preparationDecision.eligible");
     expect(persistence).toContain("preparedCheckpoint ?? localRuntimeCheckpointStore.get()");
   });
 
@@ -840,6 +841,71 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(publish).toContain("Promise.race([publication,echoAcknowledgement]");
     expect(publish).toContain("echoAcknowledgement");
     expect(publish).toContain("publicationBarrier=task.then(()=>undefined,()=>undefined)");
+  });
+
+  describe("RUNTIME-BOOTSTRAP-01 initial canonical persistence", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+    const startup = source.slice(
+      source.indexOf("async function startRuntimeCheckpointSyncForExercise"),
+      source.indexOf("async function startRuntimeCheckpointSyncOnce"),
+    );
+
+    test("RB-A1 fresh local rev1 is not mistaken for an already-published checkpoint", () => {
+      expect(startup).toContain("let lastPublishedCheckpoint=remote;");
+      expect(startup).not.toContain('lastPublishedCheckpoint=remote ?? (resolved.status!=="NONE"');
+      expect(startup).toContain("checkpoint.checkpointRevision<=remoteRevision||isIdenticalCheckpointPayload(lastPublishedCheckpoint,checkpoint)");
+    });
+
+    test("RB-A2 immediate cold restore selects the canonical remote envelope", () => {
+      expect(startup).toContain('remote=await startupAwait(loadRuntimeCheckpointWithCache(repository,exerciseId,local,"startup"))');
+      expect(startup).toContain('else if (resolved.status==="REMOTE")');
+      expect(startup).toContain("await acceptReaderCheckpoint(resolved.checkpoint,local===resolved.checkpoint?\"CACHE\":\"REMOTE\")");
+    });
+
+    test("RB-A3 bootstrap revocation is not a dependency of checkpoint publication", () => {
+      const publication = startup.slice(startup.indexOf("let publishInFlight=false"), startup.indexOf("const stopLocal="));
+      expect(publication).not.toContain("EXERCISE_BOOTSTRAP");
+      expect(publication).toContain("repository.finalizeCompletion");
+      expect(publication).toContain("publishRuntimeCheckpointTerminal");
+    });
+
+    test("RB-A4 fresh startup has one writer-acquisition decision", () => {
+      const authority = startup.slice(startup.indexOf("const resolved="), startup.indexOf("let publishInFlight=false"));
+      expect(authority.match(/acquireRuntimeWriterTerminal\(/g)).toHaveLength(1);
+      expect(authority).toContain('if ("lease" in acquired)');
+      expect(authority).toContain("setRuntimeCommandAuthorityWriter(exerciseId)");
+    });
+
+    test("RB-A5 and RB-A6 bootstrap persistence is package and Imaging agnostic", () => {
+      expect(startup).not.toContain("packageId");
+      expect(startup).not.toContain("Imaging");
+      expect(startup).not.toContain("imaging");
+      expect(startup).toContain("ensureSharedWorkflowPatientHeads(exerciseId, patientIds)");
+    });
+
+    test("RB-A7 reconnect is idempotent at the canonical CAS and patient-head boundaries", () => {
+      expect(startup).toContain("remoteRevision=remote?.checkpointRevision??0");
+      expect(startup).toContain("ensureSharedWorkflowPatientHeads(exerciseId, patientIds)");
+      expect(startup).toContain("checkpoint.checkpointRevision<=remoteRevision");
+      expect(startup).toContain("isIdenticalCheckpointPayload(lastPublishedCheckpoint,checkpoint)");
+    });
+
+    test("RB-A8 failed first publication stays dirty and retries instead of masquerading as acknowledged", () => {
+      const publication = startup.slice(startup.indexOf("const runPublish=async()=>{"), startup.indexOf("const publishNow="));
+      expect(publication).toContain("publicationDirty=true;");
+      expect(publication).toContain("schedulePublicationRetry()");
+      expect(publication).toContain('else { endPublish({ outcome: result.state }); publicationDirty=true;setStatus({state:"WRITER",code:result.code,revision:remoteRevision});schedulePublicationRetry(); }');
+      expect(publication).toContain('if(result.state==="PUBLISHED")');
+      expect(publication.indexOf('if(result.state==="PUBLISHED")')).toBeLessThan(publication.indexOf("lastPublishedCheckpoint=result.checkpoint"));
+    });
+
+    test("RB2-A2 checkpoint preparation records the exact eligibility decision", () => {
+      const persistence = fs.readFileSync(path.join(process.cwd(), "src/services/StatePersistenceService.ts"), "utf8");
+      expect(persistence).toContain('reason: "NO_CANONICAL_RUNTIME"');
+      expect(persistence).toContain('reason: "RUNTIME_WRITES_NOT_ALLOWED"');
+      expect(persistence).toContain("eligibilityReason: preparationDecision.reason");
+      expect(persistence).toContain("const preparedCheckpoint = preparationDecision.eligible");
+    });
   });
 
   test("terminal lifecycle publication supersedes one active routine preparation before RPC", () => {

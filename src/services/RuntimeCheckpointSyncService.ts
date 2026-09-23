@@ -844,7 +844,12 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   let activePublicationPriority:"ROUTINE"|"LIFECYCLE_CRITICAL"|undefined;
   let routinePublishTimer:ReturnType<typeof setTimeout>|undefined;
   let publicationRetryTimer:ReturnType<typeof setTimeout>|undefined;
-  let lastPublishedCheckpoint=remote ?? (resolved.status!=="NONE"&&resolved.status!=="CONFLICT" ? resolved.checkpoint : undefined);
+  // Only a checkpoint loaded from the authoritative repository has already
+  // been published.  On a fresh exercise `resolved.checkpoint` is the local
+  // rev1 bootstrap envelope; treating it as the remote base suppresses the
+  // first CAS publication and leaves a RUNNING exercise without durable
+  // Runtime state.
+  let lastPublishedCheckpoint=remote;
   let lastPublicationAt=Date.now();
   let pendingWriterEcho: Readonly<{
     payloadHash:string;

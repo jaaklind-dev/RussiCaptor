@@ -156,6 +156,20 @@ function collectSharedExerciseState(): SharedExerciseState {
     ...(runtimePatientCommandCursor > 0 ? { runtimePatientCommandCursor } : {}) };
 }
 
+export type CheckpointEnvelopePreparationDecision = Readonly<{
+  eligible: boolean;
+  reason: "READY" | "NO_CANONICAL_RUNTIME" | "RUNTIME_WRITES_NOT_ALLOWED";
+}>;
+
+export function checkpointEnvelopePreparationDecision(
+  persistedRuntimeCount: number,
+  writesAllowed: boolean,
+): CheckpointEnvelopePreparationDecision {
+  if (persistedRuntimeCount < 1) return Object.freeze({ eligible: false, reason: "NO_CANONICAL_RUNTIME" });
+  if (!writesAllowed) return Object.freeze({ eligible: false, reason: "RUNTIME_WRITES_NOT_ALLOWED" });
+  return Object.freeze({ eligible: true, reason: "READY" });
+}
+
 async function collectSharedExerciseStateAsync(yieldControl: () => Promise<void>): Promise<SharedExerciseState> {
   const endSnapshot = startRuntimeWorkTrace("PRE_CANON_SNAPSHOT");
   const endCollection = startRuntimeWorkTrace("CHECKPOINT_PROJECTION_COLLECTION");
@@ -595,19 +609,28 @@ export function startStatePersistence(): () => void {
       const shared = await collectSharedExerciseStateAsync(yieldForGeneration);
       if (stopped) return;
       await yieldControl();
-      const hasCanonicalRuntime = (shared.persistedRuntimeStates?.length ?? 0) > 0;
+      const persistedRuntimeCount = shared.persistedRuntimeStates?.length ?? 0;
+      const preparationDecision = checkpointEnvelopePreparationDecision(
+        persistedRuntimeCount,
+        runtimeWritesAllowed(),
+      );
       const endPreparation = startRuntimeWorkTrace("CHECKPOINT_ENVELOPE_PREPARATION", {
         generation,
-        persistedRuntimeCount: shared.persistedRuntimeStates?.length ?? 0,
+        persistedRuntimeCount,
+        eligibilityReason: preparationDecision.reason,
+        exerciseId: shared.exerciseSession.exerciseId,
+        lifecycleState: "lifecycleState" in shared.exerciseSession
+          ? shared.exerciseSession.lifecycleState
+          : shared.exerciseSession.state,
       });
       // A reader persists the exact validated authoritative checkpoint it
       // accepted. It must never mint a local revision from read-only state:
       // such a revision can outrank the next durable notification after a cold
       // restart even though it was never published by the sole writer.
-      const preparedCheckpoint = hasCanonicalRuntime && runtimeWritesAllowed()
+      const preparedCheckpoint = preparationDecision.eligible
         ? await localRuntimeCheckpointStore.prepareCaptureAsync(shared, yieldForGeneration)
         : undefined;
-      endPreparation({ prepared: Boolean(preparedCheckpoint) });
+      endPreparation({ prepared: Boolean(preparedCheckpoint), eligibilityReason: preparationDecision.reason });
       // Drop one obsolete preparation, but force the next one through CAS so a
       // continuously ticking Runtime cannot starve checkpoint publication.
       if (stopped || obsoleteGate.shouldDrop(pipeline.isCurrent(generation))) return;
