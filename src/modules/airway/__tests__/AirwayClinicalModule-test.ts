@@ -80,7 +80,7 @@ describe("WP-32 AIRWAY_V1 Clinical Module", () => {
     expect(CANONICAL_EXERCISE_PACKAGES.every(pkg => !pkg.requiredClinicalModules && !pkg.definition.clinicalModuleComposition)).toBe(true);
     expect(identities.find(item => item.packageId === DEFAULT_EXERCISE_PACKAGE.packageId)).toEqual({
       packageId: DEFAULT_EXERCISE_PACKAGE.packageId,
-      packageHash: "a32f63f6730596a8491279213bd4ac0c7806efe96b157992beeb3183edb266ae",
+      packageHash: "dd4938b812a7d540c30f9dc0a9829ba32e521ec25c62657349680aca59a39db3",
       definitionHash: "b488182cd19a1e09dbb0dcd23de1db0c922782ceb0ae4e6903b45d533409a81b",
     });
   });

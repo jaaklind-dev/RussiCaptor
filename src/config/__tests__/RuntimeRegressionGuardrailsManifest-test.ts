@@ -6,6 +6,13 @@ type GuardrailManifest = Readonly<{
   document: string;
   runner: string;
   guardrails: readonly Readonly<{ id: string; name: string; tests: readonly string[] }>[];
+  imagingGuardrails: readonly Readonly<{
+    id: string;
+    name: string;
+    description: string;
+    phase: "FOUNDATION";
+    tests: readonly string[];
+  }>[];
   laboratoryGuardrails: readonly Readonly<{
     id: string;
     name: string;
@@ -55,6 +62,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       manifest.document,
       manifest.runner,
       ...manifest.guardrails.flatMap(guardrail => guardrail.tests),
+      ...manifest.imagingGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.laboratoryGuardrails.flatMap(guardrail => guardrail.tests),
       ...Object.values(manifest.groups).flat(),
       ...manifest.historicalFailures.flatMap(failure => failure.tests),
@@ -63,7 +71,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
   });
 
   test("exposes stable grouped commands through the manifest-backed runner", () => {
-    expect(Object.keys(manifest.groups).sort()).toEqual(["laboratory", "multi-device", "persistence", "runtime"]);
+    expect(Object.keys(manifest.groups).sort()).toEqual(["imaging", "laboratory", "multi-device", "persistence", "runtime"]);
     expect(Object.values(manifest.groups).every(files => files.length > 0)).toBe(true);
     expect(packageJson.scripts).toMatchObject({
       "test:guardrails": "node scripts/run-runtime-guardrails.mjs all",
@@ -71,6 +79,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       "test:multi-device-guardrails": "node scripts/run-runtime-guardrails.mjs multi-device",
       "test:persistence-guardrails": "node scripts/run-runtime-guardrails.mjs persistence",
       "test:lab-guardrails": "node scripts/run-runtime-guardrails.mjs laboratory",
+      "test:imaging-guardrails": "node scripts/run-runtime-guardrails.mjs imaging",
     });
   });
 
@@ -90,8 +99,18 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
     expect(manifest.laboratoryGuardrails.every(guardrail => guardrail.name.length > 0 &&
       guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);
     const allIds = [...manifest.guardrails.map(guardrail => guardrail.id),
-      ...manifest.historicalFailures.map(failure => failure.id), ...expectedLabIds];
+      ...manifest.historicalFailures.map(failure => failure.id),
+      ...manifest.imagingGuardrails.map(guardrail => guardrail.id), ...expectedLabIds];
     expect(new Set(allIds).size).toBe(allIds.length);
+  });
+
+  test("keeps the complete package-owned Imaging guardrail catalog unique and explicit", () => {
+    const expectedImagingIds = Array.from({ length: 10 }, (_, index) => `IMG-G${String(index + 1).padStart(2, "0")}`);
+    expect(manifest.imagingGuardrails.map(guardrail => guardrail.id)).toEqual(expectedImagingIds);
+    expect(manifest.imagingGuardrails.every(guardrail => guardrail.name.length > 0 &&
+      guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);
+    const document = readFileSync(resolve(root, manifest.document), "utf8");
+    for (const guardrail of manifest.imagingGuardrails) expect(document).toContain(`| ${guardrail.id} |`);
   });
 
   test("freezes Narva laboratory timing, package scope and future-WP policy", () => {

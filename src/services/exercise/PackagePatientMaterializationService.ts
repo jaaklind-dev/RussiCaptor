@@ -44,6 +44,12 @@ export function createPatientMaterializationPlan(exerciseId: string, pkg: Exerci
     if (ids.has(record.patient.id)) throw new PatientDatasetError("DUPLICATE_PATIENT_ID", `Patient ${record.patient.id} is duplicated.`); ids.add(record.patient.id);
     if (record.runtimeFixture && record.runtimeFixture.patientId !== record.patient.id) throw new PatientDatasetError("INVALID_RUNTIME_FIXTURE", `Runtime fixture patient identity differs for ${record.patient.id}.`);
   }
+  for (const definition of pkg.imagingConfiguration?.definitions ?? []) {
+    if (!ids.has(definition.study.patientId)) throw new PatientDatasetError(
+      "MALFORMED_PATIENT",
+      `Imaging study ${definition.study.id} references patient ${definition.study.patientId} outside ${dataset.datasetId}.`,
+    );
+  }
   const patients = deepFreeze(ordered.map(record => ({ patient: clonePatient(record.patient), ...(record.runtimeFixture ? { runtimeFixture: structuredClone(record.runtimeFixture) } : {}) }))) as readonly PackagePatientRecord[];
   const canonical = { exerciseId, packageId: pkg.packageId, packageVersion: pkg.packageVersion, packageHash: pkg.packageHash, datasetId: dataset.datasetId, datasetVersion: dataset.version, patients };
   return deepFreeze({ ...canonical, materializationHash: sha256Text(stableJson(canonical)) }) as MaterializedPatientDataset;

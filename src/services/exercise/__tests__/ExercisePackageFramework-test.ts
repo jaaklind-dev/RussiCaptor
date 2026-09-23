@@ -34,7 +34,7 @@ describe("WP-28 Exercise Package Framework", () => {
     expect(HISTORICAL_BOTULISM_EXERCISE_PACKAGE_V1.packageHash).toBe("c6ff142e1cfbdcb37757f159fbbd95128f9ee4a961972d22264c44317b6e803d");
     expect(HISTORICAL_BOTULISM_EXERCISE_PACKAGE_V1.manifest.definitionHash).toBe("b488182cd19a1e09dbb0dcd23de1db0c922782ceb0ae4e6903b45d533409a81b");
     expect(DEFAULT_EXERCISE_PACKAGE).toMatchObject({ packageId: "russicaptor.botulism-johvi", packageVersion: "2.0.0", patientDatasetId: "patients.botulism-johvi.v2" });
-    expect(DEFAULT_EXERCISE_PACKAGE.packageHash).toBe("a32f63f6730596a8491279213bd4ac0c7806efe96b157992beeb3183edb266ae");
+    expect(DEFAULT_EXERCISE_PACKAGE.packageHash).toBe("dd4938b812a7d540c30f9dc0a9829ba32e521ec25c62657349680aca59a39db3");
     expect(calculateExercisePackageHash(DEFAULT_EXERCISE_PACKAGE)).toBe(DEFAULT_EXERCISE_PACKAGE.packageHash);
   });
 

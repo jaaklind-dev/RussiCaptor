@@ -40,6 +40,7 @@ export class ExercisePackageLoader {
       protocolConfiguration: pkg.protocolConfiguration,
       evaluationProfile: pkg.evaluationProfile,
       transportConfiguration: pkg.transportConfiguration,
+      imagingConfiguration: pkg.imagingConfiguration,
       compatibilityVersion: pkg.manifest.compatibilityVersion,
     });
   }

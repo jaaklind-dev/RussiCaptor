@@ -7,7 +7,7 @@ import { ExerciseDefinitionValidator } from "./ExerciseDefinitionValidator";
 import { isClinicalTreatmentId } from "@/services/clinical/ClinicalTreatmentCatalog";
 
 export const CURRENT_PACKAGE_COMPATIBILITY_VERSION = 1;
-export type ExercisePackageValidationCode = "INVALID_PACKAGE_ID" | "INVALID_PACKAGE_VERSION" | "INVALID_MANIFEST" | "INVALID_HASH" | "INVALID_DEFINITION" | "UNKNOWN_PATIENT_PROCESS" | "UNKNOWN_ANALYTICS_PROVIDER" | "UNKNOWN_METRIC_PROVIDER" | "INCONSISTENT_SELECTION" | "DUPLICATE_VALUE" | "INCOMPATIBLE_PACKAGE" | "INVALID_MODULE_DEPENDENCY" | "INVALID_EVALUATION_PROFILE_REFERENCE" | "INVALID_TRANSPORT_CONFIGURATION" | "INVALID_CLINICAL_TREATMENT";
+export type ExercisePackageValidationCode = "INVALID_PACKAGE_ID" | "INVALID_PACKAGE_VERSION" | "INVALID_MANIFEST" | "INVALID_HASH" | "INVALID_DEFINITION" | "UNKNOWN_PATIENT_PROCESS" | "UNKNOWN_ANALYTICS_PROVIDER" | "UNKNOWN_METRIC_PROVIDER" | "INCONSISTENT_SELECTION" | "DUPLICATE_VALUE" | "INCOMPATIBLE_PACKAGE" | "INVALID_MODULE_DEPENDENCY" | "INVALID_EVALUATION_PROFILE_REFERENCE" | "INVALID_TRANSPORT_CONFIGURATION" | "INVALID_CLINICAL_TREATMENT" | "INVALID_IMAGING_CONFIGURATION";
 export type ExercisePackageDiagnostic = Readonly<{ code: ExercisePackageValidationCode; path: string; message: string }>;
 const duplicates = (values: readonly string[]) => values.filter((value, index) => values.indexOf(value) !== index);
 
@@ -49,6 +49,20 @@ export class ExercisePackageValidator {
       const resourceIds = transport.resources.map(item => item.resourceId); const destinationIds = transport.destinations.map(item => item.destinationId);
       if (new Set(resourceIds).size !== resourceIds.length || transport.resources.some(item => !item.resourceId?.trim() || !item.resourceType?.trim() || !item.displayName?.trim() || !item.homeLocationId?.trim() || item.capacity !== 1)) add("INVALID_TRANSPORT_CONFIGURATION", "transportConfiguration.resources", "Transport resources require unique identity, home location and capacity one");
       if (new Set(destinationIds).size !== destinationIds.length || transport.destinations.some(item => !item.destinationId?.trim() || !item.displayName?.trim() || [item.travelDurationSec, item.handoverDurationSec, item.returnDurationSec, item.turnaroundDurationSec].some(value => !Number.isInteger(value) || value < 0))) add("INVALID_TRANSPORT_CONFIGURATION", "transportConfiguration.destinations", "Transport destinations require unique identity and non-negative canonical durations");
+    }
+    const imaging = pkg.imagingConfiguration;
+    if (imaging) {
+      if (imaging.schemaVersion !== 1) add("INVALID_IMAGING_CONFIGURATION", "imagingConfiguration.schemaVersion", "Unsupported Imaging configuration schema version");
+      const studyIds = imaging.definitions.map(item => item.study.id);
+      const orderIds = imaging.definitions.map(item => item.order.id);
+      if (new Set(studyIds).size !== studyIds.length) add("DUPLICATE_VALUE", "imagingConfiguration.definitions", "Duplicate Imaging study ID");
+      if (new Set(orderIds).size !== orderIds.length) add("DUPLICATE_VALUE", "imagingConfiguration.definitions", "Duplicate Imaging order ID");
+      imaging.definitions.forEach((item, index) => {
+        const path = `imagingConfiguration.definitions[${index}]`;
+        if (!item.study.id?.trim() || !item.study.patientId?.trim() || !item.study.title?.trim() || !item.study.report?.trim()) add("INVALID_IMAGING_CONFIGURATION", path, "Imaging study identity, patient, title and report are required");
+        if (!item.order.id?.trim() || !item.order.title?.trim()) add("INVALID_IMAGING_CONFIGURATION", `${path}.order`, "Imaging order identity and title are required");
+        if (item.order.workflow.resultAction !== "imaging.available" || item.order.workflow.resultTargetId !== item.study.id || !Number.isFinite(item.order.workflow.delayMinutes) || item.order.workflow.delayMinutes < 0) add("INVALID_IMAGING_CONFIGURATION", `${path}.order.workflow`, "Imaging order must target its study with a non-negative delay");
+      });
     }
     return Object.freeze(issues.sort((a, b) => a.path.localeCompare(b.path) || a.code.localeCompare(b.code)));
   }

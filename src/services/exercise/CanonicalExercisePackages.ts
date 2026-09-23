@@ -12,6 +12,7 @@ import { TRAUMA_CORE_MODULE_ID, TRAUMA_CORE_MODULE_VERSION } from "@/modules/tra
 import { PELVIC_INJURY_MODULE_ID, PELVIC_INJURY_MODULE_VERSION } from "@/modules/pelvicInjury/PelvicInjuryManifest";
 import { PLEURAL_INJURY_MODULE_ID, PLEURAL_INJURY_MODULE_VERSION } from "@/modules/pleuralInjury/PleuralInjuryManifest";
 import { MASSIVE_TRANSFUSION_MODULE_ID, MASSIVE_TRANSFUSION_MODULE_VERSION } from "@/modules/massiveTransfusion/MassiveTransfusionManifest";
+import { BOTULISM_JOHVI_IMAGING_CONFIGURATION } from "./BotulismJohviImagingDefinitions";
 
 const capabilities: readonly ExerciseCapability[] = ["EXERCISE_CONTROLS", "TIMELINE", "DEBRIEF", "ANALYTICS", "METRICS", "RESOURCES", "PATIENT_PLAYBACK"];
 const processes: Record<ExerciseProfile, readonly string[]> = {
@@ -33,6 +34,7 @@ const template = (profile: ExerciseProfile, author = "RussiCaptor") => { const d
   definition,
   patientDatasetId: botulism ? "patients.botulism-johvi.v2" : `patients.${profile.toLowerCase()}.v1`,
   enabledPatientProcesses: definition.enabledPatientProcesses, enabledAnalyticsProviders: definition.enabledAnalyticsProviders, enabledMetricProviders: definition.enabledMetricProviders,
+  ...(botulism ? { imagingConfiguration: BOTULISM_JOHVI_IMAGING_CONFIGURATION } : {}),
   metadata: { name: botulism ? "Jõhvi restorani botulismiõppuse mallpakett" : `${profile.replaceAll("_", " ")} Template Package`, description: botulism ? "Jõhvi restorani botulismiõppuse canonical konfiguratsioonipakett" : `Canonical ${profile.replaceAll("_", " ").toLowerCase()} exercise configuration package`, author, organization: "RussiCaptor", createdVersion: "0.7.0", exerciseType: profile, tags: ["canonical", "template", profile.toLowerCase(), ...(botulism ? ["johvi", "v2"] : [])] },
 }); };
 

@@ -30,6 +30,18 @@
     { "id": "Y", "name": "multi-cm", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowConcurrency-test.ts", "src/services/sharedWorkflow/__tests__/CmOwnershipProjectionRestore-test.ts", "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts"] },
     { "id": "Z", "name": "physical-acceptance-policy", "tests": ["src/services/operations/__tests__/MultiDeviceRehearsalPreparation-test.ts", "src/config/__tests__/SharedWorkflowValidationHarness-test.ts"] }
   ],
+  "imagingGuardrails": [
+    { "id": "IMG-G01", "name": "package-ownership", "description": "Predefined Imaging definitions come only from the authoritative exercise package and dataset binding.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
+    { "id": "IMG-G02", "name": "no-patient-id-leakage", "description": "Equal patient IDs across packages cannot implicitly share predefined Imaging.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
+    { "id": "IMG-G03", "name": "botulism-installation", "description": "The canonical Botulism package installs the authored P09, P11 and P12 chest X-rays and orders.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
+    { "id": "IMG-G04", "name": "botulism-exclusion", "description": "Other Botulism patients receive no unrelated predefined Imaging.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
+    { "id": "IMG-G05", "name": "narva-isolation", "description": "Narva packages remain Imaging-empty until explicitly configured.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
+    { "id": "IMG-G06", "name": "workbook-compatibility", "description": "The established workbook Imaging and order mapping remains functional.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts", "src/providers/excel/__tests__/WorkbookDataMapper-test.ts"] },
+    { "id": "IMG-G07", "name": "package-workbook-equivalence", "description": "Overlapping Botulism package and workbook Imaging definitions remain semantically equivalent.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
+    { "id": "IMG-G08", "name": "checkpoint-isolation", "description": "Cold restore retains only the exercise package's persisted Imaging collection.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
+    { "id": "IMG-G09", "name": "deterministic-installation", "description": "Repeated package installation or hydration cannot duplicate Imaging studies or orders.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
+    { "id": "IMG-G10", "name": "stable-identifiers", "description": "Package-owned Imaging study and order IDs remain deterministic across installation and restore.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] }
+  ],
   "laboratoryGuardrails": [
     { "id": "LAB-G01", "name": "sample-snapshot-immutability", "description": "A collected sample retains an immutable authoritative physiological source snapshot across later treatment, physiology, restart and takeover changes.", "phase": "FOUNDATION", "tests": ["src/services/runtime/laboratory/__tests__/LaboratoryWorkflowRuntime-test.ts", "src/services/runtime/laboratory/__tests__/NarvaLabPhysiologyV1Generator-test.ts"] },
     { "id": "LAB-G02", "name": "result-uses-sample-time", "description": "A released result represents physiology at sampledAt rather than resultAvailableAt.", "phase": "FOUNDATION", "tests": ["src/services/runtime/laboratory/__tests__/LaboratoryWorkflowRuntime-test.ts", "src/services/runtime/laboratory/__tests__/NarvaLabPhysiologyV1Generator-test.ts"] },
@@ -93,6 +105,11 @@
     "futureWorkPackageStatement": "All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G46, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed."
   },
   "groups": {
+    "imaging": [
+      "src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts",
+      "src/providers/excel/__tests__/WorkbookDataMapper-test.ts",
+      "src/services/__tests__/ScenarioWorkflow-test.ts"
+    ],
     "laboratory": [
       "src/config/__tests__/NarvaLaboratoryCatalog-test.ts",
       "src/components/patient/__tests__/LaboratoryWorkflowCard-test.tsx",

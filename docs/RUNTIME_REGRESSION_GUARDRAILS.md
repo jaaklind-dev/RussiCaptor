@@ -48,7 +48,24 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/IMG-G01–IMG-G10/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+
+## Imaging regression guardrails
+
+Package-owned Imaging uses the existing order, delayed workflow, persistence, and UI paths. Legacy static demo Imaging remains available only to the demo baseline and is deliberately removed from canonical package bootstrap; patient-ID equality never establishes ownership.
+
+| ID | Guardrail | Frozen invariant |
+| --- | --- | --- |
+| IMG-G01 | Package ownership | Predefined Imaging definitions come only from the authoritative exercise package/dataset binding. |
+| IMG-G02 | No patient-ID leakage | Equal patient IDs across packages cannot implicitly share predefined Imaging. |
+| IMG-G03 | Botulism installation | The canonical Botulism package installs the authored P09, P11, and P12 chest X-rays and orders. |
+| IMG-G04 | Botulism exclusion | Other Botulism patients receive no unrelated predefined Imaging. |
+| IMG-G05 | Narva isolation | Narva packages remain Imaging-empty until explicitly configured. |
+| IMG-G06 | Workbook compatibility | Established workbook Imaging and order mapping remains functional. |
+| IMG-G07 | Package/workbook equivalence | Overlapping Botulism package and workbook definitions remain semantically equivalent. |
+| IMG-G08 | Checkpoint isolation | Cold restore retains only the exercise package's persisted Imaging collection. |
+| IMG-G09 | Deterministic installation | Repeated package installation or hydration cannot duplicate Imaging studies or orders. |
+| IMG-G10 | Stable identifiers | Package-owned study and order IDs remain deterministic across installation and restore. |
 
 ## Laboratory regression guardrails
 

@@ -77,7 +77,7 @@ describe("WP-40 Exercise Evaluation Profile Foundation", () => {
     expect(loaded.evaluationProfile).toEqual({ profileId: "ALS_GENERIC_EVALUATION_V1", version: "1.0.0" });
     expect(loaded.definition.evaluationProfileProvenance?.profileHash).toBe(ALS_GENERIC_EVALUATION_V1.evaluationProfileHash);
     expect(DEFAULT_EXERCISE_PACKAGE.evaluationProfile).toBeUndefined(); expect(DEFAULT_EXERCISE_PACKAGE.definition.evaluationProfileProvenance).toBeUndefined();
-    expect(DEFAULT_EXERCISE_PACKAGE.packageHash).toBe("a32f63f6730596a8491279213bd4ac0c7806efe96b157992beeb3183edb266ae");
+    expect(DEFAULT_EXERCISE_PACKAGE.packageHash).toBe("dd4938b812a7d540c30f9dc0a9829ba32e521ec25c62657349680aca59a39db3");
   });
 
   test("indexes 500 assessment results without Timeline access or quadratic work", () => {
