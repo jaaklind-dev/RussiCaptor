@@ -33,42 +33,69 @@ const statusLabel: Readonly<Record<string, string>> = Object.freeze({
 const abnormalLabel = (row: LaboratoryPresentedRow) => row.abnormalFlag === "HIGH" ? "KÕRGE"
   : row.abnormalFlag === "LOW" ? "MADAL" : row.abnormalFlag === "NORMAL" ? "Normis" : undefined;
 
+const rowValueAccessibilityLabel = (row: LaboratoryPresentedRow): string => {
+  if (row.kind === "NOT_APPLICABLE") return `${row.name}: ei kohaldu, ei ole negatiivne tulemus`;
+  if (row.kind === "SOURCE_AMBIGUOUS") return `${row.name}: tulemus puudub, allikas ebaselge`;
+  if (row.kind === "PENDING") return `${row.name}: tulemus ootel`;
+  if (row.kind === "MISSING") return `${row.name}: tulemus puudub`;
+  const measurement = `${row.valueText ?? ""}${row.unit ? ` ${row.unit}` : ""}`;
+  const flag = abnormalLabel(row);
+  return `${row.name}: ${measurement}${flag ? `, ${flag}` : ""}`;
+};
+
 const LaboratoryResultRow = memo(function LaboratoryResultRow(
   { row }: Readonly<{ row: LaboratoryPresentedRow }>,
 ) {
   const flag = abnormalLabel(row);
+  const abnormal = row.abnormalFlag === "HIGH" || row.abnormalFlag === "LOW";
   return (
-    <View testID={`laboratory-result-${row.analyteId}`} style={[styles.resultRow,
+    <View testID={`laboratory-result-${row.analyteId}`} accessibilityLabel={rowValueAccessibilityLabel(row)}
+      style={[styles.resultRow,
       row.abnormalFlag === "HIGH" && styles.resultHigh,
       row.abnormalFlag === "LOW" && styles.resultLow]}>
       <View style={styles.resultNameColumn}>
         <Text style={styles.resultName}>{row.name}</Text>
         {row.referenceRange && <Text style={styles.reference}>Võrdlus: {row.referenceRange}</Text>}
-        {row.sourceMetadata && !row.referenceRange &&
+        {row.sourceMetadata && !row.referenceRange && row.kind !== "QUALITATIVE" &&
           <Text style={styles.reference}>Allikas: {row.sourceMetadata}</Text>}
       </View>
       <View style={styles.resultValueColumn}>
         {row.state === "RESULT" ? <>
-          <Text style={styles.resultValue}>{row.valueText}{row.unit ? ` ${row.unit}` : ""}</Text>
-          {flag && <Text accessibilityLabel={`Tulemus ${flag}`} style={[styles.flag,
+          <View style={[styles.measurement, row.kind === "QUALITATIVE" && styles.qualitativeMeasurement]}>
+            <Text style={[styles.resultValue, row.kind === "QUALITATIVE" && styles.qualitativeValue,
+              row.abnormalFlag === "HIGH" && styles.resultValueHigh,
+              row.abnormalFlag === "LOW" && styles.resultValueLow]}>{row.valueText}</Text>
+            {row.unit && <Text style={styles.resultUnit}>{row.unit}</Text>}
+          </View>
+          {abnormal && flag && <Text accessibilityLabel={`Tulemus ${flag}`} style={[styles.flag,
             row.abnormalFlag === "HIGH" && styles.flagHigh,
             row.abnormalFlag === "LOW" && styles.flagLow]}>{flag}</Text>}
         </> : row.state === "NOT_APPLICABLE"
-          ? <Text style={styles.notApplicable}>Ei kohaldu</Text>
-          : row.state === "PENDING"
-            ? <Text style={styles.pendingValue}>Lahendamata</Text>
+          ? <View style={styles.semanticValue}><Text style={styles.notApplicable}>Ei kohaldu</Text>
+            <Text style={styles.semanticHint}>Pole negatiivne tulemus</Text></View>
+          : row.kind === "SOURCE_AMBIGUOUS"
+            ? <View style={styles.semanticValue}><Text style={styles.ambiguousValue}>Allikas ebaselge</Text>
+              <Text style={styles.semanticHint}>Tulemust ei kuvata</Text></View>
+            : row.state === "PENDING"
+              ? <Text style={styles.pendingValue}>Tulemus ootel</Text>
             : <Text style={styles.missingValue}>Tulemus puudub</Text>}
       </View>
     </View>
   );
 });
 
+export function defaultLaboratoryGroupExpanded(group: LaboratoryPresentedGroup): boolean {
+  return group.type === "ASTRUP" && group.status !== "PROCESSING";
+}
+
 const LaboratoryResultGroupSection = memo(function LaboratoryResultGroupSection(
   { group }: Readonly<{ group: LaboratoryPresentedGroup }>,
 ) {
-  const [expanded, setExpanded] = useState(group.type === "ASTRUP" && group.status !== "PROCESSING");
+  const [expanded, setExpanded] = useState(() => defaultLaboratoryGroupExpanded(group));
   const pending = group.status === "PROCESSING";
-  const summary = pending ? "Tulemused töötlemisel" : `${group.resultCount} tulemust${group.unresolvedCount
+  const abnormalCount = group.rows.filter(row => row.abnormalFlag === "HIGH" || row.abnormalFlag === "LOW").length;
+  const summary = pending ? "Tulemused töötlemisel" : `${group.resultCount} tulemust${abnormalCount
+    ? ` · ${abnormalCount} kõrvalekallet` : ""}${group.unresolvedCount
     ? ` · ${group.unresolvedCount} lahendamata` : ""}`;
   return (
     <View testID={`laboratory-group-section-${group.type}`} style={styles.group}>
@@ -399,10 +426,10 @@ const styles = StyleSheet.create({
   meta: { color: "#475467", marginTop: 4 },
   group: { borderColor: "#d0d5dd", borderWidth: 1, borderRadius: 10, marginTop: 10,
     overflow: "hidden" },
-  groupHeader: { minHeight: 58, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row",
+  groupHeader: { minHeight: 62, paddingHorizontal: 12, paddingVertical: 9, flexDirection: "row",
     alignItems: "center", justifyContent: "space-between", backgroundColor: "#f8fafc" },
   groupHeadingColumn: { flex: 1, paddingRight: 10 },
-  groupTitle: { fontWeight: "700", fontSize: 16, color: "#101828" },
+  groupTitle: { fontWeight: "800", fontSize: 16, color: "#101828" },
   groupSummary: { color: "#475467", fontSize: 13, marginTop: 2 },
   groupStatusColumn: { alignItems: "flex-end" },
   groupStatus: { color: "#067647", backgroundColor: "#ecfdf3", borderRadius: 12,
@@ -412,21 +439,33 @@ const styles = StyleSheet.create({
   groupMeta: { color: "#475467", fontSize: 12, paddingHorizontal: 12, paddingVertical: 8 },
   processingMessage: { color: "#475467", fontStyle: "italic", paddingHorizontal: 12,
     paddingVertical: 14 },
-  resultRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between",
-    borderTopColor: "#eaecf0", borderTopWidth: 1, paddingHorizontal: 12, paddingVertical: 9,
+  resultRow: { minHeight: 54, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    borderTopColor: "#eaecf0", borderTopWidth: 1, paddingHorizontal: 12, paddingVertical: 7,
     borderLeftWidth: 4, borderLeftColor: "transparent" },
   resultHigh: { borderLeftColor: "#b42318", backgroundColor: "#fff6f5" },
   resultLow: { borderLeftColor: "#175cd3", backgroundColor: "#f5f8ff" },
-  resultNameColumn: { flex: 1, paddingRight: 12 },
-  resultName: { color: "#101828", fontWeight: "600" },
-  reference: { color: "#667085", fontSize: 12, marginTop: 2 },
-  resultValueColumn: { maxWidth: "42%", alignItems: "flex-end" },
-  resultValue: { color: "#101828", fontSize: 16, fontWeight: "700", textAlign: "right" },
+  resultNameColumn: { flex: 1, minWidth: 0, paddingRight: 12 },
+  resultName: { color: "#101828", fontWeight: "600", fontSize: 14, lineHeight: 18 },
+  reference: { color: "#667085", fontSize: 12, lineHeight: 16, marginTop: 1 },
+  resultValueColumn: { width: "43%", minWidth: 132, alignItems: "flex-end" },
+  measurement: { maxWidth: "100%", flexDirection: "row", alignItems: "baseline", justifyContent: "flex-end",
+    flexWrap: "wrap", columnGap: 4 },
+  qualitativeMeasurement: { backgroundColor: "#f2f4f7", borderRadius: 8, paddingHorizontal: 9,
+    paddingVertical: 4 },
+  resultValue: { color: "#101828", fontSize: 17, lineHeight: 21, fontWeight: "800", textAlign: "right",
+    fontVariant: ["tabular-nums"] },
+  resultUnit: { color: "#475467", fontSize: 12, lineHeight: 18, fontWeight: "600" },
+  qualitativeValue: { fontSize: 16 },
+  resultValueHigh: { color: "#912018" },
+  resultValueLow: { color: "#1849a9" },
   flag: { color: "#067647", backgroundColor: "#ecfdf3", borderRadius: 10,
-    paddingHorizontal: 7, paddingVertical: 2, marginTop: 3, fontSize: 11, fontWeight: "800" },
+    paddingHorizontal: 7, paddingVertical: 2, marginTop: 2, fontSize: 11, fontWeight: "800" },
   flagHigh: { color: "#b42318", backgroundColor: "#fee4e2" },
   flagLow: { color: "#175cd3", backgroundColor: "#d1e9ff" },
+  semanticValue: { alignItems: "flex-end", maxWidth: "100%" },
+  semanticHint: { color: "#667085", fontSize: 11, lineHeight: 14, marginTop: 1, textAlign: "right" },
   pendingValue: { color: "#93370d", fontWeight: "700", textAlign: "right" },
+  ambiguousValue: { color: "#93370d", fontWeight: "800", textAlign: "right" },
   missingValue: { color: "#b42318", fontWeight: "700", textAlign: "right" },
   notApplicable: { color: "#475467", fontStyle: "italic", textAlign: "right" },
 });

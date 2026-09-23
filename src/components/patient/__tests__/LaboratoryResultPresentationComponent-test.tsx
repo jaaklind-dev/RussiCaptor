@@ -84,7 +84,7 @@ describe("B32 LaboratoryWorkflowCard presentation", () => {
         notApplicableAnalyteIds: ["LAB_HCG"] }),
     ]));
     const ambiguous = renderer.root.findByProps({ testID: "laboratory-result-LAB_ASTRUP_HB_FR" });
-    expect(ambiguous.findAll(node => node.props.children === "Lahendamata").length).toBeGreaterThan(0);
+    expect(ambiguous.findAll(node => node.props.children === "Allikas ebaselge").length).toBeGreaterThan(0);
     await act(async () => { renderer.root.findByProps({ testID: "laboratory-group-toggle-CLINICAL_CHEMISTRY" })
       .props.onPress(); });
     const hcg = renderer.root.findByProps({ testID: "laboratory-result-LAB_HCG" });

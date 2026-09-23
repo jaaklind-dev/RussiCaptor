@@ -5,12 +5,15 @@ import type { LaboratoryResultGroup, LabResultGroupType, NarvaLabPackageId } fro
 
 export type LaboratoryAbnormalFlag = "LOW" | "HIGH" | "NORMAL" | "UNCLASSIFIED";
 export type LaboratoryPresentedRowState = "RESULT" | "PENDING" | "NOT_APPLICABLE" | "MISSING";
+export type LaboratoryPresentedRowKind = "MEASUREMENT" | "QUALITATIVE" | "NOT_APPLICABLE" |
+  "SOURCE_AMBIGUOUS" | "PENDING" | "MISSING";
 
 export type LaboratoryPresentedRow = Readonly<{
   key: string;
   analyteId: string;
   name: string;
   state: LaboratoryPresentedRowState;
+  kind: LaboratoryPresentedRowKind;
   valueText?: string;
   unit?: string;
   referenceRange?: string;
@@ -53,6 +56,16 @@ const STATUS_LABELS: Readonly<Record<LaboratoryResultGroup["status"], string>> =
   PARTIALLY_RESULTED: "Osaliselt valmis",
   RESULTED: "Valmis",
 });
+
+const QUALITATIVE_ANALYTES = new Set(["LAB_AB0", "LAB_RHD", "LAB_ANTIBODY_SCREEN"]);
+const SOURCE_AMBIGUOUS_ANALYTES = new Set(["LAB_ASTRUP_HB_FR"]);
+
+function presentedRowKind(analyteId: string, state: LaboratoryPresentedRowState): LaboratoryPresentedRowKind {
+  if (state === "RESULT") return QUALITATIVE_ANALYTES.has(analyteId) ? "QUALITATIVE" : "MEASUREMENT";
+  if (state === "NOT_APPLICABLE") return "NOT_APPLICABLE";
+  if (state === "PENDING") return SOURCE_AMBIGUOUS_ANALYTES.has(analyteId) ? "SOURCE_AMBIGUOUS" : "PENDING";
+  return "MISSING";
+}
 
 function arrayOfStrings(value: unknown): readonly string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
@@ -109,6 +122,7 @@ function presentGroup(group: LaboratoryResultGroup): LaboratoryPresentedGroup {
       analyteId: definition.id,
       name: definition.name,
       state,
+      kind: presentedRowKind(definition.id, state),
       ...(value ? { valueText: qualitativeValue(value.value) } : {}),
       ...(value?.unit && value.unit !== "-" ? { unit: value.unit } :
         definition.unit && definition.unit !== "-" ? { unit: definition.unit } : {}),
