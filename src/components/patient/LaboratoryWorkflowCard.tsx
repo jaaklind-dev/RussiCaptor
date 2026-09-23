@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { NARVA_LAB_ANALYTES } from "@/config/NarvaLaboratoryCatalog";
-import type { LaboratoryResultGroup, LaboratoryWorkflowSnapshot, NarvaLabPackageId } from
+import type { LaboratoryWorkflowSnapshot, NarvaLabPackageId } from
   "@/models/LaboratoryWorkflow";
 import { traceLaboratoryAction } from "./LaboratoryActionDiagnostics";
+import { buildLaboratoryResultPresentation } from "./LaboratoryResultPresentation";
+import type { LaboratoryPresentedGroup, LaboratoryPresentedRow } from "./LaboratoryResultPresentation";
 
 type Outcome = Readonly<{ ok: boolean; message: string }>;
 type CommandReadiness = Readonly<{ ready: boolean; reason?: string }>;
@@ -28,14 +29,74 @@ const statusLabel: Readonly<Record<string, string>> = Object.freeze({
   ORDERED: "ORDERED", COLLECTED: "COLLECTED / PROCESSING", PROCESSING: "COLLECTED / PROCESSING",
   PARTIALLY_RESULTED: "PARTIALLY_RESULTED", RESULTED: "RESULTED",
 });
-const analyteNames = new Map(NARVA_LAB_ANALYTES.map(item => [item.id, item.name]));
 
-function analytes(group: LaboratoryResultGroup): readonly Readonly<{ analyteId: string; value: unknown; unit?: string }>[] {
-  const value = group.resultPayload?.analytes;
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is Readonly<{ analyteId: string; value: unknown; unit?: string }> =>
-    Boolean(item && typeof item === "object" && "analyteId" in item && "value" in item));
-}
+const abnormalLabel = (row: LaboratoryPresentedRow) => row.abnormalFlag === "HIGH" ? "KÕRGE"
+  : row.abnormalFlag === "LOW" ? "MADAL" : row.abnormalFlag === "NORMAL" ? "Normis" : undefined;
+
+const LaboratoryResultRow = memo(function LaboratoryResultRow(
+  { row }: Readonly<{ row: LaboratoryPresentedRow }>,
+) {
+  const flag = abnormalLabel(row);
+  return (
+    <View testID={`laboratory-result-${row.analyteId}`} style={[styles.resultRow,
+      row.abnormalFlag === "HIGH" && styles.resultHigh,
+      row.abnormalFlag === "LOW" && styles.resultLow]}>
+      <View style={styles.resultNameColumn}>
+        <Text style={styles.resultName}>{row.name}</Text>
+        {row.referenceRange && <Text style={styles.reference}>Võrdlus: {row.referenceRange}</Text>}
+        {row.sourceMetadata && !row.referenceRange &&
+          <Text style={styles.reference}>Allikas: {row.sourceMetadata}</Text>}
+      </View>
+      <View style={styles.resultValueColumn}>
+        {row.state === "RESULT" ? <>
+          <Text style={styles.resultValue}>{row.valueText}{row.unit ? ` ${row.unit}` : ""}</Text>
+          {flag && <Text accessibilityLabel={`Tulemus ${flag}`} style={[styles.flag,
+            row.abnormalFlag === "HIGH" && styles.flagHigh,
+            row.abnormalFlag === "LOW" && styles.flagLow]}>{flag}</Text>}
+        </> : row.state === "NOT_APPLICABLE"
+          ? <Text style={styles.notApplicable}>Ei kohaldu</Text>
+          : row.state === "PENDING"
+            ? <Text style={styles.pendingValue}>Lahendamata</Text>
+            : <Text style={styles.missingValue}>Tulemus puudub</Text>}
+      </View>
+    </View>
+  );
+});
+
+const LaboratoryResultGroupSection = memo(function LaboratoryResultGroupSection(
+  { group }: Readonly<{ group: LaboratoryPresentedGroup }>,
+) {
+  const [expanded, setExpanded] = useState(group.type === "ASTRUP" && group.status !== "PROCESSING");
+  const pending = group.status === "PROCESSING";
+  const summary = pending ? "Tulemused töötlemisel" : `${group.resultCount} tulemust${group.unresolvedCount
+    ? ` · ${group.unresolvedCount} lahendamata` : ""}`;
+  return (
+    <View testID={`laboratory-group-section-${group.type}`} style={styles.group}>
+      <Pressable testID={`laboratory-group-toggle-${group.type}`} accessibilityRole="button"
+        accessibilityLabel={`${group.title}, ${group.statusLabel}, ${expanded ? "sulge" : "ava"}`}
+        accessibilityState={{ expanded }} onPress={() => setExpanded(value => !value)}
+        style={styles.groupHeader}>
+        <View style={styles.groupHeadingColumn}>
+          <Text style={styles.groupTitle}>{group.title}</Text>
+          <Text style={styles.groupSummary}>{summary}</Text>
+        </View>
+        <View style={styles.groupStatusColumn}>
+          <Text style={[styles.groupStatus, pending && styles.groupStatusPending]}>{group.statusLabel}</Text>
+          <Text style={styles.groupChevron}>{expanded ? "▲" : "▼"}</Text>
+        </View>
+      </Pressable>
+      {expanded && <View testID={`laboratory-group-content-${group.type}`}>
+        <Text style={styles.groupMeta}>Valmib T+{group.availableAtSimulationTimeSec}s
+          {group.generatedAtSimulationTimeSec !== undefined
+            ? ` · avaldatud T+${group.generatedAtSimulationTimeSec}s` : ""}
+          {group.generationVersion ? ` · ${group.generationVersion}` : ""}</Text>
+        {pending
+          ? <Text style={styles.processingMessage}>Tulemused on töötlemisel. Väärtusi ei ole veel avaldatud.</Text>
+          : group.rows.map(row => <LaboratoryResultRow key={row.key} row={row} />)}
+      </View>}
+    </View>
+  );
+});
 
 type StableActionProps = Readonly<{
   accessibilityLabel: string;
@@ -158,6 +219,8 @@ export default function LaboratoryWorkflowCard({ workflow, packageId, workflowSc
   const orders = useMemo(() => displayedWorkflow?.orders ?? [], [displayedWorkflow]);
   const samples = useMemo(() => displayedWorkflow?.samples ?? [], [displayedWorkflow]);
   const groups = useMemo(() => displayedWorkflow?.resultGroups ?? [], [displayedWorkflow]);
+  const presentedGroups = useMemo(() => packageId
+    ? buildLaboratoryResultPresentation(groups, packageId) : [], [groups, packageId]);
   const pendingOrder = [...orders].reverse().find(item => item.status === "ORDERED" &&
     !samples.some(sample => sample.orderId === item.orderId));
   const actionState = useRef<Readonly<{ readOnly: boolean; projectionReady: boolean; commandReady: boolean;
@@ -305,21 +368,14 @@ export default function LaboratoryWorkflowCard({ workflow, packageId, workflowSc
       {orders.length === 0 && <Text style={styles.empty}>Laboritellimusi ei ole.</Text>}
       {orders.map(order => {
         const sample = samples.find(item => item.orderId === order.orderId);
-        const resultGroups = sample ? groups.filter(item => item.sampleId === sample.sampleId) : [];
+        const resultGroups = sample
+          ? presentedGroups.filter(item => item.sampleId === sample.sampleId) : [];
         return (
           <View key={order.orderId} style={styles.order}>
             <Text style={styles.orderTitle}>{order.packageId === "NARVA_IRO_ASTRUP" ? "Astrup" : "POLÜTRAUMA"}</Text>
             <Text style={styles.meta}>{statusLabel[order.status] ?? order.status} · T+{order.orderedAtSimulationTimeSec}s</Text>
             {sample && <Text style={styles.meta}>Proov {sample.sampleId} · sampledAt T+{sample.sampledAtSimulationTimeSec}s · lähterevisjon {sample.sourcePatientRevision}</Text>}
-            {resultGroups.map(group => (
-              <View key={group.resultGroupId} style={styles.group}>
-                <Text style={styles.groupTitle}>{group.type} · {statusLabel[group.status] ?? group.status}</Text>
-                <Text style={styles.meta}>availableAt T+{group.availableAtSimulationTimeSec}s{group.generationVersion ? ` · ${group.generationVersion}` : ""}</Text>
-                {analytes(group).map(item => (
-                  <Text key={item.analyteId} style={styles.value}>{analyteNames.get(item.analyteId) ?? item.analyteId}: {String(item.value)}{item.unit ? ` ${item.unit}` : ""}</Text>
-                ))}
-              </View>
-            ))}
+            {resultGroups.map(group => <LaboratoryResultGroupSection key={group.key} group={group} />)}
           </View>
         );
       })}
@@ -341,7 +397,36 @@ const styles = StyleSheet.create({
     padding: 12, marginTop: 10 },
   orderTitle: { fontSize: 17, fontWeight: "bold" },
   meta: { color: "#475467", marginTop: 4 },
-  group: { borderTopColor: "#d0d5dd", borderTopWidth: 1, marginTop: 10, paddingTop: 8 },
-  groupTitle: { fontWeight: "700" },
-  value: { marginTop: 3 },
+  group: { borderColor: "#d0d5dd", borderWidth: 1, borderRadius: 10, marginTop: 10,
+    overflow: "hidden" },
+  groupHeader: { minHeight: 58, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row",
+    alignItems: "center", justifyContent: "space-between", backgroundColor: "#f8fafc" },
+  groupHeadingColumn: { flex: 1, paddingRight: 10 },
+  groupTitle: { fontWeight: "700", fontSize: 16, color: "#101828" },
+  groupSummary: { color: "#475467", fontSize: 13, marginTop: 2 },
+  groupStatusColumn: { alignItems: "flex-end" },
+  groupStatus: { color: "#067647", backgroundColor: "#ecfdf3", borderRadius: 12,
+    paddingHorizontal: 8, paddingVertical: 2, fontSize: 12, fontWeight: "700" },
+  groupStatusPending: { color: "#93370d", backgroundColor: "#fffaeb" },
+  groupChevron: { color: "#344054", fontSize: 12, marginTop: 5 },
+  groupMeta: { color: "#475467", fontSize: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  processingMessage: { color: "#475467", fontStyle: "italic", paddingHorizontal: 12,
+    paddingVertical: 14 },
+  resultRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between",
+    borderTopColor: "#eaecf0", borderTopWidth: 1, paddingHorizontal: 12, paddingVertical: 9,
+    borderLeftWidth: 4, borderLeftColor: "transparent" },
+  resultHigh: { borderLeftColor: "#b42318", backgroundColor: "#fff6f5" },
+  resultLow: { borderLeftColor: "#175cd3", backgroundColor: "#f5f8ff" },
+  resultNameColumn: { flex: 1, paddingRight: 12 },
+  resultName: { color: "#101828", fontWeight: "600" },
+  reference: { color: "#667085", fontSize: 12, marginTop: 2 },
+  resultValueColumn: { maxWidth: "42%", alignItems: "flex-end" },
+  resultValue: { color: "#101828", fontSize: 16, fontWeight: "700", textAlign: "right" },
+  flag: { color: "#067647", backgroundColor: "#ecfdf3", borderRadius: 10,
+    paddingHorizontal: 7, paddingVertical: 2, marginTop: 3, fontSize: 11, fontWeight: "800" },
+  flagHigh: { color: "#b42318", backgroundColor: "#fee4e2" },
+  flagLow: { color: "#175cd3", backgroundColor: "#d1e9ff" },
+  pendingValue: { color: "#93370d", fontWeight: "700", textAlign: "right" },
+  missingValue: { color: "#b42318", fontWeight: "700", textAlign: "right" },
+  notApplicable: { color: "#475467", fontStyle: "italic", textAlign: "right" },
 });

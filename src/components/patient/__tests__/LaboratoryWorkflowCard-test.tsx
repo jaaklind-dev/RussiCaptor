@@ -397,10 +397,12 @@ describe("LaboratoryWorkflowCard canonical Runtime projection", () => {
       .join(" ").replace(/\s+/g, " ");
     const compact = text.replace(/\s/g, "");
     expect(compact).toContain("sampledAtT+100s");
-    expect(compact).toContain("availableAtT+1600s");
+    expect(compact).toContain("ValmibT+1600s");
     expect(text).toContain("narva-lab-physiology-v1");
-    expect(compact).toContain("pH:7.12");
-    expect(compact).toContain("Ionizedcalcium:0.91mmol/L");
+    expect(compact).toContain("pH");
+    expect(compact).toContain("7.12");
+    expect(compact).toContain("Ionizedcalcium");
+    expect(compact).toContain("0.91mmol/L");
   });
 
   test("read-only/terminal presentation exposes no order or collection action", async () => {

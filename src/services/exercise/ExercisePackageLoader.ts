@@ -10,6 +10,8 @@ import type { ExerciseEvaluationCompositionService } from "@/services/evaluation
 
 export class ExercisePackageLoader {
   private readonly bindings = new Map<string, string>();
+  private readonly bindingListeners = new Set<() => void>();
+  private bindingVersion = 0;
   constructor(private readonly validator: ExercisePackageValidator, private readonly registry: ExercisePackageRegistry, private readonly moduleComposer?: ClinicalModuleComposer, private readonly protocolComposer?: ProtocolCompositionService, private readonly evaluationComposer?: ExerciseEvaluationCompositionService) {}
   private compose(pkg: ExercisePackage): ExercisePackage {
     let definition = pkg.definition;
@@ -59,11 +61,25 @@ export class ExercisePackageLoader {
     const existing = this.bindings.get(exerciseId);
     if (existing && existing !== reference) throw new Error(`EXERCISE_PACKAGE_BINDING_CONFLICT:${exerciseId}`);
     const published = this.load(pkg);
-    this.bindings.set(exerciseId, reference); return published;
+    if (existing !== reference) {
+      this.bindings.set(exerciseId, reference);
+      this.bindingVersion += 1;
+      this.bindingListeners.forEach(listener => listener());
+    }
+    return published;
   }
   getBound(exerciseId: string): ExercisePackage | undefined {
     const reference = this.bindings.get(exerciseId); if (!reference) return undefined;
     const split = reference.lastIndexOf("@"); return this.registry.require(reference.slice(0, split), reference.slice(split + 1));
   }
-  unbind(exerciseId: string): void { this.bindings.delete(exerciseId); }
+  unbind(exerciseId: string): void {
+    if (!this.bindings.delete(exerciseId)) return;
+    this.bindingVersion += 1;
+    this.bindingListeners.forEach(listener => listener());
+  }
+  getBindingVersion(): number { return this.bindingVersion; }
+  subscribeToBindings(listener: () => void): () => void {
+    this.bindingListeners.add(listener);
+    return () => this.bindingListeners.delete(listener);
+  }
 }

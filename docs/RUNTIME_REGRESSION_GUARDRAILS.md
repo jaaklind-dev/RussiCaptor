@@ -48,11 +48,11 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/LAB-G01–LAB-G34 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Laboratory regression guardrails
 
-The durable laboratory lifecycle foundation and the versioned Narva trauma/Astrup physiology-v1 generator are executable and mapped in the guardrail manifest. Static/scenario analyte generation remains intentionally deferred; the tests below protect catalog scope, sample-time snapshots, timing, physiology directionality, persistence, authority, exactly-once behavior, and terminal fencing.
+The durable laboratory lifecycle, the versioned Narva trauma/Astrup physiology-v1 generator, deterministic static/scenario results, and canonical result presentation are executable and mapped in the guardrail manifest. The tests below protect catalog scope, sample-time snapshots, timing, physiology directionality, presentation fidelity, persistence, authority, exactly-once behavior, and terminal fencing.
 
 | ID | Guardrail | Frozen invariant |
 | --- | --- | --- |
@@ -90,6 +90,18 @@ The durable laboratory lifecycle foundation and the versioned Narva trauma/Astru
 | LAB-G32 | Static restart/takeover determinism | Pending and released B31 results survive restart and produce identical payloads through writer takeover without regeneration drift. |
 | LAB-G33 | Reader restriction for B31 results | Readers may display persisted B31 payloads but cannot generate, revise, or release them locally. |
 | LAB-G34 | Independent complete result groups | Astrup, hematology, blood bank, clinical chemistry, and coagulation retain independent sampledAt-anchored release boundaries after complete package generation. |
+| LAB-G35 | Complete result UI reachability | Every canonical reportable result remains reachable in the laboratory presentation without silent omission. |
+| LAB-G36 | Deterministic result-group order | Laboratory result groups render in canonical package order across rerender, rehydration, and restart. |
+| LAB-G37 | Deterministic analyte order | Analytes render in canonical catalog order within their result group, independent of payload transport order. |
+| LAB-G38 | Valid-reference abnormal flags | Numeric LOW, HIGH, and normal flags derive only from one valid authoritative numeric range and include non-color semantics. |
+| LAB-G39 | No invented abnormal flag | Missing, qualitative, demographic-ambiguous, or source-ambiguous reference metadata cannot produce an invented abnormal flag. |
+| LAB-G40 | Qualitative result presentation | AB0, RhD, antibody screen, and other canonical qualitative values render as qualitative results rather than malformed numbers. |
+| LAB-G41 | hCG presentation applicability | Canonical hCG results render only when applicable; not-applicable state never displays a fabricated numeric value. |
+| LAB-G42 | SOURCE_AMBIGUOUS presentation | Source-ambiguous components remain explicitly unresolved and cannot be mistaken for completed measurements. |
+| LAB-G43 | Pending result-group presentation | Processing groups remain visibly pending without fake values and transition once to their canonical released result. |
+| LAB-G44 | Stable result-row identity | Group and analyte keys derive from canonical identities rather than revisions, indexes, or render order. |
+| LAB-G45 | Presentation rehydration consistency | The same canonical result renders identically after rerender and checkpoint rehydration without duplicates or ordering drift. |
+| LAB-G46 | Presentation canonical immutability | Grouping, ordering, expansion, and abnormal classification never mutate the canonical laboratory payload. |
 
 ### Frozen Narva laboratory timing contract
 
@@ -102,7 +114,7 @@ Availability is measured from sample collection time: Astrup 25 minutes; Hematol
 
 ### Mandatory statement for every future laboratory WP
 
-> All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G34, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed.
+> All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G46, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed.
 
 ## Performance and physical acceptance
 

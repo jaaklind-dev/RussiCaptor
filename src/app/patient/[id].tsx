@@ -52,7 +52,8 @@ import ActiveInterventionsCard from "@/components/patient/ActiveInterventionsCar
 import ClinicalAssessmentDeveloperCard from "@/components/patient/ClinicalAssessmentDeveloperCard";
 import { getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots } from "@/services/RuntimeSnapshotService";
 import { SingleFlightActionGate } from "@/services/ui/InteractionSafety";
-import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { getCanonicalExerciseSnapshot, getCanonicalExerciseSnapshotVersion,
+  subscribeToCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getActiveLaboratoryWorkflow } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
 import { laboratoryPackageForActiveExercise, submitLaboratoryCollection, submitLaboratoryOrder } from
   "@/services/runtime/laboratory/LaboratoryWorkflowCommandService";
@@ -61,6 +62,8 @@ import { getRuntimeReaderConvergenceState, getRuntimeReaderConvergenceVersion,
   "@/services/runtime/persistence/RuntimeReaderConvergenceService";
 import { runtimePatientCommandSubmissionReadiness } from
   "@/services/runtime/commands/RuntimePatientCommandService";
+import { getExercisePackageBindingVersion, subscribeToExercisePackageBindings } from
+  "@/services/exercise/ExercisePackageService";
 type PatientTab =
   | "overview"
   | "vitals"
@@ -87,6 +90,10 @@ const runWorkflow=async <T extends {message:string}>(operation:()=>Promise<T>):P
   const runtimeVersion = useSyncExternalStore(subscribeToRuntimeSnapshots, getRuntimeSnapshotVersion, getRuntimeSnapshotVersion);
   useSyncExternalStore(subscribeToRuntimeReaderConvergence, getRuntimeReaderConvergenceVersion,
     getRuntimeReaderConvergenceVersion);
+  useSyncExternalStore(subscribeToExercisePackageBindings, getExercisePackageBindingVersion,
+    getExercisePackageBindingVersion);
+  useSyncExternalStore(subscribeToCanonicalExerciseSnapshot, getCanonicalExerciseSnapshotVersion,
+    getCanonicalExerciseSnapshotVersion);
   const patient = findPatientById(id ?? "");
 const isCompleted = patient?.status === "Completed";
 const canonicalExercise = getCanonicalExerciseSnapshot();

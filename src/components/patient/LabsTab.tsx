@@ -36,20 +36,23 @@ export default function LabsTab({ labs, onOpenPanel, readOnly = false, laborator
   laboratoryPackageId, laboratoryWorkflowScopeKey, laboratoryProjectionRevision,
   laboratoryProjectionReady, laboratoryCommandReadiness, onOrderLaboratory, onCollectLaboratory }: Props) {
   const panels = [...new Set(labs.map((lab) => lab.panel))];
+  const hasCanonicalLaboratorySurface = Boolean(
+    laboratoryPackageId && onOrderLaboratory && onCollectLaboratory,
+  );
 
   return (
     <View>
-      {laboratoryPackageId && onOrderLaboratory && onCollectLaboratory && (
+      {hasCanonicalLaboratorySurface && laboratoryPackageId && onOrderLaboratory && onCollectLaboratory && (
         <LaboratoryWorkflowCard workflow={laboratoryWorkflow} packageId={laboratoryPackageId}
           workflowScopeKey={laboratoryWorkflowScopeKey} projectionRevision={laboratoryProjectionRevision}
           projectionReady={laboratoryProjectionReady} commandReadiness={laboratoryCommandReadiness}
           readOnly={readOnly} onOrder={onOrderLaboratory} onCollect={onCollectLaboratory} />
       )}
-      <View style={styles.card}>
+      {!hasCanonicalLaboratorySurface && <View style={styles.card}>
       <Text style={styles.title}>{et.lab.title}</Text>
 
       {labs.length === 0 ? (
-        <Text style={styles.empty}>{et.common.noData}</Text>
+        <Text testID="legacy-laboratory-empty" style={styles.empty}>{et.common.noData}</Text>
       ) : (
         panels.map((panel) => {
           const panelLabs = labs.filter((lab) => lab.panel === panel);
@@ -95,7 +98,7 @@ export default function LabsTab({ labs, onOpenPanel, readOnly = false, laborator
           );
         })
       )}
-      </View>
+      </View>}
     </View>
   );
 }

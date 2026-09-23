@@ -59,3 +59,7 @@ exercisePackageLoader.bind("demo", DEFAULT_EXERCISE_PACKAGE);
 export function getExercisePackage(exerciseId: string): ExercisePackage { return exercisePackageLoader.getBound(exerciseId) ?? DEFAULT_EXERCISE_PACKAGE; }
 export function getExerciseDefinition(exerciseId: string): ExercisePackage["definition"] { return getExercisePackage(exerciseId).definition; }
 export function isPatientProcessEnabled(exerciseId: string, processType: string): boolean { return getExerciseDefinition(exerciseId).enabledPatientProcesses.includes(processType); }
+export function getExercisePackageBindingVersion(): number { return exercisePackageLoader.getBindingVersion(); }
+export function subscribeToExercisePackageBindings(listener: () => void): () => void {
+  return exercisePackageLoader.subscribeToBindings(listener);
+}

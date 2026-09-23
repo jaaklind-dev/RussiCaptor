@@ -56,6 +56,18 @@ describe("WP-28 Exercise Package Framework", () => {
     expect(getExercisePackage("demo").packageHash).toBe(DEFAULT_EXERCISE_PACKAGE.packageHash);
   });
 
+  test("package bindings publish only semantic binding changes", () => {
+    const registry = new ExercisePackageRegistry(validator); const loader = new ExercisePackageLoader(validator, registry);
+    const pkg = makePackage("binding-observer"); const versions: number[] = [];
+    const stop = loader.subscribeToBindings(() => versions.push(loader.getBindingVersion()));
+    loader.bind("EX-OBSERVED", pkg);
+    loader.bind("EX-OBSERVED", pkg);
+    loader.unbind("EX-UNKNOWN");
+    loader.unbind("EX-OBSERVED");
+    stop();
+    expect(versions).toEqual([1, 2]);
+  });
+
   test("analytics metadata can record package identity without changing analytics hash", () => {
     const base = Object.freeze({ analyticsHash: "canonical-hash" }) as AnalyticsReport; const analytics = withExercisePackageMetadata(base, DEFAULT_EXERCISE_PACKAGE);
     expect(analytics.analyticsHash).toBe("canonical-hash"); expect(analytics.exercisePackage?.packageHash).toBe(DEFAULT_EXERCISE_PACKAGE.packageHash);
