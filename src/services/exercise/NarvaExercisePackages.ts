@@ -7,6 +7,7 @@ import { PLEURAL_INJURY_MODULE_ID, PLEURAL_INJURY_MODULE_VERSION } from "@/modul
 import { RESPIRATORY_FAILURE_MODULE_ID, RESPIRATORY_FAILURE_MODULE_VERSION } from "@/modules/respiratoryFailure/RespiratoryFailureManifest";
 import { createExercisePackage } from "./ExercisePackageHash";
 import { DEFAULT_EXERCISE_DEFINITION } from "./ExerciseDefinitionService";
+import { NARVA_TRAUMA_IMAGING_CONFIGURATION } from "./NarvaTraumaImagingDefinitions";
 import { NARVA_IRO_DATASET_ID, NARVA_IRO_HISTORICAL_DATASET_ID,
   NARVA_TRAUMA_DATASET_ID } from "./NarvaPatientDatasets";
 
@@ -46,6 +47,7 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
     { moduleId: ALS_MODULE_ID, version: ALS_MODULE_VERSION },
   ]),
   availableClinicalTreatments: NARVA_TRAUMA_TREATMENT_PALETTE,
+  imagingConfiguration: NARVA_TRAUMA_IMAGING_CONFIGURATION,
   transportConfiguration: Object.freeze({ version: "1.0.0", vehicleLocationId: "REANIMOBILE",
     resources: Object.freeze([Object.freeze({ resourceId: "NARVA-REANIMOBILE-01",
       resourceType: "CRITICAL_CARE_AMBULANCE", displayName: "Reanimobiil 01", capacity: 1,

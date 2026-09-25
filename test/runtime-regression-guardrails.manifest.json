@@ -55,7 +55,16 @@
     { "id": "IMG-G22", "name": "reader-no-generation", "description": "Readers cannot create or release authoritative Imaging state locally.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] },
     { "id": "IMG-G23", "name": "terminal-fencing", "description": "Terminal fencing blocks new orders and prohibited late result release.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] },
     { "id": "IMG-G24", "name": "provenance-stability", "description": "Study instances retain original package and definition provenance and captured authored source.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] },
-    { "id": "IMG-G25", "name": "checkpoint-no-duplication", "description": "Checkpoint roundtrip restores all Imaging instances without identity or result duplication.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts", "src/services/runtime/persistence/__tests__/ImagingRuntimePersistence-test.ts"] }
+    { "id": "IMG-G25", "name": "checkpoint-no-duplication", "description": "Checkpoint roundtrip restores all Imaging instances without identity or result duplication.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts", "src/services/runtime/persistence/__tests__/ImagingRuntimePersistence-test.ts"] },
+    { "id": "IMG-G26", "name": "narva-package-ownership", "description": "The approved Narva Imaging definition belongs only to russicaptor.narva-trauma@1.0.1.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaTraumaImagingDefinitions-test.ts"] },
+    { "id": "IMG-G27", "name": "narva-approved-chest-only", "description": "PT-CHEST-001 receives exactly the approved source-defined P02 chest X-ray.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaTraumaImagingDefinitions-test.ts"] },
+    { "id": "IMG-G28", "name": "narva-pelvic-empty", "description": "PT-PELVIC-001 remains Imaging-empty because its source defines no study.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaTraumaImagingDefinitions-test.ts"] },
+    { "id": "IMG-G29", "name": "narva-no-botulism-leakage", "description": "Narva bootstrap cannot install Botulism Imaging content.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaTraumaImagingDefinitions-test.ts"] },
+    { "id": "IMG-G30", "name": "narva-no-demo-leakage", "description": "Narva bootstrap cannot install legacy demo Imaging content.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaTraumaImagingDefinitions-test.ts"] },
+    { "id": "IMG-G31", "name": "narva-source-fidelity", "description": "Narva modality, title, report and delay equal the approved canonical workbook source.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaTraumaImagingDefinitions-test.ts"] },
+    { "id": "IMG-G32", "name": "narva-deterministic-definition-identity", "description": "Repeated bootstrap and restore retain the same Narva study identity exactly once.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaTraumaImagingDefinitions-test.ts"] },
+    { "id": "IMG-G33", "name": "narva-iro-isolation", "description": "The Narva IRO package remains Imaging-empty.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaTraumaImagingDefinitions-test.ts"] },
+    { "id": "IMG-G34", "name": "narva-no-speculative-content", "description": "Narva Imaging contains no unauthored assets, studies or report content.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaTraumaImagingDefinitions-test.ts"] }
   ],
   "laboratoryGuardrails": [
     { "id": "LAB-G01", "name": "sample-snapshot-immutability", "description": "A collected sample retains an immutable authoritative physiological source snapshot across later treatment, physiology, restart and takeover changes.", "phase": "FOUNDATION", "tests": ["src/services/runtime/laboratory/__tests__/LaboratoryWorkflowRuntime-test.ts", "src/services/runtime/laboratory/__tests__/NarvaLabPhysiologyV1Generator-test.ts"] },
@@ -122,6 +131,7 @@
   "groups": {
     "imaging": [
       "src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts",
+      "src/services/exercise/__tests__/NarvaTraumaImagingDefinitions-test.ts",
       "src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts",
       "src/services/runtime/imaging/__tests__/ImagingWorkflowCommandService-test.ts",
       "src/services/runtime/commands/__tests__/ImagingRuntimeCommandMigration-test.ts",

@@ -86,24 +86,24 @@ describe("I1 package-owned Imaging definitions / IMG-G01..IMG-G10", () => {
       .toContain("INVALID_IMAGING_CONFIGURATION");
   });
 
-  test("I1-A4/A5 isolates canonical packages from legacy PT-001 demo Imaging", () => {
+  test("I1-A4/A5 isolates packages from legacy PT-001 demo Imaging", () => {
     expect(getImagingStudies("PT-001").map(study => study.id)).toEqual(["IMG-001", "IMG-002"]);
-    for (const pkg of CANONICAL_EXERCISE_PACKAGES.filter(item => item.definition.profile !== "BOTULISM")) {
+    for (const pkg of CANONICAL_EXERCISE_PACKAGES) {
       install(pkg, `EX-${pkg.definition.profile}`);
-      expect(clinicalDataProvider.getImagingStudies()).toEqual([]);
-      expect(clinicalDataProvider.getOrders().filter(order => order.category === "imaging")).toEqual([]);
+      expect(clinicalDataProvider.getImagingStudies().some(study => study.patientId === "PT-001")).toBe(false);
       resetExercise();
     }
   });
 
-  test("I1-A6 keeps every Narva package Imaging-empty", () => {
-    for (const pkg of [NARVA_TRAUMA_EXERCISE_PACKAGE, NARVA_IRO_EXERCISE_PACKAGE]) {
-      expect(pkg.imagingConfiguration).toBeUndefined();
-      install(pkg, `EX-${pkg.packageId}`);
-      expect(clinicalDataProvider.getImagingStudies()).toEqual([]);
-      expect(clinicalDataProvider.getOrders().filter(order => order.category === "imaging")).toEqual([]);
-      resetExercise();
-    }
+  test("I1-A6 keeps Narva IRO empty while Narva trauma owns only approved P02 Imaging", () => {
+    install(NARVA_TRAUMA_EXERCISE_PACKAGE, "EX-NARVA-TRAUMA");
+    expect(clinicalDataProvider.getImagingStudies()).toEqual([expect.objectContaining({
+      id: "P02-CXR", patientId: "PT-CHEST-001",
+    })]);
+    resetExercise();
+    expect(NARVA_IRO_EXERCISE_PACKAGE.imagingConfiguration).toBeUndefined();
+    install(NARVA_IRO_EXERCISE_PACKAGE, "EX-NARVA-IRO");
+    expect(clinicalDataProvider.getImagingStudies()).toEqual([]);
   });
 
   test("I1-A7/A8/A10 restores stable package IDs and repeated installation cannot duplicate", () => {
