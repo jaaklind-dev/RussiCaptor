@@ -40,7 +40,22 @@
     { "id": "IMG-G07", "name": "package-workbook-equivalence", "description": "Overlapping Botulism package and workbook Imaging definitions remain semantically equivalent.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
     { "id": "IMG-G08", "name": "checkpoint-isolation", "description": "Cold restore retains only the exercise package's persisted Imaging collection.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
     { "id": "IMG-G09", "name": "deterministic-installation", "description": "Repeated package installation or hydration cannot duplicate Imaging studies or orders.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
-    { "id": "IMG-G10", "name": "stable-identifiers", "description": "Package-owned Imaging study and order IDs remain deterministic across installation and restore.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] }
+    { "id": "IMG-G10", "name": "stable-identifiers", "description": "Package-owned Imaging study and order IDs remain deterministic across installation and restore.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
+    { "id": "IMG-G11", "name": "durable-instance-identity", "description": "Every study execution has a stable command-derived identity distinct from its package definition.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] },
+    { "id": "IMG-G12", "name": "exactly-once-order", "description": "Replaying one durable order command cannot duplicate a study instance.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts", "src/services/runtime/commands/__tests__/ImagingRuntimeCommandMigration-test.ts"] },
+    { "id": "IMG-G13", "name": "writer-only-mutation", "description": "Only authoritative writer or explicit offline test authority may mutate Imaging lifecycle state.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] },
+    { "id": "IMG-G14", "name": "simulation-threshold", "description": "Imaging result release uses authoritative simulation time and configured delay.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] },
+    { "id": "IMG-G15", "name": "no-early-release", "description": "No released clinical result exists before availableAt.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts", "src/components/patient/__tests__/ImagingTabDurableLifecycle-test.tsx"] },
+    { "id": "IMG-G16", "name": "jump-safe-release", "description": "Large simulation-time jumps crossing availableAt release the result exactly once.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] },
+    { "id": "IMG-G17", "name": "immutable-result", "description": "A RESULTED payload and release timestamp never change.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] },
+    { "id": "IMG-G18", "name": "restart-determinism", "description": "Cold restore preserves pending and resulted Imaging instances without regeneration.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts", "src/services/runtime/persistence/__tests__/ImagingRuntimePersistence-test.ts"] },
+    { "id": "IMG-G19", "name": "takeover-determinism", "description": "A new writer releases an overdue pending instance once and only once.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts", "src/services/runtime/persistence/__tests__/ImagingRuntimePersistence-test.ts"] },
+    { "id": "IMG-G20", "name": "repeat-separation", "description": "Distinct valid commands for one definition create distinct ordered repeat instances.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] },
+    { "id": "IMG-G21", "name": "same-command-idempotency", "description": "A replayed repeat command does not create an additional instance.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] },
+    { "id": "IMG-G22", "name": "reader-no-generation", "description": "Readers cannot create or release authoritative Imaging state locally.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] },
+    { "id": "IMG-G23", "name": "terminal-fencing", "description": "Terminal fencing blocks new orders and prohibited late result release.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] },
+    { "id": "IMG-G24", "name": "provenance-stability", "description": "Study instances retain original package and definition provenance and captured authored source.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] },
+    { "id": "IMG-G25", "name": "checkpoint-no-duplication", "description": "Checkpoint roundtrip restores all Imaging instances without identity or result duplication.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts", "src/services/runtime/persistence/__tests__/ImagingRuntimePersistence-test.ts"] }
   ],
   "laboratoryGuardrails": [
     { "id": "LAB-G01", "name": "sample-snapshot-immutability", "description": "A collected sample retains an immutable authoritative physiological source snapshot across later treatment, physiology, restart and takeover changes.", "phase": "FOUNDATION", "tests": ["src/services/runtime/laboratory/__tests__/LaboratoryWorkflowRuntime-test.ts", "src/services/runtime/laboratory/__tests__/NarvaLabPhysiologyV1Generator-test.ts"] },
@@ -107,6 +122,11 @@
   "groups": {
     "imaging": [
       "src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts",
+      "src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts",
+      "src/services/runtime/imaging/__tests__/ImagingWorkflowCommandService-test.ts",
+      "src/services/runtime/commands/__tests__/ImagingRuntimeCommandMigration-test.ts",
+      "src/services/runtime/persistence/__tests__/ImagingRuntimePersistence-test.ts",
+      "src/components/patient/__tests__/ImagingTabDurableLifecycle-test.tsx",
       "src/providers/excel/__tests__/WorkbookDataMapper-test.ts",
       "src/services/__tests__/ScenarioWorkflow-test.ts"
     ],

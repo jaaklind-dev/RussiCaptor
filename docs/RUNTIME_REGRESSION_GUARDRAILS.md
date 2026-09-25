@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/IMG-G01–IMG-G10/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/IMG-G01–IMG-G25/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Imaging regression guardrails
 
@@ -66,6 +66,21 @@ Package-owned Imaging uses the existing order, delayed workflow, persistence, an
 | IMG-G08 | Checkpoint isolation | Cold restore retains only the exercise package's persisted Imaging collection. |
 | IMG-G09 | Deterministic installation | Repeated package installation or hydration cannot duplicate Imaging studies or orders. |
 | IMG-G10 | Stable identifiers | Package-owned study and order IDs remain deterministic across installation and restore. |
+| IMG-G11 | Durable instance identity | Every execution has stable command-derived identity separate from its definition. |
+| IMG-G12 | Exactly-once order | Replaying a command cannot duplicate an instance. |
+| IMG-G13 | Writer-only mutation | Readers cannot mutate the authoritative lifecycle. |
+| IMG-G14 | Simulation threshold | Release uses authoritative simulation time and configured delay. |
+| IMG-G15 | No early release | No released result exists before `availableAt`. |
+| IMG-G16 | Jump-safe release | A time jump across the threshold releases exactly once. |
+| IMG-G17 | Immutable result | Released payload and timestamp never change. |
+| IMG-G18 | Restart determinism | Cold restore preserves lifecycle state exactly. |
+| IMG-G19 | Takeover determinism | A takeover releases overdue work once. |
+| IMG-G20 | Repeat separation | Repeat orders create distinct instances. |
+| IMG-G21 | Same-command idempotency | Replaying a repeat command creates no extra instance. |
+| IMG-G22 | Reader no generation | Readers do not generate orders or results. |
+| IMG-G23 | Terminal fencing | Terminal state blocks new and prohibited late mutations. |
+| IMG-G24 | Provenance stability | Package/definition identity and captured source remain stable. |
+| IMG-G25 | Checkpoint no duplication | Restore preserves every instance without duplication. |
 
 ## Laboratory regression guardrails
 

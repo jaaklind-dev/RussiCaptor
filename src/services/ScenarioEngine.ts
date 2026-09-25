@@ -111,6 +111,8 @@ import { narvaLabPhysiologyV1Generator } from
   "@/services/runtime/laboratory/NarvaLabPhysiologyV1Generator";
 import { getRuntimeWriterAuthorityState } from
   "@/services/runtime/persistence/RuntimeWriterAuthorityState";
+import { ImagingWorkflowRuntime } from "@/services/runtime/imaging/ImagingWorkflowRuntime";
+import type { ImagingOrderDefinitionSnapshot, ImagingWorkflowSnapshot } from "@/models/ImagingWorkflow";
 
 export function runScenarioEvents(
 
@@ -309,6 +311,7 @@ export class ClinicalScenarioEngine {
   private readonly mechanicalVentilation = new MechanicalVentilationRuntime();
   private readonly narvaIroScenario = new NarvaIroScenarioRuntime();
   private readonly laboratory: LaboratoryWorkflowRuntime;
+  private readonly imaging: ImagingWorkflowRuntime;
   private vitalSignEvents: VitalSignEvent[] = [];
   private assessmentPublicationGeneration = 0;
   private assessmentPendingGeneration = 0;
@@ -319,12 +322,14 @@ export class ClinicalScenarioEngine {
   private assessmentPublicationCount = 0;
 
   constructor(laboratoryResultGenerator: LaboratoryResultGenerator = narvaLabPhysiologyV1Generator,
-    laboratoryGenerationAllowed?: () => boolean) {
+    laboratoryGenerationAllowed?: () => boolean, imagingMutationAllowed?: () => boolean) {
     const productionGenerator = laboratoryResultGenerator === narvaLabPhysiologyV1Generator;
     this.laboratory = new LaboratoryWorkflowRuntime(laboratoryResultGenerator,
       laboratoryGenerationAllowed ?? (productionGenerator
         ? () => ["WRITER", "OFFLINE"].includes(getRuntimeWriterAuthorityState())
         : () => true));
+    this.imaging = new ImagingWorkflowRuntime(imagingMutationAllowed ??
+      (() => ["WRITER", "OFFLINE"].includes(getRuntimeWriterAuthorityState())));
   }
 
   reset(fixture: GoldenFixture): void {
@@ -358,6 +363,7 @@ export class ClinicalScenarioEngine {
     this.medicationEngine.reset();
     this.mechanicalVentilation.reset();
     this.laboratory.reset();
+    this.imaging.reset();
     const fixturePatientId = this.requireProcess().encounterId;
     this.narvaIroScenario.reset(fixtureState.narvaIroScenario === true ? fixturePatientId : undefined);
     if (fixtureState.narvaIroInitialTreatments === true) this.bootstrapNarvaIroInitialTreatments(fixturePatientId);
@@ -379,6 +385,7 @@ export class ClinicalScenarioEngine {
     const targetTime = simulationTimeSec;
     if (this.narvaIroScenario.snapshot()) this.narvaIroScenario.advanceTo(targetTime);
     this.laboratory.advanceTo(targetTime);
+    this.imaging.advanceTo(targetTime);
     for (const medicationEvent of this.medicationEngine.advanceTo(targetTime)) this.logEvent(medicationEvent.eventType, { ...medicationEvent }, medicationEvent.patientId);
     const root = this.rootProcess();
     if (root) {
@@ -694,6 +701,7 @@ export class ClinicalScenarioEngine {
       ...(this.mechanicalVentilation.snapshot() ? { mechanicalVentilation: this.mechanicalVentilation.snapshot() } : {}),
       ...(this.narvaIroScenario.snapshot() ? { narvaIroScenario: this.narvaIroScenario.snapshot() } : {}),
       ...(this.laboratory.snapshot().orders.length ? { laboratory: this.laboratory.snapshot() } : {}),
+      ...(this.imaging.snapshot().instances.length ? { imaging: this.imaging.snapshot() } : {}),
       assessmentRules: this.assessmentRules,
       vitalSignEvents: boundedVitalSignEvents(this.vitalSignEvents),
     }) as PersistedRuntimePayload;
@@ -770,6 +778,7 @@ export class ClinicalScenarioEngine {
     this.mechanicalVentilation.restore(candidate.mechanicalVentilation);
     this.narvaIroScenario.restore(candidate.narvaIroScenario);
     this.laboratory.restore(candidate.laboratory);
+    this.imaging.restore(candidate.imaging);
     endClinicalRestore();
     this.assessmentRules = structuredClone(candidate.assessmentRules) as AssessmentRule[];
     this.vitalSignEvents = boundedVitalSignEvents(candidate.vitalSignEvents);
@@ -833,9 +842,15 @@ export class ClinicalScenarioEngine {
   }
 
   getLaboratoryWorkflow(): LaboratoryWorkflowSnapshot { return this.laboratory.snapshot(); }
+  getImagingWorkflow(): ImagingWorkflowSnapshot { return this.imaging.snapshot(); }
+  orderImaging(input: Readonly<{ commandId: string; exerciseId: string; patientId: string; orderedBy: string;
+    orderedAtSimulationTimeSec: number; definition: ImagingOrderDefinitionSnapshot }>) {
+    return this.imaging.order(input);
+  }
   getSimulationTimeSec(): number { return this.simulationTimeSec; }
   fenceLaboratoryAtTerminal(simulationTimeSec = this.simulationTimeSec): void {
     this.laboratory.fenceTerminal(simulationTimeSec);
+    this.imaging.fenceTerminal(simulationTimeSec);
   }
 
   /** Instructor command boundary: process transition first, canonical aggregation second. */

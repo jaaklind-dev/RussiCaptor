@@ -8,6 +8,7 @@ import { isNarvaIroScenarioControlCommandType } from "@/models/NarvaIroScenario"
 import { handleNarvaIroScenarioControlCommand } from "@/services/runtime/instructor/NarvaIroScenarioControlCommandService";
 import { handleLaboratoryCommand } from "@/services/runtime/instructor/LaboratoryCommandService";
 import type { LabPatientBloodIdentity, NarvaLabPackageId } from "@/models/LaboratoryWorkflow";
+import { handleImagingOrder } from "@/services/runtime/instructor/ImagingCommandService";
 
 function rejected(reason: string): RuntimePatientCommandMaterialization {
   return Object.freeze({ status: "REJECTED", result: Object.freeze({ ok: false, reason }) });
@@ -76,6 +77,15 @@ export function materializeRuntimePatientCommand(command: AcceptedRuntimePatient
         simulationTimeSec: command.simulationTimeSec, patientRevision: command.patientResultingRevision,
         labPackageId, orderId,
         patientBloodIdentity: command.payload.patientBloodIdentity as LabPatientBloodIdentity | undefined });
+      return Object.freeze({ status: result.ok ? "MATERIALIZED" : "REJECTED",
+        result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
+    }
+    if (command.commandType === "IMAGING_ORDER") {
+      const definitionId = command.payload.definitionId;
+      if (typeof definitionId !== "string") return rejected("INVALID_COMMAND_PAYLOAD");
+      const result = handleImagingOrder({ commandId: command.commandId, exerciseId: command.exerciseId,
+        patientId: command.patientId, actorUserId: command.actorUserId,
+        simulationTimeSec: command.simulationTimeSec, definitionId });
       return Object.freeze({ status: result.ok ? "MATERIALIZED" : "REJECTED",
         result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
     }

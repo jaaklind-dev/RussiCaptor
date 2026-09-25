@@ -54,7 +54,7 @@ import { getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscrib
 import { SingleFlightActionGate } from "@/services/ui/InteractionSafety";
 import { getCanonicalExerciseSnapshot, getCanonicalExerciseSnapshotVersion,
   subscribeToCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
-import { getActiveLaboratoryWorkflow } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
+import { getActiveImagingWorkflow, getActiveLaboratoryWorkflow } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
 import { laboratoryPackageForActiveExercise, submitLaboratoryCollection, submitLaboratoryOrder } from
   "@/services/runtime/laboratory/LaboratoryWorkflowCommandService";
 import { getRuntimeReaderConvergenceState, getRuntimeReaderConvergenceVersion,
@@ -64,6 +64,7 @@ import { runtimePatientCommandSubmissionReadiness } from
   "@/services/runtime/commands/RuntimePatientCommandService";
 import { getExercisePackageBindingVersion, subscribeToExercisePackageBindings } from
   "@/services/exercise/ExercisePackageService";
+import { submitImagingOrder } from "@/services/runtime/imaging/ImagingWorkflowCommandService";
 type PatientTab =
   | "overview"
   | "vitals"
@@ -100,6 +101,7 @@ const canonicalExercise = getCanonicalExerciseSnapshot();
 const isExerciseCompleted = canonicalExercise.lifecycleState === "COMPLETED";
 const exerciseId = canonicalExercise.exerciseId;
 const laboratoryWorkflow = getActiveLaboratoryWorkflow(exerciseId, patient?.id ?? "");
+const imagingWorkflow = getActiveImagingWorkflow(exerciseId, patient?.id ?? "");
 const laboratoryPackageId = laboratoryPackageForActiveExercise(exerciseId);
 const laboratoryConvergence = getRuntimeReaderConvergenceState();
 const laboratoryProjectionReady = laboratoryConvergence.phase === "UNTRACKED" ||
@@ -332,6 +334,7 @@ useEffect(() => {
    {activeTab === "imaging" && (
   <ImagingTab
     studies={imagingStudies}
+    workflow={imagingWorkflow}
     readOnly={isReadOnly}
     onOpenImage={(study) => {
       void runWorkflow(()=>openImagingImageConflictSafe(patient.id, study.id, study.title));
@@ -356,7 +359,11 @@ useEffect(() => {
     orders={orders}
     readOnly={isReadOnly}
     onPlaceOrder={(order) => {
-      void runWorkflow(()=>placeOrderConflictSafe(order));
+      if (order.category === "imaging") {
+        void runWorkflow(() => submitImagingOrder(exerciseId, patient.id, order.workflow.resultTargetId));
+      } else {
+        void runWorkflow(() => placeOrderConflictSafe(order));
+      }
     }}
   />
 )}

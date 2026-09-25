@@ -105,7 +105,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
   });
 
   test("keeps the complete package-owned Imaging guardrail catalog unique and explicit", () => {
-    const expectedImagingIds = Array.from({ length: 10 }, (_, index) => `IMG-G${String(index + 1).padStart(2, "0")}`);
+    const expectedImagingIds = Array.from({ length: 25 }, (_, index) => `IMG-G${String(index + 1).padStart(2, "0")}`);
     expect(manifest.imagingGuardrails.map(guardrail => guardrail.id)).toEqual(expectedImagingIds);
     expect(manifest.imagingGuardrails.every(guardrail => guardrail.name.length > 0 &&
       guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);

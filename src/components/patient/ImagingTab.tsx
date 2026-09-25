@@ -4,11 +4,13 @@ import { t } from "@/locales";
 import { ImagingStudy } from "@/models/ImagingStudy";
 import { getStatusLabel } from "@/utils/status";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import type { ImagingWorkflowSnapshot } from "@/models/ImagingWorkflow";
 type Props = {
   studies: ImagingStudy[];
   onOpenImage: (study: ImagingStudy) => void;
   onOpenReport: (study: ImagingStudy) => void;
   readOnly?: boolean;
+  workflow?: ImagingWorkflowSnapshot;
 };
 
 export default function ImagingTab({
@@ -16,27 +18,40 @@ export default function ImagingTab({
   onOpenImage,
   onOpenReport,
   readOnly = false,
+  workflow,
 }: Props) {
+  const durableDefinitionIds = new Set((workflow?.instances ?? []).map(item => item.definitionId));
+  const legacyStudies = workflow ? studies.filter(study => !durableDefinitionIds.has(study.id)) : studies;
   return (
     <View style={styles.card}>
       <Text style={styles.title}>{t.imaging.title}</Text>
 
-      {studies.length === 0 ? (
+      {(workflow?.instances ?? []).map(instance => (
+        <View key={instance.imagingInstanceId} style={styles.study}>
+          <Text style={styles.studyTitle}>{instance.title} #{instance.repeatOrdinal}</Text>
+          <Text style={styles.status}>{instance.status}</Text>
+          {instance.status === "RESULTED" && instance.result ? (
+            <Text style={styles.report}>{instance.result.report}</Text>
+          ) : <Text style={styles.hidden}>Raport ei ole veel avaldatud</Text>}
+        </View>
+      ))}
+
+      {legacyStudies.length === 0 && !workflow?.instances.length ? (
         <Text style={styles.empty}>{t.common.noData}</Text>
       ) : (
-        studies.map((study) => (
+        legacyStudies.map((study) => (
           <View key={study.id} style={styles.study}>
             <View style={styles.header}>
               <View>
                 <Text style={styles.studyTitle}>{study.title}</Text>
                 <Text style={styles.status}>
-                  {getStatusLabel(study.status)}
+                  {workflow ? "Tellitav uuring" : getStatusLabel(study.status)}
                 </Text>
               </View>
             </View>
 
             <View style={styles.buttonRow}>
-              {!readOnly && study.attachment && study.imageVisibility !== "revealed" && (
+              {!workflow && !readOnly && study.attachment && study.imageVisibility !== "revealed" && (
                 <Pressable
                   style={styles.button}
                   onPress={() => onOpenImage(study)}
@@ -45,7 +60,7 @@ export default function ImagingTab({
                 </Pressable>
               )}
 
-             {!readOnly && study.reportVisibility !== "revealed" && (
+             {!workflow && !readOnly && study.status === "viewed" && study.reportVisibility !== "revealed" && (
   <Pressable
     style={styles.button}
     onPress={() => onOpenReport(study)}
@@ -55,12 +70,12 @@ export default function ImagingTab({
 )}
 </View>
 
-{study.imageVisibility === "revealed" &&
+{!workflow && study.imageVisibility === "revealed" &&
   study.attachment &&
   imagingAssets[study.attachment] && (
     <ImageViewer source={imagingAssets[study.attachment]} />
   )}
-            {study.reportVisibility === "revealed" ? (
+            {!workflow && study.status === "viewed" && study.reportVisibility === "revealed" ? (
               <Text style={styles.report}>{study.report}</Text>
             ) : (
               <Text style={styles.hidden}>Raport on varjatud</Text>

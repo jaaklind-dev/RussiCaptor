@@ -1,6 +1,6 @@
 import type { InstructorPatientCommand } from "@/models/InstructorCommand";
 import type { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
-import type { InstructorRuntimeOwner } from "./InstructorRuntimeEventRegistry";
+import type { ImagingRuntimeOwner } from "./InstructorRuntimeEventRegistry";
 import { inferredInterventionDefinitionId } from "@/services/runtime/clinical/InterventionRuntime";
 import { runtimeWritesAllowed } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { notifySync } from "@/services/SyncService";
@@ -16,7 +16,7 @@ export function createScenarioEngineInstructorRuntimeOwner(
   engine: ClinicalScenarioEngine,
   exerciseId: string,
   patientId: string
-): InstructorRuntimeOwner {
+): ImagingRuntimeOwner {
   return {
     exerciseId,
     patientId,
@@ -182,6 +182,26 @@ export function createScenarioEngineInstructorRuntimeOwner(
         return { ok: true, runtimeEventId: sample.sampleId };
       } catch (error) {
         return { ok: false, reason: error instanceof Error ? error.message : "Laboratory command failed" };
+      }
+    },
+    executeImagingOrder(input) {
+      if (!runtimeWritesAllowed()) return readOnly();
+      try {
+        const pkg = getExercisePackage(exerciseId);
+        const configured = pkg.imagingConfiguration?.definitions.find(item =>
+          item.study.id === input.definitionId && item.study.patientId === patientId);
+        if (!configured) return { ok: false, reason: "IMAGING_DEFINITION_SCOPE_DENIED" };
+        const instance = engine.orderImaging({ commandId: input.commandId, exerciseId, patientId,
+          orderedBy: input.actorUserId, orderedAtSimulationTimeSec: input.simulationTimeSec,
+          definition: { definitionId: configured.study.id, patientId, title: configured.study.title,
+            modality: configured.study.modality, reportSource: configured.study.report,
+            ...(configured.study.attachment ? { attachment: configured.study.attachment } : {}),
+            delaySeconds: configured.order.workflow.delayMinutes * 60, packageId: pkg.packageId,
+            packageVersion: pkg.packageVersion, packageHash: pkg.packageHash } });
+        notifySync("local");
+        return { ok: true, runtimeEventId: instance.imagingInstanceId };
+      } catch (error) {
+        return { ok: false, reason: error instanceof Error ? error.message : "Imaging order failed" };
       }
     },
     advanceRuntime(commandId, durationSec, canonicalSimulationTimeSec) {

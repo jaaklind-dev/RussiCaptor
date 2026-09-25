@@ -15,6 +15,7 @@ import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerat
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { clearPatientTransportRuntime, preparePatientTransportRuntime } from "./PatientTransportRuntimeService";
 import type { LaboratoryWorkflowSnapshot } from "@/models/LaboratoryWorkflow";
+import type { ImagingWorkflowSnapshot } from "@/models/ImagingWorkflow";
 import type { GoldenFixture } from "@/models/GoldenTest";
 import type { ExercisePackage } from "@/models/exercise/ExercisePackage";
 
@@ -203,6 +204,12 @@ export function getActiveLaboratoryWorkflow(
 ): LaboratoryWorkflowSnapshot | undefined {
   return active.find(item => item.exerciseId === exerciseId && item.patientId === patientId)
     ?.engine.getLaboratoryWorkflow();
+}
+
+/** Read-only canonical Imaging projection. Readers never advance or release studies here. */
+export function getActiveImagingWorkflow(exerciseId: string, patientId: string): ImagingWorkflowSnapshot | undefined {
+  return active.find(item => item.exerciseId === exerciseId && item.patientId === patientId)
+    ?.engine.getImagingWorkflow();
 }
 
 /** Applies terminal semantics at the same authoritative Runtime boundary used for terminal checkpoint capture. */
