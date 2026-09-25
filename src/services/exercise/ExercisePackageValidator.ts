@@ -1,4 +1,5 @@
 import type { ExercisePackage } from "@/models/exercise/ExercisePackage";
+import { validateImagingAssetReference } from "@/services/imaging/ImagingAssetRegistry";
 import type { ExercisePackageCompatibility } from "@/models/exercise/ExercisePackageManifest";
 import type { ExerciseDefinitionCatalog } from "@/models/exercise/ExerciseDefinition";
 import { calculateExercisePackageHash } from "./ExercisePackageHash";
@@ -60,6 +61,17 @@ export class ExercisePackageValidator {
       imaging.definitions.forEach((item, index) => {
         const path = `imagingConfiguration.definitions[${index}]`;
         if (!item.study.id?.trim() || !item.study.patientId?.trim() || !item.study.title?.trim() || !item.study.report?.trim()) add("INVALID_IMAGING_CONFIGURATION", path, "Imaging study identity, patient, title and report are required");
+        if (item.study.attachment) add("INVALID_IMAGING_CONFIGURATION", `${path}.study.attachment`, "Package Imaging must use the canonical asset reference contract");
+        if (item.study.asset) {
+          try {
+            validateImagingAssetReference(item.study.asset);
+            if (item.study.asset.packageId !== pkg.packageId || item.study.asset.definitionId !== item.study.id) {
+              add("INVALID_IMAGING_CONFIGURATION", `${path}.study.asset`, "Imaging asset provenance must match package and definition");
+            }
+          } catch {
+            add("INVALID_IMAGING_CONFIGURATION", `${path}.study.asset`, "Imaging asset identity or integrity metadata is invalid");
+          }
+        }
         if (!item.order.id?.trim() || !item.order.title?.trim()) add("INVALID_IMAGING_CONFIGURATION", `${path}.order`, "Imaging order identity and title are required");
         if (item.order.workflow.resultAction !== "imaging.available" || item.order.workflow.resultTargetId !== item.study.id || !Number.isFinite(item.order.workflow.delayMinutes) || item.order.workflow.delayMinutes < 0) add("INVALID_IMAGING_CONFIGURATION", `${path}.order.workflow`, "Imaging order must target its study with a non-negative delay");
       });

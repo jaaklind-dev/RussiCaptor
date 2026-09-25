@@ -1,16 +1,22 @@
-import { imagingAssets } from "../../assets/imaging";
 import ImageViewer from "@/components/viewers/ImageViewer";
 import { t } from "@/locales";
 import { ImagingStudy } from "@/models/ImagingStudy";
 import { getStatusLabel } from "@/utils/status";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { ImagingWorkflowSnapshot } from "@/models/ImagingWorkflow";
+import type { ImagingAssetReference } from "@/models/ImagingAsset";
+import { classifyLegacyImagingAttachment, resolveImagingAsset } from "@/services/imaging/ImagingAssetRegistry";
 type Props = {
   studies: ImagingStudy[];
   onOpenImage: (study: ImagingStudy) => void;
   onOpenReport: (study: ImagingStudy) => void;
   readOnly?: boolean;
   workflow?: ImagingWorkflowSnapshot;
+};
+
+const ReleasedAsset = ({ asset }: { asset: ImagingAssetReference }) => {
+  const resolution = resolveImagingAsset(asset);
+  return resolution.status === "RESOLVED" ? <ImageViewer source={resolution.source} /> : null;
 };
 
 export default function ImagingTab({
@@ -31,7 +37,10 @@ export default function ImagingTab({
           <Text style={styles.studyTitle}>{instance.title} #{instance.repeatOrdinal}</Text>
           <Text style={styles.status}>{instance.status}</Text>
           {instance.status === "RESULTED" && instance.result ? (
-            <Text style={styles.report}>{instance.result.report}</Text>
+            <>
+              <Text style={styles.report}>{instance.result.reportText}</Text>
+              {instance.result.asset ? <ReleasedAsset asset={instance.result.asset} /> : null}
+            </>
           ) : <Text style={styles.hidden}>Raport ei ole veel avaldatud</Text>}
         </View>
       ))}
@@ -51,7 +60,7 @@ export default function ImagingTab({
             </View>
 
             <View style={styles.buttonRow}>
-              {!workflow && !readOnly && study.attachment && study.imageVisibility !== "revealed" && (
+              {!workflow && !readOnly && (study.asset || study.attachment) && study.imageVisibility !== "revealed" && (
                 <Pressable
                   style={styles.button}
                   onPress={() => onOpenImage(study)}
@@ -70,11 +79,10 @@ export default function ImagingTab({
 )}
 </View>
 
-{!workflow && study.imageVisibility === "revealed" &&
-  study.attachment &&
-  imagingAssets[study.attachment] && (
-    <ImageViewer source={imagingAssets[study.attachment]} />
-  )}
+{!workflow && study.imageVisibility === "revealed" && (() => {
+  const resolution = study.asset ? resolveImagingAsset(study.asset) : classifyLegacyImagingAttachment(study.attachment);
+  return resolution?.status === "RESOLVED" ? <ImageViewer source={resolution.source} /> : null;
+})()}
             {!workflow && study.status === "viewed" && study.reportVisibility === "revealed" ? (
               <Text style={styles.report}>{study.report}</Text>
             ) : (

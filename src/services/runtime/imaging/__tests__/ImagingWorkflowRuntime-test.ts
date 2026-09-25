@@ -27,7 +27,7 @@ describe("I2 durable Imaging lifecycle / IMG-G11..IMG-G25", () => {
       expect(runtime.advanceTo(519)[0]).toMatchObject({ status: "PROCESSING" });
       expect(runtime.snapshot().instances[0]).not.toHaveProperty("result");
       expect(runtime.advanceTo(target)[0]).toMatchObject({ status: "RESULTED",
-        result: { report: "Kopsuväljad ilma infiltraadita.", releasedAtSimulationTimeSec: target } });
+        result: { reportText: "Kopsuväljad ilma infiltraadita.", releasedAtSimulationTimeSec: target } });
       expect(runtime.advanceTo(target + 100)).toEqual([]);
       expect(runtime.snapshot().instances.filter(item => item.status === "RESULTED")).toHaveLength(1);
     }
@@ -40,7 +40,7 @@ describe("I2 durable Imaging lifecycle / IMG-G11..IMG-G25", () => {
     (source as { reportSource: string }).reportSource = "changed";
     runtime.advanceTo(420); const before = runtime.snapshot(); const hash = sha256Text(stableJson(before));
     runtime.advanceTo(999); expect(sha256Text(stableJson(runtime.snapshot()))).toBe(hash);
-    expect(before.instances[0].result?.report).toBe("Kopsuväljad ilma infiltraadita.");
+    expect(before.instances[0].result?.reportText).toBe("Kopsuväljad ilma infiltraadita.");
   });
 
   test("I2-A10..A13 restart/takeover preserves pending state and releases overdue exactly once", () => {

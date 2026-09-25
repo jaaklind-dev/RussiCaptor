@@ -90,7 +90,8 @@ describe("I3A approved Narva Imaging content / IMG-G26..IMG-G34", () => {
 
     const pending = new ImagingWorkflowRuntime(); pending.restore(runtime.snapshot());
     expect(pending.advanceTo(520)).toEqual([expect.objectContaining({ status: "RESULTED",
-      result: { report: NARVA_TRAUMA_P02_IMAGING_SOURCE.report, releasedAtSimulationTimeSec: 520 } })]);
+      result: expect.objectContaining({ reportText: NARVA_TRAUMA_P02_IMAGING_SOURCE.report,
+        releasedAtSimulationTimeSec: 520 }) })]);
     expect(pending.advanceTo(1_000)).toEqual([]);
 
     const resulted = new ImagingWorkflowRuntime(); resulted.restore(pending.snapshot());
@@ -105,6 +106,6 @@ describe("I3A approved Narva Imaging content / IMG-G26..IMG-G34", () => {
       orderedBy: "CM", orderedAtSimulationTimeSec: 0, definition: source });
     (source as { reportSource: string }).reportSource = "unrelated mutation";
     runtime.advanceTo(420);
-    expect(runtime.snapshot().instances[0].result?.report).toBe(NARVA_TRAUMA_P02_IMAGING_SOURCE.report);
+    expect(runtime.snapshot().instances[0].result?.reportText).toBe(NARVA_TRAUMA_P02_IMAGING_SOURCE.report);
   });
 });

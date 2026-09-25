@@ -195,7 +195,7 @@ export function createScenarioEngineInstructorRuntimeOwner(
           orderedBy: input.actorUserId, orderedAtSimulationTimeSec: input.simulationTimeSec,
           definition: { definitionId: configured.study.id, patientId, title: configured.study.title,
             modality: configured.study.modality, reportSource: configured.study.report,
-            ...(configured.study.attachment ? { attachment: configured.study.attachment } : {}),
+            ...(configured.study.asset ? { asset: configured.study.asset } : {}),
             delaySeconds: configured.order.workflow.delayMinutes * 60, packageId: pkg.packageId,
             packageVersion: pkg.packageVersion, packageHash: pkg.packageHash } });
         notifySync("local");

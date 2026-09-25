@@ -1,4 +1,5 @@
 import { ImagingStudy } from "@/models/ImagingStudy";
+import { DEMO_HEAD_CT_ASSET } from "@/services/imaging/ImagingAssetRegistry";
 
 export const imagingStudies: ImagingStudy[] = [
   {
@@ -15,7 +16,7 @@ export const imagingStudies: ImagingStudy[] = [
 
   report: "Ägeda intrakraniaalse verejooksu tunnuseid ei ole. Massiefekti ei ole. Basaaltsisternid on vabad.",
 
-attachment: "image01.jpg",
+asset: DEMO_HEAD_CT_ASSET,
 
   status: "processing",
 

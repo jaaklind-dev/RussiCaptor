@@ -2,6 +2,8 @@ import { IMAGING_WORKFLOW_SCHEMA_VERSION, type ImagingOrderDefinitionSnapshot,
   type ImagingStudyInstance, type ImagingWorkflowSnapshot } from "@/models/ImagingWorkflow";
 import { deepFreeze, immutableClone } from "@/utils/immutable";
 import { stableJson } from "@/utils/stableJson";
+import { sha256Text } from "@/utils/sha256";
+import { adaptLegacyImagingAttachment, validateImagingAssetReference } from "@/services/imaging/ImagingAssetRegistry";
 
 const empty = (): ImagingWorkflowSnapshot => deepFreeze({
   schemaVersion: IMAGING_WORKFLOW_SCHEMA_VERSION, instances: [],
@@ -34,6 +36,7 @@ export class ImagingWorkflowRuntime {
       }
       return immutableClone(duplicate) as ImagingStudyInstance;
     }
+    if (input.definition.asset) validateImagingAssetReference(input.definition.asset);
     const repeatOrdinal = this.state.instances.filter(item =>
       item.definitionId === input.definition.definitionId).length + 1;
     const instance = deepFreeze({ imagingInstanceId, orderCommandId: input.commandId,
@@ -44,8 +47,9 @@ export class ImagingWorkflowRuntime {
       orderedAtSimulationTimeSec: input.orderedAtSimulationTimeSec,
       availableAtSimulationTimeSec: input.orderedAtSimulationTimeSec + input.definition.delaySeconds,
       repeatOrdinal, status: "ORDERED" as const, authoredSource: {
-        report: input.definition.reportSource,
-        ...(input.definition.attachment ? { attachment: input.definition.attachment } : {}),
+        reportText: input.definition.reportSource,
+        reportSha256: sha256Text(input.definition.reportSource),
+        ...(input.definition.asset ? { asset: input.definition.asset } : {}),
       },
     });
     this.replace({ ...this.state, instances: [...this.state.instances, instance] });
@@ -66,8 +70,12 @@ export class ImagingWorkflowRuntime {
       }
       const resulted = deepFreeze({ ...item, status: "RESULTED" as const,
         processingStartedAtSimulationTimeSec: item.processingStartedAtSimulationTimeSec ?? item.orderedAtSimulationTimeSec,
-        result: { report: item.authoredSource.report,
-          ...(item.authoredSource.attachment ? { attachment: item.authoredSource.attachment } : {}),
+        result: { resultId: `IMAGING_RESULT:${item.imagingInstanceId}`,
+          imagingInstanceId: item.imagingInstanceId, patientId: item.patientId,
+          definitionId: item.definitionId, packageId: item.packageId, packageVersion: item.packageVersion,
+          packageHash: item.packageHash, reportText: item.authoredSource.reportText,
+          authoredReportSha256: item.authoredSource.reportSha256,
+          ...(item.authoredSource.asset ? { asset: item.authoredSource.asset } : {}),
           releasedAtSimulationTimeSec: simulationTimeSec } });
       changed.push(resulted); return resulted;
     });
@@ -77,7 +85,7 @@ export class ImagingWorkflowRuntime {
 
   restore(value?: ImagingWorkflowSnapshot): void {
     if (!value) { this.reset(); return; }
-    const candidate = immutableClone(value) as ImagingWorkflowSnapshot;
+    const candidate = this.upgradeLegacySnapshot(value as unknown as Record<string, unknown>);
     this.validate(candidate); this.state = candidate;
   }
 
@@ -101,7 +109,7 @@ export class ImagingWorkflowRuntime {
     for (const item of value.instances) {
       if (!item.imagingInstanceId || !item.orderCommandId || !item.exerciseId || !item.patientId ||
         !item.definitionId || !item.packageId || !item.packageVersion || !item.packageHash ||
-        !item.authoredSource?.report ||
+        !item.authoredSource?.reportText || item.authoredSource.reportSha256 !== sha256Text(item.authoredSource.reportText) ||
         ids.has(item.imagingInstanceId) || commands.has(item.orderCommandId) || item.repeatOrdinal < 1 ||
         !Number.isInteger(item.repeatOrdinal) || !["ORDERED", "PROCESSING", "RESULTED"].includes(item.status)) {
         throw new Error("IMAGING_INVALID_INSTANCE");
@@ -112,6 +120,14 @@ export class ImagingWorkflowRuntime {
         (item.result && item.result.releasedAtSimulationTimeSec < item.availableAtSimulationTimeSec)) {
         throw new Error("IMAGING_INVALID_INSTANCE");
       }
+      if (item.authoredSource.asset) validateImagingAssetReference(item.authoredSource.asset);
+      if (item.result && (item.result.resultId !== `IMAGING_RESULT:${item.imagingInstanceId}` ||
+        item.result.imagingInstanceId !== item.imagingInstanceId || item.result.patientId !== item.patientId ||
+        item.result.definitionId !== item.definitionId || item.result.packageId !== item.packageId ||
+        item.result.packageVersion !== item.packageVersion || item.result.packageHash !== item.packageHash ||
+        item.result.reportText !== item.authoredSource.reportText ||
+        item.result.authoredReportSha256 !== item.authoredSource.reportSha256 ||
+        stableJson(item.result.asset) !== stableJson(item.authoredSource.asset))) throw new Error("IMAGING_INVALID_RESULT");
       ids.add(item.imagingInstanceId); commands.add(item.orderCommandId);
     }
     const ordinals = value.instances.map(item => `${item.definitionId}:${item.repeatOrdinal}`);
@@ -119,5 +135,29 @@ export class ImagingWorkflowRuntime {
     if (value.terminalFencedAtSimulationTimeSec !== undefined) validTime(value.terminalFencedAtSimulationTimeSec);
     // Ensures clone did not normalize any data silently.
     if (stableJson(value) !== stableJson(immutableClone(value))) throw new Error("IMAGING_INVALID_SNAPSHOT");
+  }
+
+  private upgradeLegacySnapshot(value: Record<string, unknown>): ImagingWorkflowSnapshot {
+    if (value.schemaVersion === IMAGING_WORKFLOW_SCHEMA_VERSION) {
+      return immutableClone(value) as unknown as ImagingWorkflowSnapshot;
+    }
+    if (value.schemaVersion !== 1 || !Array.isArray(value.instances)) throw new Error("IMAGING_UNSUPPORTED_SCHEMA");
+    const instances = value.instances.map(raw => {
+      const item = raw as Record<string, any>;
+      const legacySource = item.authoredSource ?? {};
+      const reportText = legacySource.report;
+      const asset = adaptLegacyImagingAttachment({ attachment: legacySource.attachment,
+        packageId: item.packageId, definitionId: item.definitionId });
+      if (legacySource.attachment && !asset) throw new Error("IMAGING_UNRESOLVED_LEGACY_ATTACHMENT");
+      const authoredSource = { reportText, reportSha256: sha256Text(reportText), ...(asset ? { asset } : {}) };
+      return { ...item, authoredSource, ...(item.result ? { result: {
+        resultId: `IMAGING_RESULT:${item.imagingInstanceId}`, imagingInstanceId: item.imagingInstanceId,
+        patientId: item.patientId, definitionId: item.definitionId, packageId: item.packageId,
+        packageVersion: item.packageVersion, packageHash: item.packageHash, reportText: item.result.report,
+        authoredReportSha256: sha256Text(item.result.report), ...(asset ? { asset } : {}),
+        releasedAtSimulationTimeSec: item.result.releasedAtSimulationTimeSec,
+      } } : {}) };
+    });
+    return immutableClone({ ...value, schemaVersion: IMAGING_WORKFLOW_SCHEMA_VERSION, instances }) as ImagingWorkflowSnapshot;
   }
 }

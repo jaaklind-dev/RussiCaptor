@@ -22,7 +22,7 @@ describe("I2 Imaging canonical Runtime checkpoint persistence", () => {
     expect(restored.getImagingWorkflow()).toEqual(payload.imaging);
     restored.advanceTo(60);
     expect(restored.getImagingWorkflow().instances).toEqual([expect.objectContaining({ status: "RESULTED",
-      result: { report: "Immutable report", releasedAtSimulationTimeSec: 60 } })]);
+      result: expect.objectContaining({ reportText: "Immutable report", releasedAtSimulationTimeSec: 60 }) })]);
     restored.advanceTo(600);
     expect(restored.getImagingWorkflow().instances).toHaveLength(1);
   });

@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/IMG-G01–IMG-G34/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Imaging regression guardrails
 
@@ -90,6 +90,17 @@ Package-owned Imaging uses the existing order, delayed workflow, persistence, an
 | IMG-G32 | Narva deterministic identity | Bootstrap and restore retain the same P02 study/order definition identity exactly once. |
 | IMG-G33 | IRO isolation | The Narva IRO package remains Imaging-empty. |
 | IMG-G34 | No speculative Narva content | No asset, extra study or unauthored report field is invented for Narva. |
+| IMG-G35 | Released report provenance | Every result identifies its durable instance, definition, patient and exact package source. |
+| IMG-G36 | Immutable released asset | A RESULTED asset reference cannot change after release. |
+| IMG-G37 | Bundled asset identity | Every bundled asset has stable semantic identity distinct from its resolver path. |
+| IMG-G38 | Bundled asset integrity | Registered bundled bytes match the frozen SHA-256, media type and optional byte length. |
+| IMG-G39 | No checkpoint binary | Checkpoints persist only asset metadata/reference identity, never image bytes. |
+| IMG-G40 | Report-only validity | A released report without an asset is a complete valid result. |
+| IMG-G41 | No pre-release exposure | Authored report source and asset are not exposed as a released result before RESULTED. |
+| IMG-G42 | Package asset isolation | Asset provenance must match its package and study definition. |
+| IMG-G43 | Asset restore determinism | Restart and takeover preserve the exact released asset reference. |
+| IMG-G44 | Reader asset convergence | Readers restore asset metadata without local generation or mutation. |
+| IMG-G45 | Unsupported attachment safety | Unregistered workbook paths and URLs remain explicitly unresolved and never become trusted assets. |
 
 ## Laboratory regression guardrails
 

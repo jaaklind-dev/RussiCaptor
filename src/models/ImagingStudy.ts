@@ -1,4 +1,5 @@
 import { Visibility } from "@/models/Visibility";
+import type { ImagingAssetReference } from "@/models/ImagingAsset";
 
 export type ImagingStatus =
   | "processing"
@@ -20,6 +21,8 @@ export type ImagingStudy = {
   modality: ImagingModality;
   title: string;
   report: string;
+  asset?: ImagingAssetReference;
+  /** Import-only compatibility. Canonical package/runtime content uses asset. */
   attachment?: string;
 
   status: ImagingStatus;
