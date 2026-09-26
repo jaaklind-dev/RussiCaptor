@@ -16,4 +16,16 @@ describe("WP-45C generic patient transport", () => {
   test("evidence is sparse and canonical", () => { const e=engine(); e.start("C1","P01","REANIMOBILE-01","THORACIC_CENTER",0); e.advanceTo(4500); expect(e.snapshot().evidence.map(x=>x.type)).toEqual(["TRANSPORT_REQUESTED","PATIENT_ONBOARD","TRANSPORT_DEPARTED","TRANSPORT_ARRIVED","TRANSPORT_HANDOVER_COMPLETED","TRANSPORT_RETURNING","TRANSPORT_RESOURCE_AVAILABLE"]); });
   test("invalid references fail closed and do not mutate state", () => { const e=engine(); expect(e.start("A","P01","NOPE","THORACIC_CENTER",0).reason).toBe("UNKNOWN_RESOURCE"); expect(e.start("B","P01","REANIMOBILE-01","NOPE",0).reason).toBe("UNKNOWN_DESTINATION"); expect(e.start("C","P99","REANIMOBILE-01","THORACIC_CENTER",0).reason).toBe("INVALID_PATIENT_LOCATION"); expect(e.snapshot().transports).toHaveLength(0); });
   test("snapshot is deterministic and configuration mismatch is rejected", () => { const a=engine(); a.start("C1","P01","REANIMOBILE-01","THORACIC_CENTER",0); const state=a.snapshot(); expect(new PatientTransportEngine(config,{},state).snapshot()).toEqual(state); expect(()=>new PatientTransportEngine({...config,version:"2.0.0"},{},state)).toThrow("TRANSPORT_CONFIGURATION_MISMATCH"); });
+  test("delayed durable materialization retains accepted time and catches up through crossed phases", () => {
+    const e=engine(); e.advanceTo(2500);
+    expect(e.start("LATE","P01","REANIMOBILE-01","THORACIC_CENTER",100).status).toBe("STARTED");
+    const state=e.snapshot();
+    expect(state.transports[0]).toMatchObject({ requestedAtSec:100,onboardAtSec:100,departedAtSec:100,
+      arrivedAtSec:1900,handedOverAtSec:2500,state:"HANDED_OVER" });
+    expect(state.resources[0]).toMatchObject({ state:"RETURNING",phaseEndsAtSec:4300 });
+    expect(state.evidence.map(item=>`${item.type}:${item.simulationTimeSec}`)).toEqual([
+      "TRANSPORT_REQUESTED:100","PATIENT_ONBOARD:100","TRANSPORT_DEPARTED:100",
+      "TRANSPORT_ARRIVED:1900","TRANSPORT_HANDOVER_COMPLETED:2500","TRANSPORT_RETURNING:2500",
+    ]);
+  });
 });

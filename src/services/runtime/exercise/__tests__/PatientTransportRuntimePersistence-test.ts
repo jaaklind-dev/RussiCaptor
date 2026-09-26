@@ -2,7 +2,7 @@ import { notifySync } from "@/services/SyncService";
 import {
   clearPatientTransportRuntime,
   preparePatientTransportRuntime,
-  startPatientTransport,
+  materializePatientTransport,
   submitPatientTransport,
 } from "../PatientTransportRuntimeService";
 
@@ -10,10 +10,11 @@ const mockStart = jest.fn();
 const mockGetCommandGateway = jest.fn();
 const mockSubmitCommand = jest.fn();
 const mockWaitForCommandResult = jest.fn();
+const mockReadiness = jest.fn();
 
 jest.mock("@/services/SyncService", () => ({ notifySync: jest.fn() }));
 jest.mock("@/services/runtime/commands/RuntimePatientCommandService", () => ({
-  getRuntimePatientCommandGateway: () => mockGetCommandGateway(),
+  runtimePatientCommandSubmissionReadiness: (...args: unknown[]) => mockReadiness(...args),
   submitPatientRuntimeCommand: (...args: unknown[]) => mockSubmitCommand(...args),
   waitForPatientRuntimeCommandResult: (...args: unknown[]) => mockWaitForCommandResult(...args),
 }));
@@ -39,14 +40,14 @@ jest.mock("../ExerciseClockTargetRegistry", () => ({ registerExerciseClockTarget
 const mockNotifySync = notifySync as jest.MockedFunction<typeof notifySync>;
 
 describe("WP-45C transport persistence boundary", () => {
-  beforeEach(() => { mockGetCommandGateway.mockReturnValue(undefined); mockWaitForCommandResult.mockResolvedValue(undefined); });
+  beforeEach(() => { mockGetCommandGateway.mockReturnValue(undefined); mockReadiness.mockReturnValue({ ready: true }); mockWaitForCommandResult.mockResolvedValue(undefined); });
   afterEach(() => { clearPatientTransportRuntime(); jest.clearAllMocks(); });
 
   test("a newly started transport immediately requests canonical persistence", () => {
     mockStart.mockReturnValue({ status: "STARTED", transport: { transportId: "T1" } });
     preparePatientTransportRuntime("EX");
 
-    expect(startPatientTransport("C1", "P01", "R1", "D1")).toMatchObject({ status: "STARTED" });
+    expect(materializePatientTransport("C1", "P01", "R1", "D1", 10)).toMatchObject({ status: "STARTED" });
     expect(mockNotifySync).toHaveBeenCalledTimes(1);
     expect(mockNotifySync).toHaveBeenCalledWith("local");
   });
@@ -55,7 +56,7 @@ describe("WP-45C transport persistence boundary", () => {
     mockStart.mockReturnValue({ status: "REJECTED", reason: "TRANSPORT_RESOURCE_BUSY" });
     preparePatientTransportRuntime("EX");
 
-    expect(startPatientTransport("C2", "P01", "R1", "D1")).toMatchObject({ status: "REJECTED" });
+    expect(materializePatientTransport("C2", "P01", "R1", "D1", 10)).toMatchObject({ status: "REJECTED" });
     expect(mockNotifySync).not.toHaveBeenCalled();
   });
 
@@ -68,7 +69,7 @@ describe("WP-45C transport persistence boundary", () => {
       .resolves.toEqual({ status: "PENDING", commandId: "REMOTE-1" });
     expect(mockStart).not.toHaveBeenCalled();
     expect(mockSubmitCommand).toHaveBeenCalledWith(expect.objectContaining({ commandType: "TRANSPORT_START",
-      payload: { resourceId: "R1", destinationId: "D1" } }));
+      simulationTimeSec: 10, payload: { resourceId: "R1", destinationId: "D1" } }));
     expect(mockWaitForCommandResult).toHaveBeenCalledWith("EX", 7);
     expect(mockNotifySync).not.toHaveBeenCalled();
   });
@@ -92,5 +93,17 @@ describe("WP-45C transport persistence boundary", () => {
     await expect(submitPatientTransport("REMOTE-2", "P01", "R1", "D1"))
       .resolves.toEqual({ status: "REJECTED", commandId: "REMOTE-2", reason: "COMPLETION_FENCED" });
     expect(mockStart).not.toHaveBeenCalled();
+  });
+
+  test("missing gateway/readiness fails closed without falling back to the local owner", async () => {
+    mockReadiness.mockReturnValue({ ready: false, reason: "Patsiendi käskude saatmine ei ole ühendatud." });
+    preparePatientTransportRuntime("EX");
+
+    await expect(submitPatientTransport("NO-GATEWAY", "P01", "R1", "D1")).resolves.toEqual({
+      status: "REJECTED", commandId: "NO-GATEWAY", reason: "Patsiendi käskude saatmine ei ole ühendatud.",
+    });
+    expect(mockSubmitCommand).not.toHaveBeenCalled();
+    expect(mockStart).not.toHaveBeenCalled();
+    expect(mockNotifySync).not.toHaveBeenCalled();
   });
 });

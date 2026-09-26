@@ -23,7 +23,13 @@ export class PatientTransportEngine {
 
   start(commandId: string, patientId: string, resourceId: string, destinationId: string, atSec: number): TransportCommandResult {
     const prior = this.commandResults.get(commandId); if (prior) return copy(prior);
-    this.advanceTo(atSec);
+    if (!Number.isInteger(atSec) || atSec < 0) return this.remember(commandId, { status: "REJECTED", reason: "INVALID_CONFIGURATION" });
+    // Durable commands retain their accepted intent time. A writer recovering
+    // later materializes the historical start and deterministically catches the
+    // new transport up to the already-authoritative clock without rewriting its
+    // start timestamps to takeover/materialization time.
+    const authoritativeTimeSec = this.time;
+    if (atSec > authoritativeTimeSec) this.advanceTo(atSec);
     const resource = this.resources.get(resourceId); const destination = this.destinations.get(destinationId);
     if (!resource) return this.remember(commandId, { status: "REJECTED", reason: "UNKNOWN_RESOURCE" });
     if (!destination) return this.remember(commandId, { status: "REJECTED", reason: "UNKNOWN_DESTINATION" });
@@ -35,9 +41,12 @@ export class PatientTransportEngine {
     this.locations.set(patientId, this.configuration.vehicleLocationId);
     this.resources.set(resourceId, { resourceId, state: "OUTBOUND", currentPatientId: patientId, currentTransportId: transportId, phaseEndsAtSec: atSec + destination.travelDurationSec, availableAtSimulationTime: atSec + destination.travelDurationSec + destination.handoverDurationSec + destination.returnDurationSec + destination.turnaroundDurationSec });
     this.emit("TRANSPORT_REQUESTED", atSec, transport); this.emit("PATIENT_ONBOARD", atSec, transport); this.emit("TRANSPORT_DEPARTED", atSec, transport);
-    return this.remember(commandId, { status: "STARTED", transport: copy(transport) });
+    this.remember(commandId, { status: "STARTED", transport: copy(transport) });
+    if (authoritativeTimeSec > atSec) this.advanceTo(authoritativeTimeSec);
+    return copy(this.commandResults.get(commandId)!);
   }
 
+  /** Compatibility-only engine primitive; no production command or UI exposes cancellation. */
   cancel(commandId: string, transportId: string, atSec: number): TransportCommandResult {
     const prior = this.commandResults.get(commandId); if (prior) return copy(prior);
     this.advanceTo(atSec); const transport = this.transports.get(transportId);

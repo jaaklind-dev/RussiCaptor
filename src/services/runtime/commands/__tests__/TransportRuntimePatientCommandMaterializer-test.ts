@@ -1,15 +1,15 @@
 import type { AcceptedRuntimePatientCommand } from "@/models/RuntimePatientCommand";
 import { materializeRuntimePatientCommand } from "../RuntimePatientCommandMaterializer";
-import { startPatientTransport } from "@/services/runtime/exercise/PatientTransportRuntimeService";
+import { materializePatientTransport } from "@/services/runtime/exercise/PatientTransportRuntimeService";
 
-jest.mock("@/services/runtime/exercise/PatientTransportRuntimeService", () => ({ startPatientTransport: jest.fn() }));
+jest.mock("@/services/runtime/exercise/PatientTransportRuntimeService", () => ({ materializePatientTransport: jest.fn() }));
 jest.mock("@/services/runtime/instructor/ResourceInterventionCommandService", () => ({
   handleResourceInterventionCommand: jest.fn(), stopResourceInterventionCommand: jest.fn(),
 }));
 jest.mock("@/services/runtime/instructor/MassiveTransfusionCommandService", () => ({ handleMtpCommand: jest.fn() }));
 jest.mock("@/services/clinical/ClinicalTreatmentCommandService", () => ({ applyClinicalTreatmentLocally: jest.fn() }));
 
-const mockStart = startPatientTransport as jest.MockedFunction<typeof startPatientTransport>;
+const mockStart = materializePatientTransport as jest.MockedFunction<typeof materializePatientTransport>;
 const command = (payload: Readonly<Record<string, unknown>>): AcceptedRuntimePatientCommand => Object.freeze({
   exerciseId: "EX-NARVA", patientId: "PT-CHEST", commandId: "TRANSPORT-1", commandType: "TRANSPORT_START",
   patientBaseRevision: 4, patientResultingRevision: 5, simulationTimeSec: 120, payload,
@@ -23,7 +23,7 @@ describe("WP-NARVA-09 transport command materialization", () => {
     mockStart.mockReturnValue({ status: "STARTED" });
     expect(materializeRuntimePatientCommand(command({ resourceId: "REANIMOBILE-1", destinationId: "IVKH" })))
       .toEqual({ status: "MATERIALIZED", result: { status: "STARTED" } });
-    expect(mockStart).toHaveBeenCalledWith("TRANSPORT-1", "PT-CHEST", "REANIMOBILE-1", "IVKH");
+    expect(mockStart).toHaveBeenCalledWith("TRANSPORT-1", "PT-CHEST", "REANIMOBILE-1", "IVKH", 120);
   });
 
   test("invalid payload and authoritative resource rejection fail closed", () => {

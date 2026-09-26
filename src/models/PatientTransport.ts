@@ -1,3 +1,5 @@
+// ONBOARD/PATIENT_ONBOARD and FAILED remain reserved for checkpoint/schema
+// compatibility. The current production lifecycle starts directly in transit.
 export type TransportResourceState = "AVAILABLE" | "PATIENT_ONBOARD" | "OUTBOUND" | "HANDOVER" | "RETURNING" | "TURNAROUND";
 export type PatientTransportState = "ONBOARD" | "IN_TRANSIT" | "ARRIVED" | "HANDED_OVER" | "COMPLETED" | "CANCELLED" | "FAILED";
 

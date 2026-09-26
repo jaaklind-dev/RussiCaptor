@@ -5,7 +5,7 @@ import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { getExercisePackage } from "@/services/exercise/ExercisePackageService";
 import { PatientTransportEngine } from "@/services/runtime/PatientTransportEngine";
 import { notifySync } from "@/services/SyncService";
-import { getRuntimePatientCommandGateway, submitPatientRuntimeCommand, waitForPatientRuntimeCommandResult } from "@/services/runtime/commands/RuntimePatientCommandService";
+import { runtimePatientCommandSubmissionReadiness, submitPatientRuntimeCommand, waitForPatientRuntimeCommandResult } from "@/services/runtime/commands/RuntimePatientCommandService";
 import { registerExerciseClockTarget } from "./ExerciseClockTargetRegistry";
 
 let active: { exerciseId: string; engine: PatientTransportEngine; dispose: () => void; emitted: number } | undefined;
@@ -23,7 +23,9 @@ export function preparePatientTransportRuntime(exerciseId: string, restored?: Pa
   const locations=Object.fromEntries(dataProvider.getPatients().map(patient=>[patient.id,patient.location])); const engine=new PatientTransportEngine(config,locations,restored);
   const dispose=registerExerciseClockTarget({targetId:"TRANSPORT",advance:(_from,to)=>{engine.advanceTo(to);project();}}); active={exerciseId,engine,dispose,emitted:restored?.evidence.length??0}; project();
 }
-export function startPatientTransport(commandId:string,patientId:string,resourceId:string,destinationId:string):TransportCommandResult { if(!active)return{status:"REJECTED",reason:"INVALID_CONFIGURATION"}; const result=active.engine.start(commandId,patientId,resourceId,destinationId,getCanonicalExerciseSnapshot().simulationTimeSec); project(); if(result.status==="STARTED")notifySync("local"); return result; }
+/** Writer-only materialization entry point. Client controls must use submitPatientTransport. */
+export function materializePatientTransport(commandId:string,patientId:string,resourceId:string,destinationId:string,
+  acceptedSimulationTimeSec:number):TransportCommandResult { if(!active)return{status:"REJECTED",reason:"INVALID_CONFIGURATION"}; const result=active.engine.start(commandId,patientId,resourceId,destinationId,acceptedSimulationTimeSec); project(); if(result.status==="STARTED")notifySync("local"); return result; }
 export type PatientTransportSubmissionResult = Readonly<{
   status: "PENDING" | "STARTED" | "IDEMPOTENT" | "REJECTED";
   commandId: string;
@@ -36,13 +38,12 @@ export type PatientTransportSubmissionResult = Readonly<{
  */
 export async function submitPatientTransport(commandId:string,patientId:string,resourceId:string,destinationId:string):Promise<PatientTransportSubmissionResult> {
   const exercise=getCanonicalExerciseSnapshot();
-  if (!getRuntimePatientCommandGateway()) {
-    const result=startPatientTransport(commandId,patientId,resourceId,destinationId);
-    return Object.freeze({ status: result.status === "STARTED" ? "STARTED" : result.status === "NO_OP" ? "IDEMPOTENT" : "REJECTED",
-      commandId, ...(result.reason ? { reason: result.reason } : {}) });
-  }
+  const readiness=runtimePatientCommandSubmissionReadiness(exercise.exerciseId,exercise.simulationTimeSec);
+  if (!readiness.ready) return Object.freeze({ status:"REJECTED",commandId,
+    reason:readiness.reason??"COMMAND_NOT_READY" });
   const result=await submitPatientRuntimeCommand({ exerciseId:exercise.exerciseId,patientId,commandId,
-    commandType:"TRANSPORT_START",payload:Object.freeze({resourceId,destinationId}) });
+    commandType:"TRANSPORT_START",simulationTimeSec:exercise.simulationTimeSec,
+    payload:Object.freeze({resourceId,destinationId}) });
   if (result.status === "APPLIED" || result.status === "IDEMPOTENT") {
     if (result.commandSequence !== undefined) {
       const materialized=await waitForPatientRuntimeCommandResult(exercise.exerciseId,result.commandSequence);

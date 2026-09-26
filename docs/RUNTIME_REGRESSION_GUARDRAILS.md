@@ -48,7 +48,30 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/PROC-G01–PROC-G32/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G16/PROC-G01–PROC-G32/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+
+## Transport lifecycle regression guardrails
+
+Transport start is a durable patient command. Only the authoritative writer materializes it, accepted simulation time anchors every phase, and checkpoint restore/takeover must preserve each active phase without duplicate evidence.
+
+| ID | Guardrail | Frozen invariant |
+| --- | --- | --- |
+| TRANS-G01 | Durable production path | Production transport submission uses the Runtime patient-command inbox. |
+| TRANS-G02 | No direct client fallback | Missing durable command authority fails closed without local transport mutation. |
+| TRANS-G03 | Accepted intent time | Start timestamps and deadlines use accepted durable simulation time. |
+| TRANS-G04 | Same-command exactly once | One command identity creates at most one transport and evidence sequence. |
+| TRANS-G05 | Stale readiness fence | Stale or reconciling clients cannot offer or submit transport. |
+| TRANS-G06 | Stable destination intent | Rehydration cannot substitute IVKH, PERH, or another destination after intent begins. |
+| TRANS-G07 | Single in-flight intent | Repeated activation while submitting creates no second durable command. |
+| TRANS-G08 | Restart in transit | Outbound identity, location and deadline survive restart. |
+| TRANS-G09 | Restart in handover | Arrival and handover resume deterministically and emit once. |
+| TRANS-G10 | Restart return/turnaround | Vehicle availability retains its original return and turnaround thresholds. |
+| TRANS-G11 | Active takeover | A takeover restores the active phase without reset or duplicate transport. |
+| TRANS-G12 | Takeover threshold exactly once | Arrival, handover and availability threshold evidence emits once after takeover. |
+| TRANS-G13 | Reader no local mutation | Readers submit durably and receive canonical transport only through publication. |
+| TRANS-G14 | Terminal fence | Completion fencing rejects later starts and deterministically drains prior accepted commands. |
+| TRANS-G15 | Cancellation unsupported | Current production exposes no misleading unreachable cancellation action. |
+| TRANS-G16 | Completion independence | Transport phases do not complete the patient or exercise. |
 
 ## Procedure availability regression guardrails
 

@@ -61,6 +61,7 @@
     "test:lab-guardrails": "node scripts/run-runtime-guardrails.mjs laboratory",
     "test:imaging-guardrails": "node scripts/run-runtime-guardrails.mjs imaging",
     "test:procedure-guardrails": "node scripts/run-runtime-guardrails.mjs procedure",
+    "test:transport-guardrails": "node scripts/run-runtime-guardrails.mjs transport",
     "test:imaging-physical-prep": "jest --runInBand scripts/__tests__/NarvaImagingPhysicalAcceptanceHarness-test.ts",
     "imaging:physical-prep": "node scripts/narva-imaging-physical-acceptance.mjs --mode prepare",
     "field-release:android": "node scripts/build-field-release.mjs",

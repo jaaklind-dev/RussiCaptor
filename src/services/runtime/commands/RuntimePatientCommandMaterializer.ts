@@ -3,7 +3,7 @@ import type { AcceptedRuntimePatientCommand, RuntimePatientCommandMaterializatio
 import { applyClinicalTreatmentLocally } from "@/services/clinical/ClinicalTreatmentCommandService";
 import { handleMtpCommand, type MtpAction } from "@/services/runtime/instructor/MassiveTransfusionCommandService";
 import { handleResourceInterventionCommand, stopResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
-import { startPatientTransport } from "@/services/runtime/exercise/PatientTransportRuntimeService";
+import { materializePatientTransport } from "@/services/runtime/exercise/PatientTransportRuntimeService";
 import { isNarvaIroScenarioControlCommandType } from "@/models/NarvaIroScenario";
 import { handleNarvaIroScenarioControlCommand } from "@/services/runtime/instructor/NarvaIroScenarioControlCommandService";
 import { handleLaboratoryCommand } from "@/services/runtime/instructor/LaboratoryCommandService";
@@ -57,7 +57,8 @@ export function materializeRuntimePatientCommand(command: AcceptedRuntimePatient
       const resourceId = command.payload.resourceId;
       const destinationId = command.payload.destinationId;
       if (typeof resourceId !== "string" || typeof destinationId !== "string") return rejected("INVALID_COMMAND_PAYLOAD");
-      const result = startPatientTransport(command.commandId, command.patientId, resourceId, destinationId);
+      const result = materializePatientTransport(command.commandId, command.patientId, resourceId, destinationId,
+        command.simulationTimeSec);
       return Object.freeze({ status: result.status === "REJECTED" ? "REJECTED" : "MATERIALIZED",
         result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
     }
