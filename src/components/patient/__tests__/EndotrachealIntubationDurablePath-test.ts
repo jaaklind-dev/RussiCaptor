@@ -7,7 +7,7 @@ describe("PROC-G13/16/22 ETT production UI durable path", () => {
 
   test("uses the durable facade and shared command readiness without a direct owner bypass", () => {
     expect(source).toContain("submitEndotrachealIntubationCommand");
-    expect(source).toContain("runtimePatientCommandSubmissionReadiness(exerciseId)");
+    expect(source).toContain("useRuntimePatientCommandSubmissionReadiness(exerciseId)");
     expect(source).toContain("!commandReadiness.ready");
     expect(source).not.toContain("executeEndotrachealIntubationCommand");
     expect(source).not.toContain("getInstructorRuntimeOwner");

@@ -4,12 +4,16 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getPatientResourceDebugSnapshot, getResourceRuntimeDebugVersion, subscribeToResourceRuntimeDebug } from "@/services/ResourceRuntimeDebugService";
 import { submitResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
+import { useRuntimePatientCommandSubmissionReadiness } from
+  "@/services/runtime/commands/useRuntimePatientCommandSubmissionReadiness";
 
 const labels = { peripheralIV: "Raja veenitee", centralVenousCatheter: "Raja tsentraalveenitee" } as const;
 
 export function VascularAccessControls({ patientId, readOnly = false }: Readonly<{ patientId: string; readOnly?: boolean }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
   const snapshot = getPatientResourceDebugSnapshot(patientId);
+  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  const commandReadiness = useRuntimePatientCommandSubmissionReadiness(exerciseId);
   const resources = snapshot.resources.filter(resource =>
     resource.status === "AVAILABLE" && (resource.type === "peripheralIV" || resource.type === "centralVenousCatheter"));
   const accessInstances = (snapshot.clinicalInterventions ?? []).filter(instance =>
@@ -26,13 +30,15 @@ export function VascularAccessControls({ patientId, readOnly = false }: Readonly
       return <View key={instance.instanceId} style={styles.progress}><Text style={styles.progressTitle}>{label}</Text>
         <Text style={styles.progressText}>{instance.status === "RUNNING" ? `Rajamisel · ${minutes}:${seconds}`
           : instance.status === "COMPLETED" ? "Valmis" : instance.status === "CANCELLED" ? "Tühistatud" : "Ebaõnnestus"}</Text></View>; })}
-    {resources.map(resource => <Pressable key={resource.resourceId} disabled={Boolean(submitting)} style={styles.button} onPress={() => {
-      const exerciseId = getCanonicalExerciseSnapshot().exerciseId; setSubmitting(resource.resourceId); setMessage(undefined);
+    {resources.map(resource => <Pressable key={resource.resourceId} disabled={Boolean(submitting) || !commandReadiness.ready} style={styles.button} onPress={() => {
+      if (!commandReadiness.ready) return;
+      setSubmitting(resource.resourceId); setMessage(undefined);
       void submitResourceInterventionCommand({ commandId: `ACCESS-${exerciseId}-${patientId}-${resource.resourceId}`,
         exerciseId, patientId, resourceId: resource.resourceId, issuedBy: "Case Manager" }).then(result => {
         setMessage(result.ok ? "Vaskulaarse ligipääsu korraldus vastu võetud." : result.message); setSubmitting(undefined);
       });
     }}><Text style={styles.buttonText}>{submitting === resource.resourceId ? "Rajamine…" : labels[resource.type as keyof typeof labels]}</Text></Pressable>)}
+    {!commandReadiness.ready && <Text style={styles.message}>Patsiendi andmeid sünkroniseeritakse…</Text>}
     {message && <Text style={styles.message}>{message}</Text>}
   </View>;
 }

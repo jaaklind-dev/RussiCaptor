@@ -1,7 +1,7 @@
 import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { getCanonicalPatientRuntimeSnapshot } from "@/services/RuntimeSnapshotService";
 import { getInstructorRuntimeOwner } from "./InstructorRuntimeEventRegistry";
-import { getRuntimePatientCommandGateway, submitPatientRuntimeCommand } from "@/services/runtime/commands/RuntimePatientCommandService";
+import { submitPatientRuntimeCommand } from "@/services/runtime/commands/RuntimePatientCommandService";
 
 export type MtpAction = "MTP_ACTIVATION" | "RBC_ADMINISTRATION" | "PLASMA_ADMINISTRATION" | "PLATELET_ADMINISTRATION" | "CALCIUM_ADMINISTRATION" | "BLOOD_PRODUCT_DELIVERY_MODE_CHANGE";
 export type MtpCommandResult = Readonly<{ ok: true; commandId: string; runtimeEventId: string }> | Readonly<{ ok: false; commandId: string; errorCode: "UNAVAILABLE" | "NO_FREE_VASCULAR_ACCESS" | "DELIVERY_DEVICE_CAPACITY_FULL" | "RUNTIME_FAILURE"; message: string }>;
@@ -39,7 +39,6 @@ export function handleMtpCommand(command: Readonly<{ commandId: string; exercise
 }
 export async function submitMtpCommand(command: Readonly<{ commandId: string; exerciseId: string; patientId: string; action: MtpAction; units?: number; issuedBy: string;
   deliveryMode?: "GRAVITY" | "PRESSURE_BAG" | "RAPID_INFUSER"; vascularAccessLineId?: "IV-1" | "IV-2" | "IV-3"; administrationId?: string }>): Promise<MtpCommandResult> {
-  if (!getRuntimePatientCommandGateway()) return handleMtpCommand(command);
   const submitted = await submitPatientRuntimeCommand({ exerciseId: command.exerciseId, patientId: command.patientId,
     commandId: command.commandId, commandType: "MTP", payload: Object.freeze({ action: command.action,
       units: command.units ?? 1, deliveryMode: command.deliveryMode, vascularAccessLineId: command.vascularAccessLineId,

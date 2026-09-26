@@ -5,23 +5,31 @@ import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepo
 import { getPatientResourceDebugSnapshot, getResourceRuntimeDebugVersion, subscribeToResourceRuntimeDebug } from "@/services/ResourceRuntimeDebugService";
 import { submitResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
 import { isResourceInterventionAllowed } from "@/services/exercise/PackageInterventionAvailabilityService";
+import { useRuntimePatientCommandSubmissionReadiness } from
+  "@/services/runtime/commands/useRuntimePatientCommandSubmissionReadiness";
 
 export function PleuralDrainControls({ patientId, readOnly = false }: Readonly<{ patientId: string; readOnly?: boolean }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
   const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  const commandReadiness = useRuntimePatientCommandSubmissionReadiness(exerciseId);
   const allowed = isResourceInterventionAllowed(exerciseId, patientId, "CHEST_DRAIN_INSERTION");
   const resources = getPatientResourceDebugSnapshot(patientId).resources.filter(resource => resource.type === "chestDrain" && resource.status === "AVAILABLE");
+  const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string>();
   if (readOnly || !allowed || resources.length === 0) return null;
   return <View style={styles.card} testID="canonical-pleural-drain-controls">
     <Text style={styles.title}>Pleuradrenaaž</Text>
     <Text style={styles.help}>Paigalda rindkeredreen kanoonilise pleuravigastuse raviks.</Text>
-    {resources.map(resource => <Pressable key={resource.resourceId} style={styles.button} onPress={() => {
+    {resources.map(resource => <Pressable key={resource.resourceId} disabled={submitting || !commandReadiness.ready} style={styles.button} onPress={() => {
+      if (submitting || !commandReadiness.ready) return;
+      setSubmitting(true); setMessage(undefined);
       const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
       void submitResourceInterventionCommand({ commandId: `PLEURAL-DRAIN-${exerciseId}-${patientId}-${resource.resourceId}`,
         exerciseId, patientId, resourceId: resource.resourceId, issuedBy: "Case Manager" }).then(result =>
-        setMessage(result.ok ? "Rindkeredreeni korraldus vastu võetud." : result.message));
-    }}><Text style={styles.buttonText}>Paigalda rindkeredreen</Text></Pressable>)}
+        setMessage(result.ok ? "Rindkeredreeni korraldus vastu võetud." : result.message))
+        .finally(() => setSubmitting(false));
+    }}><Text style={styles.buttonText}>{submitting ? "Paigaldamine…" : "Paigalda rindkeredreen"}</Text></Pressable>)}
+    {!commandReadiness.ready && <Text style={styles.message}>Patsiendi andmeid sünkroniseeritakse…</Text>}
     {message && <Text style={styles.message}>{message}</Text>}
   </View>;
 }

@@ -5,7 +5,7 @@ import { getPatientResourceDebugSnapshot } from "@/services/ResourceRuntimeDebug
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { advanceExerciseMinutes } from "@/services/ClockService";
 import { getRegisteredExerciseClockTargetIds } from "@/services/runtime/exercise/ExerciseClockTargetRegistry";
-import { getRuntimePatientCommandGateway, submitPatientRuntimeCommand } from "@/services/runtime/commands/RuntimePatientCommandService";
+import { submitPatientRuntimeCommand } from "@/services/runtime/commands/RuntimePatientCommandService";
 import { isResourceInterventionAllowed } from "@/services/exercise/PackageInterventionAvailabilityService";
 import { inferredInterventionDefinitionId } from "@/services/runtime/clinical/InterventionRuntime";
 
@@ -70,7 +70,6 @@ export function handleResourceInterventionCommand(command: Readonly<{ commandId:
 
 export async function submitResourceInterventionCommand(command: Readonly<{ commandId: string; exerciseId: string;
   patientId: string; resourceId: string; issuedBy: string }>): Promise<ResourceInterventionCommandResult> {
-  if (!getRuntimePatientCommandGateway()) return handleResourceInterventionCommand(command);
   const submitted = await submitPatientRuntimeCommand({ exerciseId: command.exerciseId, patientId: command.patientId,
     commandId: command.commandId, commandType: "RESOURCE_APPLY", payload: Object.freeze({ resourceId: command.resourceId }) });
   if (submitted.status === "APPLIED" || submitted.status === "IDEMPOTENT") {
@@ -109,7 +108,6 @@ export function stopResourceInterventionCommand(command: Readonly<{ commandId: s
 
 export async function submitStopResourceInterventionCommand(command: Readonly<{ commandId: string; exerciseId: string;
   patientId: string; sourceInterventionId: string; issuedBy: string }>): Promise<ResourceInterventionCommandResult> {
-  if (!getRuntimePatientCommandGateway()) return stopResourceInterventionCommand(command);
   const submitted = await submitPatientRuntimeCommand({ exerciseId: command.exerciseId, patientId: command.patientId,
     commandId: command.commandId, commandType: "RESOURCE_STOP",
     payload: Object.freeze({ sourceInterventionId: command.sourceInterventionId }) });

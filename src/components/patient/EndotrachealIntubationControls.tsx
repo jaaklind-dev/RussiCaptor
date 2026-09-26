@@ -1,4 +1,4 @@
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
@@ -8,19 +8,15 @@ import { airwayResourceLabel, selectEndotrachealIntubationOptions } from
   "@/services/runtime/clinical/EndotrachealIntubationSelector";
 import { createEndotrachealIntubationCommandId, submitEndotrachealIntubationCommand } from
   "@/services/runtime/instructor/EndotrachealIntubationCommandService";
-import { getRuntimeReaderConvergenceVersion, subscribeToRuntimeReaderConvergence } from
-  "@/services/runtime/persistence/RuntimeReaderConvergenceService";
-import { runtimePatientCommandSubmissionReadiness } from
-  "@/services/runtime/commands/RuntimePatientCommandService";
+import { useRuntimePatientCommandSubmissionReadiness } from
+  "@/services/runtime/commands/useRuntimePatientCommandSubmissionReadiness";
 
 export function EndotrachealIntubationControls({ patientId, readOnly = false }:
   Readonly<{ patientId: string; readOnly?: boolean }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
-  useSyncExternalStore(subscribeToRuntimeReaderConvergence, getRuntimeReaderConvergenceVersion,
-    getRuntimeReaderConvergenceVersion);
   const snapshot = getPatientResourceDebugSnapshot(patientId);
   const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
-  const commandReadiness = runtimePatientCommandSubmissionReadiness(exerciseId);
+  const commandReadiness = useRuntimePatientCommandSubmissionReadiness(exerciseId);
   const options = selectEndotrachealIntubationOptions(snapshot.resources);
   const active = (snapshot.clinicalInterventions ?? []).find(item =>
     item.definitionId === "ENDOTRACHEAL_INTUBATION" && item.status === "RUNNING");
@@ -31,7 +27,7 @@ export function EndotrachealIntubationControls({ patientId, readOnly = false }:
   const [cuff, setCuff] = useState(true);
   const [confirmed, setConfirmed] = useState(false);
   const [message, setMessage] = useState<string>();
-  const submitting = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
 
   if (readOnly || (!active && !options.available)) return null;
   const selectedTube = options.tubes.find(item => item.resourceId === tubeId);
@@ -66,10 +62,10 @@ export function EndotrachealIntubationControls({ patientId, readOnly = false }:
       <View style={styles.toggle}><Text style={styles.rowText}>Toru asend kinnitatud</Text>
         <Switch value={confirmed} onValueChange={setConfirmed} /></View>
       <Pressable testID="start-endotracheal-intubation"
-        disabled={!selectedTube || !selectedScope || !confirmed || !commandReadiness.ready}
-        style={[styles.button, (!selectedTube || !selectedScope || !confirmed || !commandReadiness.ready) && styles.disabled]} onPress={() => {
-          if (submitting.current || !selectedTube || !selectedScope) return;
-          submitting.current = true;
+        disabled={submitting || !selectedTube || !selectedScope || !confirmed || !commandReadiness.ready}
+        style={[styles.button, (submitting || !selectedTube || !selectedScope || !confirmed || !commandReadiness.ready) && styles.disabled]} onPress={() => {
+          if (submitting || !commandReadiness.ready || !selectedTube || !selectedScope) return;
+          setSubmitting(true);
           setMessage("Käsk ootab serveri kinnitust…");
           void submitEndotrachealIntubationCommand({
               commandId: createEndotrachealIntubationCommandId(exerciseId, patientId), exerciseId, patientId,
@@ -79,8 +75,8 @@ export function EndotrachealIntubationControls({ patientId, readOnly = false }:
               tubeSize: Number(tubeSize.replace(",", ".")), cuff, confirmation: confirmed, issuedBy: "Case Manager",
             }).then(result => setMessage(result.ok ? "Endotrahheaalse intubatsiooni korraldus vastu võetud." : result.message))
             .catch(() => setMessage("Intubatsioonikäsku ei saanud tööjärjekorda saata."))
-            .finally(() => { submitting.current = false; });
-        }}><Text style={styles.buttonText}>Alusta intubatsiooni</Text></Pressable>
+            .finally(() => setSubmitting(false));
+        }}><Text style={styles.buttonText}>{submitting ? "Saatmine…" : "Alusta intubatsiooni"}</Text></Pressable>
       {!commandReadiness.ready && <Text style={styles.message}>Patsiendi andmeid sünkroniseeritakse…</Text>}
     </>}
     {message && <Text style={styles.message}>{message}</Text>}

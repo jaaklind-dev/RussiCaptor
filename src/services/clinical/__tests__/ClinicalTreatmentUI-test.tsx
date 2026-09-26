@@ -346,6 +346,8 @@ describe("Clinical Treatment authoritative integration and projections", () => {
 
   test("keeps durable reader readiness across repeated owner hydration and reconnect replacement", () => {
     const exerciseId = "READER-REHYDRATION";
+    replaceCanonicalExerciseSnapshot({ exerciseId, lifecycleState: "RUNNING", simulationTimeSec: 0,
+      speed: 1, version: 1, clockVersion: 1, clockInitializedAtSimulationTimeSec: 0 });
     const gateway: RuntimePatientCommandGateway = { submit: jest.fn(),
       loadAfter: jest.fn(async () => Object.freeze([])), record: jest.fn(async () => undefined) };
     setRuntimeWriterAuthorityState("READER");

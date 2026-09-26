@@ -9,11 +9,14 @@ import {
 } from "@/services/ResourceRuntimeDebugService";
 import { createResourceInterventionCommandId, submitResourceInterventionCommand, submitStopResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
 import { isResourceInterventionAllowed } from "@/services/exercise/PackageInterventionAvailabilityService";
+import { useRuntimePatientCommandSubmissionReadiness } from
+  "@/services/runtime/commands/useRuntimePatientCommandSubmissionReadiness";
 
 export function PelvicBinderControls({ patientId, readOnly = false }: Readonly<{ patientId: string; readOnly?: boolean }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
   const snapshot = getPatientResourceDebugSnapshot(patientId);
   const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  const commandReadiness = useRuntimePatientCommandSubmissionReadiness(exerciseId);
   const allowed = isResourceInterventionAllowed(exerciseId, patientId, "PELVIC_BINDER_APPLICATION");
   const binders = snapshot.resources.filter(resource => resource.type === "pelvicBinder" && resource.status === "AVAILABLE");
   const applied = (snapshot.clinicalInterventions ?? []).find(instance =>
@@ -25,7 +28,8 @@ export function PelvicBinderControls({ patientId, readOnly = false }: Readonly<{
   return <View style={styles.card} testID="canonical-pelvic-binder-controls">
     <Text style={styles.title}>Vaagna stabiliseerimine</Text>
     {applied
-      ? <><Text style={styles.applied}>Vaagnalahas on paigaldatud.</Text><Pressable disabled={submitting} style={styles.removeButton} onPress={() => {
+      ? <><Text style={styles.applied}>Vaagnalahas on paigaldatud.</Text><Pressable disabled={submitting || !commandReadiness.ready} style={styles.removeButton} onPress={() => {
+        if (!commandReadiness.ready) return;
         const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
         setSubmitting(true); setMessage(undefined);
         void submitStopResourceInterventionCommand({ commandId: `PELVIC-BINDER-REMOVE-${exerciseId}-${patientId}-${applied.instanceId}`,
@@ -33,7 +37,8 @@ export function PelvicBinderControls({ patientId, readOnly = false }: Readonly<{
           setMessage(result.ok ? "Vaagnalahase eemaldamise korraldus vastu võetud." : result.message); setSubmitting(false);
         });
       }}><Text style={styles.buttonText}>{submitting ? "Eemaldamine…" : "Eemalda vaagnalahas"}</Text></Pressable></>
-      : binders.map(resource => <Pressable key={resource.resourceId} disabled={submitting} style={styles.button} onPress={() => {
+      : binders.map(resource => <Pressable key={resource.resourceId} disabled={submitting || !commandReadiness.ready} style={styles.button} onPress={() => {
+        if (!commandReadiness.ready) return;
         const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
         setSubmitting(true); setMessage(undefined);
         void submitResourceInterventionCommand({
@@ -43,6 +48,7 @@ export function PelvicBinderControls({ patientId, readOnly = false }: Readonly<{
           setMessage(result.ok ? "Vaagnalahase paigaldamise korraldus vastu võetud." : result.message); setSubmitting(false);
         });
       }}><Text style={styles.buttonText}>{submitting ? "Paigaldamine…" : "Paigalda vaagnalahas"}</Text></Pressable>)}
+    {!commandReadiness.ready && <Text style={styles.message}>Patsiendi andmeid sünkroniseeritakse…</Text>}
     {message && <Text style={styles.message}>{message}</Text>}
   </View>;
 }

@@ -5,6 +5,8 @@ import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepo
 import { getCanonicalPatientRuntimeSnapshot, getRuntimeSnapshotVersion, subscribeToRuntimeSnapshots } from "@/services/RuntimeSnapshotService";
 import { createMtpCommandId, submitMtpCommand, type MtpAction } from "@/services/runtime/instructor/MassiveTransfusionCommandService";
 import { getMtpCalciumRecommendationThreshold, type BloodProductDeliveryMode, type BloodProductInventory, type VascularAccessLineId } from "@/models/MassiveTransfusion";
+import { useRuntimePatientCommandSubmissionReadiness } from
+  "@/services/runtime/commands/useRuntimePatientCommandSubmissionReadiness";
 
 type MtpProjection = Readonly<{
   activated?: boolean;
@@ -32,6 +34,8 @@ const actions: readonly Readonly<{ action: MtpAction; label: string }>[] = [
 export function MassiveTransfusionControls({ patientId, readOnly = false }: Readonly<{ patientId: string; readOnly?: boolean }>) {
   const version = useSyncExternalStore(subscribeToRuntimeSnapshots, getRuntimeSnapshotVersion, getRuntimeSnapshotVersion);
   const runtimeSnapshot = getCanonicalPatientRuntimeSnapshot(patientId, version);
+  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  const commandReadiness = useRuntimePatientCommandSubmissionReadiness(exerciseId);
   const process = runtimeSnapshot?.processes.find(item => item.moduleId === "MASSIVE_TRANSFUSION_V1");
   const state = process?.clinicalState as MtpProjection | undefined;
   const calcium = state?.transfusionCalcium;
@@ -49,8 +53,7 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
     ? `${value}` : value?.mode === "UNLIMITED" ? "Piiramatu" : "Teadmata";
 
   const submit = async (action: MtpAction) => {
-    if (submitting || readOnly) return;
-    const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+    if (submitting || readOnly || !commandReadiness.ready) return;
     const commandId = createMtpCommandId(exerciseId, patientId, action);
     setSubmitting(action); setMessage(undefined);
     const freeLine = state?.vascularAccessLines?.find(line => line.status === "FREE" && (!selectedLineId || line.lineId === selectedLineId));
@@ -65,7 +68,7 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
   const chooseMode = async (lineId: VascularAccessLineId, administrationId: string | undefined, mode: BloodProductDeliveryMode) => {
     setSelectedLineId(lineId);
     if (!administrationId) { setLineModes(current => ({ ...current, [lineId]: mode })); return; }
-    const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+    if (!commandReadiness.ready) return;
     const action: MtpAction = "BLOOD_PRODUCT_DELIVERY_MODE_CHANGE";
     const commandId = createMtpCommandId(exerciseId, patientId, action);
     setSubmitting(`${lineId}:${mode}`); setMessage(undefined);
@@ -89,7 +92,7 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
             ? `VABA · ${line.accessType === "CENTRAL_ACCESS" ? "tsentraalveenitee" : "perifeerne veenitee"}` :
               `HÕIVATUD · ${administration?.product ?? "verekomponent"} · ${activeMode} · ${administration?.deliveredVolumeMl ?? "?"}/${administration?.totalVolumeMl ?? "?"} ml · ${remaining ?? "?"} s`}</Text></Pressable>
           {!readOnly && line.status !== "MISSING" && <View style={styles.row}>{modes.map(mode => <Pressable key={mode}
-            disabled={Boolean(submitting)} onPress={() => void chooseMode(lineId, administration?.administrationId, mode)}
+            disabled={Boolean(submitting) || !commandReadiness.ready} onPress={() => void chooseMode(lineId, administration?.administrationId, mode)}
             style={mode === activeMode ? styles.choiceSelected : styles.choice}><Text style={styles.choiceText}>{modeLabel[mode]}</Text></Pressable>)}</View>}
         </View>; })}
     </View>}
@@ -98,12 +101,13 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
         ? `Kaltsium on näidustatud pärast ${calciumThreshold} lõpetatud erütrotsüüdiühikut · ${calcium?.completedRbcUnitsSinceLastCalcium ?? 0}/${calciumThreshold}`
         : "Kaltsiumiasendus ei ole selles protokollis kasutusel"}
     </Text>
-    {!readOnly && actions.map(({ action, label }) => <Pressable key={action} disabled={Boolean(submitting)}
+    {!readOnly && actions.map(({ action, label }) => <Pressable key={action} disabled={Boolean(submitting) || !commandReadiness.ready}
       onPress={() => void submit(action)} style={styles.button}><Text style={styles.buttonText}>{label}</Text></Pressable>)}
-    {!readOnly && calcium?.rbcUnitsPerCalcium && <Pressable testID="administer-calcium" disabled={Boolean(submitting)}
+    {!readOnly && calcium?.rbcUnitsPerCalcium && <Pressable testID="administer-calcium" disabled={Boolean(submitting) || !commandReadiness.ready}
       onPress={() => void submit("CALCIUM_ADMINISTRATION")} style={styles.calciumButton}>
       <Text style={styles.buttonText}>Manusta kaltsiumi</Text>
     </Pressable>}
+    {!commandReadiness.ready && <Text style={styles.message}>Patsiendi andmeid sünkroniseeritakse…</Text>}
     {message && <Text style={styles.message}>{message}</Text>}
   </View>;
 }

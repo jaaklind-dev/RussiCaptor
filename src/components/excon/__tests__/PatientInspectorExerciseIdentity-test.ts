@@ -18,7 +18,9 @@ describe("Patient Inspector canonical exercise identity", () => {
       path.join(process.cwd(), "src/components/instructor/InspectorResourceInterventions.tsx"),
       "utf8",
     );
-    expect(interventions.match(/getCanonicalExerciseSnapshot\(\)\.exerciseId/g)).toHaveLength(3);
+    expect(interventions.match(/getCanonicalExerciseSnapshot\(\)/g)).toHaveLength(2);
+    expect(interventions).toContain("const exerciseId = exercise.exerciseId");
+    expect(interventions).toContain("useRuntimePatientCommandSubmissionReadiness(exerciseId)");
     expect(interventions).not.toContain("{ exerciseId, patientId }");
     expect(inspector).toContain("const inspectorVersion = useSyncExternalStore(");
     expect(inspector).toContain("getInstructorPatientInspector(id, inspectorVersion)");

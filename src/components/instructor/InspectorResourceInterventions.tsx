@@ -9,6 +9,8 @@ import { createMtpCommandId, submitMtpCommand, type MtpAction } from "@/services
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { isResourceInterventionAllowed } from "@/services/exercise/PackageInterventionAvailabilityService";
+import { useRuntimePatientCommandSubmissionReadiness } from
+  "@/services/runtime/commands/useRuntimePatientCommandSubmissionReadiness";
 
 export function InspectorResourceInterventions({ patientId }: Readonly<{ patientId: string }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
@@ -16,6 +18,7 @@ export function InspectorResourceInterventions({ patientId }: Readonly<{ patient
   const snapshot = getPatientResourceDebugSnapshot(patientId);
   const exercise = getCanonicalExerciseSnapshot();
   const exerciseId = exercise.exerciseId;
+  const commandReadiness = useRuntimePatientCommandSubmissionReadiness(exerciseId);
   const available = snapshot.resources.filter(resource => {
     const definitionId = inferredInterventionDefinitionId(resource);
     return resource.status === "AVAILABLE" && Boolean(definitionId) &&
@@ -26,8 +29,7 @@ export function InspectorResourceInterventions({ patientId }: Readonly<{ patient
   const mtp = getCanonicalPatientRuntimeSnapshot(patientId, runtimeSnapshotVersion)?.processes.find(process => process.moduleId === "MASSIVE_TRANSFUSION_V1");
   const calcium = mtp?.clinicalState?.transfusionCalcium as Readonly<{ rbcUnitsPerCalcium?: number | null }> | undefined;
   const apply = async (resourceId: string) => {
-    if (submitting) return;
-    const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+    if (submitting || !commandReadiness.ready) return;
     setSubmitting(resourceId); setResult(undefined);
     setResult(await submitResourceInterventionCommand({ commandId: `RESOURCE-${patientId}-${resourceId}`,
       exerciseId, patientId, resourceId, issuedBy: "Exercise Controller" }));
@@ -36,14 +38,14 @@ export function InspectorResourceInterventions({ patientId }: Readonly<{ patient
   return <View style={styles.card} testID="resource-intervention-card">
     <Text style={styles.title}>Saadaval ressursipõhised sekkumised</Text>
     <Text style={styles.help}>Canonical resource path · advances the clinical reference by 60 seconds.</Text>
-    {available.map(resource => <Pressable key={resource.resourceId} disabled={Boolean(submitting)}
+    {available.map(resource => <Pressable key={resource.resourceId} disabled={Boolean(submitting) || !commandReadiness.ready}
       onPress={() => void apply(resource.resourceId)} style={styles.button}>
       <Text style={styles.buttonText}>{submitting === resource.resourceId ? "Applying…" : `Apply ${resource.type}`}</Text>
     </Pressable>)}
     {mtp && <View style={styles.mtp}><Text style={styles.title}>Massiivse transfusiooni protokoll</Text>
       {(["MTP_ACTIVATION", "RBC_ADMINISTRATION", "PLASMA_ADMINISTRATION", "PLATELET_ADMINISTRATION", ...(calcium?.rbcUnitsPerCalcium ? ["CALCIUM_ADMINISTRATION" as const] : [])] as Exclude<MtpAction,"BLOOD_PRODUCT_DELIVERY_MODE_CHANGE">[]).map(action =>
-        <Pressable key={action} disabled={Boolean(submitting)} onPress={() => {
-          const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+        <Pressable key={action} disabled={Boolean(submitting) || !commandReadiness.ready} onPress={() => {
+          if (!commandReadiness.ready) return;
           const commandId = createMtpCommandId(exerciseId, patientId, action); setSubmitting(action);
           void submitMtpCommand({ commandId, exerciseId, patientId, action, units: 1, issuedBy: "EXCON" }).then(next => {
             setResult(next.ok ? { ok: true, commandId, runtimeEventId: next.runtimeEventId } : { ok: false, commandId, errorCode: "RUNTIME_FAILURE", message: next.message });
@@ -51,6 +53,7 @@ export function InspectorResourceInterventions({ patientId }: Readonly<{ patient
           }); }} style={styles.button}>
           <Text style={styles.buttonText}>{({ MTP_ACTIVATION: "Aktiveeri MTP", RBC_ADMINISTRATION: "Manusta 1 ühik erütrotsüüte", PLASMA_ADMINISTRATION: "Manusta 1 ühik plasmat", PLATELET_ADMINISTRATION: "Manusta 1 doos trombotsüüte", CALCIUM_ADMINISTRATION: "Manusta kaltsiumi" } as const)[action]}</Text>
         </Pressable>)}</View>}
+    {!commandReadiness.ready && <Text style={styles.error}>Patsiendi andmeid sünkroniseeritakse…</Text>}
     <Pressable accessibilityRole="button" accessibilityLabel="Keri kliinilist simulatsiooni 60 s edasi"
       disabled={Boolean(submitting)}
       onPress={() => {

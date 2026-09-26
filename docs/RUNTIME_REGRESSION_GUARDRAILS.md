@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/PROC-G01–PROC-G22/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/PROC-G01–PROC-G32/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Procedure availability regression guardrails
 
@@ -78,6 +78,16 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | PROC-G20 | Package/patient enforcement | ETT materialization enforces the package-owned patient allowlist. |
 | PROC-G21 | Ventilation prerequisite | Canonical active ETT remains the existing mechanical-ventilation prerequisite. |
 | PROC-G22 | No direct production bypass | Production ETT UI has no direct Runtime-owner mutation path. |
+| PROC-G23 | Shared readiness | Every durable intervention control consumes the shared command-readiness contract. |
+| PROC-G24 | Stale projection disables | A stale or reconciling projection disables durable intervention actions. |
+| PROC-G25 | Tap-time precheck | Durable submission rechecks readiness after render and before inbox acceptance. |
+| PROC-G26 | No readiness bypass | Production controls cannot fall through to direct owner mutation. |
+| PROC-G27 | Availability preserved | Shared readiness cannot re-enable a package/patient-forbidden procedure. |
+| PROC-G28 | Stable action identity | Rehydration does not substitute one intervention intent for another. |
+| PROC-G29 | In-flight single intent | Committing state suppresses duplicate durable submissions. |
+| PROC-G30 | Reader/writer consistency | Reader and writer controls expose the same readiness semantics. |
+| PROC-G31 | Terminal readiness fence | Terminal exercises are disabled in UI and rejected by submission. |
+| PROC-G32 | Convergence recovery | Controls re-enable automatically after authoritative convergence. |
 
 ## Imaging regression guardrails
 

@@ -111,7 +111,9 @@ export function runtimePatientCommandSubmissionReadiness(
   if (exercise.exerciseId !== exerciseId || exercise.lifecycleState !== "RUNNING") {
     return Object.freeze({ ready: false, reason: "Õppus lõpetatakse või on lõpetatud." });
   }
-  return runtimeReaderCommandReadiness(exerciseId, simulationTimeSec ?? exercise.simulationTimeSec);
+  // Render-time callers only need authoritative convergence. Submission callers
+  // pass the exact intent time below, adding the stricter time-alignment fence.
+  return runtimeReaderCommandReadiness(exerciseId, simulationTimeSec);
 }
 
 export async function submitPatientRuntimeCommand(input: Omit<RuntimePatientCommandSubmission, "patientBaseRevision" | "simulationTimeSec"> &

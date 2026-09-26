@@ -11,8 +11,8 @@ import type { AnalgesicCommand } from "@/models/AnalgesiaMedication";
 import type { SupportedFluidTherapyCommand } from "@/models/FluidTherapy";
 import { getInstructorRuntimeOwner } from "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
 import { runtimeWritesAllowed } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
-import { getRuntimePatientCommandGateway, submitPatientRuntimeCommand } from "@/services/runtime/commands/RuntimePatientCommandService";
-import { runtimeReaderCommandReadiness } from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
+import { getRuntimePatientCommandGateway, runtimePatientCommandSubmissionReadiness,
+  submitPatientRuntimeCommand } from "@/services/runtime/commands/RuntimePatientCommandService";
 import { canCurrentCaseManagerEditPatient, getCmOwnershipProjectionReadiness } from "@/services/AssignmentRepository";
 
 export type ClinicalTreatmentBuildResult = Readonly<{ ok: true; command: ClinicalTreatmentCommand }> |
@@ -151,7 +151,7 @@ Readonly<{ ready: boolean; reason?: string }> {
       : "Patsiendi vastutust sünkroonitakse." });
   }
   if (getRuntimePatientCommandGateway()) {
-    return runtimeReaderCommandReadiness(exerciseId);
+    return runtimePatientCommandSubmissionReadiness(exerciseId);
   }
   if (!runtimeWritesAllowed()) {
     return Object.freeze({ ready: false, reason: "Ravikorralduse saatmine ei ole ühendatud." });
