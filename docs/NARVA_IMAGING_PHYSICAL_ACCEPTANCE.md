@@ -21,7 +21,7 @@ This validates the local migration and canonical Narva definition. It never read
 
 3. Inspect the linked Supabase migration ledger. Deploy only `20260925120000_add_imaging_runtime_patient_command.sql`, and only when it is the sole pending local migration, through `npx supabase db push --linked`. Re-read the ledger afterward. Never substitute direct SQL.
 4. Through the exact approved Keychain service-role item and supported audited RPCs, reuse a valid scoped assignment or grant temporary bootstrap, then scoped EXCON/CM. On `ACTIVE_ASSIGNMENT_CONFLICT`, resolve the existing assignment through the audited lifecycle; do not retry or grant GLOBAL.
-5. Create a fresh `russicaptor.narva-trauma@1.0.1` exercise in the normal app UI. Record exercise/runtime/assignment/lease/checkpoint identifiers. Assert the package content before ordering.
+5. Create a fresh `russicaptor.narva-trauma@1.0.2` exercise in the normal app UI. Record exercise/runtime/assignment/lease/checkpoint identifiers. Assert the package content before ordering.
 6. Submit one `P02-CXR` through the production `IMAGING_ORDER` route. Capture pre-threshold, post-threshold, repeated-advance and cold-restart evidence in one JSON document. Do not dump full checkpoints.
    For I4, verify the RESULTED report is exact, no placeholder image is shown, the result has no asset reference, and cold restart preserves the same report-only provenance.
 7. Validate the evidence:

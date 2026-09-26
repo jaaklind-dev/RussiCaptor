@@ -52,6 +52,25 @@ describe("PROC-G01..G12 Narva package-owned patient procedure availability", () 
     expect(isResourceInterventionAllowed(exerciseId, "PT-CHEST-001", "PELVIC_BINDER_APPLICATION")).toBe(false);
   });
 
+  test("authorizes source-backed oxygen only for P02 even when P01 is given an oxygen resource", () => {
+    const chest = projectPatientInterventionAvailability(NARVA_TRAUMA_EXERCISE_PACKAGE, "PT-CHEST-001")!;
+    const pelvic = projectPatientInterventionAvailability(NARVA_TRAUMA_EXERCISE_PACKAGE, "PT-PELVIC-001")!;
+    expect(chest.resourceInterventionDefinitionIds).toContain("OXYGEN_THERAPY");
+    expect(pelvic.resourceInterventionDefinitionIds).not.toContain("OXYGEN_THERAPY");
+    expect((fixture("PT-CHEST-001").activeResources as any).resources)
+      .toContainEqual(expect.objectContaining({ resourceId: "O2-MASK-CHEST-1", type: "oxygenMask" }));
+
+    const pelvicWithMask = structuredClone(fixture("PT-PELVIC-001"));
+    (pelvicWithMask.activeResources as any).resources.push({ resourceId: "O2-MASK-PELVIC-FORCED",
+      type: "oxygenMask", status: "AVAILABLE", metadata: {} });
+    const engine = new ClinicalScenarioEngine(); engine.reset(pelvicWithMask);
+    registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(engine, exerciseId, "PT-PELVIC-001"));
+    expect(handleResourceInterventionCommand({ commandId: "O2-P01-FORCED", exerciseId,
+      patientId: "PT-PELVIC-001", resourceId: "O2-MASK-PELVIC-FORCED", issuedBy: "CM" }))
+      .toMatchObject({ ok: false, errorCode: "UNAVAILABLE" });
+    expect(engine.getInterventionInstances().some(item => item.definitionId === "OXYGEN_THERAPY")).toBe(false);
+  });
+
   test("preserves package-wide procedures, specialized actions, treatments and MTP", () => {
     for (const patientId of ["PT-PELVIC-001", "PT-CHEST-001"]) {
       const projection = projectPatientInterventionAvailability(NARVA_TRAUMA_EXERCISE_PACKAGE, patientId)!;

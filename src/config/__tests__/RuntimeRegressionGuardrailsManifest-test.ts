@@ -141,7 +141,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
   });
 
   test("keeps the complete procedure availability guardrail catalog unique and explicit", () => {
-    const expectedIds = Array.from({ length: 32 }, (_, index) => `PROC-G${String(index + 1).padStart(2, "0")}`);
+    const expectedIds = Array.from({ length: 42 }, (_, index) => `PROC-G${String(index + 1).padStart(2, "0")}`);
     expect(manifest.procedureGuardrails.map(guardrail => guardrail.id)).toEqual(expectedIds);
     expect(manifest.procedureGuardrails.every(guardrail => guardrail.name.length > 0 &&
       guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);

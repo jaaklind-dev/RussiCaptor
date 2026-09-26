@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G16/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G32/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G16/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Transport lifecycle regression guardrails
 
@@ -133,6 +133,16 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | PROC-G30 | Reader/writer consistency | Reader and writer controls expose the same readiness semantics. |
 | PROC-G31 | Terminal readiness fence | Terminal exercises are disabled in UI and rejected by submission. |
 | PROC-G32 | Convergence recovery | Controls re-enable automatically after authoritative convergence. |
+| PROC-G33 | Narva P02 oxygen availability | Only the source-backed P02 chest patient receives generic oxygen therapy. |
+| PROC-G34 | Narva P01 no oxygen inheritance | P01 remains unauthorized for P02 oxygen therapy. |
+| PROC-G35 | Oxygen resource is not authorization | Resource presence cannot bypass package/patient authorization. |
+| PROC-G36 | Oxygen durable command path | Oxygen start and stop use durable `RESOURCE_APPLY` / `RESOURCE_STOP`. |
+| PROC-G37 | Oxygen writer-only mutation | A reader cannot mutate oxygen physiology locally. |
+| PROC-G38 | Oxygen stale-readiness fence | Shared command readiness fails closed while convergence is pending. |
+| PROC-G39 | Oxygen exactly once | One durable command identity creates at most one oxygen intervention. |
+| PROC-G40 | Oxygen restart determinism | Restore preserves active oxygen state and effect. |
+| PROC-G41 | Oxygen takeover determinism | A takeover writer consumes accepted oxygen intent once. |
+| PROC-G42 | Oxygen stop semantics | Existing stop semantics deterministically remove the oxygen effect. |
 
 ## Imaging regression guardrails
 
@@ -165,7 +175,7 @@ Package-owned Imaging uses the existing order, delayed workflow, persistence, an
 | IMG-G23 | Terminal fencing | Terminal state blocks new and prohibited late mutations. |
 | IMG-G24 | Provenance stability | Package/definition identity and captured source remain stable. |
 | IMG-G25 | Checkpoint no duplication | Restore preserves every instance without duplication. |
-| IMG-G26 | Narva package ownership | The approved Narva study belongs only to `russicaptor.narva-trauma@1.0.1`. |
+| IMG-G26 | Narva package ownership | The approved Narva study belongs only to immutable `russicaptor.narva-trauma` package versions. |
 | IMG-G27 | Approved chest content only | PT-CHEST-001 receives exactly the approved P02 chest X-ray and no additional study. |
 | IMG-G28 | Pelvic patient remains empty | PT-PELVIC-001 has no source-defined Imaging. |
 | IMG-G29 | No Botulism leakage | Narva bootstrap cannot install Botulism Imaging content. |

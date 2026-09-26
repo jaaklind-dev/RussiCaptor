@@ -5,13 +5,14 @@ import { activateMassiveTransfusion, bootstrapMassiveTransfusionPatientProcess,
 import { canonicalRuntimePersistenceService, moduleCompositionHash } from
   "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
 import { packagePatientDatasetRegistry } from "../CanonicalPatientDatasets";
-import { NARVA_TRAUMA_EXERCISE_PACKAGE, NARVA_TRAUMA_TREATMENT_PALETTE } from "../NarvaExercisePackages";
+import { NARVA_TRAUMA_EXERCISE_PACKAGE, NARVA_TRAUMA_EXERCISE_PACKAGE_V101,
+  NARVA_TRAUMA_TREATMENT_PALETTE } from "../NarvaExercisePackages";
 import { NARVA_CHEST_BLEEDING_RATE_ML_MIN, NARVA_CHEST_INJURY_TIME_SEC,
   NARVA_PELVIC_INJURY_TIME_SEC, NARVA_TRAUMA_MTP_CONFIGURATION } from "../NarvaPatientDatasets";
 import { createPatientMaterializationPlan } from "../PackagePatientMaterializationService";
 import { exercisePackageRegistry, exercisePackageValidator } from "../ExercisePackageService";
 
-const dataset = () => packagePatientDatasetRegistry.resolve("patients.narva-trauma.v1");
+const dataset = () => packagePatientDatasetRegistry.resolve(NARVA_TRAUMA_EXERCISE_PACKAGE.patientDatasetId);
 const fixture = (patientId: string) => dataset().patients.find(item => item.patient.id === patientId)!.runtimeFixture!;
 const initial = (patientId: string) => fixture(patientId).initialState as Record<string, any>;
 
@@ -21,6 +22,10 @@ describe("WP-NARVA-01 trauma package", () => {
     expect(exercisePackageRegistry.require("russicaptor.narva-trauma", "1.0.1"))
       .toMatchObject({ packageId: "russicaptor.narva-trauma", packageVersion: "1.0.1",
         patientDatasetId: "patients.narva-trauma.v1" });
+    expect(exercisePackageRegistry.require("russicaptor.narva-trauma", "1.0.2"))
+      .toMatchObject({ packageId: "russicaptor.narva-trauma", packageVersion: "1.0.2",
+        patientDatasetId: "patients.narva-trauma.v2" });
+    expect(NARVA_TRAUMA_EXERCISE_PACKAGE_V101.packageHash).not.toBe(NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash);
     expect(NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash).toMatch(/^[a-f0-9]{64}$/u);
   });
 
@@ -116,7 +121,8 @@ describe("WP-NARVA-01 trauma package", () => {
   test.each(["PT-PELVIC-001", "PT-CHEST-001"])("round-trips %s deterministically", patientId => {
     const source = new ClinicalScenarioEngine(); source.reset(structuredClone(fixture(patientId)));
     const identity = { exerciseId: "EX-NARVA-TRAUMA", patientId,
-      packageId: NARVA_TRAUMA_EXERCISE_PACKAGE.packageId, packageVersion: "1.0.1",
+      packageId: NARVA_TRAUMA_EXERCISE_PACKAGE.packageId,
+      packageVersion: NARVA_TRAUMA_EXERCISE_PACKAGE.packageVersion,
       packageHash: NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash,
       definitionHash: NARVA_TRAUMA_EXERCISE_PACKAGE.manifest.definitionHash,
       moduleCompositionHash: moduleCompositionHash(NARVA_TRAUMA_EXERCISE_PACKAGE.definition.clinicalModuleComposition?.modules ?? []) };

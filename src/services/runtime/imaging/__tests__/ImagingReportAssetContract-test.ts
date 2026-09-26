@@ -33,7 +33,7 @@ describe("I4 immutable Imaging report/asset contract / IMG-G35..IMG-G45", () => 
         packageHash: NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash } });
     expect(runtime.advanceTo(430)[0].result).toEqual({ resultId: "IMAGING_RESULT:IMAGING:CMD-P02",
       imagingInstanceId: "IMAGING:CMD-P02", patientId: "PT-CHEST-001", definitionId: "P02-CXR",
-      packageId: "russicaptor.narva-trauma", packageVersion: "1.0.1",
+      packageId: "russicaptor.narva-trauma", packageVersion: NARVA_TRAUMA_EXERCISE_PACKAGE.packageVersion,
       packageHash: NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash,
       reportText: NARVA_TRAUMA_P02_IMAGING_SOURCE.report,
       authoredReportSha256: sha256Text(NARVA_TRAUMA_P02_IMAGING_SOURCE.report), releasedAtSimulationTimeSec: 430 });

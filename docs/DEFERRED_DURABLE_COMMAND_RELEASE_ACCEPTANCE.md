@@ -57,7 +57,7 @@ If only a prefix deployed, classify the session as partial deployment and stop. 
 
 ## Combined physical gate order
 
-One fresh `russicaptor.narva-trauma@1.0.1` exercise should be reused where practical. Any foundational `FAIL` or `BLOCKED` skips all later gates.
+One fresh `russicaptor.narva-trauma@1.0.2` exercise should be reused where practical. Any foundational `FAIL` or `BLOCKED` skips all later gates.
 
 ### A — Runtime
 

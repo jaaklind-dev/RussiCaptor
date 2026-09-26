@@ -6,6 +6,7 @@ import { PELVIC_INJURY_REFERENCE_PATIENT } from "@/modules/pelvicInjury/PelvicIn
 import { PLEURAL_INJURY_REFERENCE } from "@/modules/pleuralInjury/PleuralInjuryReference";
 
 export const NARVA_TRAUMA_DATASET_ID = "patients.narva-trauma.v1";
+export const NARVA_TRAUMA_OXYGEN_DATASET_ID = "patients.narva-trauma.v2";
 export const NARVA_IRO_HISTORICAL_DATASET_ID = "patients.narva-iro-evacuation.v1";
 export const NARVA_IRO_DATASET_ID = "patients.narva-iro-evacuation.v2";
 
@@ -16,7 +17,8 @@ export const NARVA_CHEST_BLEEDING_RATE_ML_MIN = 200 / 60;
 const resource = (resourceId: string, type: string, metadata: Record<string, unknown> = {}) =>
   Object.freeze({ resourceId, type, status: "AVAILABLE", metadata: Object.freeze(metadata) });
 
-const traumaResources = (patientSuffix: string) => Object.freeze({ resources: Object.freeze([
+const traumaResources = (patientSuffix: string, includeOxygen = false) => Object.freeze({ resources: Object.freeze([
+  ...(includeOxygen ? [resource(`O2-MASK-${patientSuffix}-1`, "oxygenMask")] : []),
   resource(`PB-${patientSuffix}-1`, "pelvicBinder"),
   resource(`PIV-${patientSuffix}-1`, "peripheralIV"),
   resource(`PIV-${patientSuffix}-2`, "peripheralIV"),
@@ -118,6 +120,24 @@ export const NARVA_TRAUMA_PATIENT_DATASET: PackagePatientDataset = Object.freeze
         injuries: "Massiivne hemopneumotooraks", signs: "Hüpoksia, hingamispuudulikkus ja rindkeresisene verejooks",
         treatment: "Ravimata" }) }), initialLocationId: "NARVA_ED", runtimeFixture: NARVA_CHEST_FIXTURE }),
   ]),
+});
+
+const narvaChestOxygenFixture: GoldenFixture = Object.freeze({
+  ...structuredClone(NARVA_CHEST_FIXTURE),
+  fixtureId: "FX-NARVA-CHEST-1.0.2",
+  activeResources: traumaResources("CHEST", true),
+});
+
+/** Narva trauma v2 adds only the source-backed P02 oxygen-mask resource. */
+export const NARVA_TRAUMA_OXYGEN_PATIENT_DATASET: PackagePatientDataset = Object.freeze({
+  datasetId: NARVA_TRAUMA_OXYGEN_DATASET_ID,
+  version: "2",
+  patients: Object.freeze(NARVA_TRAUMA_PATIENT_DATASET.patients.map(record => Object.freeze({
+    patient: record.patient,
+    ...(record.patient.id === "PT-CHEST-001"
+      ? { runtimeFixture: narvaChestOxygenFixture }
+      : record.runtimeFixture ? { runtimeFixture: record.runtimeFixture } : {}),
+  }))),
 });
 
 export const NARVA_IRO_HISTORICAL_REQUIRED_CAPABILITY_GAPS = Object.freeze([

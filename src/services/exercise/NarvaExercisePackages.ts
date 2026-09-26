@@ -9,7 +9,7 @@ import { createExercisePackage } from "./ExercisePackageHash";
 import { DEFAULT_EXERCISE_DEFINITION } from "./ExerciseDefinitionService";
 import { NARVA_TRAUMA_IMAGING_CONFIGURATION } from "./NarvaTraumaImagingDefinitions";
 import { NARVA_IRO_DATASET_ID, NARVA_IRO_HISTORICAL_DATASET_ID,
-  NARVA_TRAUMA_DATASET_ID } from "./NarvaPatientDatasets";
+  NARVA_TRAUMA_DATASET_ID, NARVA_TRAUMA_OXYGEN_DATASET_ID } from "./NarvaPatientDatasets";
 
 const definition = (exerciseTypeId: string, name: string, description: string): ExerciseDefinition =>
   Object.freeze({ ...structuredClone(DEFAULT_EXERCISE_DEFINITION), exerciseTypeId, name, description,
@@ -31,7 +31,7 @@ export const NARVA_TRAUMA_TREATMENT_PALETTE: readonly ClinicalTreatmentId[] = Ob
   "CALCIUM_CHLORIDE", "SODIUM_BICARBONATE",
 ]);
 
-const NARVA_TRAUMA_INTERVENTION_AVAILABILITY = Object.freeze({
+const NARVA_TRAUMA_INTERVENTION_AVAILABILITY_V101 = Object.freeze({
   schemaVersion: 1 as const,
   packageWideResourceInterventionDefinitionIds: Object.freeze([
     "PERIPHERAL_IV_ACCESS", "INTRAOSSEOUS_ACCESS", "CENTRAL_VENOUS_ACCESS",
@@ -47,10 +47,21 @@ const NARVA_TRAUMA_INTERVENTION_AVAILABILITY = Object.freeze({
   ]),
 });
 
+const NARVA_TRAUMA_INTERVENTION_AVAILABILITY = Object.freeze({
+  ...structuredClone(NARVA_TRAUMA_INTERVENTION_AVAILABILITY_V101),
+  patients: Object.freeze(NARVA_TRAUMA_INTERVENTION_AVAILABILITY_V101.patients.map(patient =>
+    patient.patientId === "PT-CHEST-001"
+      ? Object.freeze({ ...patient, allowedResourceInterventionDefinitionIds: Object.freeze([
+        ...patient.allowedResourceInterventionDefinitionIds, "OXYGEN_THERAPY",
+      ]) })
+      : patient)),
+});
+
 const traumaDefinition = definition("RUSSICAPTOR_NARVA_TRAUMA", "Narva kahe patsiendi traumaõppus",
   "Kaks samaaegset P1 traumapatsienti, üks reanimobiil ja kaks kõrgema etapi ravisuunda.");
 
-export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
+/** Exact package content accepted before the source-backed P02 oxygen addition. */
+export const NARVA_TRAUMA_EXERCISE_PACKAGE_V101 = createExercisePackage({
   packageId: "russicaptor.narva-trauma", packageVersion: "1.0.1", definition: traumaDefinition,
   patientDatasetId: NARVA_TRAUMA_DATASET_ID,
   enabledPatientProcesses: traumaDefinition.enabledPatientProcesses,
@@ -63,7 +74,7 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
     { moduleId: ALS_MODULE_ID, version: ALS_MODULE_VERSION },
   ]),
   availableClinicalTreatments: NARVA_TRAUMA_TREATMENT_PALETTE,
-  interventionAvailability: NARVA_TRAUMA_INTERVENTION_AVAILABILITY,
+  interventionAvailability: NARVA_TRAUMA_INTERVENTION_AVAILABILITY_V101,
   imagingConfiguration: NARVA_TRAUMA_IMAGING_CONFIGURATION,
   transportConfiguration: Object.freeze({ version: "1.0.0", vehicleLocationId: "REANIMOBILE",
     resources: Object.freeze([Object.freeze({ resourceId: "NARVA-REANIMOBILE-01",
@@ -80,6 +91,23 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
   metadata: { name: "Narva traumaõppus", description: "Narva kahe P1 traumapatsiendi versioneeritud konfiguratsioonipakett.",
     author: "RussiCaptor", organization: "RussiCaptor", createdVersion: "1.0.0", exerciseType: "TRAUMA",
     tags: ["narva", "trauma", "two-patient", "transport", "blood-inventory-finalized"] },
+});
+
+export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.narva-trauma", packageVersion: "1.0.2", definition: traumaDefinition,
+  patientDatasetId: NARVA_TRAUMA_OXYGEN_DATASET_ID,
+  enabledPatientProcesses: traumaDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: traumaDefinition.enabledAnalyticsProviders,
+  enabledMetricProviders: traumaDefinition.enabledMetricProviders,
+  requiredClinicalModules: NARVA_TRAUMA_EXERCISE_PACKAGE_V101.requiredClinicalModules,
+  availableClinicalTreatments: NARVA_TRAUMA_TREATMENT_PALETTE,
+  interventionAvailability: NARVA_TRAUMA_INTERVENTION_AVAILABILITY,
+  imagingConfiguration: NARVA_TRAUMA_IMAGING_CONFIGURATION,
+  transportConfiguration: NARVA_TRAUMA_EXERCISE_PACKAGE_V101.transportConfiguration,
+  metadata: { ...NARVA_TRAUMA_EXERCISE_PACKAGE_V101.metadata,
+    description: "Narva kahe P1 traumapatsiendi versioneeritud konfiguratsioonipakett koos P02 hapnikraviga.",
+    tags: [...NARVA_TRAUMA_EXERCISE_PACKAGE_V101.metadata.tags, "p02-oxygen-therapy"],
+  },
 });
 
 const historicalIroDefinition = definition("RUSSICAPTOR_NARVA_IRO_EVACUATION", "Narva IRO evakuatsiooniõppus",
