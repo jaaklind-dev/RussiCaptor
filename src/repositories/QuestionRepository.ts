@@ -4,7 +4,7 @@ import { clinicalDataProvider } from "@/providers/ProviderFactory";
 export function getQuestions(patientId: string): Question[] {
   return clinicalDataProvider.getQuestions()
     .filter((question) => question.patientId === patientId)
-    .sort((a, b) => a.order - b.order);
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
 }
 
 export function getQuestion(

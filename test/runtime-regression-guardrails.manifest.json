@@ -77,6 +77,18 @@
     { "id": "IMG-G44", "name": "reader-asset-convergence", "description": "Readers restore asset metadata without local generation or mutation.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingReportAssetContract-test.ts"] },
     { "id": "IMG-G45", "name": "unsupported-attachment-safety", "description": "Unregistered workbook paths and URLs remain explicitly unresolved and never become trusted assets.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingReportAssetContract-test.ts", "src/providers/excel/__tests__/WorkbookDataMapper-test.ts"] }
   ],
+  "questionGuardrails": [
+    { "id": "Q-G01", "name": "package-owned-questions", "description": "Narva question definitions are immutable content of an exact package version.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts"] },
+    { "id": "Q-G02", "name": "p01-pelvic-mapping", "description": "Only PT-PELVIC-001 receives the two source P01 questions.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts"] },
+    { "id": "Q-G03", "name": "p02-chest-mapping", "description": "Only PT-CHEST-001 receives the four source P02 questions.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts"] },
+    { "id": "Q-G04", "name": "no-demo-or-cross-patient-leakage", "description": "Narva patients receive neither global demo questions nor another patient's questions.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts"] },
+    { "id": "Q-G05", "name": "stable-question-identities", "description": "Workbook question IDs remain stable across bootstrap and restore.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts"] },
+    { "id": "Q-G06", "name": "deterministic-question-order", "description": "Patient question order is stable and independent of installation order.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts"] },
+    { "id": "Q-G07", "name": "restore-no-duplication", "description": "Repeated installation and shared-workflow restore cannot duplicate questions.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts"] },
+    { "id": "Q-G08", "name": "interaction-state-restore", "description": "Question visibility state survives shared-workflow restore.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts", "src/services/__tests__/ScenarioWorkflow-test.ts"] },
+    { "id": "Q-G09", "name": "package-isolation", "description": "Packages without package-owned question content retain their established legacy behavior.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts"] },
+    { "id": "Q-G10", "name": "source-wording-fidelity", "description": "Prompt, answer, category, order and initial visibility exactly match the authoritative workbook rows.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts"] }
+  ],
   "transportGuardrails": [
     { "id": "TRANS-G01", "name": "durable-production-path", "description": "Production transport submission uses the durable Runtime patient-command inbox.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/TransportDurableLifecycleHardening-test.ts"] },
     { "id": "TRANS-G02", "name": "no-direct-client-fallback", "description": "Missing command authority fails closed without direct transport-owner mutation.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/TransportDurableLifecycleHardening-test.ts", "src/services/runtime/exercise/__tests__/PatientTransportRuntimePersistence-test.ts"] },
@@ -219,6 +231,13 @@
     "futureWorkPackageStatement": "All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G46, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed."
   },
   "groups": {
+    "questions": [
+      "src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts",
+      "src/services/__tests__/ScenarioWorkflow-test.ts",
+      "src/services/__tests__/RemoteClinicalSync-test.ts",
+      "src/providers/excel/__tests__/WorkbookDataMapper-test.ts",
+      "src/services/exercise/__tests__/ExercisePreparationService-test.ts"
+    ],
     "patient-completion": [
       "src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts",
       "src/services/runtime/commands/__tests__/PatientCompletionRuntimeCommandMigration-test.ts",

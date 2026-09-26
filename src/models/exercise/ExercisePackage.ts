@@ -8,6 +8,7 @@ import type { TransportConfiguration } from "@/models/PatientTransport";
 import type { ClinicalTreatmentId } from "@/models/ClinicalTreatment";
 import type { PackageImagingConfiguration } from "./PackageImagingConfiguration";
 import type { PackageInterventionAvailability } from "./PackageInterventionAvailability";
+import type { PackageQuestionConfiguration } from "./PackageQuestionConfiguration";
 
 export type ExercisePackage = Readonly<{
   packageId: string;
@@ -30,4 +31,6 @@ export type ExercisePackage = Readonly<{
   imagingConfiguration?: PackageImagingConfiguration;
   /** Package-owned clinical procedure availability, distinct from physical resource inventory. */
   interventionAvailability?: PackageInterventionAvailability;
+  /** Immutable patient questions authored by this exact package version. */
+  questionConfiguration?: PackageQuestionConfiguration;
 }>;

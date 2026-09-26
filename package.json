@@ -63,6 +63,7 @@
     "test:procedure-guardrails": "node scripts/run-runtime-guardrails.mjs procedure",
     "test:transport-guardrails": "node scripts/run-runtime-guardrails.mjs transport",
     "test:patient-completion-guardrails": "node scripts/run-runtime-guardrails.mjs patient-completion",
+    "test:question-guardrails": "node scripts/run-runtime-guardrails.mjs questions",
     "test:imaging-physical-prep": "jest --runInBand scripts/__tests__/NarvaImagingPhysicalAcceptanceHarness-test.ts",
     "imaging:physical-prep": "node scripts/narva-imaging-physical-acceptance.mjs --mode prepare",
     "test:deferred-durable-release-prep": "jest --runInBand scripts/__tests__/DeferredDurableCommandAcceptanceHarness-test.ts",

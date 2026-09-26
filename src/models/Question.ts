@@ -14,4 +14,7 @@ export type Question = {
   visibility: Visibility;
 
   order: number;
+  packageId?: string;
+  packageVersion?: string;
+  sourcePatientId?: string;
 };

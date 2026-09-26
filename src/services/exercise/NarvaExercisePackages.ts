@@ -10,6 +10,7 @@ import { DEFAULT_EXERCISE_DEFINITION } from "./ExerciseDefinitionService";
 import { NARVA_TRAUMA_IMAGING_CONFIGURATION } from "./NarvaTraumaImagingDefinitions";
 import { NARVA_IRO_DATASET_ID, NARVA_IRO_HISTORICAL_DATASET_ID,
   NARVA_TRAUMA_DATASET_ID, NARVA_TRAUMA_OXYGEN_DATASET_ID } from "./NarvaPatientDatasets";
+import { NARVA_TRAUMA_QUESTION_CONFIGURATION } from "./NarvaTraumaQuestionDefinitions";
 
 const definition = (exerciseTypeId: string, name: string, description: string): ExerciseDefinition =>
   Object.freeze({ ...structuredClone(DEFAULT_EXERCISE_DEFINITION), exerciseTypeId, name, description,
@@ -93,7 +94,8 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE_V101 = createExercisePackage({
     tags: ["narva", "trauma", "two-patient", "transport", "blood-inventory-finalized"] },
 });
 
-export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
+/** Exact package content accepted before package-owned Narva questions. */
+export const NARVA_TRAUMA_EXERCISE_PACKAGE_V102 = createExercisePackage({
   packageId: "russicaptor.narva-trauma", packageVersion: "1.0.2", definition: traumaDefinition,
   patientDatasetId: NARVA_TRAUMA_OXYGEN_DATASET_ID,
   enabledPatientProcesses: traumaDefinition.enabledPatientProcesses,
@@ -107,6 +109,24 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
   metadata: { ...NARVA_TRAUMA_EXERCISE_PACKAGE_V101.metadata,
     description: "Narva kahe P1 traumapatsiendi versioneeritud konfiguratsioonipakett koos P02 hapnikraviga.",
     tags: [...NARVA_TRAUMA_EXERCISE_PACKAGE_V101.metadata.tags, "p02-oxygen-therapy"],
+  },
+});
+
+export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.narva-trauma", packageVersion: "1.0.3", definition: traumaDefinition,
+  patientDatasetId: NARVA_TRAUMA_OXYGEN_DATASET_ID,
+  enabledPatientProcesses: traumaDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: traumaDefinition.enabledAnalyticsProviders,
+  enabledMetricProviders: traumaDefinition.enabledMetricProviders,
+  requiredClinicalModules: NARVA_TRAUMA_EXERCISE_PACKAGE_V102.requiredClinicalModules,
+  availableClinicalTreatments: NARVA_TRAUMA_TREATMENT_PALETTE,
+  interventionAvailability: NARVA_TRAUMA_INTERVENTION_AVAILABILITY,
+  imagingConfiguration: NARVA_TRAUMA_IMAGING_CONFIGURATION,
+  questionConfiguration: NARVA_TRAUMA_QUESTION_CONFIGURATION,
+  transportConfiguration: NARVA_TRAUMA_EXERCISE_PACKAGE_V102.transportConfiguration,
+  metadata: { ...NARVA_TRAUMA_EXERCISE_PACKAGE_V102.metadata,
+    description: "Narva kahe P1 traumapatsiendi versioneeritud konfiguratsioonipakett koos P02 hapnikravi ja patsiendiküsimustega.",
+    tags: [...NARVA_TRAUMA_EXERCISE_PACKAGE_V102.metadata.tags, "package-owned-questions"],
   },
 });
 

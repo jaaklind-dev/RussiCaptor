@@ -13,6 +13,7 @@ import type { MaterializedPatientDataset } from "@/models/exercise/PackagePatien
 import { packagePatientDatasetRegistry } from "./CanonicalPatientDatasets";
 import { createPatientMaterializationPlan, installPatientMaterialization, PatientDatasetError } from "./PackagePatientMaterializationService";
 import { installPackageImagingDefinitions } from "./PackageImagingInstallationService";
+import { installPackageQuestions } from "./PackageQuestionInstallationService";
 
 export type ExercisePreparationFailureCode = "ACTIVE_EXERCISE" | "NO_ACTIVE_PACKAGE" | "PACKAGE_NOT_FOUND" | "PACKAGE_INCOMPATIBLE" | "PACKAGE_BINDING_FAILED" | "PATIENT_DATASET_INVALID" | "PROTOCOL_INCOMPATIBLE" | "MODULE_COMPOSITION_FAILED" | "INVALID_EXERCISE_STATE" | "PERSISTENCE_FAILURE" | "RUNTIME_INITIALIZATION_FAILURE" | "VERSION_CONFLICT" | "UNAUTHORIZED";
 export type ExercisePreparationCommand = Readonly<{ commandId: string; currentExerciseId: string; newExerciseId: string; expectedVersion: number; issuedBy: "Exercise Controller" }>;
@@ -71,4 +72,4 @@ export class ExercisePreparationService {
   }
 }
 
-export const exercisePreparationService = new ExercisePreparationService({ snapshot: getCanonicalExerciseSnapshot, activePackage: () => activeExercisePackageService.getActive(), compatibility: pkg => exercisePackageValidator.compatibility(pkg), bind: (id, pkg) => exercisePackageLoader.bind(id, pkg), unbind: id => exercisePackageLoader.unbind(id), reset: command => executeExerciseReset(command, { notify: false }), capture: captureCompletedExerciseArchive, archive: storeCompletedExerciseArchive, plan: (id, pkg) => createPatientMaterializationPlan(id, pkg, packagePatientDatasetRegistry), install: (plan, pkg) => { installPatientMaterialization(plan); installPackageImagingDefinitions(plan, pkg); }, clear: clearPreparedExerciseWorkingData, publish: () => notifySync("local") });
+export const exercisePreparationService = new ExercisePreparationService({ snapshot: getCanonicalExerciseSnapshot, activePackage: () => activeExercisePackageService.getActive(), compatibility: pkg => exercisePackageValidator.compatibility(pkg), bind: (id, pkg) => exercisePackageLoader.bind(id, pkg), unbind: id => exercisePackageLoader.unbind(id), reset: command => executeExerciseReset(command, { notify: false }), capture: captureCompletedExerciseArchive, archive: storeCompletedExerciseArchive, plan: (id, pkg) => createPatientMaterializationPlan(id, pkg, packagePatientDatasetRegistry), install: (plan, pkg) => { installPatientMaterialization(plan); installPackageImagingDefinitions(plan, pkg); installPackageQuestions(plan, pkg); }, clear: clearPreparedExerciseWorkingData, publish: () => notifySync("local") });

@@ -25,6 +25,9 @@ describe("WP-NARVA-01 trauma package", () => {
     expect(exercisePackageRegistry.require("russicaptor.narva-trauma", "1.0.2"))
       .toMatchObject({ packageId: "russicaptor.narva-trauma", packageVersion: "1.0.2",
         patientDatasetId: "patients.narva-trauma.v2" });
+    expect(exercisePackageRegistry.require("russicaptor.narva-trauma", "1.0.3"))
+      .toMatchObject({ packageId: "russicaptor.narva-trauma", packageVersion: "1.0.3",
+        patientDatasetId: "patients.narva-trauma.v2" });
     expect(NARVA_TRAUMA_EXERCISE_PACKAGE_V101.packageHash).not.toBe(NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash);
     expect(NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash).toMatch(/^[a-f0-9]{64}$/u);
   });

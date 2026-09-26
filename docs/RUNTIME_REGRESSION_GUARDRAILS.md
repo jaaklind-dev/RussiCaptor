@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G16/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G16/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/Q-G01–Q-G10/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Transport lifecycle regression guardrails
 
@@ -143,6 +143,21 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | PROC-G40 | Oxygen restart determinism | Restore preserves active oxygen state and effect. |
 | PROC-G41 | Oxygen takeover determinism | A takeover writer consumes accepted oxygen intent once. |
 | PROC-G42 | Oxygen stop semantics | Existing stop semantics deterministically remove the oxygen effect. |
+
+## Question regression guardrails
+
+| ID | Guardrail | Frozen invariant |
+| --- | --- | --- |
+| Q-G01 | Package ownership | Narva question definitions belong to an exact immutable package version. |
+| Q-G02 | P01 mapping | Only PT-PELVIC-001 receives the two P01 questions. |
+| Q-G03 | P02 mapping | Only PT-CHEST-001 receives the four P02 questions. |
+| Q-G04 | No demo or cross-patient leakage | Narva patients receive no global demo or other-patient questions. |
+| Q-G05 | Stable IDs | Workbook question IDs remain stable across bootstrap and restore. |
+| Q-G06 | Deterministic ordering | Patient question order is stable and independent of installation order. |
+| Q-G07 | Restore no duplication | Repeated installation and restore cannot duplicate questions. |
+| Q-G08 | Interaction-state restore | Question visibility state survives shared-workflow restoration. |
+| Q-G09 | Package isolation | Unrelated packages retain their established question behavior. |
+| Q-G10 | Source wording fidelity | Prompt, answer, category, order and initial visibility match the workbook exactly. |
 
 ## Imaging regression guardrails
 

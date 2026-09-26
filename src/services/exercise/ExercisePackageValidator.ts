@@ -8,7 +8,7 @@ import { ExerciseDefinitionValidator } from "./ExerciseDefinitionValidator";
 import { isClinicalTreatmentId } from "@/services/clinical/ClinicalTreatmentCatalog";
 
 export const CURRENT_PACKAGE_COMPATIBILITY_VERSION = 1;
-export type ExercisePackageValidationCode = "INVALID_PACKAGE_ID" | "INVALID_PACKAGE_VERSION" | "INVALID_MANIFEST" | "INVALID_HASH" | "INVALID_DEFINITION" | "UNKNOWN_PATIENT_PROCESS" | "UNKNOWN_ANALYTICS_PROVIDER" | "UNKNOWN_METRIC_PROVIDER" | "INCONSISTENT_SELECTION" | "DUPLICATE_VALUE" | "INCOMPATIBLE_PACKAGE" | "INVALID_MODULE_DEPENDENCY" | "INVALID_EVALUATION_PROFILE_REFERENCE" | "INVALID_TRANSPORT_CONFIGURATION" | "INVALID_CLINICAL_TREATMENT" | "INVALID_IMAGING_CONFIGURATION" | "INVALID_INTERVENTION_AVAILABILITY";
+export type ExercisePackageValidationCode = "INVALID_PACKAGE_ID" | "INVALID_PACKAGE_VERSION" | "INVALID_MANIFEST" | "INVALID_HASH" | "INVALID_DEFINITION" | "UNKNOWN_PATIENT_PROCESS" | "UNKNOWN_ANALYTICS_PROVIDER" | "UNKNOWN_METRIC_PROVIDER" | "INCONSISTENT_SELECTION" | "DUPLICATE_VALUE" | "INCOMPATIBLE_PACKAGE" | "INVALID_MODULE_DEPENDENCY" | "INVALID_EVALUATION_PROFILE_REFERENCE" | "INVALID_TRANSPORT_CONFIGURATION" | "INVALID_CLINICAL_TREATMENT" | "INVALID_IMAGING_CONFIGURATION" | "INVALID_INTERVENTION_AVAILABILITY" | "INVALID_QUESTION_CONFIGURATION";
 export type ExercisePackageDiagnostic = Readonly<{ code: ExercisePackageValidationCode; path: string; message: string }>;
 const duplicates = (values: readonly string[]) => values.filter((value, index) => values.indexOf(value) !== index);
 
@@ -98,6 +98,26 @@ export class ExercisePackageValidator {
         if (!item.order.id?.trim() || !item.order.title?.trim()) add("INVALID_IMAGING_CONFIGURATION", `${path}.order`, "Imaging order identity and title are required");
         if (item.order.workflow.resultAction !== "imaging.available" || item.order.workflow.resultTargetId !== item.study.id || !Number.isFinite(item.order.workflow.delayMinutes) || item.order.workflow.delayMinutes < 0) add("INVALID_IMAGING_CONFIGURATION", `${path}.order.workflow`, "Imaging order must target its study with a non-negative delay");
       });
+    }
+    const questions = pkg.questionConfiguration;
+    if (questions) {
+      if (questions.schemaVersion !== 1) add("INVALID_QUESTION_CONFIGURATION",
+        "questionConfiguration.schemaVersion", "Unsupported question configuration schema version");
+      const ids = questions.definitions.map(item => item.questionId);
+      if (duplicates(ids).length) add("DUPLICATE_VALUE", "questionConfiguration.definitions",
+        "Duplicate package question identity");
+      questions.definitions.forEach((item, index) => {
+        const path = `questionConfiguration.definitions[${index}]`;
+        if (!item.questionId.trim() || !item.patientId.trim() || !item.sourcePatientId.trim() ||
+          !item.category.trim() || !item.prompt.trim() || !item.answer.trim() ||
+          !Number.isInteger(item.order) || item.order < 1 || item.visibility !== "hidden") {
+          add("INVALID_QUESTION_CONFIGURATION", path,
+            "Package questions require source identity, patient, content, positive order and hidden initial visibility");
+        }
+      });
+      const patientOrders = questions.definitions.map(item => `${item.patientId}\0${item.order}`);
+      if (duplicates(patientOrders).length) add("DUPLICATE_VALUE", "questionConfiguration.definitions",
+        "Question order must be unique within each patient");
     }
     return Object.freeze(issues.sort((a, b) => a.path.localeCompare(b.path) || a.code.localeCompare(b.code)));
   }

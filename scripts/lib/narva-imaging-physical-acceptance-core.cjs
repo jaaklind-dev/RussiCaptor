@@ -5,7 +5,7 @@ const TARGET_MIGRATION = Object.freeze({
 
 const EXPECTED_NARVA_IMAGING = Object.freeze({
   packageId: "russicaptor.narva-trauma",
-  packageVersion: "1.0.2",
+  packageVersion: "1.0.3",
   patientId: "PT-CHEST-001",
   emptyPatientId: "PT-PELVIC-001",
   definitionId: "P02-CXR",
