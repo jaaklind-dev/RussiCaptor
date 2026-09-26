@@ -170,7 +170,7 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | SRC-G05 | Question fidelity | Six questions retain exact patient scope and identity. |
 | SRC-G06 | Pelvic binder mapping | P01 stabilization remains the canonical binder action. |
 | SRC-G07 | Pleural drain mapping | P02 decompression remains the canonical chest-drain action. |
-| SRC-G08 | Known bleeding conflict | 400 ml/h source versus 200 ml/h production stays `SOURCE_CONFLICT`. |
+| SRC-G08 | P02 bleeding authority chain | Historical workbook 400 ml/h remains explicitly superseded by the current 200 ml/h user decision; production follows `currentAuthorityId`. |
 | SRC-G09 | Unresolved items stay unresolved | Ambiguity, missing content, and conflicts cannot silently become `MATCH`. |
 | SRC-G10 | No demo substitution | Demo/global content cannot satisfy a Narva mapping. |
 | SRC-G11 | Historical versions immutable | Narva 1.0.1 and 1.0.2 remain preserved beside 1.0.3. |

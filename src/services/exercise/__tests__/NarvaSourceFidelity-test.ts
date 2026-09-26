@@ -10,12 +10,17 @@ import { NARVA_TRAUMA_QUESTION_CONFIGURATION } from "../NarvaTraumaQuestionDefin
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const core = require("../../../../scripts/lib/narva-source-fidelity-core.cjs") as {
   evaluateFidelity: (manifest: Manifest, actual: Record<string, unknown>) => Result[];
+  resolveCurrentAuthority: (item: Item) => Readonly<{ value: unknown; authority: AuthorityRecord | null;
+    errors: readonly string[] }>;
   summarizeFidelity: (results: Result[]) => { total: number; counts: Record<string, number>; drift: Result[] };
   sha256File: (path: string) => string;
 };
+type AuthorityRecord = Readonly<{ authorityId: string; sourceType: string; sourceReference: string;
+  semanticValue: unknown; status: string; supersedesAuthorityIds?: readonly string[] }>;
 type Item = Readonly<{ id: string; classification: string; productionValue: unknown; rationale: string;
-  resolutionGuard?: string }>;
+  resolutionGuard?: string; currentAuthorityId?: string; authorityChain?: readonly AuthorityRecord[] }>;
 type Manifest = Readonly<{ schemaVersion: number; classifications: readonly string[]; items: readonly Item[];
+  authorityModel: Readonly<{ sourceTypes: readonly string[]; statuses: readonly string[] }>;
   sources: Readonly<{ originalWorkbook: Readonly<{ path: string; fileSha256: string }>;
     canonicalWorkbook: Readonly<{ path: string; fileSha256: string; semanticSha256: string;
       verificationPath: string }> }> }>;
@@ -94,10 +99,45 @@ describe("Narva source-fidelity guardrails SRC-G01..SRC-G12", () => {
       .toBe("PRODUCTION_DRIFT");
   });
 
-  test("SRC-G08..SRC-G09 keep conflict and ambiguity unresolved rather than falsely passing", () => {
-    const conflict = manifest.items.find(item => item.id === "p02.continuing-bleeding")!;
-    expect(conflict).toMatchObject({ classification: "SOURCE_CONFLICT",
-      productionValue: { mlPerHour: 200 }, resolutionGuard: expect.stringContaining("explicit") });
+  test("SRC-G08 resolves P02 through an explicit historical-to-current authority chain", () => {
+    const bleeding = manifest.items.find(item => item.id === "p02.continuing-bleeding")!;
+    expect(manifest.authorityModel).toEqual({
+      sourceTypes: ["ORIGINAL_SOURCE", "CORRECTED_SOURCE", "USER_DECISION", "ACCEPTED_WORK_PACKAGE",
+        "IMPLEMENTATION_POLICY"], statuses: ["CURRENT", "SUPERSEDED", "HISTORICAL"],
+    });
+    expect(bleeding).toMatchObject({ classification: "SUPERSEDED_SOURCE_VALUE",
+      productionValue: { mlPerHour: 200 }, currentAuthorityId: "p02-bleeding-user-decision-200" });
+    expect(bleeding.authorityChain).toEqual([
+      expect.objectContaining({ authorityId: "p02-bleeding-original-workbook-400",
+        sourceType: "ORIGINAL_SOURCE", semanticValue: { mlPerHour: 400, approximate: true },
+        status: "SUPERSEDED" }),
+      expect.objectContaining({ authorityId: "p02-bleeding-user-decision-200", sourceType: "USER_DECISION",
+        semanticValue: { mlPerHour: 200 }, status: "CURRENT",
+        supersedesAuthorityIds: ["p02-bleeding-original-workbook-400"] }),
+    ]);
+    expect(core.resolveCurrentAuthority(bleeding)).toMatchObject({ value: { mlPerHour: 200 },
+      authority: { authorityId: "p02-bleeding-user-decision-200" }, errors: [] });
+    expect(core.evaluateFidelity(manifest, actual).find(item => item.id === bleeding.id)?.drift).toBeNull();
+  });
+
+  test("SRC-G08 rejects reversal to 400 and historical edits cannot redefine current authority", () => {
+    const reversed = { ...actual, "p02.continuing-bleeding": { mlPerHour: 400 } };
+    expect(core.evaluateFidelity(manifest, reversed).find(item => item.id === "p02.continuing-bleeding")?.drift)
+      .toBe("PRODUCTION_DRIFT");
+    const bleeding = manifest.items.find(item => item.id === "p02.continuing-bleeding")!;
+    const changedHistory = { ...bleeding, authorityChain: bleeding.authorityChain!.map(record =>
+      record.status === "SUPERSEDED" ? { ...record, semanticValue: { mlPerHour: 999 } } : record) };
+    expect(core.resolveCurrentAuthority(changedHistory)).toMatchObject({ value: { mlPerHour: 200 }, errors: [] });
+  });
+
+  test("SRC-G09 keeps true conflicts and superseded values semantically distinct", () => {
+    expect(manifest.classifications).toEqual(expect.arrayContaining(["SOURCE_CONFLICT", "SUPERSEDED_SOURCE_VALUE"]));
+    const unresolved: Item = { id: "fixture.true-conflict", classification: "SOURCE_CONFLICT",
+      productionValue: 1, rationale: "Two still-valid authorities disagree." };
+    const result = core.evaluateFidelity({ ...manifest, items: [unresolved] },
+      { "fixture.true-conflict": 1 })[0];
+    expect(result).toMatchObject({ classification: "SOURCE_CONFLICT", drift: null });
+    expect(result.classification).not.toBe("SUPERSEDED_SOURCE_VALUE");
     expect(manifest.items.filter(item => ["SOURCE_CONFLICT", "SOURCE_AMBIGUOUS", "SOURCE_DEFINED_MISSING"]
       .includes(item.classification)).every(item => item.rationale.length > 0 && Boolean(item.resolutionGuard))).toBe(true);
   });
@@ -114,6 +154,7 @@ describe("Narva source-fidelity guardrails SRC-G01..SRC-G12", () => {
     const second = core.summarizeFidelity(core.evaluateFidelity(manifest, actual));
     expect(second).toEqual(first);
     expect(first.total).toBe(manifest.items.length);
+    expect(first.counts).toMatchObject({ SOURCE_CONFLICT: 0, SUPERSEDED_SOURCE_VALUE: 1 });
     expect(JSON.stringify(manifest)).not.toMatch(/isikukood|national.?id/iu);
   });
 });

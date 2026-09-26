@@ -27,3 +27,12 @@ const summary = summarizeFidelity(manifest.items.map(item => ({ ...item, drift: 
 console.log(`Narva source fidelity: ${summary.total} mapped items`);
 for (const [classification, count] of Object.entries(summary.counts)) console.log(`${classification}: ${count}`);
 for (const item of summary.nonMatch) console.log(`${item.classification} ${item.id}: ${item.rationale}`);
+const p02Bleeding = manifest.items.find(item => item.id === "p02.continuing-bleeding");
+const historical = p02Bleeding.authorityChain.find(record => record.status === "SUPERSEDED");
+const current = p02Bleeding.authorityChain.find(record => record.authorityId === p02Bleeding.currentAuthorityId);
+console.log("P02 continuing hemorrhage");
+console.log(`historical source: ~${historical.semanticValue.mlPerHour} ml/h`);
+console.log(`current authority: ${current.semanticValue.mlPerHour} ml/h`);
+console.log(`production: ${p02Bleeding.productionValue.mlPerHour} ml/h`);
+console.log(`classification: ${p02Bleeding.classification}`);
+console.log("status: PASS");
