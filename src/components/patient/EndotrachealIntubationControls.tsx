@@ -6,13 +6,21 @@ import { getPatientResourceDebugSnapshot, getResourceRuntimeDebugVersion,
   subscribeToResourceRuntimeDebug } from "@/services/ResourceRuntimeDebugService";
 import { airwayResourceLabel, selectEndotrachealIntubationOptions } from
   "@/services/runtime/clinical/EndotrachealIntubationSelector";
-import { createEndotrachealIntubationCommandId, executeEndotrachealIntubationCommand } from
+import { createEndotrachealIntubationCommandId, submitEndotrachealIntubationCommand } from
   "@/services/runtime/instructor/EndotrachealIntubationCommandService";
+import { getRuntimeReaderConvergenceVersion, subscribeToRuntimeReaderConvergence } from
+  "@/services/runtime/persistence/RuntimeReaderConvergenceService";
+import { runtimePatientCommandSubmissionReadiness } from
+  "@/services/runtime/commands/RuntimePatientCommandService";
 
 export function EndotrachealIntubationControls({ patientId, readOnly = false }:
   Readonly<{ patientId: string; readOnly?: boolean }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
+  useSyncExternalStore(subscribeToRuntimeReaderConvergence, getRuntimeReaderConvergenceVersion,
+    getRuntimeReaderConvergenceVersion);
   const snapshot = getPatientResourceDebugSnapshot(patientId);
+  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  const commandReadiness = runtimePatientCommandSubmissionReadiness(exerciseId);
   const options = selectEndotrachealIntubationOptions(snapshot.resources);
   const active = (snapshot.clinicalInterventions ?? []).find(item =>
     item.definitionId === "ENDOTRACHEAL_INTUBATION" && item.status === "RUNNING");
@@ -57,22 +65,23 @@ export function EndotrachealIntubationControls({ patientId, readOnly = false }:
       </Pressable>)}
       <View style={styles.toggle}><Text style={styles.rowText}>Toru asend kinnitatud</Text>
         <Switch value={confirmed} onValueChange={setConfirmed} /></View>
-      <Pressable testID="start-endotracheal-intubation" disabled={!selectedTube || !selectedScope || !confirmed}
-        style={[styles.button, (!selectedTube || !selectedScope || !confirmed) && styles.disabled]} onPress={() => {
+      <Pressable testID="start-endotracheal-intubation"
+        disabled={!selectedTube || !selectedScope || !confirmed || !commandReadiness.ready}
+        style={[styles.button, (!selectedTube || !selectedScope || !confirmed || !commandReadiness.ready) && styles.disabled]} onPress={() => {
           if (submitting.current || !selectedTube || !selectedScope) return;
           submitting.current = true;
-          try {
-            const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
-            const result = executeEndotrachealIntubationCommand({
+          setMessage("Käsk ootab serveri kinnitust…");
+          void submitEndotrachealIntubationCommand({
               commandId: createEndotrachealIntubationCommandId(exerciseId, patientId), exerciseId, patientId,
               tubeResourceId: selectedTube.resourceId, laryngoscopeResourceId: selectedScope.resourceId,
               capnographyResourceId: capnographyId,
               device: selectedScope.type === "videoLaryngoscope" ? "VIDEO" : "DIRECT",
               tubeSize: Number(tubeSize.replace(",", ".")), cuff, confirmation: confirmed, issuedBy: "Case Manager",
-            });
-            setMessage(result.ok ? "Endotrahheaalne intubatsioon alustati." : result.message);
-          } finally { submitting.current = false; }
+            }).then(result => setMessage(result.ok ? "Endotrahheaalse intubatsiooni korraldus vastu võetud." : result.message))
+            .catch(() => setMessage("Intubatsioonikäsku ei saanud tööjärjekorda saata."))
+            .finally(() => { submitting.current = false; });
         }}><Text style={styles.buttonText}>Alusta intubatsiooni</Text></Pressable>
+      {!commandReadiness.ready && <Text style={styles.message}>Patsiendi andmeid sünkroniseeritakse…</Text>}
     </>}
     {message && <Text style={styles.message}>{message}</Text>}
   </View>;

@@ -3,6 +3,7 @@ import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepo
 import { getCanonicalPatientRuntimeSnapshot } from "@/services/RuntimeSnapshotService";
 import { getInstructorRuntimeOwner } from "./InstructorRuntimeEventRegistry";
 import { isResourceInterventionAllowed } from "@/services/exercise/PackageInterventionAvailabilityService";
+import { submitPatientRuntimeCommand } from "@/services/runtime/commands/RuntimePatientCommandService";
 
 export type EndotrachealIntubationCommand = Readonly<{
   commandId: string; exerciseId: string; patientId: string; tubeResourceId: string;
@@ -23,7 +24,8 @@ export function createEndotrachealIntubationCommandId(exerciseId: string, patien
   return `ETT-${exerciseId}-${patientId}-${getCanonicalExerciseSnapshot().simulationTimeSec}-${sequence}`;
 }
 
-export function executeEndotrachealIntubationCommand(command: EndotrachealIntubationCommand): EndotrachealIntubationCommandResult {
+/** Writer-side materialization boundary. Production UI must use submitEndotrachealIntubationCommand. */
+export function handleEndotrachealIntubationCommand(command: EndotrachealIntubationCommand): EndotrachealIntubationCommandResult {
   const previous = results.get(command.commandId);
   if (previous) return structuredClone(previous);
   const exercise = getCanonicalExerciseSnapshot();
@@ -55,6 +57,31 @@ export function executeEndotrachealIntubationCommand(command: EndotrachealIntuba
   }
   results.set(command.commandId, structuredClone(result));
   return structuredClone(result);
+}
+
+export async function submitEndotrachealIntubationCommand(command: EndotrachealIntubationCommand):
+Promise<EndotrachealIntubationCommandResult> {
+  const submitted = await submitPatientRuntimeCommand({ exerciseId: command.exerciseId,
+    patientId: command.patientId, commandId: command.commandId,
+    commandType: "ENDOTRACHEAL_INTUBATION", payload: Object.freeze({
+      tubeResourceId: command.tubeResourceId,
+      laryngoscopeResourceId: command.laryngoscopeResourceId,
+      ...(command.capnographyResourceId ? { capnographyResourceId: command.capnographyResourceId } : {}),
+      device: command.device, tubeSize: command.tubeSize, cuff: command.cuff,
+      confirmation: command.confirmation,
+    }) });
+  if (submitted.status === "APPLIED" || submitted.status === "IDEMPOTENT") {
+    return Object.freeze({ ok: true, commandId: command.commandId,
+      runtimeEventId: `QUEUED-${submitted.commandSequence ?? command.commandId}` });
+  }
+  return Object.freeze({ ok: false, commandId: command.commandId,
+    errorCode: "RUNTIME_UNAVAILABLE",
+    message: submitted.status === "RECONNECT_REQUIRED" || submitted.status === "STALE_VERSION" ||
+      submitted.status === "NOT_OWNER"
+      ? "Patsiendi andmeid sünkroniseeritakse. Proovi uuesti."
+      : submitted.status === "COMPLETION_FENCED" || submitted.status === "EXERCISE_NOT_ACTIVE"
+        ? "Õppust lõpetatakse või see on lõppenud."
+        : "Intubatsioonikäsku ei saanud tööjärjekorda saata." });
 }
 
 export function resetEndotrachealIntubationCommands(): void { results.clear(); sequence = 0; }

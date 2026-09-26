@@ -13,6 +13,7 @@ export const runtimePatientCommandTypes = [
   "LAB_ORDER",
   "LAB_COLLECT",
   "IMAGING_ORDER",
+  "ENDOTRACHEAL_INTUBATION",
 ] as const;
 
 export type RuntimePatientCommandType = typeof runtimePatientCommandTypes[number];

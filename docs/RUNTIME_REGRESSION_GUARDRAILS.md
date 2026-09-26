@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/PROC-G01–PROC-G12/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/PROC-G01–PROC-G22/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Procedure availability regression guardrails
 
@@ -68,6 +68,16 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | PROC-G10 | Reader no local bypass | Readers route through durable authorization and cannot mutate availability locally. |
 | PROC-G11 | Terminal fencing | Existing terminal fencing continues to reject patient commands after completion. |
 | PROC-G12 | Package-wide treatments preserved | Patient procedure scoping does not narrow intentional treatment or MTP availability. |
+| PROC-G13 | ETT durable command path | Production ETT UI submits only through the Runtime patient-command inbox. |
+| PROC-G14 | ETT exactly once | One durable command identity creates at most one airway intervention and evidence event. |
+| PROC-G15 | Reader no local intubation | Reader acceptance does not mutate airway state; the writer materializes it. |
+| PROC-G16 | Stale-reader fence | ETT enablement and submission use shared durable command readiness. |
+| PROC-G17 | Takeover recovery | A takeover writer consumes an accepted unmaterialized ETT command exactly once. |
+| PROC-G18 | Restart determinism | Restore preserves ETT state and replay cannot duplicate it. |
+| PROC-G19 | Terminal fencing | Completion fencing rejects new ETT commands before acceptance. |
+| PROC-G20 | Package/patient enforcement | ETT materialization enforces the package-owned patient allowlist. |
+| PROC-G21 | Ventilation prerequisite | Canonical active ETT remains the existing mechanical-ventilation prerequisite. |
+| PROC-G22 | No direct production bypass | Production ETT UI has no direct Runtime-owner mutation path. |
 
 ## Imaging regression guardrails
 

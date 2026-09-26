@@ -5,7 +5,7 @@ import { selectEndotrachealIntubationOptions } from "../EndotrachealIntubationSe
 import { restoreExerciseSession, resetExerciseSession } from "@/repositories/ExerciseSessionRepository";
 import { clearInstructorRuntimeOwners, registerInstructorRuntimeOwner } from "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
 import { createScenarioEngineInstructorRuntimeOwner } from "@/services/runtime/instructor/ScenarioEngineInstructorRuntimeOwner";
-import { executeEndotrachealIntubationCommand, resetEndotrachealIntubationCommands } from
+import { handleEndotrachealIntubationCommand, resetEndotrachealIntubationCommands } from
   "@/services/runtime/instructor/EndotrachealIntubationCommandService";
 import { clearTimelineEvents, getTimelineEvents } from "@/repositories/TimelineRepository";
 
@@ -100,7 +100,7 @@ describe("resource-aware canonical endotracheal intubation", () => {
     const command = { commandId: "ETT-COMMAND", exerciseId, patientId, tubeResourceId: "ETT-75",
       laryngoscopeResourceId: "DL-1", device: "DIRECT" as const, tubeSize: 7.5, cuff: true,
       confirmation: true, issuedBy: "Case Manager" };
-    expect(executeEndotrachealIntubationCommand(command)).toEqual(executeEndotrachealIntubationCommand(command));
+    expect(handleEndotrachealIntubationCommand(command)).toEqual(handleEndotrachealIntubationCommand(command));
     expect(value.getInterventionInstances()).toHaveLength(1); expect(getTimelineEvents(patientId)).toHaveLength(1);
   });
   test("stop releases the selected resources and removes secured airway", () => {

@@ -9,6 +9,8 @@ import { handleNarvaIroScenarioControlCommand } from "@/services/runtime/instruc
 import { handleLaboratoryCommand } from "@/services/runtime/instructor/LaboratoryCommandService";
 import type { LabPatientBloodIdentity, NarvaLabPackageId } from "@/models/LaboratoryWorkflow";
 import { handleImagingOrder } from "@/services/runtime/instructor/ImagingCommandService";
+import { handleEndotrachealIntubationCommand } from
+  "@/services/runtime/instructor/EndotrachealIntubationCommandService";
 
 function rejected(reason: string): RuntimePatientCommandMaterialization {
   return Object.freeze({ status: "REJECTED", result: Object.freeze({ ok: false, reason }) });
@@ -86,6 +88,20 @@ export function materializeRuntimePatientCommand(command: AcceptedRuntimePatient
       const result = handleImagingOrder({ commandId: command.commandId, exerciseId: command.exerciseId,
         patientId: command.patientId, actorUserId: command.actorUserId,
         simulationTimeSec: command.simulationTimeSec, definitionId });
+      return Object.freeze({ status: result.ok ? "MATERIALIZED" : "REJECTED",
+        result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
+    }
+    if (command.commandType === "ENDOTRACHEAL_INTUBATION") {
+      const { tubeResourceId, laryngoscopeResourceId, capnographyResourceId, device,
+        tubeSize, cuff, confirmation } = command.payload;
+      if (typeof tubeResourceId !== "string" || typeof laryngoscopeResourceId !== "string" ||
+        capnographyResourceId !== undefined && typeof capnographyResourceId !== "string" ||
+        device !== "DIRECT" && device !== "VIDEO" || typeof tubeSize !== "number" ||
+        typeof cuff !== "boolean" || typeof confirmation !== "boolean") return rejected("INVALID_COMMAND_PAYLOAD");
+      const result = handleEndotrachealIntubationCommand({ commandId: command.commandId,
+        exerciseId: command.exerciseId, patientId: command.patientId, tubeResourceId,
+        laryngoscopeResourceId, ...(capnographyResourceId ? { capnographyResourceId } : {}),
+        device, tubeSize, cuff, confirmation, issuedBy: command.actorUserId });
       return Object.freeze({ status: result.ok ? "MATERIALIZED" : "REJECTED",
         result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
     }
