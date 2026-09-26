@@ -4,12 +4,15 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getPatientResourceDebugSnapshot, getResourceRuntimeDebugVersion, subscribeToResourceRuntimeDebug } from "@/services/ResourceRuntimeDebugService";
 import { submitResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
+import { isResourceInterventionAllowed } from "@/services/exercise/PackageInterventionAvailabilityService";
 
 export function PleuralDrainControls({ patientId, readOnly = false }: Readonly<{ patientId: string; readOnly?: boolean }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
+  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  const allowed = isResourceInterventionAllowed(exerciseId, patientId, "CHEST_DRAIN_INSERTION");
   const resources = getPatientResourceDebugSnapshot(patientId).resources.filter(resource => resource.type === "chestDrain" && resource.status === "AVAILABLE");
   const [message, setMessage] = useState<string>();
-  if (readOnly || resources.length === 0) return null;
+  if (readOnly || !allowed || resources.length === 0) return null;
   return <View style={styles.card} testID="canonical-pleural-drain-controls">
     <Text style={styles.title}>Pleuradrenaaž</Text>
     <Text style={styles.help}>Paigalda rindkeredreen kanoonilise pleuravigastuse raviks.</Text>

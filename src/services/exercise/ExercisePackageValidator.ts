@@ -8,7 +8,7 @@ import { ExerciseDefinitionValidator } from "./ExerciseDefinitionValidator";
 import { isClinicalTreatmentId } from "@/services/clinical/ClinicalTreatmentCatalog";
 
 export const CURRENT_PACKAGE_COMPATIBILITY_VERSION = 1;
-export type ExercisePackageValidationCode = "INVALID_PACKAGE_ID" | "INVALID_PACKAGE_VERSION" | "INVALID_MANIFEST" | "INVALID_HASH" | "INVALID_DEFINITION" | "UNKNOWN_PATIENT_PROCESS" | "UNKNOWN_ANALYTICS_PROVIDER" | "UNKNOWN_METRIC_PROVIDER" | "INCONSISTENT_SELECTION" | "DUPLICATE_VALUE" | "INCOMPATIBLE_PACKAGE" | "INVALID_MODULE_DEPENDENCY" | "INVALID_EVALUATION_PROFILE_REFERENCE" | "INVALID_TRANSPORT_CONFIGURATION" | "INVALID_CLINICAL_TREATMENT" | "INVALID_IMAGING_CONFIGURATION";
+export type ExercisePackageValidationCode = "INVALID_PACKAGE_ID" | "INVALID_PACKAGE_VERSION" | "INVALID_MANIFEST" | "INVALID_HASH" | "INVALID_DEFINITION" | "UNKNOWN_PATIENT_PROCESS" | "UNKNOWN_ANALYTICS_PROVIDER" | "UNKNOWN_METRIC_PROVIDER" | "INCONSISTENT_SELECTION" | "DUPLICATE_VALUE" | "INCOMPATIBLE_PACKAGE" | "INVALID_MODULE_DEPENDENCY" | "INVALID_EVALUATION_PROFILE_REFERENCE" | "INVALID_TRANSPORT_CONFIGURATION" | "INVALID_CLINICAL_TREATMENT" | "INVALID_IMAGING_CONFIGURATION" | "INVALID_INTERVENTION_AVAILABILITY";
 export type ExercisePackageDiagnostic = Readonly<{ code: ExercisePackageValidationCode; path: string; message: string }>;
 const duplicates = (values: readonly string[]) => values.filter((value, index) => values.indexOf(value) !== index);
 
@@ -41,6 +41,29 @@ export class ExercisePackageValidator {
       }
       treatments.filter(treatmentId => !isClinicalTreatmentId(treatmentId)).forEach(treatmentId =>
         add("INVALID_CLINICAL_TREATMENT", "availableClinicalTreatments", `Unknown treatment ${treatmentId}`));
+    }
+    const availability = pkg.interventionAvailability;
+    if (availability) {
+      if (availability.schemaVersion !== 1) add("INVALID_INTERVENTION_AVAILABILITY",
+        "interventionAvailability.schemaVersion", "Unsupported intervention availability schema version");
+      const packageWide = availability.packageWideResourceInterventionDefinitionIds;
+      if (duplicates(packageWide).length) add("DUPLICATE_VALUE",
+        "interventionAvailability.packageWideResourceInterventionDefinitionIds", "Duplicate package-wide intervention definition");
+      const patientIds = availability.patients.map(item => item.patientId);
+      if (duplicates(patientIds).length) add("DUPLICATE_VALUE", "interventionAvailability.patients",
+        "Duplicate patient intervention availability");
+      availability.patients.forEach((patient, index) => {
+        if (!patient.patientId.trim()) add("INVALID_INTERVENTION_AVAILABILITY",
+          `interventionAvailability.patients[${index}].patientId`, "Patient identity is required");
+        if (duplicates(patient.allowedResourceInterventionDefinitionIds).length) add("DUPLICATE_VALUE",
+          `interventionAvailability.patients[${index}].allowedResourceInterventionDefinitionIds`,
+          "Duplicate patient intervention definition");
+        if (patient.allowedResourceInterventionDefinitionIds.some(id => packageWide.includes(id))) {
+          add("INVALID_INTERVENTION_AVAILABILITY",
+            `interventionAvailability.patients[${index}].allowedResourceInterventionDefinitionIds`,
+            "Patient-specific definitions must not duplicate package-wide definitions");
+        }
+      });
     }
     if (pkg.evaluationProfile && (!pkg.evaluationProfile.profileId?.trim() || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pkg.evaluationProfile.version))) add("INVALID_EVALUATION_PROFILE_REFERENCE", "evaluationProfile", "Evaluation Profile requires an ID and exact semantic version");
     if (pkg.evaluationProfile && !pkg.protocolConfiguration) add("INVALID_EVALUATION_PROFILE_REFERENCE", "evaluationProfile", "Evaluation Profile requires an exact Protocol binding");

@@ -8,12 +8,19 @@ import {
 import { createMtpCommandId, submitMtpCommand, type MtpAction } from "@/services/runtime/instructor/MassiveTransfusionCommandService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { isResourceInterventionAllowed } from "@/services/exercise/PackageInterventionAvailabilityService";
 
 export function InspectorResourceInterventions({ patientId }: Readonly<{ patientId: string }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
   const runtimeSnapshotVersion = useSyncExternalStore(subscribeToRuntimeSnapshots, getRuntimeSnapshotVersion, getRuntimeSnapshotVersion);
   const snapshot = getPatientResourceDebugSnapshot(patientId);
-  const available = snapshot.resources.filter(resource => resource.status === "AVAILABLE" && inferredInterventionDefinitionId(resource));
+  const exercise = getCanonicalExerciseSnapshot();
+  const exerciseId = exercise.exerciseId;
+  const available = snapshot.resources.filter(resource => {
+    const definitionId = inferredInterventionDefinitionId(resource);
+    return resource.status === "AVAILABLE" && Boolean(definitionId) &&
+      isResourceInterventionAllowed(exerciseId, patientId, definitionId!);
+  });
   const [submitting, setSubmitting] = useState<string>();
   const [result, setResult] = useState<ResourceInterventionCommandResult>();
   const mtp = getCanonicalPatientRuntimeSnapshot(patientId, runtimeSnapshotVersion)?.processes.find(process => process.moduleId === "MASSIVE_TRANSFUSION_V1");

@@ -31,6 +31,22 @@ export const NARVA_TRAUMA_TREATMENT_PALETTE: readonly ClinicalTreatmentId[] = Ob
   "CALCIUM_CHLORIDE", "SODIUM_BICARBONATE",
 ]);
 
+const NARVA_TRAUMA_INTERVENTION_AVAILABILITY = Object.freeze({
+  schemaVersion: 1 as const,
+  packageWideResourceInterventionDefinitionIds: Object.freeze([
+    "PERIPHERAL_IV_ACCESS", "INTRAOSSEOUS_ACCESS", "CENTRAL_VENOUS_ACCESS",
+    "CRYSTALLOID_INFUSION", "BLOOD_PRODUCT_ADMINISTRATION", "PRESSURE_INFUSION",
+    "ENDOTRACHEAL_INTUBATION", "MECHANICAL_VENTILATION",
+  ]),
+  packageWideSpecializedActions: Object.freeze(["CLINICAL_TREATMENT", "MTP", "TRANSPORT_START"]),
+  patients: Object.freeze([
+    Object.freeze({ patientId: "PT-PELVIC-001",
+      allowedResourceInterventionDefinitionIds: Object.freeze(["PELVIC_BINDER_APPLICATION"]) }),
+    Object.freeze({ patientId: "PT-CHEST-001",
+      allowedResourceInterventionDefinitionIds: Object.freeze(["CHEST_DRAIN_INSERTION"]) }),
+  ]),
+});
+
 const traumaDefinition = definition("RUSSICAPTOR_NARVA_TRAUMA", "Narva kahe patsiendi traumaõppus",
   "Kaks samaaegset P1 traumapatsienti, üks reanimobiil ja kaks kõrgema etapi ravisuunda.");
 
@@ -47,6 +63,7 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
     { moduleId: ALS_MODULE_ID, version: ALS_MODULE_VERSION },
   ]),
   availableClinicalTreatments: NARVA_TRAUMA_TREATMENT_PALETTE,
+  interventionAvailability: NARVA_TRAUMA_INTERVENTION_AVAILABILITY,
   imagingConfiguration: NARVA_TRAUMA_IMAGING_CONFIGURATION,
   transportConfiguration: Object.freeze({ version: "1.0.0", vehicleLocationId: "REANIMOBILE",
     resources: Object.freeze([Object.freeze({ resourceId: "NARVA-REANIMOBILE-01",

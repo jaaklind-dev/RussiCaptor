@@ -2,6 +2,7 @@ import { addTimelineEvent } from "@/repositories/TimelineRepository";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getCanonicalPatientRuntimeSnapshot } from "@/services/RuntimeSnapshotService";
 import { getInstructorRuntimeOwner } from "./InstructorRuntimeEventRegistry";
+import { isResourceInterventionAllowed } from "@/services/exercise/PackageInterventionAvailabilityService";
 
 export type EndotrachealIntubationCommand = Readonly<{
   commandId: string; exerciseId: string; patientId: string; tubeResourceId: string;
@@ -26,6 +27,12 @@ export function executeEndotrachealIntubationCommand(command: EndotrachealIntuba
   const previous = results.get(command.commandId);
   if (previous) return structuredClone(previous);
   const exercise = getCanonicalExerciseSnapshot();
+  if (!isResourceInterventionAllowed(command.exerciseId, command.patientId, "ENDOTRACHEAL_INTUBATION")) {
+    const result: EndotrachealIntubationCommandResult = { ok: false, commandId: command.commandId,
+      errorCode: "INTERVENTION_REJECTED", message: "Intervention is not available for this package patient" };
+    results.set(command.commandId, structuredClone(result));
+    return structuredClone(result);
+  }
   const owner = getInstructorRuntimeOwner(command.exerciseId, command.patientId);
   const applied = exercise.exerciseId === command.exerciseId && exercise.lifecycleState === "RUNNING"
     ? owner?.executeResourceAwareIntervention?.(command.commandId, "ENDOTRACHEAL_INTUBATION",

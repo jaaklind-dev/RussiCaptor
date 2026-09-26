@@ -41,6 +41,7 @@ export class ExercisePackageLoader {
       evaluationProfile: pkg.evaluationProfile,
       transportConfiguration: pkg.transportConfiguration,
       imagingConfiguration: pkg.imagingConfiguration,
+      interventionAvailability: pkg.interventionAvailability,
       compatibilityVersion: pkg.manifest.compatibilityVersion,
     });
   }

@@ -7,6 +7,7 @@ import type { EvaluationProfileReference } from "@/models/evaluation/ExerciseEva
 import type { TransportConfiguration } from "@/models/PatientTransport";
 import type { ClinicalTreatmentId } from "@/models/ClinicalTreatment";
 import type { PackageImagingConfiguration } from "./PackageImagingConfiguration";
+import type { PackageInterventionAvailability } from "./PackageInterventionAvailability";
 
 export type ExercisePackage = Readonly<{
   packageId: string;
@@ -27,4 +28,6 @@ export type ExercisePackage = Readonly<{
   availableClinicalTreatments?: readonly ClinicalTreatmentId[];
   /** Predefined Imaging content owned by this exact package version. */
   imagingConfiguration?: PackageImagingConfiguration;
+  /** Package-owned clinical procedure availability, distinct from physical resource inventory. */
+  interventionAvailability?: PackageInterventionAvailability;
 }>;

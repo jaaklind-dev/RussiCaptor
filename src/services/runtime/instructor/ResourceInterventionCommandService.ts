@@ -6,6 +6,8 @@ import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepo
 import { advanceExerciseMinutes } from "@/services/ClockService";
 import { getRegisteredExerciseClockTargetIds } from "@/services/runtime/exercise/ExerciseClockTargetRegistry";
 import { getRuntimePatientCommandGateway, submitPatientRuntimeCommand } from "@/services/runtime/commands/RuntimePatientCommandService";
+import { isResourceInterventionAllowed } from "@/services/exercise/PackageInterventionAvailabilityService";
+import { inferredInterventionDefinitionId } from "@/services/runtime/clinical/InterventionRuntime";
 
 export type ResourceInterventionCommandResult =
   | Readonly<{ ok: true; commandId: string; runtimeEventId: string }>
@@ -34,6 +36,13 @@ export function handleResourceInterventionCommand(command: Readonly<{ commandId:
   const owner = getInstructorRuntimeOwner(command.exerciseId, command.patientId);
   const exercise = getCanonicalExerciseSnapshot();
   const resourceBefore = getPatientResourceDebugSnapshot(command.patientId).resources.find(item => item.resourceId === command.resourceId);
+  const definitionId = inferredInterventionDefinitionId(resourceBefore);
+  if (!definitionId || !isResourceInterventionAllowed(command.exerciseId, command.patientId, definitionId)) {
+    const result: ResourceInterventionCommandResult = { ok: false, commandId: command.commandId,
+      errorCode: "UNAVAILABLE", message: "Intervention is not available for this package patient" };
+    results.set(command.commandId, structuredClone(result));
+    return structuredClone(result);
+  }
   const timedAccess = resourceBefore?.type === "peripheralIV" || resourceBefore?.type === "centralVenousCatheter";
   const canonicalSimulationTimeSec = owner?.executeResourceIntervention && exercise.exerciseId === command.exerciseId && exercise.lifecycleState === "RUNNING"
     ? exercise.simulationTimeSec + (timedAccess ? 0 : 60) : undefined;

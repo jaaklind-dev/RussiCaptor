@@ -8,17 +8,20 @@ import {
   subscribeToResourceRuntimeDebug,
 } from "@/services/ResourceRuntimeDebugService";
 import { createResourceInterventionCommandId, submitResourceInterventionCommand, submitStopResourceInterventionCommand } from "@/services/runtime/instructor/ResourceInterventionCommandService";
+import { isResourceInterventionAllowed } from "@/services/exercise/PackageInterventionAvailabilityService";
 
 export function PelvicBinderControls({ patientId, readOnly = false }: Readonly<{ patientId: string; readOnly?: boolean }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
   const snapshot = getPatientResourceDebugSnapshot(patientId);
+  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  const allowed = isResourceInterventionAllowed(exerciseId, patientId, "PELVIC_BINDER_APPLICATION");
   const binders = snapshot.resources.filter(resource => resource.type === "pelvicBinder" && resource.status === "AVAILABLE");
   const applied = (snapshot.clinicalInterventions ?? []).find(instance =>
     instance.definitionId === "PELVIC_BINDER_APPLICATION" && instance.status === "RUNNING");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string>();
 
-  if (readOnly || (binders.length === 0 && !applied)) return null;
+  if (readOnly || !allowed || (binders.length === 0 && !applied)) return null;
   return <View style={styles.card} testID="canonical-pelvic-binder-controls">
     <Text style={styles.title}>Vaagna stabiliseerimine</Text>
     {applied

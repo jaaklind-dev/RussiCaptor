@@ -77,6 +77,20 @@
     { "id": "IMG-G44", "name": "reader-asset-convergence", "description": "Readers restore asset metadata without local generation or mutation.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingReportAssetContract-test.ts"] },
     { "id": "IMG-G45", "name": "unsupported-attachment-safety", "description": "Unregistered workbook paths and URLs remain explicitly unresolved and never become trusted assets.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingReportAssetContract-test.ts", "src/providers/excel/__tests__/WorkbookDataMapper-test.ts"] }
   ],
+  "procedureGuardrails": [
+    { "id": "PROC-G01", "name": "package-patient-ownership", "description": "Procedure availability derives from the bound package and patient identity.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaProcedureAvailability-test.ts"] },
+    { "id": "PROC-G02", "name": "resource-is-not-authorization", "description": "Possessing a compatible resource never authorizes a procedure omitted by package policy.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaProcedureAvailability-test.ts"] },
+    { "id": "PROC-G03", "name": "pelvic-denies-chest-procedure", "description": "The Narva pelvic patient cannot execute chest drainage.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaProcedureAvailability-test.ts"] },
+    { "id": "PROC-G04", "name": "chest-denies-pelvic-procedure", "description": "The Narva chest patient cannot execute pelvic binder application.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaProcedureAvailability-test.ts"] },
+    { "id": "PROC-G05", "name": "allowed-procedure-executable", "description": "A source-backed allowed procedure remains executable through the existing runtime.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaProcedureAvailability-test.ts"] },
+    { "id": "PROC-G06", "name": "ui-command-policy-alignment", "description": "UI projection and command authorization consume the same package-owned availability policy.", "phase": "FOUNDATION", "tests": ["src/components/patient/__tests__/NarvaProcedureAvailabilityPresentation-test.tsx", "src/services/exercise/__tests__/NarvaProcedureAvailability-test.ts"] },
+    { "id": "PROC-G07", "name": "direct-command-bypass-rejected", "description": "Direct service and durable materializer paths reject unauthorized procedures.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaProcedureAvailability-test.ts"] },
+    { "id": "PROC-G08", "name": "restore-determinism", "description": "Cold restore derives identical availability without mutable checkpoint duplication.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaProcedureAvailability-test.ts"] },
+    { "id": "PROC-G09", "name": "package-isolation", "description": "Narva availability neither leaks into nor is sourced from unrelated packages.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaProcedureAvailability-test.ts"] },
+    { "id": "PROC-G10", "name": "reader-no-local-bypass", "description": "Reader submission remains routed through durable command authorization and cannot mutate availability.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaProcedureAvailability-test.ts", "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts"] },
+    { "id": "PROC-G11", "name": "terminal-fencing-preserved", "description": "Existing completion fencing continues to block patient commands after terminal transition.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts"] },
+    { "id": "PROC-G12", "name": "package-treatment-palette-preserved", "description": "Patient procedure scoping does not narrow the intentional package-wide treatment or MTP palette.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaProcedureAvailability-test.ts", "src/services/clinical/__tests__/ClinicalTreatmentUI-test.tsx", "src/modules/massiveTransfusion/__tests__/MtpCalciumReplacement-test.ts"] }
+  ],
   "laboratoryGuardrails": [
     { "id": "LAB-G01", "name": "sample-snapshot-immutability", "description": "A collected sample retains an immutable authoritative physiological source snapshot across later treatment, physiology, restart and takeover changes.", "phase": "FOUNDATION", "tests": ["src/services/runtime/laboratory/__tests__/LaboratoryWorkflowRuntime-test.ts", "src/services/runtime/laboratory/__tests__/NarvaLabPhysiologyV1Generator-test.ts"] },
     { "id": "LAB-G02", "name": "result-uses-sample-time", "description": "A released result represents physiology at sampledAt rather than resultAvailableAt.", "phase": "FOUNDATION", "tests": ["src/services/runtime/laboratory/__tests__/LaboratoryWorkflowRuntime-test.ts", "src/services/runtime/laboratory/__tests__/NarvaLabPhysiologyV1Generator-test.ts"] },
@@ -140,6 +154,14 @@
     "futureWorkPackageStatement": "All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G46, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed."
   },
   "groups": {
+    "procedure": [
+      "src/services/exercise/__tests__/NarvaProcedureAvailability-test.ts",
+      "src/components/patient/__tests__/NarvaProcedureAvailabilityPresentation-test.tsx",
+      "src/services/runtime/instructor/__tests__/ResourceInterventionCommand-test.ts",
+      "src/services/clinical/__tests__/ClinicalTreatmentUI-test.tsx",
+      "src/modules/massiveTransfusion/__tests__/MtpCalciumReplacement-test.ts",
+      "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts"
+    ],
     "imaging": [
       "src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts",
       "src/services/exercise/__tests__/NarvaTraumaImagingDefinitions-test.ts",

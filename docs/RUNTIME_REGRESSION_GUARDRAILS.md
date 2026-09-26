@@ -48,7 +48,26 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/PROC-G01–PROC-G12/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+
+## Procedure availability regression guardrails
+
+Procedure definitions and physical resources are reusable Runtime capabilities, not clinical authorization. For packages with an explicit availability contract, the bound package and patient identity determine which procedures are offered and accepted; package-wide treatments remain governed by their existing package palette.
+
+| ID | Guardrail | Frozen invariant |
+| --- | --- | --- |
+| PROC-G01 | Package/patient ownership | Procedure availability derives from the bound package and patient identity. |
+| PROC-G02 | Resource is not authorization | A compatible assigned resource does not authorize a procedure omitted by package policy. |
+| PROC-G03 | Pelvic denies chest procedure | PT-PELVIC-001 cannot execute chest drainage. |
+| PROC-G04 | Chest denies pelvic procedure | PT-CHEST-001 cannot execute pelvic binder application. |
+| PROC-G05 | Allowed procedure executable | A source-backed allowed procedure remains executable through the existing Runtime. |
+| PROC-G06 | UI/command policy alignment | UI projection and command authorization consume the same package-owned policy. |
+| PROC-G07 | Direct bypass rejected | Direct service and durable materializer paths reject unauthorized procedures. |
+| PROC-G08 | Restore determinism | Cold restore derives identical availability without persisting redundant mutable state. |
+| PROC-G09 | Package isolation | Narva procedure availability cannot leak to or from unrelated packages. |
+| PROC-G10 | Reader no local bypass | Readers route through durable authorization and cannot mutate availability locally. |
+| PROC-G11 | Terminal fencing | Existing terminal fencing continues to reject patient commands after completion. |
+| PROC-G12 | Package-wide treatments preserved | Patient procedure scoping does not narrow intentional treatment or MTP availability. |
 
 ## Imaging regression guardrails
 
