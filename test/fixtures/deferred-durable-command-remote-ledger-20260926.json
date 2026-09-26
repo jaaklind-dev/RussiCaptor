@@ -1,0 +1,14 @@
+{
+  "projectRef": "fimcsrivizpliiuoqopv",
+  "observedAt": "2026-09-26",
+  "readOnly": true,
+  "migrations": [
+    { "version": "20260915165109", "name": "narva_laboratory_runtime_commands" },
+    { "version": "20260916054932", "name": "fresh_exercise_bootstrap_authorization" },
+    { "version": "20260916055132", "name": "harden_fresh_exercise_bootstrap_authorization" },
+    { "version": "20260916080629", "name": "allow_bootstrap_insert_claim" },
+    { "version": "20260916080939", "name": "separate_bootstrap_insert_authority" },
+    { "version": "20260916084829", "name": "fix_bootstrap_insert_authorization_helper" },
+    { "version": "20260918145252", "name": "large_canonical_checkpoint_publication_timeout" }
+  ]
+}

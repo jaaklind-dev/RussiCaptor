@@ -65,6 +65,8 @@
     "test:patient-completion-guardrails": "node scripts/run-runtime-guardrails.mjs patient-completion",
     "test:imaging-physical-prep": "jest --runInBand scripts/__tests__/NarvaImagingPhysicalAcceptanceHarness-test.ts",
     "imaging:physical-prep": "node scripts/narva-imaging-physical-acceptance.mjs --mode prepare",
+    "test:deferred-durable-release-prep": "jest --runInBand scripts/__tests__/DeferredDurableCommandAcceptanceHarness-test.ts",
+    "runtime:deferred-acceptance": "node scripts/deferred-durable-command-acceptance.mjs",
     "field-release:android": "node scripts/build-field-release.mjs",
     "field-release:verify": "node scripts/verify-field-release-config.mjs"
   },
