@@ -129,6 +129,23 @@
     { "id": "PROC-G31", "name": "terminal-readiness-fence", "description": "Terminal exercises are both disabled in UI and rejected at submission.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts", "src/components/patient/__tests__/DurableInterventionReadinessContract-test.ts"] },
     { "id": "PROC-G32", "name": "readiness-recovers-after-convergence", "description": "Controls reactively become available after authoritative convergence restores readiness.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts", "src/components/patient/__tests__/DurableInterventionReadinessContract-test.ts"] }
   ],
+  "patientCompletionGuardrails": [
+    { "id": "PATCOMP-G01", "name": "durable-production-path", "description": "Production patient completion enters the durable Runtime patient-command inbox.", "phase": "FOUNDATION", "tests": ["src/components/excon/__tests__/ActivePatientsDurableCompletionPath-test.ts", "src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts"] },
+    { "id": "PATCOMP-G02", "name": "no-direct-excon-mutation", "description": "EXCON completion UI cannot directly mutate patient, assignment, scenario-event or timeline state.", "phase": "FOUNDATION", "tests": ["src/components/excon/__tests__/ActivePatientsDurableCompletionPath-test.ts"] },
+    { "id": "PATCOMP-G03", "name": "writer-only-materialization", "description": "Only the authoritative writer materializes accepted patient completion.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts"] },
+    { "id": "PATCOMP-G04", "name": "same-command-exactly-once", "description": "One durable completion command identity completes a patient at most once.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts"] },
+    { "id": "PATCOMP-G05", "name": "single-completion-evidence", "description": "Replay, restart and takeover cannot duplicate completion timeline evidence.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts"] },
+    { "id": "PATCOMP-G06", "name": "scenario-cancellation-exactly-once", "description": "Pending patient scenario events are cancelled once while historical resolved events remain intact.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts", "src/services/__tests__/ScenarioWorkflow-test.ts"] },
+    { "id": "PATCOMP-G07", "name": "assignment-removal-exactly-once", "description": "Patient assignment removal is canonical, idempotent and stable after restore.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts", "src/services/__tests__/ScenarioWorkflow-test.ts"] },
+    { "id": "PATCOMP-G08", "name": "accepted-command-recovery", "description": "An accepted unmaterialized completion survives writer absence and is consumed once after recovery.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts"] },
+    { "id": "PATCOMP-G09", "name": "takeover-before-materialization", "description": "A valid takeover writer consumes an accepted completion command once.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts"] },
+    { "id": "PATCOMP-G10", "name": "already-completed-idempotency", "description": "A completion request for an already completed patient has no duplicate effects.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts"] },
+    { "id": "PATCOMP-G11", "name": "exercise-terminal-fence", "description": "Exercise completion fencing rejects later patient-completion intents and deterministically drains prior accepted work.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts", "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts"] },
+    { "id": "PATCOMP-G12", "name": "transport-independent", "description": "Transport arrival, handover and completion never complete the patient.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts", "src/services/runtime/__tests__/TransportDurableLifecycleHardening-test.ts"] },
+    { "id": "PATCOMP-G13", "name": "exercise-independent", "description": "Patient completion does not complete the exercise.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts"] },
+    { "id": "PATCOMP-G14", "name": "reader-no-local-completion", "description": "A reader may submit durably but cannot apply completion effects locally.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts"] },
+    { "id": "PATCOMP-G15", "name": "readiness-fails-closed", "description": "Completion UI and tap-time submission both reject while shared durable command readiness is unsafe.", "phase": "FOUNDATION", "tests": ["src/components/excon/__tests__/ActivePatientsDurableCompletionPath-test.ts", "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts"] }
+  ],
   "laboratoryGuardrails": [
     { "id": "LAB-G01", "name": "sample-snapshot-immutability", "description": "A collected sample retains an immutable authoritative physiological source snapshot across later treatment, physiology, restart and takeover changes.", "phase": "FOUNDATION", "tests": ["src/services/runtime/laboratory/__tests__/LaboratoryWorkflowRuntime-test.ts", "src/services/runtime/laboratory/__tests__/NarvaLabPhysiologyV1Generator-test.ts"] },
     { "id": "LAB-G02", "name": "result-uses-sample-time", "description": "A released result represents physiology at sampledAt rather than resultAvailableAt.", "phase": "FOUNDATION", "tests": ["src/services/runtime/laboratory/__tests__/LaboratoryWorkflowRuntime-test.ts", "src/services/runtime/laboratory/__tests__/NarvaLabPhysiologyV1Generator-test.ts"] },
@@ -192,6 +209,14 @@
     "futureWorkPackageStatement": "All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G46, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed."
   },
   "groups": {
+    "patient-completion": [
+      "src/services/runtime/commands/__tests__/DurablePatientCompletionCommand-test.ts",
+      "src/services/runtime/commands/__tests__/PatientCompletionRuntimeCommandMigration-test.ts",
+      "src/components/excon/__tests__/ActivePatientsDurableCompletionPath-test.ts",
+      "src/services/__tests__/ScenarioWorkflow-test.ts",
+      "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts",
+      "src/services/runtime/__tests__/TransportDurableLifecycleHardening-test.ts"
+    ],
     "transport": [
       "src/services/runtime/__tests__/TransportDurableLifecycleHardening-test.ts",
       "src/services/runtime/__tests__/PatientTransportEngine-test.ts",

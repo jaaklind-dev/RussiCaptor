@@ -27,6 +27,13 @@ type GuardrailManifest = Readonly<{
     phase: "FOUNDATION";
     tests: readonly string[];
   }>[];
+  patientCompletionGuardrails: readonly Readonly<{
+    id: string;
+    name: string;
+    description: string;
+    phase: "FOUNDATION";
+    tests: readonly string[];
+  }>[];
   laboratoryGuardrails: readonly Readonly<{
     id: string;
     name: string;
@@ -78,6 +85,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       ...manifest.guardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.imagingGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.transportGuardrails.flatMap(guardrail => guardrail.tests),
+      ...manifest.patientCompletionGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.procedureGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.laboratoryGuardrails.flatMap(guardrail => guardrail.tests),
       ...Object.values(manifest.groups).flat(),
@@ -87,7 +95,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
   });
 
   test("exposes stable grouped commands through the manifest-backed runner", () => {
-    expect(Object.keys(manifest.groups).sort()).toEqual(["imaging", "laboratory", "multi-device", "persistence", "procedure", "runtime", "transport"]);
+    expect(Object.keys(manifest.groups).sort()).toEqual(["imaging", "laboratory", "multi-device", "patient-completion", "persistence", "procedure", "runtime", "transport"]);
     expect(Object.values(manifest.groups).every(files => files.length > 0)).toBe(true);
     expect(packageJson.scripts).toMatchObject({
       "test:guardrails": "node scripts/run-runtime-guardrails.mjs all",
@@ -98,6 +106,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       "test:imaging-guardrails": "node scripts/run-runtime-guardrails.mjs imaging",
       "test:procedure-guardrails": "node scripts/run-runtime-guardrails.mjs procedure",
       "test:transport-guardrails": "node scripts/run-runtime-guardrails.mjs transport",
+      "test:patient-completion-guardrails": "node scripts/run-runtime-guardrails.mjs patient-completion",
     });
   });
 
@@ -147,6 +156,15 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);
     const document = readFileSync(resolve(root, manifest.document), "utf8");
     for (const guardrail of manifest.transportGuardrails) expect(document).toContain(`| ${guardrail.id} |`);
+  });
+
+  test("keeps the complete durable patient-completion guardrail catalog unique and explicit", () => {
+    const expectedIds = Array.from({ length: 15 }, (_, index) => `PATCOMP-G${String(index + 1).padStart(2, "0")}`);
+    expect(manifest.patientCompletionGuardrails.map(guardrail => guardrail.id)).toEqual(expectedIds);
+    expect(manifest.patientCompletionGuardrails.every(guardrail => guardrail.name.length > 0 &&
+      guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);
+    const document = readFileSync(resolve(root, manifest.document), "utf8");
+    for (const guardrail of manifest.patientCompletionGuardrails) expect(document).toContain(`| ${guardrail.id} |`);
   });
 
   test("freezes Narva laboratory timing, package scope and future-WP policy", () => {

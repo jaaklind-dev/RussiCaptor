@@ -11,6 +11,8 @@ import type { LabPatientBloodIdentity, NarvaLabPackageId } from "@/models/Labora
 import { handleImagingOrder } from "@/services/runtime/instructor/ImagingCommandService";
 import { handleEndotrachealIntubationCommand } from
   "@/services/runtime/instructor/EndotrachealIntubationCommandService";
+import { materializePatientCompletion } from
+  "@/services/runtime/exercise/PatientCompletionMaterializationService";
 
 function rejected(reason: string): RuntimePatientCommandMaterialization {
   return Object.freeze({ status: "REJECTED", result: Object.freeze({ ok: false, reason }) });
@@ -103,6 +105,13 @@ export function materializeRuntimePatientCommand(command: AcceptedRuntimePatient
         exerciseId: command.exerciseId, patientId: command.patientId, tubeResourceId,
         laryngoscopeResourceId, ...(capnographyResourceId ? { capnographyResourceId } : {}),
         device, tubeSize, cuff, confirmation, issuedBy: command.actorUserId });
+      return Object.freeze({ status: result.ok ? "MATERIALIZED" : "REJECTED",
+        result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
+    }
+    if (command.commandType === "PATIENT_COMPLETE") {
+      if (Object.keys(command.payload).length !== 0) return rejected("INVALID_COMMAND_PAYLOAD");
+      const result = materializePatientCompletion(command.commandId, command.patientId,
+        command.simulationTimeSec, command.actorUserId);
       return Object.freeze({ status: result.ok ? "MATERIALIZED" : "REJECTED",
         result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
     }

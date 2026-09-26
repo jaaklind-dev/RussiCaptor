@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G16/PROC-G01–PROC-G32/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G16/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G32/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Transport lifecycle regression guardrails
 
@@ -72,6 +72,28 @@ Transport start is a durable patient command. Only the authoritative writer mate
 | TRANS-G14 | Terminal fence | Completion fencing rejects later starts and deterministically drains prior accepted commands. |
 | TRANS-G15 | Cancellation unsupported | Current production exposes no misleading unreachable cancellation action. |
 | TRANS-G16 | Completion independence | Transport phases do not complete the patient or exercise. |
+
+## Patient completion regression guardrails
+
+Patient completion is a durable patient command. EXCON submits through the shared readiness-gated inbox; only the authoritative writer applies the canonical completion effects. Replay, restart, and takeover must preserve one completed state, one assignment removal, one pending-event cancellation outcome, and one evidence event. Transport and whole-exercise completion remain independent.
+
+| ID | Guardrail | Frozen invariant |
+| --- | --- | --- |
+| PATCOMP-G01 | Durable production path | Production patient completion enters the Runtime patient-command inbox. |
+| PATCOMP-G02 | No direct EXCON mutation | EXCON UI cannot directly mutate patient, assignment, scenario-event, or timeline state. |
+| PATCOMP-G03 | Writer-only materialization | Only the authoritative writer materializes accepted patient completion. |
+| PATCOMP-G04 | Same-command exactly once | One completion command identity completes the patient at most once. |
+| PATCOMP-G05 | Single completion evidence | Replay, restart, and takeover cannot duplicate completion evidence. |
+| PATCOMP-G06 | Scenario cancellation exactly once | Pending scenario events are cancelled once and historical resolved events remain intact. |
+| PATCOMP-G07 | Assignment removal exactly once | Assignment removal remains canonical and idempotent after restore. |
+| PATCOMP-G08 | Accepted-command recovery | Accepted completion survives writer absence and is consumed once after recovery. |
+| PATCOMP-G09 | Takeover recovery | A takeover writer consumes accepted completion once. |
+| PATCOMP-G10 | Already-completed idempotency | A later completion request has no duplicate effects. |
+| PATCOMP-G11 | Exercise terminal fence | The exercise fence rejects later intents and drains accepted earlier work deterministically. |
+| PATCOMP-G12 | Transport independence | Transport phases never complete the patient. |
+| PATCOMP-G13 | Exercise independence | Patient completion never completes the exercise. |
+| PATCOMP-G14 | Reader no local completion | Readers submit durably and never apply completion effects locally. |
+| PATCOMP-G15 | Readiness fails closed | UI and tap-time submission reject while durable command readiness is unsafe. |
 
 ## Procedure availability regression guardrails
 

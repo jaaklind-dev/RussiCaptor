@@ -31,7 +31,8 @@ import { advanceExerciseMinutes } from "@/services/ClockService";
 import { resetExercise } from "@/services/ExerciseResetService";
 import { placeOrder } from "@/services/OrderService";
 import { revealQuestion } from "@/services/RevealService";
-import { finishPatient } from "@/services/PatientCompletionService";
+import { materializePatientCompletion } from
+  "@/services/runtime/exercise/PatientCompletionMaterializationService";
 import {
   findPatientById,
   getAllPatients,
@@ -64,6 +65,9 @@ import { getVitalSigns } from "@/repositories/VitalSignsRepository";
 import { recordVitalSigns } from "@/services/VitalSignsService";
 
 const patientId = "PT-001";
+let completionSequence = 0;
+const finishPatient = (id: string) => materializePatientCompletion(
+  `SCENARIO-COMPLETE-${++completionSequence}`, id, getExerciseSession().currentMinute * 60, "EXCON-TEST").ok;
 
 describe("order-driven scenario workflow", () => {
   beforeEach(() => {

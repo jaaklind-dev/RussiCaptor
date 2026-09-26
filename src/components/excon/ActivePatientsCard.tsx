@@ -1,18 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { getAllActivePatientAssignments } from "@/services/AssignmentRepository";
-import { finishPatient } from "@/services/PatientCompletionService";
+import { createPatientCompletionCommandId, submitPatientCompletion } from "@/services/PatientCompletionService";
 import { subscribeToSync } from "@/services/SyncService";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { useRuntimePatientCommandSubmissionReadiness } from
+  "@/services/runtime/commands/useRuntimePatientCommandSubmissionReadiness";
 
 export default function ActivePatientsCard() {
   const [, setRefreshKey] = useState(0);
+  const [pendingPatientId, setPendingPatientId] = useState<string>();
+  const inFlightPatientIds = useRef(new Set<string>());
+  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  const commandReadiness = useRuntimePatientCommandSubmissionReadiness(exerciseId);
 
   useEffect(() => {
     return subscribeToSync(() => setRefreshKey((value) => value + 1));
   }, []);
 
   const activeAssignments = getAllActivePatientAssignments();
+
+  async function completePatient(patientId: string): Promise<void> {
+    if (!commandReadiness.ready || inFlightPatientIds.current.has(patientId)) return;
+    inFlightPatientIds.current.add(patientId); setPendingPatientId(patientId);
+    const result = await submitPatientCompletion(createPatientCompletionCommandId(exerciseId, patientId), patientId)
+      .catch(() => ({ status: "REJECTED" as const, commandId: "", reason: "UNAVAILABLE" }));
+    inFlightPatientIds.current.delete(patientId); setPendingPatientId(undefined);
+    if (result.status === "REJECTED") Alert.alert("Käsk lükati tagasi", "Patsiendi lõpetamist ei saanud kinnitada.");
+  }
 
   function confirmFinish(patientId: string, patientName: string): void {
     Alert.alert(
@@ -23,7 +39,7 @@ export default function ActivePatientsCard() {
         {
           text: "Finish",
           style: "destructive",
-          onPress: () => finishPatient(patientId),
+          onPress: () => void completePatient(patientId),
         },
       ]
     );
@@ -48,10 +64,11 @@ export default function ActivePatientsCard() {
               </Text>
             </View>
             <Pressable
-              style={styles.finishButton}
+              disabled={!commandReadiness.ready || pendingPatientId === patient.id}
+              style={[styles.finishButton, (!commandReadiness.ready || pendingPatientId === patient.id) && styles.disabled]}
               onPress={() => confirmFinish(patient.id, patient.name)}
             >
-              <Text style={styles.actionButtonText}>Lõpeta</Text>
+              <Text style={styles.actionButtonText}>{pendingPatientId === patient.id ? "Lõpetan…" : "Lõpeta"}</Text>
             </Pressable>
           </View>
         ))
@@ -108,6 +125,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 10,
   },
+  disabled: { opacity: 0.45 },
   actionButtonText: {
     color: "#fff",
     fontWeight: "bold",
