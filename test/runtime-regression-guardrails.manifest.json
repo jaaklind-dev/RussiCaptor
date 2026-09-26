@@ -230,7 +230,24 @@
     },
     "futureWorkPackageStatement": "All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G46, are mandatory acceptance gates for this work package. Determine impacted guardrail classes before implementation. No guardrail may be weakened, bypassed, deleted, or threshold-relaxed."
   },
+  "sourceFidelityGuardrails": [
+    { "id": "SRC-G01", "name": "canonical-workbook-hash", "description": "Raw source artifacts and the approved canonical semantic workbook checksum remain exact.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
+    { "id": "SRC-G02", "name": "patient-mapping-stability", "description": "P01 and P02 retain their neutral canonical production patient mappings.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
+    { "id": "SRC-G03", "name": "p02-oxygen-fidelity", "description": "Source-backed oxygen remains mapped to P02 only.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
+    { "id": "SRC-G04", "name": "imaging-fidelity", "description": "P02 Imaging identity, title, report and delay remain exact.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
+    { "id": "SRC-G05", "name": "question-fidelity", "description": "The six authored questions retain exact patient scope and stable identity.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
+    { "id": "SRC-G06", "name": "pelvic-binder-mapping", "description": "P01 pelvic stabilization remains mapped to the canonical binder action.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
+    { "id": "SRC-G07", "name": "pleural-drain-mapping", "description": "P02 pleural decompression remains mapped to the canonical chest-drain action.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
+    { "id": "SRC-G08", "name": "known-bleeding-conflict", "description": "The workbook 400 ml/h versus production 200 ml/h mismatch remains an explicit SOURCE_CONFLICT.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
+    { "id": "SRC-G09", "name": "unresolved-not-match", "description": "Ambiguous, missing and conflicting source items cannot silently become MATCH.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
+    { "id": "SRC-G10", "name": "no-demo-source-substitution", "description": "Demo or global content cannot satisfy Narva source mappings.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
+    { "id": "SRC-G11", "name": "historical-package-immutability", "description": "Historical Narva package versions remain separately addressable and immutable.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
+    { "id": "SRC-G12", "name": "explicit-drift-report", "description": "Package/source drift fails deterministically and reports the mapped item without personal identifiers.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] }
+  ],
   "groups": {
+    "source-fidelity": [
+      "src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"
+    ],
     "questions": [
       "src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts",
       "src/services/__tests__/ScenarioWorkflow-test.ts",

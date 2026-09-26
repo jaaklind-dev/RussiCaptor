@@ -27,6 +27,13 @@ type GuardrailManifest = Readonly<{
     phase: "FOUNDATION";
     tests: readonly string[];
   }>[];
+  sourceFidelityGuardrails: readonly Readonly<{
+    id: string;
+    name: string;
+    description: string;
+    phase: "FOUNDATION";
+    tests: readonly string[];
+  }>[];
   transportGuardrails: readonly Readonly<{
     id: string;
     name: string;
@@ -95,6 +102,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       ...manifest.patientCompletionGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.procedureGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.questionGuardrails.flatMap(guardrail => guardrail.tests),
+      ...manifest.sourceFidelityGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.laboratoryGuardrails.flatMap(guardrail => guardrail.tests),
       ...Object.values(manifest.groups).flat(),
       ...manifest.historicalFailures.flatMap(failure => failure.tests),
@@ -103,7 +111,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
   });
 
   test("exposes stable grouped commands through the manifest-backed runner", () => {
-    expect(Object.keys(manifest.groups).sort()).toEqual(["imaging", "laboratory", "multi-device", "patient-completion", "persistence", "procedure", "questions", "runtime", "transport"]);
+    expect(Object.keys(manifest.groups).sort()).toEqual(["imaging", "laboratory", "multi-device", "patient-completion", "persistence", "procedure", "questions", "runtime", "source-fidelity", "transport"]);
     expect(Object.values(manifest.groups).every(files => files.length > 0)).toBe(true);
     expect(packageJson.scripts).toMatchObject({
       "test:guardrails": "node scripts/run-runtime-guardrails.mjs all",
@@ -116,6 +124,8 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       "test:transport-guardrails": "node scripts/run-runtime-guardrails.mjs transport",
       "test:patient-completion-guardrails": "node scripts/run-runtime-guardrails.mjs patient-completion",
       "test:question-guardrails": "node scripts/run-runtime-guardrails.mjs questions",
+      "test:source-fidelity-guardrails": "node scripts/run-runtime-guardrails.mjs source-fidelity",
+      "narva:source-fidelity": "node scripts/narva-source-fidelity.mjs",
     });
   });
 
@@ -136,7 +146,8 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);
     const allIds = [...manifest.guardrails.map(guardrail => guardrail.id),
       ...manifest.historicalFailures.map(failure => failure.id),
-      ...manifest.imagingGuardrails.map(guardrail => guardrail.id), ...expectedLabIds];
+      ...manifest.imagingGuardrails.map(guardrail => guardrail.id),
+      ...manifest.sourceFidelityGuardrails.map(guardrail => guardrail.id), ...expectedLabIds];
     expect(new Set(allIds).size).toBe(allIds.length);
   });
 
@@ -174,6 +185,15 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);
     const document = readFileSync(resolve(root, manifest.document), "utf8");
     for (const guardrail of manifest.questionGuardrails) expect(document).toContain(`| ${guardrail.id} |`);
+  });
+
+  test("keeps the complete Narva source-fidelity guardrail catalog unique and explicit", () => {
+    const expectedIds = Array.from({ length: 12 }, (_, index) => `SRC-G${String(index + 1).padStart(2, "0")}`);
+    expect(manifest.sourceFidelityGuardrails.map(guardrail => guardrail.id)).toEqual(expectedIds);
+    expect(manifest.sourceFidelityGuardrails.every(guardrail => guardrail.name.length > 0 &&
+      guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);
+    const document = readFileSync(resolve(root, manifest.document), "utf8");
+    for (const guardrail of manifest.sourceFidelityGuardrails) expect(document).toContain(`| ${guardrail.id} |`);
   });
 
   test("keeps the complete durable patient-completion guardrail catalog unique and explicit", () => {

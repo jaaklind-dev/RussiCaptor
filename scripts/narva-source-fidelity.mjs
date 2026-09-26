@@ -1,0 +1,29 @@
+import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const require = createRequire(import.meta.url);
+const { summarizeFidelity, sha256File } = require("./lib/narva-source-fidelity-core.cjs");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const manifest = JSON.parse(readFileSync(resolve(root, "test/narva-source-fidelity.manifest.json"), "utf8"));
+for (const source of [manifest.sources.originalWorkbook, manifest.sources.canonicalWorkbook]) {
+  if (sha256File(resolve(root, source.path)) !== source.fileSha256) {
+    console.error(`Narva source artifact drift: ${source.path}`);
+    process.exit(1);
+  }
+}
+const verification = readFileSync(resolve(root, manifest.sources.canonicalWorkbook.verificationPath), "utf8");
+if (!verification.includes(manifest.sources.canonicalWorkbook.semanticSha256)) {
+  console.error("Narva canonical semantic checksum is absent from verification output.");
+  process.exit(1);
+}
+const jest = spawnSync(process.execPath, [resolve(root, "node_modules/jest/bin/jest.js"), "--runInBand",
+  "--runTestsByPath", "src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"],
+{ cwd: root, stdio: "inherit" });
+if (jest.status !== 0) process.exit(jest.status ?? 1);
+const summary = summarizeFidelity(manifest.items.map(item => ({ ...item, drift: null })));
+console.log(`Narva source fidelity: ${summary.total} mapped items`);
+for (const [classification, count] of Object.entries(summary.counts)) console.log(`${classification}: ${count}`);
+for (const item of summary.nonMatch) console.log(`${item.classification} ${item.id}: ${item.rationale}`);

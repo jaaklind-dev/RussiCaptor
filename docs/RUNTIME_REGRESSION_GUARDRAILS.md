@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G16/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/Q-G01–Q-G10/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G16/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G12/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Transport lifecycle regression guardrails
 
@@ -158,6 +158,23 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | Q-G08 | Interaction-state restore | Question visibility state survives shared-workflow restoration. |
 | Q-G09 | Package isolation | Unrelated packages retain their established question behavior. |
 | Q-G10 | Source wording fidelity | Prompt, answer, category, order and initial visibility match the workbook exactly. |
+
+## Narva source-fidelity guardrails
+
+| ID | Invariant | Required behavior |
+| --- | --- | --- |
+| SRC-G01 | Canonical workbook hash | Both workbook byte hashes and the approved semantic checksum remain exact. |
+| SRC-G02 | Stable patient mapping | P01/P02 retain their neutral production patient mappings. |
+| SRC-G03 | P02 oxygen fidelity | Oxygen remains source-mapped to P02 only. |
+| SRC-G04 | Imaging fidelity | P02 CXR identity, title, report, and delay remain exact. |
+| SRC-G05 | Question fidelity | Six questions retain exact patient scope and identity. |
+| SRC-G06 | Pelvic binder mapping | P01 stabilization remains the canonical binder action. |
+| SRC-G07 | Pleural drain mapping | P02 decompression remains the canonical chest-drain action. |
+| SRC-G08 | Known bleeding conflict | 400 ml/h source versus 200 ml/h production stays `SOURCE_CONFLICT`. |
+| SRC-G09 | Unresolved items stay unresolved | Ambiguity, missing content, and conflicts cannot silently become `MATCH`. |
+| SRC-G10 | No demo substitution | Demo/global content cannot satisfy a Narva mapping. |
+| SRC-G11 | Historical versions immutable | Narva 1.0.1 and 1.0.2 remain preserved beside 1.0.3. |
+| SRC-G12 | Explicit drift report | Drift fails deterministically without exposing personal identifiers. |
 
 ## Imaging regression guardrails
 
