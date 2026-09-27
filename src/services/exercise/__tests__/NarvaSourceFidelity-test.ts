@@ -6,6 +6,7 @@ import { NARVA_CHEST_BLEEDING_RATE_ML_MIN, NARVA_CHEST_FIXTURE, NARVA_PELVIC_FIX
   NARVA_TRAUMA_MTP_CONFIGURATION, NARVA_TRAUMA_OUTDOOR_PATIENT_DATASET } from "../NarvaPatientDatasets";
 import { NARVA_TRAUMA_P02_IMAGING_SOURCE } from "../NarvaTraumaImagingDefinitions";
 import { NARVA_TRAUMA_QUESTION_CONFIGURATION } from "../NarvaTraumaQuestionDefinitions";
+import { NARVA_LAB_ANALYTES } from "../../../config/NarvaLaboratoryCatalog";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const core = require("../../../../scripts/lib/narva-source-fidelity-core.cjs") as {
@@ -69,6 +70,20 @@ Object.assign(actual, {
   },
   "mtp.products": { RBC: mtpInventory.RBC.mode, PLASMA: mtpInventory.PLASMA.mode,
     PLATELETS: mtpInventory.PLATELETS },
+  "labs.ab-hb-fr": (() => {
+    const item = NARVA_LAB_ANALYTES.find(analyte => analyte.id === "LAB_ASTRUP_HB_FR")!;
+    return { sourceAnalysisId: item.sourceAnalysisId, sourceCode: item.sourceCode,
+      resultGroup: item.resultGroup, behavior: item.behavior, unit: item.unit ?? null,
+      referenceRange: item.referenceRange ?? null, childMapping: "NONE" };
+  })(),
+  "labs.antibody-screen-code": (() => {
+    const item = NARVA_LAB_ANALYTES.find(analyte => analyte.id === "LAB_ANTIBODY_SCREEN")!;
+    return { sourceAnalysisId: item.sourceAnalysisId, sourceCode: item.sourceCode,
+      resultGroup: item.resultGroup,
+      catalogEntries: NARVA_LAB_ANALYTES.filter(analyte => analyte.id === "LAB_ANTIBODY_SCREEN").length,
+      splitComponents: NARVA_LAB_ANALYTES.some(analyte => /^LAB_ANTIBODY_SCREEN_[I]{1,3}$/.test(analyte.id)),
+      runtimeSemantics: "UNCHANGED_IMPLEMENTATION_BEHAVIOR" };
+  })(),
   "imaging.p02-cxr": { patient: NARVA_TRAUMA_P02_IMAGING_SOURCE.patientId,
     studyId: NARVA_TRAUMA_P02_IMAGING_SOURCE.studyId, orderId: NARVA_TRAUMA_P02_IMAGING_SOURCE.orderId,
     modality: NARVA_TRAUMA_P02_IMAGING_SOURCE.modality, title: NARVA_TRAUMA_P02_IMAGING_SOURCE.title,
@@ -200,6 +215,26 @@ describe("Narva source-fidelity guardrails SRC-G01..SRC-G30", () => {
     expect(result.classification).not.toBe("SUPERSEDED_SOURCE_VALUE");
     expect(manifest.items.filter(item => ["SOURCE_CONFLICT", "SOURCE_AMBIGUOUS", "SOURCE_DEFINED_MISSING"]
       .includes(item.classification)).every(item => item.rationale.length > 0 && Boolean(item.resolutionGuard))).toBe(true);
+  });
+
+  test("SRC-G09 preserves verified laboratory codes while residual result semantics remain unresolved", () => {
+    const hbFractions = manifest.items.find(item => item.id === "labs.ab-hb-fr")!;
+    const antibodyScreen = manifest.items.find(item => item.id === "labs.antibody-screen-code")!;
+    expect(hbFractions).toMatchObject({ classification: "SOURCE_AMBIGUOUS", productionValue: {
+      sourceAnalysisId: "LAB_035", sourceCode: "aB-Hb-Fr", behavior: "SOURCE_AMBIGUOUS",
+      unit: null, referenceRange: null, childMapping: "NONE" } });
+    expect(antibodyScreen).toMatchObject({ classification: "SOURCE_AMBIGUOUS", productionValue: {
+      sourceAnalysisId: "LAB_034", sourceCode: "B1-RBC Ab screen I, II, III",
+      catalogEntries: 1, splitComponents: false, runtimeSemantics: "UNCHANGED_IMPLEMENTATION_BEHAVIOR" } });
+    expect(core.evaluateFidelity(manifest, actual).filter(item => item.id.startsWith("labs.")))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "labs.ab-hb-fr", drift: null }),
+        expect.objectContaining({ id: "labs.antibody-screen-code", drift: null }),
+      ]));
+    expect(NARVA_LAB_ANALYTES.find(item => item.id === "LAB_AB0")?.sourceCode)
+      .toBe("B1-AB0-RhD conf panel");
+    expect(NARVA_LAB_ANALYTES.find(item => item.id === "LAB_RHD")?.sourceCode)
+      .toBe("B1-AB0-RhD conf panel");
   });
 
   test("SRC-G11 preserves historical packages while current source mapping remains versioned", () => {

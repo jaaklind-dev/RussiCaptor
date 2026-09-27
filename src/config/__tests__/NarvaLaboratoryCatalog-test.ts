@@ -34,4 +34,25 @@ describe("Narva laboratory catalog", () => {
       .toMatchObject({ behavior: "SOURCE_AMBIGUOUS", implementationClass: "SOURCE_AMBIGUOUS" });
     expect(JSON.stringify(NARVA_LAB_ANALYTES)).not.toMatch(/MTP|fourth qualifying|recommendation/i);
   });
+
+  test("LAB-G30 preserves verified source codes without resolving unsupported result semantics", () => {
+    const hbFractions = NARVA_LAB_ANALYTES.find(item => item.id === "LAB_ASTRUP_HB_FR")!;
+    expect(hbFractions).toMatchObject({ sourceAnalysisId: "LAB_035", sourceCode: "aB-Hb-Fr",
+      resultGroup: "ASTRUP", behavior: "SOURCE_AMBIGUOUS", implementationClass: "SOURCE_AMBIGUOUS" });
+    expect(hbFractions).not.toHaveProperty("unit");
+    expect(hbFractions).not.toHaveProperty("referenceRange");
+    expect(hbFractions).not.toHaveProperty("children");
+    expect(hbFractions.sourceMetadata).toMatch(/reportable result shape.*remain unresolved/i);
+
+    const antibodyScreen = NARVA_LAB_ANALYTES.find(item => item.id === "LAB_ANTIBODY_SCREEN")!;
+    expect(antibodyScreen).toMatchObject({ sourceAnalysisId: "LAB_034",
+      sourceCode: "B1-RBC Ab screen I, II, III", resultGroup: "AB0" });
+    expect(NARVA_LAB_ANALYTES.filter(item => item.id === "LAB_ANTIBODY_SCREEN")).toHaveLength(1);
+    expect(NARVA_LAB_ANALYTES.filter(item => /^LAB_ANTIBODY_SCREEN_[I]{1,3}$/.test(item.id))).toEqual([]);
+    expect(NARVA_LAB_ANALYTES.find(item => item.id === "LAB_AB0")?.sourceCode)
+      .toBe("B1-AB0-RhD conf panel");
+    expect(NARVA_LAB_ANALYTES.find(item => item.id === "LAB_RHD")?.sourceCode)
+      .toBe("B1-AB0-RhD conf panel");
+    expect(antibodyScreen.sourceMetadata).toMatch(/implementation behavior rather than source-backed/i);
+  });
 });

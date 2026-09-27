@@ -117,7 +117,9 @@ export const NARVA_LAB_ANALYTES = deepFreeze([
     { sourceCode: "aB-Gluc", unit: "mmol/L", referenceRange: "3.9–5.8" }),
   analyte("LAB_ASTRUP_HB_FR", "Astrup Hb fractions", "aB-Hb-Fr", "LAB_035", "ASTRUP",
     "SOURCE_AMBIGUOUS", "SOURCE_AMBIGUOUS", {
-      sourceMetadata: "IVKH aB-Hb-Fr aggregate; exact component mapping remains source-ambiguous" }),
+      sourceCode: "aB-Hb-Fr",
+      sourceMetadata: "IVKH source contains the aB-Hb-Fr token; its reportable result shape and authoritative " +
+        "relationship to individual Hb-fraction parameters remain unresolved." }),
 
   baseline("LAB_TROPONIN_T", "Troponin T", "Troponiin T", "LAB_012", "CLINICAL_CHEMISTRY",
     { sourceCode: "P4-cTnT-hs", unit: "ng/L", referenceRange: "≤14" }),
@@ -155,8 +157,10 @@ export const NARVA_LAB_ANALYTES = deepFreeze([
       sourceMetadata: "Patient identity; IVKH source provides no reference range." }),
   analyte("LAB_ANTIBODY_SCREEN", "Antibody screen",
     "Erütrotsütaarsete antikehade sõeluuring I, II, III", "LAB_034", "AB0", "SCENARIO_STATIC",
-    "BLOOD_BANK_IDENTITY", { unit: "-",
-      sourceMetadata: "Exact source parameter code and reference entry remain ambiguous; qualitative identity-stable baseline only." }),
+    "BLOOD_BANK_IDENTITY", { sourceCode: "B1-RBC Ab screen I, II, III", unit: "-",
+      sourceMetadata: "IVKH source identifies one combined antibody-screen operation distinct from the " +
+        "B1-AB0-RhD conf panel; result vocabulary, default value and patient-stable identity semantics remain " +
+        "implementation behavior rather than source-backed by these artifacts." }),
 ]);
 
 const packages: Record<NarvaLabPackageId, readonly string[]> = {

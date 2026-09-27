@@ -135,9 +135,14 @@ describe("Narva laboratory static/scenario v1", () => {
       .toMatchObject({ sourceCode: "P4-Crea", unit: "µmol/L", referenceRange: "male 62–106; female 44–80" });
     expect(analyte("CLINICAL_CHEMISTRY", "LAB_TROPONIN_T"))
       .toMatchObject({ sourceCode: "P4-cTnT-hs", unit: "ng/L", referenceRange: "≤14" });
-    expect(NARVA_LAB_ANALYTES.find(item => item.id === "LAB_ANTIBODY_SCREEN")?.sourceCode).toBeUndefined();
+    expect(NARVA_LAB_ANALYTES.find(item => item.id === "LAB_ANTIBODY_SCREEN")?.sourceCode)
+      .toBe("B1-RBC Ab screen I, II, III");
+    expect(analyte("AB0", "LAB_ANTIBODY_SCREEN"))
+      .toMatchObject({ value: "NEGATIVE", sourceCode: "B1-RBC Ab screen I, II, III",
+        valueSource: "BLOOD_BANK_IDENTITY" });
     expect(NARVA_LAB_ANALYTES.find(item => item.id === "LAB_ASTRUP_HB_FR"))
-      .toMatchObject({ implementationClass: "SOURCE_AMBIGUOUS" });
+      .toMatchObject({ sourceCode: "aB-Hb-Fr", implementationClass: "SOURCE_AMBIGUOUS" });
+    expect(generate("ASTRUP").payload).toMatchObject({ pendingAnalyteIds: ["LAB_ASTRUP_HB_FR"] });
   });
 
   test("B31-A15 keeps static/scenario values anchored to the immutable sample snapshot", () => {

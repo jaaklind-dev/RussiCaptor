@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G19/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Transport lifecycle regression guardrails
 
@@ -179,7 +179,7 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | SRC-G06 | Pelvic binder mapping | P01 stabilization remains the canonical binder action. |
 | SRC-G07 | Pleural drain mapping | P02 decompression remains the canonical chest-drain action. |
 | SRC-G08 | P02 bleeding authority chain | Historical workbook 400 ml/h remains explicitly superseded by the current 200 ml/h user decision; production follows `currentAuthorityId`. |
-| SRC-G09 | Unresolved items stay unresolved | Ambiguity, missing content, and conflicts cannot silently become `MATCH`. |
+| SRC-G09 | Unresolved items stay unresolved | Verified partial metadata cannot silently promote unresolved reportability, component mapping, or result semantics to `MATCH`. |
 | SRC-G10 | No demo substitution | Demo/global content cannot satisfy a Narva mapping. |
 | SRC-G11 | Historical versions immutable | Narva 1.0.1 and 1.0.2 remain preserved beside 1.0.3. |
 | SRC-G12 | Explicit drift report | Drift fails deterministically without exposing personal identifiers. |
@@ -289,7 +289,7 @@ The durable laboratory lifecycle, the versioned Narva trauma/Astrup physiology-v
 | LAB-G27 | hCG applicability | hCG is reported only when an authoritative patient applicability fact exists; missing demographic evidence is represented as not applicable, never an invented positive. |
 | LAB-G28 | Narva exclusions | SARS-CoV-2, influenza, urine analyses, and U-Narco remain absent from the Narva POLÜTRAUMA result. |
 | LAB-G29 | Complete CBC coverage | The hematology group contains all CBC/5-diff/NRBC components derived from the authoritative IVKH reference export while Hb, Hct, and platelets remain physiology-driven. |
-| LAB-G30 | Source unit/reference fidelity | Source codes, units, references, conditionality, and explicit ambiguities are preserved exactly where authoritative source metadata exists; gaps are not invented. |
+| LAB-G30 | Source unit/reference fidelity | Verified source codes, including `aB-Hb-Fr` and `B1-RBC Ab screen I, II, III`, remain exact while absent units, references, component relationships, and result semantics are not invented. |
 | LAB-G31 | Static/scenario sample immutability | Static, demographic, blood-bank, and scenario-derived results use only the immutable collection snapshot and cannot change after later treatment or scenario progression. |
 | LAB-G32 | Static restart/takeover determinism | Pending and released B31 results survive restart and produce identical payloads through writer takeover without regeneration drift. |
 | LAB-G33 | Reader restriction for B31 results | Readers may display persisted B31 payloads but cannot generate, revise, or release them locally. |
