@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G18/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G19/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Transport lifecycle regression guardrails
 
@@ -189,6 +189,7 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | SRC-G16 | No unauthorized hard priority | No priority, queue, precedence, or P01-first rejection exists without explicit authority. |
 | SRC-G17 | Learner choice with consequence | Either patient may choose first; one exclusive vehicle blocks the concurrent second transport. |
 | SRC-G18 | Transport semantics unchanged | Fidelity metadata introduces no assessment-specific transport branch. |
+| SRC-G19 | P01 starting-location authority | Outdoor start and `P01-MOVE-ED` remain current source authority until explicitly superseded or durably implemented. |
 
 ## Imaging regression guardrails
 

@@ -24,7 +24,8 @@ type Manifest = Readonly<{ schemaVersion: number; classifications: readonly stri
   sources: Readonly<{ originalWorkbook: Readonly<{ path: string; fileSha256: string }>;
     canonicalWorkbook: Readonly<{ path: string; fileSha256: string; semanticSha256: string;
       verificationPath: string }> }> }>;
-type Result = Item & Readonly<{ drift: string | null }>;
+type Result = Item & Readonly<{ expectedProductionValue: unknown; actualProductionValue: unknown;
+  drift: string | null }>;
 
 const root = resolve(__dirname, "../../../..");
 const manifest = JSON.parse(readFileSync(resolve(root, "test/narva-source-fidelity.manifest.json"), "utf8")) as Manifest;
@@ -43,8 +44,8 @@ Object.assign(actual, {
   "patients.mapping": ["PT-PELVIC-001", "PT-CHEST-001"],
   "p01.baseline-vitals": pelvicState.baselineVitals,
   "p02.baseline-vitals": chestState.baselineVitals,
-  "p01.start-location": NARVA_TRAUMA_OXYGEN_PATIENT_DATASET.patients
-    .find(item => item.patient.id === "PT-PELVIC-001")!.patient.location,
+  "p01.start-location": { initialLocation: NARVA_TRAUMA_OXYGEN_PATIENT_DATASET.patients
+    .find(item => item.patient.id === "PT-PELVIC-001")!.patient.location, moveAction: "ABSENT" },
   "p02.start-location": NARVA_TRAUMA_OXYGEN_PATIENT_DATASET.patients
     .find(item => item.patient.id === "PT-CHEST-001")!.patient.location,
   "p01.pelvic-bleeding": { baselineMlMin: pelvicState.hemorrhageSources[0]
@@ -91,7 +92,7 @@ Object.assign(actual, {
   "imaging.asset": null,
 });
 
-describe("Narva source-fidelity guardrails SRC-G01..SRC-G18", () => {
+describe("Narva source-fidelity guardrails SRC-G01..SRC-G19", () => {
   test("SRC-G01 verifies raw artifacts and the approved canonical semantic checksum", () => {
     expect(core.sha256File(resolve(root, manifest.sources.originalWorkbook.path)))
       .toBe(manifest.sources.originalWorkbook.fileSha256);
@@ -131,9 +132,28 @@ describe("Narva source-fidelity guardrails SRC-G01..SRC-G18", () => {
       assessmentQuestions: ["P02-Q4", "P01-Q2"], intent: "LEARNER_CONTROLLED_PRIORITIZATION",
       operationalConsequence: "SINGLE_EXCLUSIVE_VEHICLE", hardTransportConstraint: false,
     } });
-    expect(manifest.items.filter(item => item.classification === "SOURCE_DEFINED_MISSING")).toEqual([]);
+    expect(manifest.items.filter(item => item.classification === "SOURCE_DEFINED_MISSING")
+      .map(item => item.id)).toEqual(["p01.start-location"]);
     expect(core.evaluateFidelity(manifest, actual).find(item => item.id === "transport.p02-priority")?.drift)
       .toBeNull();
+  });
+
+  test("SRC-G19 keeps the workbook outdoor start authoritative without inventing supersession", () => {
+    const location = manifest.items.find(item => item.id === "p01.start-location")!;
+    expect(location).toMatchObject({ classification: "SOURCE_DEFINED_MISSING",
+      currentAuthorityId: "p01-location-original-workbook-outdoor",
+      sourceValue: { initialLocation: "OUTDOOR", moveAction: "P01-MOVE-ED" },
+      productionValue: { initialLocation: "NARVA_ED", moveAction: "ABSENT" } });
+    expect(location.authorityChain).toEqual([expect.objectContaining({
+      authorityId: "p01-location-original-workbook-outdoor", sourceType: "ORIGINAL_SOURCE",
+      semanticValue: { initialLocation: "OUTDOOR", moveAction: "P01-MOVE-ED" }, status: "CURRENT",
+    })]);
+    expect(core.resolveCurrentAuthority(location)).toMatchObject({
+      value: { initialLocation: "OUTDOOR", moveAction: "P01-MOVE-ED" }, errors: [] });
+    const result = core.evaluateFidelity(manifest, actual).find(item => item.id === location.id)!;
+    expect(result).toMatchObject({ expectedProductionValue: {
+      initialLocation: "OUTDOOR", moveAction: "P01-MOVE-ED" },
+    actualProductionValue: { initialLocation: "NARVA_ED", moveAction: "ABSENT" }, drift: null });
   });
 
   test("SRC-G08 resolves P02 through an explicit historical-to-current authority chain", () => {

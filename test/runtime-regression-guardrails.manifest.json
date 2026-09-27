@@ -256,7 +256,8 @@
     { "id": "SRC-G15", "name": "p02-priority-assessment-content", "description": "P02-Q4 and P01-Q2 satisfy the authored first-transport teaching intent as exact package-owned assessment content.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts", "src/services/runtime/__tests__/NarvaTransportPriorityFidelity-test.ts"] },
     { "id": "SRC-G16", "name": "no-unauthorized-hard-priority", "description": "No patient priority, queue, precedence, or P01-first rejection may appear without a new explicit authority decision.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportPriorityFidelity-test.ts"] },
     { "id": "SRC-G17", "name": "learner-choice-with-resource-consequence", "description": "Either patient may claim an available vehicle first, and exclusivity blocks the concurrent second transport.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportPriorityFidelity-test.ts"] },
-    { "id": "SRC-G18", "name": "transport-semantics-unchanged", "description": "Priority fidelity remains metadata and tests only; durable transport behavior has no assessment-specific branch.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportPriorityFidelity-test.ts"] }
+    { "id": "SRC-G18", "name": "transport-semantics-unchanged", "description": "Priority fidelity remains metadata and tests only; durable transport behavior has no assessment-specific branch.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportPriorityFidelity-test.ts"] },
+    { "id": "SRC-G19", "name": "p01-start-location-authority", "description": "P01 outdoor start and P01-MOVE-ED remain the current source authority until explicitly superseded or durably implemented.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] }
   ],
   "groups": {
     "source-fidelity": [

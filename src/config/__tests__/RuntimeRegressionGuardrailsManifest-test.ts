@@ -188,7 +188,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
   });
 
   test("keeps the complete Narva source-fidelity guardrail catalog unique and explicit", () => {
-    const expectedIds = Array.from({ length: 18 }, (_, index) => `SRC-G${String(index + 1).padStart(2, "0")}`);
+    const expectedIds = Array.from({ length: 19 }, (_, index) => `SRC-G${String(index + 1).padStart(2, "0")}`);
     expect(manifest.sourceFidelityGuardrails.map(guardrail => guardrail.id)).toEqual(expectedIds);
     expect(manifest.sourceFidelityGuardrails.every(guardrail => guardrail.name.length > 0 &&
       guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);

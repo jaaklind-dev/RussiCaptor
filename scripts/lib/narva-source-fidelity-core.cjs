@@ -40,8 +40,13 @@ const resolveCurrentAuthority = item => {
 const evaluateFidelity = (manifest, actualById) => manifest.items.map(item => {
   const actual = actualById[item.id];
   const authority = resolveCurrentAuthority(item);
+  // A source-defined missing item deliberately records both the current source
+  // authority and the still-incomplete production state. Guard the latter from
+  // silent drift without pretending that it satisfies the former.
+  const comparisonValue = item.classification === "SOURCE_DEFINED_MISSING"
+    ? item.productionValue : authority.value;
   const drift = authority.errors.length > 0 ? "AUTHORITY_CHAIN_INVALID"
-    : actual === undefined ? "MISSING_ACTUAL" : equal(actual, authority.value) ? null : "PRODUCTION_DRIFT";
+    : actual === undefined ? "MISSING_ACTUAL" : equal(actual, comparisonValue) ? null : "PRODUCTION_DRIFT";
   return Object.freeze({ ...item, expectedProductionValue: authority.value,
     resolvedCurrentAuthority: authority.authority, authorityErrors: authority.errors,
     actualProductionValue: actual, drift });
