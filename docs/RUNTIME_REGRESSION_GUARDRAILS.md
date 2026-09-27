@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G14/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G18/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Transport lifecycle regression guardrails
 
@@ -185,6 +185,10 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | SRC-G12 | Explicit drift report | Drift fails deterministically without exposing personal identifiers. |
 | SRC-G13 | P02 loading equivalence | `P02-LOAD-REANIMOBILE` maps to the existing durable transport lifecycle. |
 | SRC-G14 | P02 monitoring equivalence | `P02-TRANSPORT-MONITOR` maps to the single 1800-second outbound phase. |
+| SRC-G15 | P02 priority assessment content | Exact P02-Q4 and P01-Q2 content satisfies the first-transport teaching intent. |
+| SRC-G16 | No unauthorized hard priority | No priority, queue, precedence, or P01-first rejection exists without explicit authority. |
+| SRC-G17 | Learner choice with consequence | Either patient may choose first; one exclusive vehicle blocks the concurrent second transport. |
+| SRC-G18 | Transport semantics unchanged | Fidelity metadata introduces no assessment-specific transport branch. |
 
 ## Imaging regression guardrails
 

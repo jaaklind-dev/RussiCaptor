@@ -81,11 +81,17 @@ Object.assign(actual, {
     transportState: "IN_TRANSIT", resourceState: "OUTBOUND", patientLocation: transport.vehicleLocationId,
     durationSec: transport.destinations.find(item => item.destinationId === "IVKH")!.travelDurationSec,
     timerAuthority: "TRANSPORT_PHASE_DEADLINE", timerCount: 1 },
+  "transport.p02-priority": { assessmentQuestions: [
+    questions.find(item => item.questionId === "P02-Q4")!.questionId,
+    questions.find(item => item.questionId === "P01-Q2")!.questionId,
+  ], intent: "LEARNER_CONTROLLED_PRIORITIZATION",
+    operationalConsequence: transport.resources.length === 1 ? "SINGLE_EXCLUSIVE_VEHICLE" : "UNSUPPORTED",
+    hardTransportConstraint: false },
   "questions.demo-isolation": questions.length,
   "imaging.asset": null,
 });
 
-describe("Narva source-fidelity guardrails SRC-G01..SRC-G14", () => {
+describe("Narva source-fidelity guardrails SRC-G01..SRC-G18", () => {
   test("SRC-G01 verifies raw artifacts and the approved canonical semantic checksum", () => {
     expect(core.sha256File(resolve(root, manifest.sources.originalWorkbook.path)))
       .toBe(manifest.sources.originalWorkbook.fileSha256);
@@ -117,6 +123,17 @@ describe("Narva source-fidelity guardrails SRC-G01..SRC-G14", () => {
         patientLocation: "REANIMOBILE", durationSec: 1800,
         timerAuthority: "TRANSPORT_PHASE_DEADLINE", timerCount: 1 } });
     expect(core.summarizeFidelity(core.evaluateFidelity(manifest, actual)).drift).toEqual([]);
+  });
+
+  test("SRC-G15 classifies P02-first as implemented assessment content rather than missing scheduling", () => {
+    const priority = manifest.items.find(item => item.id === "transport.p02-priority");
+    expect(priority).toMatchObject({ classification: "MATCH", productionValue: {
+      assessmentQuestions: ["P02-Q4", "P01-Q2"], intent: "LEARNER_CONTROLLED_PRIORITIZATION",
+      operationalConsequence: "SINGLE_EXCLUSIVE_VEHICLE", hardTransportConstraint: false,
+    } });
+    expect(manifest.items.filter(item => item.classification === "SOURCE_DEFINED_MISSING")).toEqual([]);
+    expect(core.evaluateFidelity(manifest, actual).find(item => item.id === "transport.p02-priority")?.drift)
+      .toBeNull();
   });
 
   test("SRC-G08 resolves P02 through an explicit historical-to-current authority chain", () => {
