@@ -6,7 +6,7 @@ import { canonicalRuntimePersistenceService, moduleCompositionHash } from
   "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
 import { packagePatientDatasetRegistry } from "../CanonicalPatientDatasets";
 import { NARVA_TRAUMA_EXERCISE_PACKAGE, NARVA_TRAUMA_EXERCISE_PACKAGE_V101,
-  NARVA_TRAUMA_TREATMENT_PALETTE } from "../NarvaExercisePackages";
+  NARVA_TRAUMA_EXERCISE_PACKAGE_V104, NARVA_TRAUMA_TREATMENT_PALETTE } from "../NarvaExercisePackages";
 import { NARVA_CHEST_BLEEDING_RATE_ML_MIN, NARVA_CHEST_INJURY_TIME_SEC,
   NARVA_PELVIC_INJURY_TIME_SEC, NARVA_TRAUMA_MTP_CONFIGURATION } from "../NarvaPatientDatasets";
 import { createPatientMaterializationPlan } from "../PackagePatientMaterializationService";
@@ -31,7 +31,11 @@ describe("WP-NARVA-01 trauma package", () => {
     expect(exercisePackageRegistry.require("russicaptor.narva-trauma", "1.0.4"))
       .toMatchObject({ packageId: "russicaptor.narva-trauma", packageVersion: "1.0.4",
         patientDatasetId: "patients.narva-trauma.v3" });
+    expect(exercisePackageRegistry.require("russicaptor.narva-trauma", "1.0.5"))
+      .toMatchObject({ packageId: "russicaptor.narva-trauma", packageVersion: "1.0.5",
+        patientDatasetId: "patients.narva-trauma.v3" });
     expect(NARVA_TRAUMA_EXERCISE_PACKAGE_V101.packageHash).not.toBe(NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash);
+    expect(NARVA_TRAUMA_EXERCISE_PACKAGE_V104.packageHash).not.toBe(NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash);
     expect(NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash).toMatch(/^[a-f0-9]{64}$/u);
   });
 

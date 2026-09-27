@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { NARVA_TRAUMA_EXERCISE_PACKAGE, NARVA_TRAUMA_EXERCISE_PACKAGE_V101,
-  NARVA_TRAUMA_EXERCISE_PACKAGE_V102, NARVA_TRAUMA_EXERCISE_PACKAGE_V103 } from "../NarvaExercisePackages";
+  NARVA_TRAUMA_EXERCISE_PACKAGE_V102, NARVA_TRAUMA_EXERCISE_PACKAGE_V103,
+  NARVA_TRAUMA_EXERCISE_PACKAGE_V104 } from "../NarvaExercisePackages";
 import { NARVA_CHEST_BLEEDING_RATE_ML_MIN, NARVA_CHEST_FIXTURE, NARVA_PELVIC_FIXTURE,
   NARVA_TRAUMA_MTP_CONFIGURATION, NARVA_TRAUMA_OUTDOOR_PATIENT_DATASET } from "../NarvaPatientDatasets";
 import { NARVA_TRAUMA_P02_IMAGING_SOURCE } from "../NarvaTraumaImagingDefinitions";
@@ -90,7 +91,13 @@ Object.assign(actual, {
     modality: NARVA_TRAUMA_P02_IMAGING_SOURCE.modality, title: NARVA_TRAUMA_P02_IMAGING_SOURCE.title,
     report: NARVA_TRAUMA_P02_IMAGING_SOURCE.report, delayMinutes: NARVA_TRAUMA_P02_IMAGING_SOURCE.delayMinutes },
   "questions.p01": questions.filter(item => item.sourcePatientId === "P01").map(item => item.questionId),
-  "questions.p02": questions.filter(item => item.sourcePatientId === "P02").map(item => item.questionId),
+  "questions.p02": (() => {
+    const p02Questions = questions.filter(item => item.sourcePatientId === "P02");
+    const p02Q2 = p02Questions.find(item => item.questionId === "P02-Q2")!;
+    return { questionIds: p02Questions.map(item => item.questionId), p02Q2Prompt: p02Q2.prompt,
+      p02Q2AnswerMlPerHour: Number(p02Q2.answer.match(/\d+/u)?.[0]),
+      answerAuthorityId: "p02-bleeding-user-decision-200" };
+  })(),
   "transport.vehicle": transport.resources.length,
   "transport.ivkh": { seconds: transport.destinations.find(item => item.destinationId === "IVKH")!.travelDurationSec },
   "transport.perh": { seconds: transport.destinations.find(item => item.destinationId === "PERH")!.travelDurationSec },
@@ -206,6 +213,25 @@ describe("Narva source-fidelity guardrails SRC-G01..SRC-G30", () => {
     expect(core.resolveCurrentAuthority(changedHistory)).toMatchObject({ value: { mlPerHour: 200 }, errors: [] });
   });
 
+  test("SRC-G08 binds P02-Q2 to current bleeding authority and preserves workbook provenance", () => {
+    const question = manifest.items.find(item => item.id === "questions.p02")!;
+    expect(question).toMatchObject({ classification: "MATCH",
+      currentAuthorityId: "p02-bleeding-user-decision-200",
+      productionValue: { p02Q2Prompt: "Kui suur on jätkuv dreeniverejooks?",
+        p02Q2AnswerMlPerHour: 200, answerAuthorityId: "p02-bleeding-user-decision-200" } });
+    expect(question.authorityChain).toEqual([
+      expect.objectContaining({ authorityId: "p02-bleeding-original-workbook-400",
+        semanticValue: { answerMlPerHour: 400, approximate: true }, status: "SUPERSEDED" }),
+      expect.objectContaining({ authorityId: "p02-bleeding-user-decision-200",
+        semanticValue: expect.objectContaining({ p02Q2AnswerMlPerHour: 200 }), status: "CURRENT",
+        supersedesAuthorityIds: ["p02-bleeding-original-workbook-400"] }),
+    ]);
+    expect(core.resolveCurrentAuthority(question)).toMatchObject({
+      value: expect.objectContaining({ p02Q2AnswerMlPerHour: 200 }),
+      authority: { authorityId: "p02-bleeding-user-decision-200" }, errors: [] });
+    expect(core.evaluateFidelity(manifest, actual).find(item => item.id === question.id)?.drift).toBeNull();
+  });
+
   test("SRC-G09 keeps true conflicts and superseded values semantically distinct", () => {
     expect(manifest.classifications).toEqual(expect.arrayContaining(["SOURCE_CONFLICT", "SUPERSEDED_SOURCE_VALUE"]));
     const unresolved: Item = { id: "fixture.true-conflict", classification: "SOURCE_CONFLICT",
@@ -241,11 +267,13 @@ describe("Narva source-fidelity guardrails SRC-G01..SRC-G30", () => {
 
   test("SRC-G11 preserves historical packages while current source mapping remains versioned", () => {
     expect([NARVA_TRAUMA_EXERCISE_PACKAGE_V101, NARVA_TRAUMA_EXERCISE_PACKAGE_V102,
-      NARVA_TRAUMA_EXERCISE_PACKAGE_V103, NARVA_TRAUMA_EXERCISE_PACKAGE]
-      .map(item => item.packageVersion)).toEqual(["1.0.1", "1.0.2", "1.0.3", "1.0.4"]);
+      NARVA_TRAUMA_EXERCISE_PACKAGE_V103, NARVA_TRAUMA_EXERCISE_PACKAGE_V104,
+      NARVA_TRAUMA_EXERCISE_PACKAGE]
+      .map(item => item.packageVersion)).toEqual(["1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5"]);
     expect(new Set([NARVA_TRAUMA_EXERCISE_PACKAGE_V101, NARVA_TRAUMA_EXERCISE_PACKAGE_V102,
-      NARVA_TRAUMA_EXERCISE_PACKAGE_V103, NARVA_TRAUMA_EXERCISE_PACKAGE]
-      .map(item => item.packageHash)).size).toBe(4);
+      NARVA_TRAUMA_EXERCISE_PACKAGE_V103, NARVA_TRAUMA_EXERCISE_PACKAGE_V104,
+      NARVA_TRAUMA_EXERCISE_PACKAGE]
+      .map(item => item.packageHash)).size).toBe(5);
   });
 
   test("SRC-G12 produces deterministic privacy-safe summaries", () => {

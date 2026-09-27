@@ -181,7 +181,7 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | SRC-G08 | P02 bleeding authority chain | Historical workbook 400 ml/h remains explicitly superseded by the current 200 ml/h user decision; production follows `currentAuthorityId`. |
 | SRC-G09 | Unresolved items stay unresolved | Verified partial metadata cannot silently promote unresolved reportability, component mapping, or result semantics to `MATCH`. |
 | SRC-G10 | No demo substitution | Demo/global content cannot satisfy a Narva mapping. |
-| SRC-G11 | Historical versions immutable | Narva 1.0.1 and 1.0.2 remain preserved beside 1.0.3. |
+| SRC-G11 | Historical versions immutable | Narva 1.0.1 through 1.0.4 remain preserved beside current 1.0.5. |
 | SRC-G12 | Explicit drift report | Drift fails deterministically without exposing personal identifiers. |
 | SRC-G13 | P02 loading equivalence | `P02-LOAD-REANIMOBILE` maps to the existing durable transport lifecycle. |
 | SRC-G14 | P02 monitoring equivalence | `P02-TRANSPORT-MONITOR` maps to the single 1800-second outbound phase. |

@@ -116,7 +116,7 @@ function assertRuntimeGate(value) {
 }
 
 function assertPatientLocationTransferGate(value) {
-  return value.packageVersion === "1.0.4" && value.patientId === "PT-PELVIC-001"
+  return value.packageVersion === "1.0.5" && value.patientId === "PT-PELVIC-001"
     && value.initialLocation === "NARVA_HOSPITAL_OUTDOOR" && value.chestInitialLocation === "NARVA_ED"
     && value.actionId === "P01-MOVE-ED" && value.visibleForPelvic === true
     && value.visibleForChest === false && value.commandType === "PATIENT_LOCATION_TRANSFER"

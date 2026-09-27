@@ -5,7 +5,7 @@ const root = resolve(__dirname, "../..");
 const localFiles = ["20260918123000_large_canonical_checkpoint_publication_timeout.sql",
   ...core.DEFERRED_MIGRATIONS.map((item: { file: string }) => item.file)];
 const baseline = [{ version: "REMOTE", name: core.BASELINE_MIGRATION }];
-const transfer = { packageVersion: "1.0.4", patientId: "PT-PELVIC-001",
+const transfer = { packageVersion: "1.0.5", patientId: "PT-PELVIC-001",
   initialLocation: "NARVA_HOSPITAL_OUTDOOR", chestInitialLocation: "NARVA_ED",
   actionId: "P01-MOVE-ED", commandId: "MOVE-1", commandType: "PATIENT_LOCATION_TRANSFER",
   visibleForPelvic: true, visibleForChest: false, commandCount: 1, materializationCount: 1,

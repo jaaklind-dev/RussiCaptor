@@ -1,7 +1,7 @@
 import type { PackageQuestionConfiguration } from "@/models/exercise/PackageQuestionConfiguration";
 
-/** Exact rows from Narva_Trauma_RussiCaptor_v1.xlsx, Questions!A2:H7. */
-export const NARVA_TRAUMA_QUESTION_CONFIGURATION: PackageQuestionConfiguration = Object.freeze({
+/** Historical workbook rows retained by immutable Narva packages through 1.0.4. */
+export const NARVA_TRAUMA_QUESTION_CONFIGURATION_V104: PackageQuestionConfiguration = Object.freeze({
   schemaVersion: 1,
   definitions: Object.freeze([
     Object.freeze({ questionId: "P01-Q1", patientId: "PT-PELVIC-001", sourcePatientId: "P01",
@@ -25,4 +25,13 @@ export const NARVA_TRAUMA_QUESTION_CONFIGURATION: PackageQuestionConfiguration =
       answer: "Tal on jätkuv aktiivne verejooks ja torakaalkeskus asub 30 minuti kaugusel.",
       visibility: "hidden" as const }),
   ]),
+});
+
+/** Current questions: P02-Q2 follows the explicit 200 ml/h authority that supersedes the workbook answer. */
+export const NARVA_TRAUMA_QUESTION_CONFIGURATION: PackageQuestionConfiguration = Object.freeze({
+  schemaVersion: 1,
+  definitions: Object.freeze(NARVA_TRAUMA_QUESTION_CONFIGURATION_V104.definitions.map(question =>
+    question.questionId === "P02-Q2"
+      ? Object.freeze({ ...question, answer: "200 ml tunnis." })
+      : question)),
 });

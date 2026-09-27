@@ -11,7 +11,8 @@ import { NARVA_TRAUMA_IMAGING_CONFIGURATION } from "./NarvaTraumaImagingDefiniti
 import { NARVA_IRO_DATASET_ID, NARVA_IRO_HISTORICAL_DATASET_ID,
   NARVA_TRAUMA_DATASET_ID, NARVA_TRAUMA_OXYGEN_DATASET_ID,
   NARVA_TRAUMA_OUTDOOR_DATASET_ID } from "./NarvaPatientDatasets";
-import { NARVA_TRAUMA_QUESTION_CONFIGURATION } from "./NarvaTraumaQuestionDefinitions";
+import { NARVA_TRAUMA_QUESTION_CONFIGURATION, NARVA_TRAUMA_QUESTION_CONFIGURATION_V104 } from
+  "./NarvaTraumaQuestionDefinitions";
 
 const definition = (exerciseTypeId: string, name: string, description: string): ExerciseDefinition =>
   Object.freeze({ ...structuredClone(DEFAULT_EXERCISE_DEFINITION), exerciseTypeId, name, description,
@@ -123,7 +124,7 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE_V103 = createExercisePackage({
   availableClinicalTreatments: NARVA_TRAUMA_TREATMENT_PALETTE,
   interventionAvailability: NARVA_TRAUMA_INTERVENTION_AVAILABILITY,
   imagingConfiguration: NARVA_TRAUMA_IMAGING_CONFIGURATION,
-  questionConfiguration: NARVA_TRAUMA_QUESTION_CONFIGURATION,
+  questionConfiguration: NARVA_TRAUMA_QUESTION_CONFIGURATION_V104,
   transportConfiguration: NARVA_TRAUMA_EXERCISE_PACKAGE_V102.transportConfiguration,
   metadata: { ...NARVA_TRAUMA_EXERCISE_PACKAGE_V102.metadata,
     description: "Narva kahe P1 traumapatsiendi versioneeritud konfiguratsioonipakett koos P02 hapnikravi ja patsiendiküsimustega.",
@@ -131,7 +132,7 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE_V103 = createExercisePackage({
   },
 });
 
-export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
+export const NARVA_TRAUMA_EXERCISE_PACKAGE_V104 = createExercisePackage({
   packageId: "russicaptor.narva-trauma", packageVersion: "1.0.4", definition: traumaDefinition,
   patientDatasetId: NARVA_TRAUMA_OUTDOOR_DATASET_ID,
   enabledPatientProcesses: traumaDefinition.enabledPatientProcesses,
@@ -141,7 +142,7 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
   availableClinicalTreatments: NARVA_TRAUMA_TREATMENT_PALETTE,
   interventionAvailability: NARVA_TRAUMA_INTERVENTION_AVAILABILITY,
   imagingConfiguration: NARVA_TRAUMA_IMAGING_CONFIGURATION,
-  questionConfiguration: NARVA_TRAUMA_QUESTION_CONFIGURATION,
+  questionConfiguration: NARVA_TRAUMA_QUESTION_CONFIGURATION_V104,
   transportConfiguration: NARVA_TRAUMA_EXERCISE_PACKAGE_V103.transportConfiguration,
   internalTransferConfiguration: Object.freeze({ schemaVersion: 1 as const, definitions: Object.freeze([
     Object.freeze({ actionId: "P01-MOVE-ED", patientId: "PT-PELVIC-001",
@@ -151,6 +152,25 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
   metadata: { ...NARVA_TRAUMA_EXERCISE_PACKAGE_V103.metadata,
     description: "Narva kahe P1 traumapatsiendi versioneeritud konfiguratsioonipakett koos P01 durable sisetranspordiga.",
     tags: [...NARVA_TRAUMA_EXERCISE_PACKAGE_V103.metadata.tags, "p01-internal-transfer"],
+  },
+});
+
+export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.narva-trauma", packageVersion: "1.0.5", definition: traumaDefinition,
+  patientDatasetId: NARVA_TRAUMA_OUTDOOR_DATASET_ID,
+  enabledPatientProcesses: traumaDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: traumaDefinition.enabledAnalyticsProviders,
+  enabledMetricProviders: traumaDefinition.enabledMetricProviders,
+  requiredClinicalModules: NARVA_TRAUMA_EXERCISE_PACKAGE_V104.requiredClinicalModules,
+  availableClinicalTreatments: NARVA_TRAUMA_TREATMENT_PALETTE,
+  interventionAvailability: NARVA_TRAUMA_INTERVENTION_AVAILABILITY,
+  imagingConfiguration: NARVA_TRAUMA_IMAGING_CONFIGURATION,
+  questionConfiguration: NARVA_TRAUMA_QUESTION_CONFIGURATION,
+  transportConfiguration: NARVA_TRAUMA_EXERCISE_PACKAGE_V104.transportConfiguration,
+  internalTransferConfiguration: NARVA_TRAUMA_EXERCISE_PACKAGE_V104.internalTransferConfiguration,
+  metadata: { ...NARVA_TRAUMA_EXERCISE_PACKAGE_V104.metadata,
+    description: "Narva kahe P1 traumapatsiendi versioneeritud konfiguratsioonipakett ajakohastatud P02 verejooksuküsimusega.",
+    tags: [...NARVA_TRAUMA_EXERCISE_PACKAGE_V104.metadata.tags, "p02-bleeding-question-authority"],
   },
 });
 

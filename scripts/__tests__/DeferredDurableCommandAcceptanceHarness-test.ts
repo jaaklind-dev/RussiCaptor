@@ -62,7 +62,7 @@ describe("RELEASE-PREP-01 deferred durable command acceptance harness", () => {
     expect(core.evaluateCombinedEvidence({
       runtime: { freshExercise: true, canonicalCheckpoint: true, writerCount: 1,
         coldRestartRestored: true, runtimeUnavailable: false },
-      patientLocationTransfer: { packageVersion: "1.0.4", patientId: "PT-PELVIC-001",
+      patientLocationTransfer: { packageVersion: "1.0.5", patientId: "PT-PELVIC-001",
         initialLocation: "NARVA_HOSPITAL_OUTDOOR", chestInitialLocation: "NARVA_ED",
         actionId: "P01-MOVE-ED", commandId: "MOVE-1", commandType: "PATIENT_LOCATION_TRANSFER",
         visibleForPelvic: true, visibleForChest: false, commandCount: 1, materializationCount: 1,

@@ -3,7 +3,8 @@ import { capturePatientSharedWorkflowState, restorePatientSharedWorkflowState } 
   "@/services/sharedWorkflow/PatientSharedWorkflowState";
 import { clinicalDataProvider } from "@/providers/ProviderFactory";
 import { packagePatientDatasetRegistry } from "../CanonicalPatientDatasets";
-import { NARVA_TRAUMA_EXERCISE_PACKAGE, NARVA_TRAUMA_EXERCISE_PACKAGE_V102 } from
+import { NARVA_TRAUMA_EXERCISE_PACKAGE, NARVA_TRAUMA_EXERCISE_PACKAGE_V102,
+  NARVA_TRAUMA_EXERCISE_PACKAGE_V104 } from
   "../NarvaExercisePackages";
 import { createPatientMaterializationPlan } from "../PackagePatientMaterializationService";
 import { installPackageQuestions } from "../PackageQuestionInstallationService";
@@ -22,7 +23,7 @@ const expected = [
   { questionId: "P02-Q1", patientId: chestId, sourcePatientId: "P02", category: "Dreen", order: 1,
     prompt: "Kui suur oli esmane dreenieritus?", answer: "Ligikaudu 1450 ml verd.", visibility: "hidden" },
   { questionId: "P02-Q2", patientId: chestId, sourcePatientId: "P02", category: "Dreen", order: 2,
-    prompt: "Kui suur on jätkuv dreeniverejooks?", answer: "Ligikaudu 400 ml tunnis.", visibility: "hidden" },
+    prompt: "Kui suur on jätkuv dreeniverejooks?", answer: "200 ml tunnis.", visibility: "hidden" },
   { questionId: "P02-Q3", patientId: chestId, sourcePatientId: "P02", category: "Transport", order: 3,
     prompt: "Kus mängitakse transpordifaas läbi?",
     answer: "Seisvas reanimobiilis; auto reaalselt ei sõida.", visibility: "hidden" },
@@ -38,10 +39,22 @@ describe("Q-G01..Q-G10 package-owned Narva questions", () => {
   beforeEach(() => resetQuestions());
   afterEach(() => resetQuestions());
 
-  test("freezes exactly the six workbook rows in immutable package content", () => {
+  test("freezes the six authority-resolved questions in immutable package content", () => {
     expect(NARVA_TRAUMA_EXERCISE_PACKAGE.questionConfiguration?.definitions).toEqual(expected);
     expect(Object.isFrozen(NARVA_TRAUMA_EXERCISE_PACKAGE.questionConfiguration)).toBe(true);
     expect(NARVA_TRAUMA_EXERCISE_PACKAGE_V102.questionConfiguration).toBeUndefined();
+    expect(NARVA_TRAUMA_EXERCISE_PACKAGE_V104.questionConfiguration?.definitions
+      .find(item => item.questionId === "P02-Q2")?.answer).toBe("Ligikaudu 400 ml tunnis.");
+  });
+
+  test("changes only P02-Q2 from the immutable 1.0.4 question content", () => {
+    const historical = NARVA_TRAUMA_EXERCISE_PACKAGE_V104.questionConfiguration!.definitions;
+    const current = NARVA_TRAUMA_EXERCISE_PACKAGE.questionConfiguration!.definitions;
+    expect(current).toHaveLength(historical.length);
+    expect(current.filter((question, index) => JSON.stringify(question) !== JSON.stringify(historical[index])))
+      .toEqual([expected.find(question => question.questionId === "P02-Q2")]);
+    expect(current.find(question => question.questionId === "P02-Q4"))
+      .toEqual(historical.find(question => question.questionId === "P02-Q4"));
   });
 
   test("installs exactly two P01 questions and four P02 questions without demo or cross-patient leakage", () => {
@@ -58,7 +71,7 @@ describe("Q-G01..Q-G10 package-owned Narva questions", () => {
     const second = [...getQuestions(pelvicId), ...getQuestions(chestId)];
     expect(second).toEqual(first); expect(second).toHaveLength(6);
     expect(second.every(item => item.exerciseId === exerciseId &&
-      item.packageId === "russicaptor.narva-trauma" && item.packageVersion === "1.0.4")).toBe(true);
+      item.packageId === "russicaptor.narva-trauma" && item.packageVersion === "1.0.5")).toBe(true);
   });
 
   test("shared-workflow restore preserves reveal state and never duplicates package definitions", () => {
