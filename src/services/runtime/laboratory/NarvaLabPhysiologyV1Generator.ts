@@ -12,7 +12,8 @@ type GeneratedAnalyte = Readonly<{
   unit: string;
   sourceCode?: string;
   referenceRange?: string;
-  valueSource: "PHYSIOLOGY_V1" | "STATIC_BASELINE" | "SCENARIO_OVERRIDE" | "BLOOD_BANK_IDENTITY";
+  valueSource: "PHYSIOLOGY_V1" | "STATIC_BASELINE" | "SCENARIO_OVERRIDE" | "BLOOD_BANK_IDENTITY" |
+    "AUTHORED_SAMPLE_RESULT";
 }>;
 
 type ProductTotals = Readonly<{
@@ -189,12 +190,20 @@ function staticAnalytes(input: Parameters<LaboratoryResultGenerator>[0]): Readon
     const identity = input.sample.snapshot.patientBloodIdentity ??
       deriveNarvaLabPatientBloodIdentity(input.sample.patientId);
     const values: Readonly<Record<string, string>> = Object.freeze({ LAB_AB0: identity.ab0,
-      LAB_RHD: identity.rhd, LAB_ANTIBODY_SCREEN: identity.antibodyScreen ?? "NEGATIVE" });
-    for (const definition of NARVA_LAB_ANALYTES.filter(item => item.resultGroup === "AB0")) {
+      LAB_RHD: identity.rhd });
+    for (const definition of NARVA_LAB_ANALYTES.filter(item => item.resultGroup === "AB0" &&
+      item.id !== "LAB_ANTIBODY_SCREEN")) {
       generated.push(Object.freeze({ analyteId: definition.id, value: values[definition.id],
         unit: definition.unit ?? "", ...(definition.sourceCode ? { sourceCode: definition.sourceCode } : {}),
         valueSource: "BLOOD_BANK_IDENTITY" }));
     }
+    const antibodyScreen = input.sample.snapshot.authoredResults?.antibodyScreen;
+    const antibodyDefinition = NARVA_LAB_ANALYTES.find(item => item.id === "LAB_ANTIBODY_SCREEN");
+    if (antibodyScreen && antibodyDefinition) generated.push(Object.freeze({
+      analyteId: antibodyDefinition.id, value: antibodyScreen, unit: antibodyDefinition.unit ?? "",
+      ...(antibodyDefinition.sourceCode ? { sourceCode: antibodyDefinition.sourceCode } : {}),
+      valueSource: "AUTHORED_SAMPLE_RESULT",
+    }));
   }
   return Object.freeze({ analytes: Object.freeze(generated), notApplicableAnalyteIds });
 }

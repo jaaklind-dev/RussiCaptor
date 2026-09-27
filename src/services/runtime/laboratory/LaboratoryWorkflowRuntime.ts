@@ -6,7 +6,7 @@ import { NARVA_LAB_RESULT_TIMING_SECONDS_FROM_SAMPLE, resultGroupsForNarvaLabPac
   "@/config/NarvaLaboratoryCatalog";
 import { deepFreeze, immutableClone } from "@/utils/immutable";
 import { stableJson } from "@/utils/stableJson";
-import { deriveNarvaLabPatientBloodIdentity } from "./NarvaLabPatientIdentity";
+import { authoredNarvaLabSampleResults, deriveNarvaLabPatientBloodIdentity } from "./NarvaLabPatientIdentity";
 
 const emptySnapshot = (): LaboratoryWorkflowSnapshot => deepFreeze({
   schemaVersion: LABORATORY_WORKFLOW_SCHEMA_VERSION, orders: [], samples: [], resultGroups: [],
@@ -59,14 +59,22 @@ export class LaboratoryWorkflowRuntime {
       }
       return immutableClone(duplicate) as LaboratorySample;
     }
-    const patientBloodIdentity = input.snapshot.patientBloodIdentity ?? (order.packageId === "NARVA_POLYTRAUMA"
+    type LegacyIdentity = LabPatientBloodIdentity & { antibodyScreen?: "NEGATIVE" | "POSITIVE" };
+    const suppliedIdentity = input.snapshot.patientBloodIdentity as LegacyIdentity | undefined;
+    const derivedIdentity = suppliedIdentity ?? (order.packageId === "NARVA_POLYTRAUMA"
       ? deriveNarvaLabPatientBloodIdentity(order.patientId) : undefined);
+    const patientBloodIdentity = derivedIdentity
+      ? { ab0: derivedIdentity.ab0, rhd: derivedIdentity.rhd } as const : undefined;
+    const authoredResults = input.snapshot.authoredResults ?? (suppliedIdentity?.antibodyScreen
+      ? { antibodyScreen: suppliedIdentity.antibodyScreen } : order.packageId === "NARVA_POLYTRAUMA"
+        ? authoredNarvaLabSampleResults(order.patientId) : undefined);
     if (patientBloodIdentity) this.rememberBloodIdentity(order.patientId, patientBloodIdentity);
     const sample = deepFreeze({ sampleId: input.sampleId, orderId: order.orderId, exerciseId: order.exerciseId,
       patientId: order.patientId, sampledAtSimulationTimeSec: input.sampledAtSimulationTimeSec,
       sourcePatientRevision: input.sourcePatientRevision, sourceRuntimeStateVersion: input.sourceRuntimeStateVersion,
       snapshot: { ...structuredClone(input.snapshot), schemaVersion: LAB_SAMPLE_SNAPSHOT_SCHEMA_VERSION,
-        ...(patientBloodIdentity ? { patientBloodIdentity } : {}) } });
+        ...(patientBloodIdentity ? { patientBloodIdentity } : {}),
+        ...(authoredResults ? { authoredResults } : {}) } });
     const groups = resultGroupsForNarvaLabPackage(order.packageId).map(type => deepFreeze({
       resultGroupId: `${input.sampleId}:${type}`, sampleId: input.sampleId, type,
       availableAtSimulationTimeSec: input.sampledAtSimulationTimeSec + NARVA_LAB_RESULT_TIMING_SECONDS_FROM_SAMPLE[type],
@@ -118,8 +126,26 @@ export class LaboratoryWorkflowRuntime {
 
   restore(value?: LaboratoryWorkflowSnapshot): void {
     if (!value) { this.reset(); return; }
-    const candidate = immutableClone(value) as LaboratoryWorkflowSnapshot;
+    const candidate = this.normalizeLegacyBloodIdentity(immutableClone(value) as LaboratoryWorkflowSnapshot);
     this.validate(candidate); this.state = candidate;
+  }
+
+  private normalizeLegacyBloodIdentity(value: LaboratoryWorkflowSnapshot): LaboratoryWorkflowSnapshot {
+    type LegacyIdentity = LabPatientBloodIdentity & { antibodyScreen?: "NEGATIVE" | "POSITIVE" };
+    const identities = Object.fromEntries(Object.entries(value.patientBloodIdentities).map(([patientId, raw]) => {
+      const identity = raw as LegacyIdentity;
+      return [patientId, { ab0: identity.ab0, rhd: identity.rhd }];
+    }));
+    const samples = value.samples.map(sample => {
+      const legacy = sample.snapshot.patientBloodIdentity as LegacyIdentity | undefined;
+      const patientBloodIdentity = legacy ? { ab0: legacy.ab0, rhd: legacy.rhd } : undefined;
+      const authoredResults = sample.snapshot.authoredResults ?? (legacy?.antibodyScreen
+        ? { antibodyScreen: legacy.antibodyScreen } : undefined);
+      return { ...sample, snapshot: { ...sample.snapshot,
+        ...(patientBloodIdentity ? { patientBloodIdentity } : {}),
+        ...(authoredResults ? { authoredResults } : {}) } };
+    });
+    return immutableClone({ ...value, patientBloodIdentities: identities, samples }) as LaboratoryWorkflowSnapshot;
   }
 
   private rememberBloodIdentity(patientId: string, identity: LabPatientBloodIdentity): void {
@@ -202,9 +228,14 @@ export class LaboratoryWorkflowRuntime {
     }
     for (const [patientId, identity] of Object.entries(value.patientBloodIdentities)) {
       if (!patientId || !["A", "B", "AB", "O"].includes(identity.ab0) ||
-        !["POSITIVE", "NEGATIVE"].includes(identity.rhd) ||
-        (identity.antibodyScreen !== undefined && !["POSITIVE", "NEGATIVE"].includes(identity.antibodyScreen))) {
+        !["POSITIVE", "NEGATIVE"].includes(identity.rhd)) {
         throw new Error("LAB_AB0_IDENTITY_CONFLICT");
+      }
+    }
+    for (const sample of value.samples) {
+      const result = sample.snapshot.authoredResults?.antibodyScreen;
+      if (result !== undefined && !["POSITIVE", "NEGATIVE"].includes(result)) {
+        throw new Error("LAB_INVALID_AUTHORED_RESULT");
       }
     }
     for (const sample of value.samples) {

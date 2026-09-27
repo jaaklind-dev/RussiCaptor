@@ -82,8 +82,8 @@ describe("laboratory canonical Runtime checkpoint persistence", () => {
     const first = takeoverA.getLaboratoryWorkflow(); const second = takeoverB.getLaboratoryWorkflow();
     expect(first).toEqual(second);
     expect(first.resultGroups.find(item => item.type === "ASTRUP")).toMatchObject({
-      status: "PARTIALLY_RESULTED", generationVersion: NARVA_LAB_PHYSIOLOGY_GENERATOR_VERSION,
-      resultPayload: { sampledAtSimulationTimeSec: 1_000, pendingAnalyteIds: ["LAB_ASTRUP_HB_FR"] },
+      status: "RESULTED", generationVersion: NARVA_LAB_PHYSIOLOGY_GENERATOR_VERSION,
+      resultPayload: { sampledAtSimulationTimeSec: 1_000, pendingAnalyteIds: [] },
     });
   });
 
@@ -112,7 +112,7 @@ describe("laboratory canonical Runtime checkpoint persistence", () => {
     target.advance(7_054, 8_291);
     const after = writer.getLaboratoryWorkflow();
     expect(after.resultGroups.find(item => item.sampleId === "SAMPLE-2" && item.type === "ASTRUP"))
-      .toMatchObject({ status: "PARTIALLY_RESULTED", generatedAtSimulationTimeSec: 8_291 });
+      .toMatchObject({ status: "RESULTED", generatedAtSimulationTimeSec: 8_291 });
     const hash = sha256Text(stableJson(after));
     target.advance(8_291, 8_292);
     expect(writer.getLaboratoryWorkflow().resultGroups.filter(item =>
@@ -138,7 +138,7 @@ describe("laboratory canonical Runtime checkpoint persistence", () => {
     const restartedWriter = new ClinicalScenarioEngine(undefined, () => true);
     restartedWriter.rehydrateRuntimePayload(beforeThreshold); restartedWriter.advanceTo(2_500);
     expect(restartedWriter.getLaboratoryWorkflow().resultGroups.find(item => item.type === "ASTRUP")?.status)
-      .toBe("PARTIALLY_RESULTED");
+      .toBe("RESULTED");
 
     const reader = new ClinicalScenarioEngine(undefined, () => false);
     reader.rehydrateRuntimePayload(beforeThreshold); reader.advanceTo(8_291);
@@ -147,7 +147,7 @@ describe("laboratory canonical Runtime checkpoint persistence", () => {
     const takeover = new ClinicalScenarioEngine(undefined, () => true);
     takeover.rehydrateRuntimePayload(overdue); takeover.advanceTo(8_291);
     expect(takeover.getLaboratoryWorkflow().resultGroups.find(item => item.type === "ASTRUP"))
-      .toMatchObject({ status: "PARTIALLY_RESULTED", generatedAtSimulationTimeSec: 8_291 });
+      .toMatchObject({ status: "RESULTED", generatedAtSimulationTimeSec: 8_291 });
     expect(takeover.advanceTo(8_291)).toBeUndefined();
     expect(takeover.getLaboratoryWorkflow().resultGroups.filter(item => item.type === "ASTRUP")).toHaveLength(1);
   });

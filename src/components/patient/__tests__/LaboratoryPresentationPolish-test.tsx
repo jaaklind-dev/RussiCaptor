@@ -92,16 +92,12 @@ describe("B33 laboratory presentation polish", () => {
       node.props.children.startsWith("Võrdlus:"))).toHaveLength(0);
   });
 
-  test("B33-A5 distinguishes hCG not-applicable from negative and B33-A6 source ambiguity from processing", async () => {
+  test("B33-A5 distinguishes hCG not-applicable and omits the non-reportable Hb-Fr source token", async () => {
     const renderer = await render([
       resultGroup("ASTRUP", payload([], ["LAB_ASTRUP_HB_FR"]), "PARTIALLY_RESULTED"),
       resultGroup("CLINICAL_CHEMISTRY", payload([], [], ["LAB_HCG"])),
     ]);
-    const ambiguous = renderer.root.findByProps({ testID: "laboratory-result-LAB_ASTRUP_HB_FR" });
-    expect(ambiguous.findAll(node => typeof node.type === "string" &&
-      node.props.children === "Allikas ebaselge")).toHaveLength(1);
-    expect(ambiguous.findAll(node => typeof node.type === "string" &&
-      node.props.children === "Tulemus ootel")).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ testID: "laboratory-result-LAB_ASTRUP_HB_FR" })).toHaveLength(0);
     await act(async () => renderer.root.findByProps({ testID: "laboratory-group-toggle-CLINICAL_CHEMISTRY" })
       .props.onPress());
     const hcg = renderer.root.findByProps({ testID: "laboratory-result-LAB_HCG" });
@@ -124,7 +120,7 @@ describe("B33 laboratory presentation polish", () => {
     expect(renderer.root.findAllByProps({ testID: "laboratory-group-content-HEMATOLOGY" })).toHaveLength(0);
   });
 
-  test("B33-A8 keeps all 59 rows reachable and B33-A9 never mutates canonical payload", async () => {
+  test("B33-A8 keeps all 58 reportable rows reachable and B33-A9 never mutates canonical payload", async () => {
     const canonical = fullResultGroups();
     const before = JSON.stringify(canonical);
     const renderer = await render(canonical);
@@ -132,7 +128,7 @@ describe("B33 laboratory presentation polish", () => {
       await act(async () => renderer.root.findByProps({ testID: `laboratory-group-toggle-${type}` }).props.onPress());
     }
     expect(renderer.root.findAll(node => typeof node.type === "string" &&
-      node.props.testID?.startsWith("laboratory-result-"))).toHaveLength(59);
+      node.props.testID?.startsWith("laboratory-result-"))).toHaveLength(58);
     expect(JSON.stringify(canonical)).toBe(before);
   });
 });

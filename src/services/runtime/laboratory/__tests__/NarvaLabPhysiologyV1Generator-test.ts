@@ -43,6 +43,7 @@ function sample(o: Overrides = {}): LaboratorySample {
     displayedVitals: { systolicBp: o.map ?? 90, diastolicBp: o.map ?? 90, spo2: o.spo2 ?? 97,
       respiratoryRate: 14, temperature: o.temperature ?? 37 },
     targetVitals: {}, runtimeFields: {},
+    authoredResults: { antibodyScreen: "NEGATIVE" as const },
     authoritativePhysiology: { baselineMinuteVentilationLMin: 6,
       effectiveMinuteVentilationLMin: o.ventilation ?? 6, fio2: o.fio2 ?? 0.21,
       oxygenSupplyAdequate: o.oxygenAdequate ?? true, arterialOxygenSaturationPct: o.spo2 ?? 97,
@@ -191,8 +192,8 @@ describe("Narva laboratory physiology v1", () => {
       rbcUnits: 4, plasmaUnits: 4, calciumAt: [1_100], time: 1_200 }), resultGroupType: "ASTRUP" });
     expect(stableJson(replay)).toBe(stableJson(first));
     expect(first?.generationVersion).toBe(NARVA_LAB_PHYSIOLOGY_GENERATOR_VERSION);
-    expect(first?.status).toBe("PARTIALLY_RESULTED");
-    expect(first?.payload.pendingAnalyteIds).toEqual(["LAB_ASTRUP_HB_FR"]);
+    expect(first?.status).toBe("RESULTED");
+    expect(first?.payload.pendingAnalyteIds).toEqual([]);
     expect((after?.payload.analytes as readonly { analyteId: string; value: number }[])
       .find(item => item.analyteId === "LAB_ICA")!.value).toBeGreaterThan(
       (first?.payload.analytes as readonly { analyteId: string; value: number }[])

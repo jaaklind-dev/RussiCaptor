@@ -285,7 +285,7 @@ The durable laboratory lifecycle, the versioned Narva trauma/Astrup physiology-v
 | LAB-G23 | Complete POLÜTRAUMA package | Every source-supported reportable POLÜTRAUMA component is represented and explicit Narva exclusions remain absent. |
 | LAB-G24 | Deterministic static generation | Static baseline analytes are deterministic for the same patient and immutable sample snapshot without random, wall-clock, device, or reader-local inputs. |
 | LAB-G25 | Scenario-derived result stability | An explicit authoritative sample-time scenario override wins only for supported static analytes and remains stable after later scenario change. |
-| LAB-G26 | Blood-bank identity persistence | AB0, RhD, and antibody-screen identity is patient-stable across samples, restart, takeover, and rehydration. |
+| LAB-G26 | Blood-bank identity persistence | AB0 and RhD remain patient identity while the authored antibody-screen result belongs to each immutable sample across restart, takeover, and rehydration. |
 | LAB-G27 | hCG applicability | hCG is reported only when an authoritative patient applicability fact exists; missing demographic evidence is represented as not applicable, never an invented positive. |
 | LAB-G28 | Narva exclusions | SARS-CoV-2, influenza, urine analyses, and U-Narco remain absent from the Narva POLÜTRAUMA result. |
 | LAB-G29 | Complete CBC coverage | The hematology group contains all CBC/5-diff/NRBC components derived from the authoritative IVKH reference export while Hb, Hct, and platelets remain physiology-driven. |
@@ -301,7 +301,7 @@ The durable laboratory lifecycle, the versioned Narva trauma/Astrup physiology-v
 | LAB-G39 | No invented abnormal flag | Missing, qualitative, demographic-ambiguous, or source-ambiguous reference metadata cannot produce an invented abnormal flag. |
 | LAB-G40 | Qualitative result presentation | AB0, RhD, antibody screen, and other canonical qualitative values render as qualitative results rather than malformed numbers. |
 | LAB-G41 | hCG presentation applicability | Canonical hCG results render only when applicable; not-applicable state never displays a fabricated numeric value. |
-| LAB-G42 | SOURCE_AMBIGUOUS presentation | Source-ambiguous components remain explicitly unresolved and cannot be mistaken for completed measurements. |
+| LAB-G42 | Non-reportable source-token presentation | Non-reportable source/order tokens such as `aB-Hb-Fr` cannot appear as pending or completed patient result rows. |
 | LAB-G43 | Pending result-group presentation | Processing groups remain visibly pending without fake values and transition once to their canonical released result. |
 | LAB-G44 | Stable result-row identity | Group and analyte keys derive from canonical identities rather than revisions, indexes, or render order. |
 | LAB-G45 | Presentation rehydration consistency | The same canonical result renders identically after rerender and checkpoint rehydration without duplicates or ordering drift. |

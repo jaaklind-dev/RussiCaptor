@@ -10,6 +10,9 @@ export type LaboratoryWorkflowStatus = "ORDERED" | "COLLECTED" | "PROCESSING" |
 export type LabPatientBloodIdentity = Readonly<{
   ab0: "A" | "B" | "AB" | "O";
   rhd: "POSITIVE" | "NEGATIVE";
+}>;
+
+export type LabAuthoredSampleResults = Readonly<{
   antibodyScreen?: "NEGATIVE" | "POSITIVE";
 }>;
 
@@ -39,6 +42,8 @@ export type LabSamplePhysiologySnapshot = Readonly<{
     effectiveIntravascularFluidVolumeMl: number;
   }>;
   patientBloodIdentity?: LabPatientBloodIdentity;
+  /** Authored scenario truth copied into this sample; it is not permanent blood-group identity. */
+  authoredResults?: LabAuthoredSampleResults;
 }>;
 
 export type LaboratoryOrder = Readonly<{

@@ -23,11 +23,10 @@ function fullGroups(): readonly LaboratoryResultGroup[] {
     "HEMATOLOGY", "ASTRUP"];
   return Object.freeze(types.map(type => {
     const definitions = NARVA_LAB_ANALYTES.filter(item => item.resultGroup === type && item.reportable !== false);
-    const analytes = definitions.filter(item => item.id !== "LAB_ASTRUP_HB_FR" && item.id !== "LAB_HCG")
+    const analytes = definitions.filter(item => item.id !== "LAB_HCG")
       .map(item => result(item.id, item.id === "LAB_AB0" ? "AB" : item.id === "LAB_RHD" ? "POSITIVE"
         : item.id === "LAB_ANTIBODY_SCREEN" ? "NEGATIVE" : 1, item.unit ?? "", item.referenceRange));
-    return group(type, type === "ASTRUP" ? "PARTIALLY_RESULTED" : "RESULTED", payload(analytes,
-      type === "ASTRUP" ? ["LAB_ASTRUP_HB_FR"] : [],
+    return group(type, "RESULTED", payload(analytes, [],
       type === "CLINICAL_CHEMISTRY" ? ["LAB_HCG"] : []));
   }));
 }
@@ -35,7 +34,7 @@ function fullGroups(): readonly LaboratoryResultGroup[] {
 describe("B32 laboratory result presentation", () => {
   test("B32-A1 renders every canonical full-result component without silent omission", () => {
     const groups = buildLaboratoryResultPresentation(fullGroups(), "NARVA_POLYTRAUMA");
-    expect(groups.flatMap(item => item.rows)).toHaveLength(59);
+    expect(groups.flatMap(item => item.rows)).toHaveLength(58);
     expect(groups.flatMap(item => item.rows).filter(item => item.state === "RESULT")).toHaveLength(57);
   });
 
@@ -107,11 +106,11 @@ describe("B32 laboratory result presentation", () => {
       .toMatchObject({ state: "NOT_APPLICABLE", abnormalFlag: "UNCLASSIFIED" });
   });
 
-  test("B32-A12 keeps source-ambiguous aB-Hb-Fr explicitly pending", () => {
+  test("B32-A12 excludes non-reportable aB-Hb-Fr even if a legacy payload marks it pending", () => {
     const [astrup] = buildLaboratoryResultPresentation([group("ASTRUP", "PARTIALLY_RESULTED",
       payload([], ["LAB_ASTRUP_HB_FR"]))], "NARVA_IRO_ASTRUP");
     expect(astrup.rows.find(item => item.analyteId === "LAB_ASTRUP_HB_FR"))
-      .toMatchObject({ state: "PENDING", abnormalFlag: "UNCLASSIFIED" });
+      .toBeUndefined();
   });
 
   test("B32-A13 distinguishes a pending group without fake result rows", () => {
@@ -147,7 +146,7 @@ describe("B32 laboratory result presentation", () => {
     const rows = buildLaboratoryResultPresentation(fullGroups(), "NARVA_POLYTRAUMA")
       .flatMap(item => item.rows);
     expect(rows.filter(item => item.state === "RESULT")).toHaveLength(57);
-    expect(new Set(rows.map(item => item.key)).size).toBe(59);
+    expect(new Set(rows.map(item => item.key)).size).toBe(58);
   });
 
   test("B32-A18 never mutates the canonical result payload", () => {

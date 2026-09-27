@@ -14,7 +14,8 @@ const order: LaboratoryOrder = Object.freeze({ orderId: "O", exerciseId: "EX", p
   packageId: "NARVA_POLYTRAUMA", orderedAtSimulationTimeSec: 0, orderedBy: "CM", status: "COLLECTED" });
 
 function sample(input: Readonly<{ id?: string; patientId?: string; time?: number;
-  overrides?: Readonly<Record<string, number | string>>; hcgApplicable?: boolean }> = {}): LaboratorySample {
+  overrides?: Readonly<Record<string, number | string>>; hcgApplicable?: boolean;
+  antibodyScreen?: "NEGATIVE" | "POSITIVE" | null }> = {}): LaboratorySample {
   const patientId = input.patientId ?? order.patientId;
   const runtimeFields = Object.freeze({
     ...(input.overrides ? { laboratoryAnalyteOverrides: input.overrides } : {}),
@@ -29,6 +30,8 @@ function sample(input: Readonly<{ id?: string; patientId?: string; time?: number
       arterialOxygenSaturationPct: 97, meanArterialPressureMmHg: 83,
       temperatureCelsius: 37, effectiveIntravascularFluidVolumeMl: 0 }),
     patientBloodIdentity: deriveNarvaLabPatientBloodIdentity(patientId),
+    ...(input.antibodyScreen === null ? {} : {
+      authoredResults: Object.freeze({ antibodyScreen: input.antibodyScreen ?? "NEGATIVE" }) }),
   });
   return Object.freeze({ sampleId: input.id ?? "S", orderId: order.orderId, exerciseId: order.exerciseId,
     patientId, sampledAtSimulationTimeSec: input.time ?? 100, sourcePatientRevision: 1,
@@ -74,7 +77,7 @@ describe("Narva laboratory static/scenario v1", () => {
     expect(NARVA_LAB_PACKAGE_ANALYTE_IDS.NARVA_IRO_ASTRUP).toEqual(
       NARVA_LAB_ANALYTES.filter(item => item.resultGroup === "ASTRUP").map(item => item.id));
     expect(generate("ASTRUP").generationVersion).toBe(NARVA_LAB_PHYSIOLOGY_GENERATOR_VERSION);
-    expect(generate("ASTRUP").payload.pendingAnalyteIds).toEqual(["LAB_ASTRUP_HB_FR"]);
+    expect(generate("ASTRUP").payload.pendingAnalyteIds).toEqual([]);
   });
 
   test("B31-A3/A4/A5/A13 makes static values deterministic, baseline-stable and explicitly overridable", () => {
@@ -139,10 +142,23 @@ describe("Narva laboratory static/scenario v1", () => {
       .toBe("B1-RBC Ab screen I, II, III");
     expect(analyte("AB0", "LAB_ANTIBODY_SCREEN"))
       .toMatchObject({ value: "NEGATIVE", sourceCode: "B1-RBC Ab screen I, II, III",
-        valueSource: "BLOOD_BANK_IDENTITY" });
+        valueSource: "AUTHORED_SAMPLE_RESULT" });
     expect(NARVA_LAB_ANALYTES.find(item => item.id === "LAB_ASTRUP_HB_FR"))
-      .toMatchObject({ sourceCode: "aB-Hb-Fr", implementationClass: "SOURCE_AMBIGUOUS" });
-    expect(generate("ASTRUP").payload).toMatchObject({ pendingAnalyteIds: ["LAB_ASTRUP_HB_FR"] });
+      .toMatchObject({ sourceCode: "aB-Hb-Fr", implementationClass: "PANEL_CONTAINER", reportable: false });
+    expect(generate("ASTRUP").payload).toMatchObject({ pendingAnalyteIds: [] });
+  });
+
+  test("keeps antibody screening sample-owned and never infers missing authoring as NEGATIVE", () => {
+    const first = sample({ id: "S-1", patientId: "PT-PELVIC-001", antibodyScreen: "NEGATIVE" });
+    const second = sample({ id: "S-2", patientId: "PT-PELVIC-001", antibodyScreen: "NEGATIVE" });
+    expect(analyte("AB0", "LAB_ANTIBODY_SCREEN", first))
+      .toMatchObject({ value: "NEGATIVE", valueSource: "AUTHORED_SAMPLE_RESULT" });
+    expect(analyte("AB0", "LAB_ANTIBODY_SCREEN", second))
+      .toMatchObject({ value: "NEGATIVE", valueSource: "AUTHORED_SAMPLE_RESULT" });
+    const missing = generate("AB0", sample({ id: "S-3", patientId: "PT-UNAUTHORED", antibodyScreen: null }));
+    expect((missing.payload.analytes as readonly { analyteId: string }[])
+      .some(item => item.analyteId === "LAB_ANTIBODY_SCREEN")).toBe(false);
+    expect(missing.payload.pendingAnalyteIds).toContain("LAB_ANTIBODY_SCREEN");
   });
 
   test("B31-A15 keeps static/scenario values anchored to the immutable sample snapshot", () => {

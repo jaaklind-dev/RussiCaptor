@@ -76,15 +76,14 @@ describe("B32 LaboratoryWorkflowCard presentation", () => {
     expect(renderer.root.findByProps({ accessibilityLabel: "Tulemus KÕRGE" })).toBeTruthy();
   });
 
-  test("renders ambiguous and not-applicable states without measured values", async () => {
+  test("omits non-reportable Hb-Fr and renders not-applicable state without a measured value", async () => {
     const renderer = await render(workflow([
       resultGroup("ASTRUP", "PARTIALLY_RESULTED", { analytes: [],
         pendingAnalyteIds: ["LAB_ASTRUP_HB_FR"] }),
       resultGroup("CLINICAL_CHEMISTRY", "RESULTED", { analytes: [],
         notApplicableAnalyteIds: ["LAB_HCG"] }),
     ]));
-    const ambiguous = renderer.root.findByProps({ testID: "laboratory-result-LAB_ASTRUP_HB_FR" });
-    expect(ambiguous.findAll(node => node.props.children === "Allikas ebaselge").length).toBeGreaterThan(0);
+    expect(renderer.root.findAllByProps({ testID: "laboratory-result-LAB_ASTRUP_HB_FR" })).toHaveLength(0);
     await act(async () => { renderer.root.findByProps({ testID: "laboratory-group-toggle-CLINICAL_CHEMISTRY" })
       .props.onPress(); });
     const hcg = renderer.root.findByProps({ testID: "laboratory-result-LAB_HCG" });

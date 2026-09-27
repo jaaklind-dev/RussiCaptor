@@ -74,7 +74,7 @@ Object.assign(actual, {
     const item = NARVA_LAB_ANALYTES.find(analyte => analyte.id === "LAB_ASTRUP_HB_FR")!;
     return { sourceAnalysisId: item.sourceAnalysisId, sourceCode: item.sourceCode,
       resultGroup: item.resultGroup, behavior: item.behavior, unit: item.unit ?? null,
-      referenceRange: item.referenceRange ?? null, childMapping: "NONE" };
+      reportable: item.reportable !== false, referenceRange: item.referenceRange ?? null, childMapping: "NONE" };
   })(),
   "labs.antibody-screen-code": (() => {
     const item = NARVA_LAB_ANALYTES.find(analyte => analyte.id === "LAB_ANTIBODY_SCREEN")!;
@@ -82,7 +82,8 @@ Object.assign(actual, {
       resultGroup: item.resultGroup,
       catalogEntries: NARVA_LAB_ANALYTES.filter(analyte => analyte.id === "LAB_ANTIBODY_SCREEN").length,
       splitComponents: NARVA_LAB_ANALYTES.some(analyte => /^LAB_ANTIBODY_SCREEN_[I]{1,3}$/.test(analyte.id)),
-      runtimeSemantics: "UNCHANGED_IMPLEMENTATION_BEHAVIOR" };
+      ownership: "SAMPLE_RESULT", authoredFixture: "NARVA_PATIENT_SCENARIO",
+      runtimeVocabulary: "IMPLEMENTATION_BEHAVIOR" };
   })(),
   "imaging.p02-cxr": { patient: NARVA_TRAUMA_P02_IMAGING_SOURCE.patientId,
     studyId: NARVA_TRAUMA_P02_IMAGING_SOURCE.studyId, orderId: NARVA_TRAUMA_P02_IMAGING_SOURCE.orderId,
@@ -217,15 +218,16 @@ describe("Narva source-fidelity guardrails SRC-G01..SRC-G30", () => {
       .includes(item.classification)).every(item => item.rationale.length > 0 && Boolean(item.resolutionGuard))).toBe(true);
   });
 
-  test("SRC-G09 preserves verified laboratory codes while residual result semantics remain unresolved", () => {
+  test("SRC-G09 preserves verified codes and the external-vs-IVKH semantic boundary", () => {
     const hbFractions = manifest.items.find(item => item.id === "labs.ab-hb-fr")!;
     const antibodyScreen = manifest.items.find(item => item.id === "labs.antibody-screen-code")!;
-    expect(hbFractions).toMatchObject({ classification: "SOURCE_AMBIGUOUS", productionValue: {
-      sourceAnalysisId: "LAB_035", sourceCode: "aB-Hb-Fr", behavior: "SOURCE_AMBIGUOUS",
-      unit: null, referenceRange: null, childMapping: "NONE" } });
+    expect(hbFractions).toMatchObject({ classification: "ACCEPTED_DERIVATION", productionValue: {
+      sourceAnalysisId: "LAB_035", sourceCode: "aB-Hb-Fr", behavior: "PANEL_CONTAINER",
+      reportable: false, unit: null, referenceRange: null, childMapping: "NONE" } });
     expect(antibodyScreen).toMatchObject({ classification: "SOURCE_AMBIGUOUS", productionValue: {
       sourceAnalysisId: "LAB_034", sourceCode: "B1-RBC Ab screen I, II, III",
-      catalogEntries: 1, splitComponents: false, runtimeSemantics: "UNCHANGED_IMPLEMENTATION_BEHAVIOR" } });
+      catalogEntries: 1, splitComponents: false, ownership: "SAMPLE_RESULT",
+      authoredFixture: "NARVA_PATIENT_SCENARIO", runtimeVocabulary: "IMPLEMENTATION_BEHAVIOR" } });
     expect(core.evaluateFidelity(manifest, actual).filter(item => item.id.startsWith("labs.")))
       .toEqual(expect.arrayContaining([
         expect.objectContaining({ id: "labs.ab-hb-fr", drift: null }),

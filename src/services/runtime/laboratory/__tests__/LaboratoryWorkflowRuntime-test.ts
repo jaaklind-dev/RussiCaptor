@@ -17,7 +17,8 @@ const collect = (runtime: LaboratoryWorkflowRuntime, overrides: Partial<Paramete
     sourcePatientRevision: 7, sourceRuntimeStateVersion: 11,
     snapshot: { displayedVitals: { hr: 92 }, targetVitals: { hr: 90 }, runtimeFields: { lactate: 3.2 },
       clinicalProcessInputs: [],
-      patientBloodIdentity: { ab0: "O", rhd: "POSITIVE", antibodyScreen: "NEGATIVE" } }, ...overrides });
+      patientBloodIdentity: { ab0: "O", rhd: "POSITIVE" },
+      authoredResults: { antibodyScreen: "NEGATIVE" } }, ...overrides });
 
 describe("LaboratoryWorkflowRuntime LAB-G01..LAB-G22", () => {
   test("captures one immutable sample and remains uncontaminated by later physiology (G01/G02/G03/G13)", () => {
@@ -89,6 +90,20 @@ describe("LaboratoryWorkflowRuntime LAB-G01..LAB-G22", () => {
     expect(restarted.snapshot()).toEqual(takeover.snapshot());
   });
 
+  test("G26 migrates a legacy antibody-screen identity value into immutable sample state", () => {
+    const writer = new LaboratoryWorkflowRuntime(generator); order(writer); collect(writer);
+    const legacy = structuredClone(writer.snapshot()) as any;
+    legacy.patientBloodIdentities["PT-1"].antibodyScreen = "NEGATIVE";
+    legacy.samples[0].snapshot.patientBloodIdentity.antibodyScreen = "NEGATIVE";
+    delete legacy.samples[0].snapshot.authoredResults;
+    const restored = new LaboratoryWorkflowRuntime(generator); restored.restore(legacy);
+    expect(restored.snapshot().patientBloodIdentities["PT-1"]).toEqual({ ab0: "O", rhd: "POSITIVE" });
+    expect(restored.snapshot().samples[0].snapshot).toMatchObject({
+      patientBloodIdentity: { ab0: "O", rhd: "POSITIVE" },
+      authoredResults: { antibodyScreen: "NEGATIVE" },
+    });
+  });
+
   test("fences all progression and resurrection after terminal completion (G10)", () => {
     const runtime = new LaboratoryWorkflowRuntime(generator); order(runtime); collect(runtime);
     runtime.fenceTerminal(1200); const terminal = runtime.snapshot();
@@ -110,7 +125,7 @@ describe("LaboratoryWorkflowRuntime LAB-G01..LAB-G22", () => {
       displayedVitals: {}, targetVitals: {}, runtimeFields: {},
       clinicalProcessInputs: [],
       patientBloodIdentity: { ab0: "A", rhd: "NEGATIVE" } } })).toThrow("LAB_AB0_IDENTITY_CONFLICT");
-    expect(runtime.snapshot().patientBloodIdentities["PT-1"]).toEqual({ ab0: "O", rhd: "POSITIVE", antibodyScreen: "NEGATIVE" });
+    expect(runtime.snapshot().patientBloodIdentities["PT-1"]).toEqual({ ab0: "O", rhd: "POSITIVE" });
   });
 
   test("fails closed on corrupt persisted timing or result state", () => {
