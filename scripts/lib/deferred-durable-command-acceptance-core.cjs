@@ -21,10 +21,11 @@ const DEFERRED_MIGRATIONS = Object.freeze([
     commandType: "PATIENT_LOCATION_TRANSFER",
     sha256: "5bfc19e82927c8208cc2d9d21fb662acfb933ca260d9c3f00d3c6fb494a260a4" }),
 ]);
-const PHYSICAL_GATES = Object.freeze(["RUNTIME", "IMAGING", "INTERVENTION_READINESS", "ETT",
-  "TRANSPORT", "PATIENT_COMPLETION"]);
+const PHYSICAL_GATES = Object.freeze(["RUNTIME", "PATIENT_LOCATION_TRANSFER", "IMAGING",
+  "INTERVENTION_READINESS", "ETT", "TRANSPORT", "PATIENT_COMPLETION"]);
 const SECOND_CLIENT_GATES = Object.freeze(["IMAGING_READER_CONVERGENCE", "ETT_READER_SUBMISSION",
-  "TRANSPORT_READER_SUBMISSION", "PATIENT_COMPLETION_READER_SUBMISSION", "ACTIVE_CLIENT_TAKEOVER"]);
+  "PATIENT_LOCATION_TRANSFER_READER_SUBMISSION", "TRANSPORT_READER_SUBMISSION",
+  "PATIENT_COMPLETION_READER_SUBMISSION", "ACTIVE_CLIENT_TAKEOVER"]);
 
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const status = (value, code, detail) => Object.freeze({ status: value, code, detail });
@@ -82,6 +83,7 @@ function evaluatePrecheck(facts) {
   if (facts.projectRef !== PROJECT_REF) blockers.push("PROJECT_REF_MISMATCH");
   if (!facts.keychainItemPresent) blockers.push("KEYCHAIN_ITEM_MISSING");
   if (facts.ledgerStatus !== "PASS") blockers.push("MIGRATION_LEDGER_UNSAFE");
+  if (facts.migrationArtifactsValid !== true) blockers.push("MIGRATION_ARTIFACT_MISMATCH");
   if (facts.deviceState !== "device") blockers.push("DEVICE_UNAVAILABLE");
   if (!facts.apkMatches) blockers.push("APK_IDENTITY_MISMATCH");
   if (!facts.backendStateVerified) blockers.push("BACKEND_PREFLIGHT_MISSING");
@@ -111,6 +113,23 @@ function evaluateGateSequence(results) {
 function assertRuntimeGate(value) {
   return value.freshExercise === true && value.canonicalCheckpoint === true && value.writerCount === 1
     && value.coldRestartRestored === true && value.runtimeUnavailable !== true ? "PASS" : "FAIL";
+}
+
+function assertPatientLocationTransferGate(value) {
+  return value.packageVersion === "1.0.4" && value.patientId === "PT-PELVIC-001"
+    && value.initialLocation === "NARVA_HOSPITAL_OUTDOOR" && value.chestInitialLocation === "NARVA_ED"
+    && value.actionId === "P01-MOVE-ED" && value.visibleForPelvic === true
+    && value.visibleForChest === false && value.commandType === "PATIENT_LOCATION_TRANSFER"
+    && value.commandCount === 1 && value.materializationCount === 1
+    && value.finalLocation === "NARVA_ED" && value.timelineEventCount === 1
+    && typeof value.evidenceId === "string" && value.evidenceId.length > 0
+    && Number.isInteger(value.checkpointRevisionBefore)
+    && Number.isInteger(value.checkpointRevisionAfter)
+    && value.checkpointRevisionAfter > value.checkpointRevisionBefore
+    && value.restartFinalLocation === "NARVA_ED" && value.actionExecutableAfterRestart === false
+    && value.duplicateCount === 0 && value.transportInstanceCountBefore === value.transportInstanceCountAfter
+    && value.transportInstanceCountBefore === 0 && value.resourceReservationUnchanged === true
+    && value.destinationUnchanged === true && value.transportClocksUnchanged === true ? "PASS" : "FAIL";
 }
 
 function assertInterventionReadinessGate(value) {
@@ -147,6 +166,7 @@ function evaluateCombinedEvidence(evidence) {
       evidence.imaging?.afterRepeatedAdvance ?? {}),
     imaging.assertRestartEvidence(evidence.imaging?.resulted ?? {}, evidence.imaging?.afterColdRestart ?? {})];
   return evaluateGateSequence({ RUNTIME: assertRuntimeGate(evidence.runtime ?? {}),
+    PATIENT_LOCATION_TRANSFER: assertPatientLocationTransferGate(evidence.patientLocationTransfer ?? {}),
     IMAGING: imaging.finalClassification(imagingAssertions),
     INTERVENTION_READINESS: assertInterventionReadinessGate(evidence.interventionReadiness ?? {}),
     ETT: assertEttGate(evidence.ett ?? {}), TRANSPORT: assertTransportGate(evidence.transport ?? {}),
@@ -168,7 +188,14 @@ function evidenceTemplate() {
     repository: { head: "", clean: false }, migrationLedger: { before: [], after: [], hashes: {} },
     apk: { versionCode: "", sha256: "" }, exercise: { exerciseId: "", runtimeId: "", writerLeaseId: "",
       assignmentIds: [], checkpointRevisions: [] }, commands: [], imaging: {}, ett: {}, transport: {},
-    runtime: {}, interventionReadiness: {}, patientCompletion: {}, duplicates: {}, restarts: [], cleanup: {}, secondClient: {
+    runtime: {}, patientLocationTransfer: { packageVersion: "", patientId: "", initialLocation: "",
+      chestInitialLocation: "", actionId: "", commandId: "", commandType: "", commandCount: 0,
+      materializationCount: 0, finalLocation: "", evidenceId: "", timelineEventCount: 0,
+      checkpointRevisionBefore: 0, checkpointRevisionAfter: 0, restartFinalLocation: "",
+      actionExecutableAfterRestart: false, duplicateCount: 0, transportInstanceCountBefore: 0,
+      transportInstanceCountAfter: 0, resourceReservationUnchanged: false, destinationUnchanged: false,
+      transportClocksUnchanged: false, visibleForPelvic: false, visibleForChest: false },
+    interventionReadiness: {}, patientCompletion: {}, duplicates: {}, restarts: [], cleanup: {}, secondClient: {
       status: "DEFERRED_SECOND_CLIENT", gates: SECOND_CLIENT_GATES } });
 }
 

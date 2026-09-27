@@ -29,7 +29,8 @@ describe("RELEASE-PREP-01 deferred durable command acceptance harness", () => {
     expect(result).toMatchObject({ status: "BLOCKED", reason: "UNRELATED_PENDING_MIGRATIONS",
       dbPushAllowed: false });
     expect(core.evaluatePrecheck({ head: "H", expectedHead: "H", clean: true,
-      projectRef: core.PROJECT_REF, keychainItemPresent: true, ledgerStatus: "PASS", deviceState: "device",
+      projectRef: core.PROJECT_REF, keychainItemPresent: true, ledgerStatus: "PASS",
+      migrationArtifactsValid: true, deviceState: "device",
       apkMatches: true, backendStateVerified: false, activeAssignmentConflict: false,
       activeBootstrapCount: 0, globalAssignmentCount: 0, writerCount: 0,
       unexpectedActiveLease: false, packageAvailable: true })).toMatchObject({ status: "BLOCKED",
@@ -53,14 +54,23 @@ describe("RELEASE-PREP-01 deferred durable command acceptance harness", () => {
   });
 
   test("RP-A6 fixes the physical gate order", () => {
-    expect(core.PHYSICAL_GATES).toEqual(["RUNTIME", "IMAGING", "INTERVENTION_READINESS", "ETT",
-      "TRANSPORT", "PATIENT_COMPLETION"]);
+    expect(core.PHYSICAL_GATES).toEqual(["RUNTIME", "PATIENT_LOCATION_TRANSFER", "IMAGING",
+      "INTERVENTION_READINESS", "ETT", "TRANSPORT", "PATIENT_COMPLETION"]);
     const resulted = { exerciseId: "EX", imagingInstanceId: "I", status: "RESULTED",
       report: "Massiivsele hemopneumotooraksile sobiv leid.", orderedAtSimulationTimeSec: 1,
       availableAtSimulationTimeSec: 421, releasedAtSimulationTimeSec: 422, resultCount: 1 };
     expect(core.evaluateCombinedEvidence({
       runtime: { freshExercise: true, canonicalCheckpoint: true, writerCount: 1,
         coldRestartRestored: true, runtimeUnavailable: false },
+      patientLocationTransfer: { packageVersion: "1.0.4", patientId: "PT-PELVIC-001",
+        initialLocation: "NARVA_HOSPITAL_OUTDOOR", chestInitialLocation: "NARVA_ED",
+        actionId: "P01-MOVE-ED", commandId: "MOVE-1", commandType: "PATIENT_LOCATION_TRANSFER",
+        visibleForPelvic: true, visibleForChest: false, commandCount: 1, materializationCount: 1,
+        finalLocation: "NARVA_ED", evidenceId: "TL-INTERNAL-TRANSFER-MOVE-1", timelineEventCount: 1,
+        checkpointRevisionBefore: 10, checkpointRevisionAfter: 11, restartFinalLocation: "NARVA_ED",
+        actionExecutableAfterRestart: false, duplicateCount: 0, transportInstanceCountBefore: 0,
+        transportInstanceCountAfter: 0, resourceReservationUnchanged: true, destinationUnchanged: true,
+        transportClocksUnchanged: true },
       imaging: { packageDefinitions: [{ packageId: "russicaptor.narva-trauma", patientId: "PT-CHEST-001",
         definitionId: "P02-CXR", modality: "XR", title: "Rindkere röntgen", delaySeconds: 420 }],
         preThreshold: { simulationTimeSec: 420, availableAtSimulationTimeSec: 421, status: "PROCESSING",

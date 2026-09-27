@@ -61,7 +61,8 @@ if (mode === "prepare") {
     "russicaptor-supabase-service-role", "-s",
     "RussiCaptor-Supabase-ServiceRole-fimcsrivizpliiuoqopv"]) !== "";
   const precheck = core.evaluatePrecheck({ head, expectedHead, clean, projectRef: core.PROJECT_REF,
-    keychainItemPresent, ledgerStatus: ledgerAnalysis.status, deviceState, apkMatches,
+    keychainItemPresent, ledgerStatus: ledgerAnalysis.status,
+    migrationArtifactsValid: migrations.every(item => item.validation.status === "PASS"), deviceState, apkMatches,
     backendStateVerified: backendState?.projectRef === core.PROJECT_REF,
     activeAssignmentConflict: backendState?.activeAssignmentConflict !== false,
     activeBootstrapCount: backendState?.activeBootstrapCount,
