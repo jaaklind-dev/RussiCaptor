@@ -9,7 +9,8 @@ import { createExercisePackage } from "./ExercisePackageHash";
 import { DEFAULT_EXERCISE_DEFINITION } from "./ExerciseDefinitionService";
 import { NARVA_TRAUMA_IMAGING_CONFIGURATION } from "./NarvaTraumaImagingDefinitions";
 import { NARVA_IRO_DATASET_ID, NARVA_IRO_HISTORICAL_DATASET_ID,
-  NARVA_TRAUMA_DATASET_ID, NARVA_TRAUMA_OXYGEN_DATASET_ID } from "./NarvaPatientDatasets";
+  NARVA_TRAUMA_DATASET_ID, NARVA_TRAUMA_OXYGEN_DATASET_ID,
+  NARVA_TRAUMA_OUTDOOR_DATASET_ID } from "./NarvaPatientDatasets";
 import { NARVA_TRAUMA_QUESTION_CONFIGURATION } from "./NarvaTraumaQuestionDefinitions";
 
 const definition = (exerciseTypeId: string, name: string, description: string): ExerciseDefinition =>
@@ -112,7 +113,7 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE_V102 = createExercisePackage({
   },
 });
 
-export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
+export const NARVA_TRAUMA_EXERCISE_PACKAGE_V103 = createExercisePackage({
   packageId: "russicaptor.narva-trauma", packageVersion: "1.0.3", definition: traumaDefinition,
   patientDatasetId: NARVA_TRAUMA_OXYGEN_DATASET_ID,
   enabledPatientProcesses: traumaDefinition.enabledPatientProcesses,
@@ -127,6 +128,29 @@ export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
   metadata: { ...NARVA_TRAUMA_EXERCISE_PACKAGE_V102.metadata,
     description: "Narva kahe P1 traumapatsiendi versioneeritud konfiguratsioonipakett koos P02 hapnikravi ja patsiendiküsimustega.",
     tags: [...NARVA_TRAUMA_EXERCISE_PACKAGE_V102.metadata.tags, "package-owned-questions"],
+  },
+});
+
+export const NARVA_TRAUMA_EXERCISE_PACKAGE = createExercisePackage({
+  packageId: "russicaptor.narva-trauma", packageVersion: "1.0.4", definition: traumaDefinition,
+  patientDatasetId: NARVA_TRAUMA_OUTDOOR_DATASET_ID,
+  enabledPatientProcesses: traumaDefinition.enabledPatientProcesses,
+  enabledAnalyticsProviders: traumaDefinition.enabledAnalyticsProviders,
+  enabledMetricProviders: traumaDefinition.enabledMetricProviders,
+  requiredClinicalModules: NARVA_TRAUMA_EXERCISE_PACKAGE_V103.requiredClinicalModules,
+  availableClinicalTreatments: NARVA_TRAUMA_TREATMENT_PALETTE,
+  interventionAvailability: NARVA_TRAUMA_INTERVENTION_AVAILABILITY,
+  imagingConfiguration: NARVA_TRAUMA_IMAGING_CONFIGURATION,
+  questionConfiguration: NARVA_TRAUMA_QUESTION_CONFIGURATION,
+  transportConfiguration: NARVA_TRAUMA_EXERCISE_PACKAGE_V103.transportConfiguration,
+  internalTransferConfiguration: Object.freeze({ schemaVersion: 1 as const, definitions: Object.freeze([
+    Object.freeze({ actionId: "P01-MOVE-ED", patientId: "PT-PELVIC-001",
+      fromLocationId: "NARVA_HOSPITAL_OUTDOOR", toLocationId: "NARVA_ED",
+      displayName: "Ohutu transport õuest EMOsse" }),
+  ]) }),
+  metadata: { ...NARVA_TRAUMA_EXERCISE_PACKAGE_V103.metadata,
+    description: "Narva kahe P1 traumapatsiendi versioneeritud konfiguratsioonipakett koos P01 durable sisetranspordiga.",
+    tags: [...NARVA_TRAUMA_EXERCISE_PACKAGE_V103.metadata.tags, "p01-internal-transfer"],
   },
 });
 

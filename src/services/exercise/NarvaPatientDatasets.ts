@@ -7,6 +7,7 @@ import { PLEURAL_INJURY_REFERENCE } from "@/modules/pleuralInjury/PleuralInjuryR
 
 export const NARVA_TRAUMA_DATASET_ID = "patients.narva-trauma.v1";
 export const NARVA_TRAUMA_OXYGEN_DATASET_ID = "patients.narva-trauma.v2";
+export const NARVA_TRAUMA_OUTDOOR_DATASET_ID = "patients.narva-trauma.v3";
 export const NARVA_IRO_HISTORICAL_DATASET_ID = "patients.narva-iro-evacuation.v1";
 export const NARVA_IRO_DATASET_ID = "patients.narva-iro-evacuation.v2";
 
@@ -137,6 +138,18 @@ export const NARVA_TRAUMA_OXYGEN_PATIENT_DATASET: PackagePatientDataset = Object
     ...(record.patient.id === "PT-CHEST-001"
       ? { runtimeFixture: narvaChestOxygenFixture }
       : record.runtimeFixture ? { runtimeFixture: record.runtimeFixture } : {}),
+  }))),
+});
+
+/** Narva trauma v3 restores P01's authoritative hospital-outdoor starting location. */
+export const NARVA_TRAUMA_OUTDOOR_PATIENT_DATASET: PackagePatientDataset = Object.freeze({
+  datasetId: NARVA_TRAUMA_OUTDOOR_DATASET_ID,
+  version: "3",
+  patients: Object.freeze(NARVA_TRAUMA_OXYGEN_PATIENT_DATASET.patients.map(record => Object.freeze({
+    patient: Object.freeze({ ...record.patient,
+      location: record.patient.id === "PT-PELVIC-001" ? "NARVA_HOSPITAL_OUTDOOR" : record.patient.location }),
+    initialLocationId: record.patient.id === "PT-PELVIC-001" ? "NARVA_HOSPITAL_OUTDOOR" : record.patient.location,
+    ...(record.runtimeFixture ? { runtimeFixture: record.runtimeFixture } : {}),
   }))),
 });
 

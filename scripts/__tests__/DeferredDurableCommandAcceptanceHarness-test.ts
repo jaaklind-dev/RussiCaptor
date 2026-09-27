@@ -9,11 +9,12 @@ const localFiles = ["20260918123000_large_canonical_checkpoint_publication_timeo
 const baseline = [{ version: "REMOTE-DIFFERENT-VERSION", name: core.BASELINE_MIGRATION }];
 
 describe("RELEASE-PREP-01 deferred durable command acceptance harness", () => {
-  test("RP-A1 inventories exactly the three deferred durable-command migrations", () => {
+  test("RP-A1 inventories the deferred durable-command migrations", () => {
     expect(core.DEFERRED_MIGRATIONS.map((item: { commandType: string }) => item.commandType))
-      .toEqual(["IMAGING_ORDER", "ENDOTRACHEAL_INTUBATION", "PATIENT_COMPLETE"]);
+      .toEqual(["IMAGING_ORDER", "ENDOTRACHEAL_INTUBATION", "PATIENT_COMPLETE",
+        "PATIENT_LOCATION_TRANSFER"]);
     expect(core.validateMigrationArtifacts(root).map((item: { validation: { status: string } }) =>
-      item.validation.status)).toEqual(["PASS", "PASS", "PASS"]);
+      item.validation.status)).toEqual(["PASS", "PASS", "PASS", "PASS"]);
   });
 
   test("RP-A2 freezes exact migration SHA-256 values", () => {
@@ -41,7 +42,7 @@ describe("RELEASE-PREP-01 deferred durable command acceptance harness", () => {
     expect(core.analyzeLedger({ remoteMigrations: remote, localMigrationFiles: localFiles }))
       .toMatchObject({ status: "PASS", states: [
         expect.objectContaining({ state: "DEPLOYED" }), expect.objectContaining({ state: "DEPLOYED" }),
-        expect.objectContaining({ state: "DEPLOYED" })] });
+        expect.objectContaining({ state: "DEPLOYED" }), expect.objectContaining({ state: "DEPLOYED" })] });
   });
 
   test("RP-A5 partial deployment stops for ledger reconciliation", () => {

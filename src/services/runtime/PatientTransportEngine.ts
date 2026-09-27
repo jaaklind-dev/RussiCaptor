@@ -69,6 +69,14 @@ export class PatientTransportEngine {
     return copy({ schemaVersion: 1, configuration: this.configuration, currentSimulationTimeSec: this.time, sequence: this.sequence, resources: [...this.resources.values()].sort(byId), transports: [...this.transports.values()].sort(byId), patientLocations: Object.fromEntries([...this.locations.entries()].sort(([a], [b]) => a.localeCompare(b))), evidence: [...this.evidence] });
   }
 
+  /** Reconciles canonical non-vehicle movement without creating transport state or evidence. */
+  reconcilePatientLocation(patientId: string, locationId: string): boolean {
+    if ([...this.transports.values()].some(item => item.patientId === patientId &&
+      !["COMPLETED", "CANCELLED", "FAILED"].includes(item.state))) return false;
+    this.locations.set(patientId, locationId);
+    return true;
+  }
+
   private completePhase(resource: TransportResourceRuntime): void {
     const transport = resource.currentTransportId ? this.transports.get(resource.currentTransportId) : undefined;
     if (!transport) throw new Error("TRANSPORT_STATE_INVALID"); const destination = this.destinations.get(transport.destinationId)!; const at = resource.phaseEndsAtSec!;

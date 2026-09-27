@@ -58,7 +58,7 @@ describe("Q-G01..Q-G10 package-owned Narva questions", () => {
     const second = [...getQuestions(pelvicId), ...getQuestions(chestId)];
     expect(second).toEqual(first); expect(second).toHaveLength(6);
     expect(second.every(item => item.exerciseId === exerciseId &&
-      item.packageId === "russicaptor.narva-trauma" && item.packageVersion === "1.0.3")).toBe(true);
+      item.packageId === "russicaptor.narva-trauma" && item.packageVersion === "1.0.4")).toBe(true);
   });
 
   test("shared-workflow restore preserves reveal state and never duplicates package definitions", () => {

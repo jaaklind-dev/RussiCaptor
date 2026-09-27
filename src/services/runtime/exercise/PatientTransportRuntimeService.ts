@@ -61,4 +61,10 @@ export function createPatientTransportCommandId(patientId:string){return `TRANSP
 export function subscribeToPatientTransport(listener:()=>void){listeners.add(listener);return()=>listeners.delete(listener);}
 export function getPatientTransportVersion(){return version;}
 export function getPatientTransportSnapshot(){return active?.engine.snapshot();}
+export function reconcilePatientTransportLocation(patientId:string,locationId:string):boolean {
+  if (!active) return true;
+  const reconciled=active.engine.reconcilePatientLocation(patientId,locationId);
+  if (reconciled) project();
+  return reconciled;
+}
 export function clearPatientTransportRuntime(){active?.dispose();active=undefined;changed();}

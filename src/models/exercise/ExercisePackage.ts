@@ -9,6 +9,7 @@ import type { ClinicalTreatmentId } from "@/models/ClinicalTreatment";
 import type { PackageImagingConfiguration } from "./PackageImagingConfiguration";
 import type { PackageInterventionAvailability } from "./PackageInterventionAvailability";
 import type { PackageQuestionConfiguration } from "./PackageQuestionConfiguration";
+import type { PackageInternalTransferConfiguration } from "./PackageInternalTransferConfiguration";
 
 export type ExercisePackage = Readonly<{
   packageId: string;
@@ -33,4 +34,6 @@ export type ExercisePackage = Readonly<{
   interventionAvailability?: PackageInterventionAvailability;
   /** Immutable patient questions authored by this exact package version. */
   questionConfiguration?: PackageQuestionConfiguration;
+  /** Package-owned, patient-scoped internal location transitions. */
+  internalTransferConfiguration?: PackageInternalTransferConfiguration;
 }>;

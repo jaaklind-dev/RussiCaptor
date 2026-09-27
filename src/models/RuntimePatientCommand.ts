@@ -15,6 +15,7 @@ export const runtimePatientCommandTypes = [
   "IMAGING_ORDER",
   "ENDOTRACHEAL_INTUBATION",
   "PATIENT_COMPLETE",
+  "PATIENT_LOCATION_TRANSFER",
 ] as const;
 
 export type RuntimePatientCommandType = typeof runtimePatientCommandTypes[number];

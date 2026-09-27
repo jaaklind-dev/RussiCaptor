@@ -28,6 +28,9 @@ describe("WP-NARVA-01 trauma package", () => {
     expect(exercisePackageRegistry.require("russicaptor.narva-trauma", "1.0.3"))
       .toMatchObject({ packageId: "russicaptor.narva-trauma", packageVersion: "1.0.3",
         patientDatasetId: "patients.narva-trauma.v2" });
+    expect(exercisePackageRegistry.require("russicaptor.narva-trauma", "1.0.4"))
+      .toMatchObject({ packageId: "russicaptor.narva-trauma", packageVersion: "1.0.4",
+        patientDatasetId: "patients.narva-trauma.v3" });
     expect(NARVA_TRAUMA_EXERCISE_PACKAGE_V101.packageHash).not.toBe(NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash);
     expect(NARVA_TRAUMA_EXERCISE_PACKAGE.packageHash).toMatch(/^[a-f0-9]{64}$/u);
   });
@@ -37,6 +40,14 @@ describe("WP-NARVA-01 trauma package", () => {
       packagePatientDatasetRegistry);
     expect(plan.patients.map(item => item.patient.id)).toEqual(["PT-CHEST-001", "PT-PELVIC-001"]);
     expect(plan.patients.every(item => item.patient.triage === "P1")).toBe(true);
+    expect(plan.patients.find(item => item.patient.id === "PT-PELVIC-001")?.patient.location)
+      .toBe("NARVA_HOSPITAL_OUTDOOR");
+    expect(plan.patients.find(item => item.patient.id === "PT-CHEST-001")?.patient.location).toBe("NARVA_ED");
+    expect(NARVA_TRAUMA_EXERCISE_PACKAGE.internalTransferConfiguration?.definitions).toEqual([
+      { actionId: "P01-MOVE-ED", patientId: "PT-PELVIC-001",
+        fromLocationId: "NARVA_HOSPITAL_OUTDOOR", toLocationId: "NARVA_ED",
+        displayName: "Ohutu transport õuest EMOsse" },
+    ]);
   });
 
   test("persists authoritative simulation-relative injury times", () => {

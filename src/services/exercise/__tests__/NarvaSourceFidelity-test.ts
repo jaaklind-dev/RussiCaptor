@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { NARVA_TRAUMA_EXERCISE_PACKAGE, NARVA_TRAUMA_EXERCISE_PACKAGE_V101,
-  NARVA_TRAUMA_EXERCISE_PACKAGE_V102 } from "../NarvaExercisePackages";
+  NARVA_TRAUMA_EXERCISE_PACKAGE_V102, NARVA_TRAUMA_EXERCISE_PACKAGE_V103 } from "../NarvaExercisePackages";
 import { NARVA_CHEST_BLEEDING_RATE_ML_MIN, NARVA_CHEST_FIXTURE, NARVA_PELVIC_FIXTURE,
-  NARVA_TRAUMA_MTP_CONFIGURATION, NARVA_TRAUMA_OXYGEN_PATIENT_DATASET } from "../NarvaPatientDatasets";
+  NARVA_TRAUMA_MTP_CONFIGURATION, NARVA_TRAUMA_OUTDOOR_PATIENT_DATASET } from "../NarvaPatientDatasets";
 import { NARVA_TRAUMA_P02_IMAGING_SOURCE } from "../NarvaTraumaImagingDefinitions";
 import { NARVA_TRAUMA_QUESTION_CONFIGURATION } from "../NarvaTraumaQuestionDefinitions";
 
@@ -44,9 +44,12 @@ Object.assign(actual, {
   "patients.mapping": ["PT-PELVIC-001", "PT-CHEST-001"],
   "p01.baseline-vitals": pelvicState.baselineVitals,
   "p02.baseline-vitals": chestState.baselineVitals,
-  "p01.start-location": { initialLocation: NARVA_TRAUMA_OXYGEN_PATIENT_DATASET.patients
-    .find(item => item.patient.id === "PT-PELVIC-001")!.patient.location, moveAction: "ABSENT" },
-  "p02.start-location": NARVA_TRAUMA_OXYGEN_PATIENT_DATASET.patients
+  "p01.start-location": { initialLocation: NARVA_TRAUMA_OUTDOOR_PATIENT_DATASET.patients
+    .find(item => item.patient.id === "PT-PELVIC-001")!.patient.location === "NARVA_HOSPITAL_OUTDOOR"
+      ? "OUTDOOR" : "UNEXPECTED",
+    moveAction: NARVA_TRAUMA_EXERCISE_PACKAGE.internalTransferConfiguration?.definitions
+      .find(item => item.patientId === "PT-PELVIC-001")?.actionId ?? "ABSENT" },
+  "p02.start-location": NARVA_TRAUMA_OUTDOOR_PATIENT_DATASET.patients
     .find(item => item.patient.id === "PT-CHEST-001")!.patient.location,
   "p01.pelvic-bleeding": { baselineMlMin: pelvicState.hemorrhageSources[0]
     .configuration.baselineBleedingRateMlMin, binderEfficiency: pelvicState.hemorrhageSources[0]
@@ -92,7 +95,7 @@ Object.assign(actual, {
   "imaging.asset": null,
 });
 
-describe("Narva source-fidelity guardrails SRC-G01..SRC-G19", () => {
+describe("Narva source-fidelity guardrails SRC-G01..SRC-G20", () => {
   test("SRC-G01 verifies raw artifacts and the approved canonical semantic checksum", () => {
     expect(core.sha256File(resolve(root, manifest.sources.originalWorkbook.path)))
       .toBe(manifest.sources.originalWorkbook.fileSha256);
@@ -132,18 +135,18 @@ describe("Narva source-fidelity guardrails SRC-G01..SRC-G19", () => {
       assessmentQuestions: ["P02-Q4", "P01-Q2"], intent: "LEARNER_CONTROLLED_PRIORITIZATION",
       operationalConsequence: "SINGLE_EXCLUSIVE_VEHICLE", hardTransportConstraint: false,
     } });
-    expect(manifest.items.filter(item => item.classification === "SOURCE_DEFINED_MISSING")
-      .map(item => item.id)).toEqual(["p01.start-location"]);
+    expect(manifest.items.filter(item => item.classification === "SOURCE_DEFINED_MISSING"))
+      .toEqual([]);
     expect(core.evaluateFidelity(manifest, actual).find(item => item.id === "transport.p02-priority")?.drift)
       .toBeNull();
   });
 
-  test("SRC-G19 keeps the workbook outdoor start authoritative without inventing supersession", () => {
+  test("SRC-G19 implements the workbook outdoor start and package-owned movement", () => {
     const location = manifest.items.find(item => item.id === "p01.start-location")!;
-    expect(location).toMatchObject({ classification: "SOURCE_DEFINED_MISSING",
+    expect(location).toMatchObject({ classification: "MATCH",
       currentAuthorityId: "p01-location-original-workbook-outdoor",
       sourceValue: { initialLocation: "OUTDOOR", moveAction: "P01-MOVE-ED" },
-      productionValue: { initialLocation: "NARVA_ED", moveAction: "ABSENT" } });
+      productionValue: { initialLocation: "OUTDOOR", moveAction: "P01-MOVE-ED" } });
     expect(location.authorityChain).toEqual([expect.objectContaining({
       authorityId: "p01-location-original-workbook-outdoor", sourceType: "ORIGINAL_SOURCE",
       semanticValue: { initialLocation: "OUTDOOR", moveAction: "P01-MOVE-ED" }, status: "CURRENT",
@@ -153,7 +156,7 @@ describe("Narva source-fidelity guardrails SRC-G01..SRC-G19", () => {
     const result = core.evaluateFidelity(manifest, actual).find(item => item.id === location.id)!;
     expect(result).toMatchObject({ expectedProductionValue: {
       initialLocation: "OUTDOOR", moveAction: "P01-MOVE-ED" },
-    actualProductionValue: { initialLocation: "NARVA_ED", moveAction: "ABSENT" }, drift: null });
+    actualProductionValue: { initialLocation: "OUTDOOR", moveAction: "P01-MOVE-ED" }, drift: null });
   });
 
   test("SRC-G08 resolves P02 through an explicit historical-to-current authority chain", () => {
@@ -201,9 +204,11 @@ describe("Narva source-fidelity guardrails SRC-G01..SRC-G19", () => {
 
   test("SRC-G11 preserves historical packages while current source mapping remains versioned", () => {
     expect([NARVA_TRAUMA_EXERCISE_PACKAGE_V101, NARVA_TRAUMA_EXERCISE_PACKAGE_V102,
-      NARVA_TRAUMA_EXERCISE_PACKAGE].map(item => item.packageVersion)).toEqual(["1.0.1", "1.0.2", "1.0.3"]);
+      NARVA_TRAUMA_EXERCISE_PACKAGE_V103, NARVA_TRAUMA_EXERCISE_PACKAGE]
+      .map(item => item.packageVersion)).toEqual(["1.0.1", "1.0.2", "1.0.3", "1.0.4"]);
     expect(new Set([NARVA_TRAUMA_EXERCISE_PACKAGE_V101, NARVA_TRAUMA_EXERCISE_PACKAGE_V102,
-      NARVA_TRAUMA_EXERCISE_PACKAGE].map(item => item.packageHash)).size).toBe(3);
+      NARVA_TRAUMA_EXERCISE_PACKAGE_V103, NARVA_TRAUMA_EXERCISE_PACKAGE]
+      .map(item => item.packageHash)).size).toBe(4);
   });
 
   test("SRC-G12 produces deterministic privacy-safe summaries", () => {

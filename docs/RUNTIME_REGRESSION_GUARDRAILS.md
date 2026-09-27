@@ -189,7 +189,8 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | SRC-G16 | No unauthorized hard priority | No priority, queue, precedence, or P01-first rejection exists without explicit authority. |
 | SRC-G17 | Learner choice with consequence | Either patient may choose first; one exclusive vehicle blocks the concurrent second transport. |
 | SRC-G18 | Transport semantics unchanged | Fidelity metadata introduces no assessment-specific transport branch. |
-| SRC-G19 | P01 starting-location authority | Outdoor start and `P01-MOVE-ED` remain current source authority until explicitly superseded or durably implemented. |
+| SRC-G19 | P01 starting-location authority | P01 starts outdoors and package-owned `P01-MOVE-ED` implements the current source authority. |
+| SRC-G20 | P01 durable internal transfer | The move to ED is durable, exactly once, and isolated from vehicle transport. |
 
 ## Imaging regression guardrails
 

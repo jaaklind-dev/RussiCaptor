@@ -16,6 +16,10 @@ const DEFERRED_MIGRATIONS = Object.freeze([
   Object.freeze({ version: "20260926143000", name: "add_patient_complete_runtime_patient_command",
     file: "20260926143000_add_patient_complete_runtime_patient_command.sql", commandType: "PATIENT_COMPLETE",
     sha256: "48553387691c2a3884375b29a7345ab20e8c66baa0d55fbb74b77780f416c371" }),
+  Object.freeze({ version: "20260927120000", name: "add_patient_location_transfer_runtime_patient_command",
+    file: "20260927120000_add_patient_location_transfer_runtime_patient_command.sql",
+    commandType: "PATIENT_LOCATION_TRANSFER",
+    sha256: "5bfc19e82927c8208cc2d9d21fb662acfb933ca260d9c3f00d3c6fb494a260a4" }),
 ]);
 const PHYSICAL_GATES = Object.freeze(["RUNTIME", "IMAGING", "INTERVENTION_READINESS", "ETT",
   "TRANSPORT", "PATIENT_COMPLETION"]);

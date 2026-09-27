@@ -13,6 +13,8 @@ import { handleEndotrachealIntubationCommand } from
   "@/services/runtime/instructor/EndotrachealIntubationCommandService";
 import { materializePatientCompletion } from
   "@/services/runtime/exercise/PatientCompletionMaterializationService";
+import { materializePatientInternalTransfer } from
+  "@/services/runtime/exercise/PatientInternalTransferService";
 
 function rejected(reason: string): RuntimePatientCommandMaterialization {
   return Object.freeze({ status: "REJECTED", result: Object.freeze({ ok: false, reason }) });
@@ -111,6 +113,16 @@ export function materializeRuntimePatientCommand(command: AcceptedRuntimePatient
     if (command.commandType === "PATIENT_COMPLETE") {
       if (Object.keys(command.payload).length !== 0) return rejected("INVALID_COMMAND_PAYLOAD");
       const result = materializePatientCompletion(command.commandId, command.patientId,
+        command.simulationTimeSec, command.actorUserId);
+      return Object.freeze({ status: result.ok ? "MATERIALIZED" : "REJECTED",
+        result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
+    }
+    if (command.commandType === "PATIENT_LOCATION_TRANSFER") {
+      const actionId = command.payload.actionId;
+      if (typeof actionId !== "string" || Object.keys(command.payload).length !== 1) {
+        return rejected("INVALID_COMMAND_PAYLOAD");
+      }
+      const result = materializePatientInternalTransfer(command.commandId, command.patientId, actionId,
         command.simulationTimeSec, command.actorUserId);
       return Object.freeze({ status: result.ok ? "MATERIALIZED" : "REJECTED",
         result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
