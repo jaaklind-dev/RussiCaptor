@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G16/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G12/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G14/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Transport lifecycle regression guardrails
 
@@ -72,6 +72,14 @@ Transport start is a durable patient command. Only the authoritative writer mate
 | TRANS-G14 | Terminal fence | Completion fencing rejects later starts and deterministically drains prior accepted commands. |
 | TRANS-G15 | Cancellation unsupported | Current production exposes no misleading unreachable cancellation action. |
 | TRANS-G16 | Completion independence | Transport phases do not complete the patient or exercise. |
+| TRANS-G17 | P02 loading equivalence | P02 loading is represented only by durable `TRANSPORT_START`. |
+| TRANS-G18 | Single onboard evidence | Replay and restore preserve exactly one `PATIENT_ONBOARD` event. |
+| TRANS-G19 | Single monitoring clock | Stationary monitoring uses the outbound phase deadline, not a second timer. |
+| TRANS-G20 | Reanimobile location | P02 remains in `REANIMOBILE` until the arrival threshold. |
+| TRANS-G21 | Source duration fidelity | The source-defined 30 minutes remains exactly 1800 simulation seconds. |
+| TRANS-G22 | Staging restart | Restart preserves transport identity, deadline, location, and evidence cardinality. |
+| TRANS-G23 | Staging takeover | Takeover crosses the arrival threshold exactly once. |
+| TRANS-G24 | No duplicate staging authority | No separate loading/monitoring command, state, or clock duplicates transport authority. |
 
 ## Patient completion regression guardrails
 
@@ -175,6 +183,8 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | SRC-G10 | No demo substitution | Demo/global content cannot satisfy a Narva mapping. |
 | SRC-G11 | Historical versions immutable | Narva 1.0.1 and 1.0.2 remain preserved beside 1.0.3. |
 | SRC-G12 | Explicit drift report | Drift fails deterministically without exposing personal identifiers. |
+| SRC-G13 | P02 loading equivalence | `P02-LOAD-REANIMOBILE` maps to the existing durable transport lifecycle. |
+| SRC-G14 | P02 monitoring equivalence | `P02-TRANSPORT-MONITOR` maps to the single 1800-second outbound phase. |
 
 ## Imaging regression guardrails
 

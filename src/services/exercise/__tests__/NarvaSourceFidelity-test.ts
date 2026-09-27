@@ -74,11 +74,18 @@ Object.assign(actual, {
   "transport.vehicle": transport.resources.length,
   "transport.ivkh": { seconds: transport.destinations.find(item => item.destinationId === "IVKH")!.travelDurationSec },
   "transport.perh": { seconds: transport.destinations.find(item => item.destinationId === "PERH")!.travelDurationSec },
+  "transport.p02-loading-equivalence": { patient: "PT-CHEST-001", commandType: "TRANSPORT_START",
+    patientLocation: transport.vehicleLocationId, evidenceType: "PATIENT_ONBOARD",
+    transportInstancesPerCommand: 1 },
+  "transport.p02-stationary-monitoring-equivalence": { patient: "PT-CHEST-001",
+    transportState: "IN_TRANSIT", resourceState: "OUTBOUND", patientLocation: transport.vehicleLocationId,
+    durationSec: transport.destinations.find(item => item.destinationId === "IVKH")!.travelDurationSec,
+    timerAuthority: "TRANSPORT_PHASE_DEADLINE", timerCount: 1 },
   "questions.demo-isolation": questions.length,
   "imaging.asset": null,
 });
 
-describe("Narva source-fidelity guardrails SRC-G01..SRC-G12", () => {
+describe("Narva source-fidelity guardrails SRC-G01..SRC-G14", () => {
   test("SRC-G01 verifies raw artifacts and the approved canonical semantic checksum", () => {
     expect(core.sha256File(resolve(root, manifest.sources.originalWorkbook.path)))
       .toBe(manifest.sources.originalWorkbook.fileSha256);
@@ -97,6 +104,19 @@ describe("Narva source-fidelity guardrails SRC-G01..SRC-G12", () => {
     const mutated = { ...actual, "p02.oxygen": { patient: "PT-PELVIC-001", intervention: "OXYGEN_THERAPY" } };
     expect(core.evaluateFidelity(manifest, mutated).find(item => item.id === "p02.oxygen")?.drift)
       .toBe("PRODUCTION_DRIFT");
+  });
+
+  test("SRC-G13/G14 formalize P02 loading and stationary monitoring as transport derivations", () => {
+    const loading = manifest.items.find(item => item.id === "transport.p02-loading-equivalence");
+    const monitoring = manifest.items.find(item => item.id === "transport.p02-stationary-monitoring-equivalence");
+    expect(loading).toMatchObject({ classification: "ACCEPTED_DERIVATION",
+      productionValue: { commandType: "TRANSPORT_START", patientLocation: "REANIMOBILE",
+        evidenceType: "PATIENT_ONBOARD", transportInstancesPerCommand: 1 } });
+    expect(monitoring).toMatchObject({ classification: "ACCEPTED_DERIVATION",
+      productionValue: { transportState: "IN_TRANSIT", resourceState: "OUTBOUND",
+        patientLocation: "REANIMOBILE", durationSec: 1800,
+        timerAuthority: "TRANSPORT_PHASE_DEADLINE", timerCount: 1 } });
+    expect(core.summarizeFidelity(core.evaluateFidelity(manifest, actual)).drift).toEqual([]);
   });
 
   test("SRC-G08 resolves P02 through an explicit historical-to-current authority chain", () => {

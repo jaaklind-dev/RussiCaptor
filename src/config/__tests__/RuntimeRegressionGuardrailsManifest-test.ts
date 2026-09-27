@@ -170,7 +170,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
   });
 
   test("keeps the complete transport hardening guardrail catalog unique and explicit", () => {
-    const expectedIds = Array.from({ length: 16 }, (_, index) => `TRANS-G${String(index + 1).padStart(2, "0")}`);
+    const expectedIds = Array.from({ length: 24 }, (_, index) => `TRANS-G${String(index + 1).padStart(2, "0")}`);
     expect(manifest.transportGuardrails.map(guardrail => guardrail.id)).toEqual(expectedIds);
     expect(manifest.transportGuardrails.every(guardrail => guardrail.name.length > 0 &&
       guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);
@@ -188,7 +188,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
   });
 
   test("keeps the complete Narva source-fidelity guardrail catalog unique and explicit", () => {
-    const expectedIds = Array.from({ length: 12 }, (_, index) => `SRC-G${String(index + 1).padStart(2, "0")}`);
+    const expectedIds = Array.from({ length: 14 }, (_, index) => `SRC-G${String(index + 1).padStart(2, "0")}`);
     expect(manifest.sourceFidelityGuardrails.map(guardrail => guardrail.id)).toEqual(expectedIds);
     expect(manifest.sourceFidelityGuardrails.every(guardrail => guardrail.name.length > 0 &&
       guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);

@@ -105,7 +105,15 @@
     { "id": "TRANS-G13", "name": "reader-no-local-mutation", "description": "A reader can submit durably but cannot create local transport state.", "phase": "FOUNDATION", "tests": ["src/services/runtime/exercise/__tests__/PatientTransportRuntimePersistence-test.ts", "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts"] },
     { "id": "TRANS-G14", "name": "terminal-fence", "description": "Exercise completion fencing rejects later transport commands and drains accepted earlier commands deterministically.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts"] },
     { "id": "TRANS-G15", "name": "cancellation-unsupported", "description": "The current production lifecycle exposes no misleading or unreachable transport-cancellation action.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/TransportDurableLifecycleHardening-test.ts"] },
-    { "id": "TRANS-G16", "name": "completion-independent", "description": "Arrival, handover and vehicle-cycle completion do not complete the patient or exercise.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/TransportDurableLifecycleHardening-test.ts"] }
+    { "id": "TRANS-G16", "name": "completion-independent", "description": "Arrival, handover and vehicle-cycle completion do not complete the patient or exercise.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/TransportDurableLifecycleHardening-test.ts"] },
+    { "id": "TRANS-G17", "name": "p02-loading-equivalence", "description": "P02 loading is represented only by durable TRANSPORT_START materialization.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportStagingEquivalence-test.ts"] },
+    { "id": "TRANS-G18", "name": "single-onboard-evidence", "description": "One transport command emits exactly one PATIENT_ONBOARD event, including replay and restore.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportStagingEquivalence-test.ts"] },
+    { "id": "TRANS-G19", "name": "single-monitoring-clock", "description": "Stationary monitoring uses the one outbound phase deadline and no second authoritative timer.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportStagingEquivalence-test.ts"] },
+    { "id": "TRANS-G20", "name": "reanimobile-location-semantics", "description": "P02 remains canonically located in REANIMOBILE throughout the pre-arrival phase.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportStagingEquivalence-test.ts"] },
+    { "id": "TRANS-G21", "name": "source-duration-fidelity", "description": "The stationary monitoring equivalence remains exactly 30 simulation minutes or 1800 seconds.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportStagingEquivalence-test.ts"] },
+    { "id": "TRANS-G22", "name": "staging-restart-determinism", "description": "Restart during the stationary phase preserves transport identity, deadline, location and evidence cardinality.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportStagingEquivalence-test.ts"] },
+    { "id": "TRANS-G23", "name": "staging-takeover-exactly-once", "description": "Takeover preserves staging state and crosses the arrival threshold exactly once.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportStagingEquivalence-test.ts"] },
+    { "id": "TRANS-G24", "name": "no-duplicate-staging-authority", "description": "No separate loading command, monitoring command, staging state or second clock may duplicate TRANSPORT_START authority.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportStagingEquivalence-test.ts"] }
   ],
   "procedureGuardrails": [
     { "id": "PROC-G01", "name": "package-patient-ownership", "description": "Procedure availability derives from the bound package and patient identity.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaProcedureAvailability-test.ts"] },
@@ -242,11 +250,14 @@
     { "id": "SRC-G09", "name": "unresolved-not-match", "description": "Ambiguous, missing and conflicting source items cannot silently become MATCH.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
     { "id": "SRC-G10", "name": "no-demo-source-substitution", "description": "Demo or global content cannot satisfy Narva source mappings.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
     { "id": "SRC-G11", "name": "historical-package-immutability", "description": "Historical Narva package versions remain separately addressable and immutable.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
-    { "id": "SRC-G12", "name": "explicit-drift-report", "description": "Package/source drift fails deterministically and reports the mapped item without personal identifiers.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] }
+    { "id": "SRC-G12", "name": "explicit-drift-report", "description": "Package/source drift fails deterministically and reports the mapped item without personal identifiers.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"] },
+    { "id": "SRC-G13", "name": "p02-loading-transport-equivalence", "description": "The authored P02 loading action maps to the existing durable TRANSPORT_START lifecycle.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts", "src/services/runtime/__tests__/NarvaTransportStagingEquivalence-test.ts"] },
+    { "id": "SRC-G14", "name": "p02-monitoring-transport-equivalence", "description": "The authored stationary 30-minute monitoring phase maps to the single 1800-second outbound transport phase.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts", "src/services/runtime/__tests__/NarvaTransportStagingEquivalence-test.ts"] }
   ],
   "groups": {
     "source-fidelity": [
-      "src/services/exercise/__tests__/NarvaSourceFidelity-test.ts"
+      "src/services/exercise/__tests__/NarvaSourceFidelity-test.ts",
+      "src/services/runtime/__tests__/NarvaTransportStagingEquivalence-test.ts"
     ],
     "questions": [
       "src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts",
@@ -264,6 +275,7 @@
       "src/services/runtime/__tests__/TransportDurableLifecycleHardening-test.ts"
     ],
     "transport": [
+      "src/services/runtime/__tests__/NarvaTransportStagingEquivalence-test.ts",
       "src/services/runtime/__tests__/TransportDurableLifecycleHardening-test.ts",
       "src/services/runtime/__tests__/PatientTransportEngine-test.ts",
       "src/services/runtime/exercise/__tests__/PatientTransportRuntimePersistence-test.ts",
