@@ -191,6 +191,16 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | SRC-G18 | Transport semantics unchanged | Fidelity metadata introduces no assessment-specific transport branch. |
 | SRC-G19 | P01 starting-location authority | P01 starts outdoors and package-owned `P01-MOVE-ED` implements the current source authority. |
 | SRC-G20 | P01 durable internal transfer | The move to ED is durable, exactly once, and isolated from vehicle transport. |
+| SRC-G21 | Scripted vital row inventory | All 11 approved Narva workbook vital IDs remain mapped exactly once. |
+| SRC-G22 | T+0 baseline fidelity | P01-V0 and P02-V0 remain exact production baseline inputs. |
+| SRC-G23 | Expected observation semantics | Five generic later rows remain descriptive `EXPECTED_OBSERVATION` metadata. |
+| SRC-G24 | Source checkpoint semantics | Four phase-tagged rows remain `SOURCE_CHECKPOINT` metadata with identity-derived hints only. |
+| SRC-G25 | Scripted vital value fidelity | Minute, HR, BP, RR, SpO2, temperature, GCS, and pain remain exact to the approved workbook. |
+| SRC-G26 | No implicit later target | No later workbook row becomes an exact Runtime target. |
+| SRC-G27 | No scripted override path | Production contains no clock-triggered playback or direct vital replacement for these rows. |
+| SRC-G28 | No unauthorized tolerance | No numeric comparison tolerance exists without a new authority decision. |
+| SRC-G29 | Dynamic physiology authority | Canonical Runtime physiology remains owned by deterministic patient processes and intervention effects. |
+| SRC-G30 | Privacy-safe deterministic mapping | Vital fidelity metadata uses only P01/P02 and neutral production patient IDs and reports deterministically. |
 
 ## Imaging regression guardrails
 

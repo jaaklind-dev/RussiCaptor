@@ -258,11 +258,22 @@
     { "id": "SRC-G17", "name": "learner-choice-with-resource-consequence", "description": "Either patient may claim an available vehicle first, and exclusivity blocks the concurrent second transport.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportPriorityFidelity-test.ts"] },
     { "id": "SRC-G18", "name": "transport-semantics-unchanged", "description": "Priority fidelity remains metadata and tests only; durable transport behavior has no assessment-specific branch.", "phase": "FOUNDATION", "tests": ["src/services/runtime/__tests__/NarvaTransportPriorityFidelity-test.ts"] },
     { "id": "SRC-G19", "name": "p01-start-location-authority", "description": "P01 starts outdoors and the package-owned durable P01-MOVE-ED action implements the current source authority.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaSourceFidelity-test.ts", "src/services/runtime/commands/__tests__/DurablePatientInternalTransferCommand-test.ts"] },
-    { "id": "SRC-G20", "name": "p01-durable-internal-transfer", "description": "P01 internal transfer is package-owned, durable, exactly once, and isolated from vehicle transport.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientInternalTransferCommand-test.ts"] }
+    { "id": "SRC-G20", "name": "p01-durable-internal-transfer", "description": "P01 internal transfer is package-owned, durable, exactly once, and isolated from vehicle transport.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientInternalTransferCommand-test.ts"] },
+    { "id": "SRC-G21", "name": "scripted-vital-row-inventory", "description": "All eleven approved Narva workbook vital IDs remain mapped exactly once.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaScriptedVitalsFidelity-test.ts"] },
+    { "id": "SRC-G22", "name": "scripted-vital-baseline-fidelity", "description": "The two T+0 rows remain exact immutable production baseline inputs.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaScriptedVitalsFidelity-test.ts"] },
+    { "id": "SRC-G23", "name": "scripted-vital-observation-semantics", "description": "Five generic later rows remain descriptive expected observations.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaScriptedVitalsFidelity-test.ts"] },
+    { "id": "SRC-G24", "name": "scripted-vital-checkpoint-semantics", "description": "Four phase-tagged rows remain source checkpoints with identity-derived hints only.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaScriptedVitalsFidelity-test.ts"] },
+    { "id": "SRC-G25", "name": "scripted-vital-value-fidelity", "description": "All mapped vital values and exercise minutes remain exact to the approved workbook.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaScriptedVitalsFidelity-test.ts"] },
+    { "id": "SRC-G26", "name": "scripted-vital-no-implicit-target", "description": "No later workbook row becomes an exact Runtime target.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaScriptedVitalsFidelity-test.ts"] },
+    { "id": "SRC-G27", "name": "scripted-vital-no-playback", "description": "Production contains no clock-triggered playback or direct vital replacement for Narva source rows.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaScriptedVitalsFidelity-test.ts"] },
+    { "id": "SRC-G28", "name": "scripted-vital-no-tolerance", "description": "No numeric comparison tolerance exists without a new authority decision.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaScriptedVitalsFidelity-test.ts"] },
+    { "id": "SRC-G29", "name": "scripted-vital-dynamic-authority", "description": "Canonical Runtime physiology remains owned by deterministic patient processes and intervention effects.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaScriptedVitalsFidelity-test.ts"] },
+    { "id": "SRC-G30", "name": "scripted-vital-privacy-determinism", "description": "Vital fidelity metadata is privacy-safe and reports deterministically.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/NarvaScriptedVitalsFidelity-test.ts"] }
   ],
   "groups": {
     "source-fidelity": [
       "src/services/exercise/__tests__/NarvaSourceFidelity-test.ts",
+      "src/services/exercise/__tests__/NarvaScriptedVitalsFidelity-test.ts",
       "src/services/runtime/__tests__/NarvaTransportStagingEquivalence-test.ts",
       "src/services/runtime/__tests__/NarvaTransportPriorityFidelity-test.ts",
       "src/services/runtime/commands/__tests__/DurablePatientInternalTransferCommand-test.ts"

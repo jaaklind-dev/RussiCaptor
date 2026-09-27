@@ -55,7 +55,8 @@ const evaluateFidelity = (manifest, actualById) => manifest.items.map(item => {
 const summarizeFidelity = results => {
   const counts = Object.fromEntries([
     "MATCH", "ACCEPTED_DERIVATION", "INTENTIONAL_IMPLEMENTATION_POLICY", "SOURCE_DEFINED_MISSING",
-    "SOURCE_AMBIGUOUS", "SOURCE_CONFLICT", "SUPERSEDED_SOURCE_VALUE", "NOT_APPLICABLE",
+    "EXPECTED_OBSERVATION", "SOURCE_CHECKPOINT", "SOURCE_AMBIGUOUS", "SOURCE_CONFLICT",
+    "SUPERSEDED_SOURCE_VALUE", "NOT_APPLICABLE",
   ].map(value => [value, 0]));
   for (const result of results) counts[result.classification] += 1;
   return Object.freeze({ total: results.length, counts: Object.freeze(counts),

@@ -95,7 +95,7 @@ Object.assign(actual, {
   "imaging.asset": null,
 });
 
-describe("Narva source-fidelity guardrails SRC-G01..SRC-G20", () => {
+describe("Narva source-fidelity guardrails SRC-G01..SRC-G30", () => {
   test("SRC-G01 verifies raw artifacts and the approved canonical semantic checksum", () => {
     expect(core.sha256File(resolve(root, manifest.sources.originalWorkbook.path)))
       .toBe(manifest.sources.originalWorkbook.fileSha256);
