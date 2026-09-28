@@ -23,6 +23,7 @@ import { NARVA_IRO_EXERCISE_PACKAGE, NARVA_IRO_HISTORICAL_EXERCISE_PACKAGE_V1,
   NARVA_TRAUMA_EXERCISE_PACKAGE, NARVA_TRAUMA_EXERCISE_PACKAGE_V101,
   NARVA_TRAUMA_EXERCISE_PACKAGE_V102, NARVA_TRAUMA_EXERCISE_PACKAGE_V103,
   NARVA_TRAUMA_EXERCISE_PACKAGE_V104 } from "./NarvaExercisePackages";
+import { loadGeneratedImagingAuthoredPackages } from "@/services/imaging/ImagingAuthoredPackageLoader";
 
 export const exercisePackageValidator = new ExercisePackageValidator(EXERCISE_DEFINITION_CATALOG);
 export const exercisePackageRegistry = new ExercisePackageRegistry(exercisePackageValidator);
@@ -61,6 +62,7 @@ exercisePackageLoader.load(NARVA_TRAUMA_EXERCISE_PACKAGE_V102);
 exercisePackageLoader.load(NARVA_TRAUMA_EXERCISE_PACKAGE_V101);
 exercisePackageLoader.load(NARVA_IRO_HISTORICAL_EXERCISE_PACKAGE_V1);
 exercisePackageLoader.load(NARVA_IRO_EXERCISE_PACKAGE);
+loadGeneratedImagingAuthoredPackages(exercisePackageLoader, exercisePackageRegistry);
 exercisePackageLoader.bind("demo", DEFAULT_EXERCISE_PACKAGE);
 export function getExercisePackage(exerciseId: string): ExercisePackage { return exercisePackageLoader.getBound(exerciseId) ?? DEFAULT_EXERCISE_PACKAGE; }
 export function getExerciseDefinition(exerciseId: string): ExercisePackage["definition"] { return getExercisePackage(exerciseId).definition; }

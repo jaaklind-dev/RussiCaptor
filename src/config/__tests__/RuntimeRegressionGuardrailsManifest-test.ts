@@ -20,6 +20,13 @@ type GuardrailManifest = Readonly<{
     phase: "FOUNDATION";
     tests: readonly string[];
   }>[];
+  imagingAuthoringGuardrails: readonly Readonly<{
+    id: string;
+    name: string;
+    description: string;
+    phase: "FOUNDATION";
+    tests: readonly string[];
+  }>[];
   procedureGuardrails: readonly Readonly<{
     id: string;
     name: string;
@@ -106,6 +113,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       ...manifest.guardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.imagingGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.imagingAssetIngestGuardrails.flatMap(guardrail => guardrail.tests),
+      ...manifest.imagingAuthoringGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.transportGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.patientCompletionGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.procedureGuardrails.flatMap(guardrail => guardrail.tests),
@@ -178,6 +186,19 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
     expect(new Set(allIds).size).toBe(allIds.length);
     const document = readFileSync(resolve(root, manifest.document), "utf8");
     for (const guardrail of manifest.imagingAssetIngestGuardrails) expect(document).toContain(`| ${guardrail.id} |`);
+  });
+
+  test("keeps the complete Imaging authoring guardrail catalog unique and explicit", () => {
+    const expectedIds = Array.from({ length: 16 }, (_, index) =>
+      `IMG-AUTH-G${String(index + 1).padStart(2, "0")}`);
+    expect(manifest.imagingAuthoringGuardrails.map(guardrail => guardrail.id)).toEqual(expectedIds);
+    expect(manifest.imagingAuthoringGuardrails.every(guardrail => guardrail.name.length > 0 &&
+      guardrail.description.length > 0 && guardrail.phase === "FOUNDATION" && guardrail.tests.length > 0)).toBe(true);
+    const allIds = [...manifest.imagingGuardrails.map(guardrail => guardrail.id),
+      ...manifest.imagingAssetIngestGuardrails.map(guardrail => guardrail.id), ...expectedIds];
+    expect(new Set(allIds).size).toBe(allIds.length);
+    const document = readFileSync(resolve(root, manifest.document), "utf8");
+    for (const guardrail of manifest.imagingAuthoringGuardrails) expect(document).toContain(`| ${guardrail.id} |`);
   });
 
   test("keeps the complete procedure availability guardrail catalog unique and explicit", () => {

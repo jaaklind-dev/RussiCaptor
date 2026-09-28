@@ -68,6 +68,8 @@
     "narva:source-fidelity": "node scripts/narva-source-fidelity.mjs",
     "imaging:asset-ingest": "node scripts/imaging-asset-ingest.mjs",
     "imaging:asset-verify": "node scripts/imaging-asset-ingest.mjs --verify",
+    "imaging:author": "node scripts/imaging-author.mjs",
+    "imaging:preview": "node scripts/imaging-preview.mjs",
     "test:imaging-physical-prep": "jest --runInBand scripts/__tests__/NarvaImagingPhysicalAcceptanceHarness-test.ts",
     "imaging:physical-prep": "node scripts/narva-imaging-physical-acceptance.mjs --mode prepare",
     "test:deferred-durable-release-prep": "jest --runInBand scripts/__tests__/DeferredDurableCommandAcceptanceHarness-test.ts",

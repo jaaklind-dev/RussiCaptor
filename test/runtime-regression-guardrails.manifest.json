@@ -95,6 +95,24 @@
     { "id": "IMG-ASSET-G15", "name": "no-checkpoint-binary", "description": "Generated metadata and canonical checkpoints never embed image bytes or data URLs.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts", "src/services/runtime/persistence/__tests__/ImagingRuntimePersistence-test.ts"] },
     { "id": "IMG-ASSET-G16", "name": "bundled-local-resolution", "description": "Generated registration resolves through the existing BUNDLED_LOCAL runtime contract.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts", "src/services/runtime/imaging/__tests__/ImagingReportAssetContract-test.ts"] }
   ],
+  "imagingAuthoringGuardrails": [
+    { "id": "IMG-AUTH-G01", "name": "new-package-version", "description": "A valid authoring operation creates one new immutable package version with the requested asset binding.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts"] },
+    { "id": "IMG-AUTH-G02", "name": "published-base-unchanged", "description": "Authoring never mutates the published base package or its hash.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts"] },
+    { "id": "IMG-AUTH-G03", "name": "dry-run-no-write", "description": "Authoring dry-run reports the complete plan without writing any file.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts"] },
+    { "id": "IMG-AUTH-G04", "name": "wrong-package-rejected", "description": "Unknown package identity fails before ingest or package output.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts"] },
+    { "id": "IMG-AUTH-G05", "name": "wrong-patient-rejected", "description": "A patient mismatch fails instead of rebinding through fuzzy matching.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts"] },
+    { "id": "IMG-AUTH-G06", "name": "wrong-definition-rejected", "description": "An unknown Imaging definition fails before any write.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts"] },
+    { "id": "IMG-AUTH-G07", "name": "version-collision-rejected", "description": "A proposed package version already present in the registry or generated recipes cannot be reused.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts"] },
+    { "id": "IMG-AUTH-G08", "name": "replacement-identity", "description": "Replacing a bound image requires a distinct immutable asset identity and later package version.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts"] },
+    { "id": "IMG-AUTH-G09", "name": "transaction-rollback", "description": "A controlled failure after ingest restores every manifest/registry and removes new asset residue.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts"] },
+    { "id": "IMG-AUTH-G10", "name": "package-hash-valid", "description": "The authored package hash is computed by the canonical package hash implementation and validated on fresh load.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts", "src/services/exercise/__tests__/ExercisePackageFramework-test.ts"] },
+    { "id": "IMG-AUTH-G11", "name": "asset-registry-valid", "description": "Authored assets remain exact members of the generated bundled registry.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts", "scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-AUTH-G12", "name": "historical-hashes-unchanged", "description": "Existing package versions and frozen historical hashes remain unchanged.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts", "src/services/exercise/__tests__/ExercisePackageFramework-test.ts", "src/services/exercise/__tests__/IroPackageImmutability-test.ts"] },
+    { "id": "IMG-AUTH-G13", "name": "clinical-semantics-unchanged", "description": "Asset authoring preserves title, report, delay, modality, order and patient binding.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts"] },
+    { "id": "IMG-AUTH-G14", "name": "provenance-preserved", "description": "Declared source, contributor, license, attribution and modification metadata is preserved exactly.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts"] },
+    { "id": "IMG-AUTH-G15", "name": "bounded-json-output", "description": "Machine-readable author output is bounded metadata and never includes raw image bytes.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts"] },
+    { "id": "IMG-AUTH-G16", "name": "normal-package-loader", "description": "Generated authored versions load through the canonical ExercisePackageLoader and registry.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingPackageAuthoring-test.ts"] }
+  ],
   "questionGuardrails": [
     { "id": "Q-G01", "name": "package-owned-questions", "description": "Narva question definitions are immutable content of an exact package version.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts"] },
     { "id": "Q-G02", "name": "p01-pelvic-mapping", "description": "Only PT-PELVIC-001 receives the two source P01 questions.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts"] },
@@ -353,7 +371,8 @@
       "src/components/patient/__tests__/ImagingTabDurableLifecycle-test.tsx",
       "src/providers/excel/__tests__/WorkbookDataMapper-test.ts",
       "src/services/__tests__/ScenarioWorkflow-test.ts",
-      "scripts/__tests__/ImagingAssetIngest-test.ts"
+      "scripts/__tests__/ImagingAssetIngest-test.ts",
+      "scripts/__tests__/ImagingPackageAuthoring-test.ts"
     ],
     "laboratory": [
       "src/config/__tests__/NarvaLaboratoryCatalog-test.ts",

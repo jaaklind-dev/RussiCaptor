@@ -1,0 +1,22 @@
+import path from "node:path";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { verifyManifest } = require("./lib/imaging-asset-ingest-core.cjs");
+const { loadAuthoringContext } = require("./lib/load-russicaptor-typescript.cjs");
+const rootDir = path.resolve(import.meta.dirname, "..");
+const index = process.argv.indexOf("--asset-id");
+if (index < 0 || !process.argv[index + 1]) throw new Error("Missing required argument: --asset-id");
+if (process.argv.length !== 4) throw new Error("Unexpected preview argument");
+verifyManifest(rootDir);
+const context = loadAuthoringContext(rootDir);
+const asset = context.getRegisteredImagingAsset(process.argv[index + 1]);
+if (!asset) throw new Error("IMAGING_PREVIEW_ASSET_NOT_FOUND");
+const resolution = context.resolveImagingAsset(asset);
+if (resolution.status !== "RESOLVED") throw new Error(`IMAGING_PREVIEW_${resolution.status}`);
+console.log(`Imaging asset preview: RESOLVED`);
+console.log(`assetId: ${asset.assetId}`);
+console.log(`media: ${asset.mediaType} ${asset.width}x${asset.height} (${asset.byteLength} bytes)`);
+console.log(`package: ${asset.packageId}@${asset.packageVersion}`);
+console.log(`target: ${asset.patientId} / ${asset.definitionId}`);
+console.log(`resolverKey: ${asset.resolverKey}`);

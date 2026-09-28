@@ -33,6 +33,38 @@ Remove `--dry-run` to ingest. The tool copies the bytes under `assets/imaging/pa
 npm run imaging:asset-verify
 ```
 
-The generated asset can then be bound once in a new package version with `getRegisteredImagingAsset(assetId)` as the Imaging definition's `study.asset`. Package validation checks package ID/version, patient ID and definition ID. The ingest command refuses a new binding for a package ID/version already present in the published package source. Intentional image replacement requires a new asset version; binding it to a published package also requires a new package version.
+The low-level ingest command remains available for registry maintenance. Package authors should normally use the transactional authoring command below; it removes the former manual package-binding and hash-editing step.
 
 Optional provenance flags are `--source-url`, `--attribution`, `--license-id`, `--license-url`, `--contributor`, and `--modification-note`. They are immutable package provenance only and never control clinical state. Externally sourced content still requires separate license approval. No Radiopaedia-specific behavior exists in this pipeline.
+
+## Authoring a package version without source edits
+
+Always preview the exact operation first:
+
+```sh
+npm run imaging:author -- \
+  --dry-run \
+  --source /absolute/path/to/image.jpg \
+  --package-id russicaptor.example \
+  --base-version 2.0.0 \
+  --new-version 2.0.1 \
+  --patient-id PT-EXAMPLE-001 \
+  --definition-id EXAMPLE-XR \
+  --logical-name primary
+```
+
+The required arguments are `--source`, `--package-id`, `--base-version`, `--new-version`, `--patient-id`, `--definition-id`, and `--logical-name`. The provenance flags listed above remain optional. `--asset-version` may be supplied for a replacement, and `--role` may be `PRIMARY_DIAGNOSTIC_IMAGE` or `SUPPORTING_IMAGE`.
+
+Dry-run resolves the real package registry and patient dataset, validates exact (not fuzzy) IDs, inspects the image, and reports the operation, old asset if present, proposed immutable asset identity, package hash, and every file that would change. It writes nothing. Remove `--dry-run` only after reviewing that plan. Add `--json` for one bounded machine-readable result containing metadata only—never image bytes.
+
+A successful write is one logical transaction: the tool ingests the bytes, regenerates the static Metro registry, writes a package-version recipe that clones the named immutable base version, binds only the selected study asset, calculates the canonical package hash, and validates the result through the normal package loader in a fresh process. A failure at any later step restores all manifests and registries and removes the newly copied asset. Existing package versions are never edited.
+
+If the base study already has an asset, the plan says `REPLACE`. Replacement still requires an unused package version and a new `assetId` (normally by incrementing `--asset-version`); old bytes and provenance remain registered and historical package hashes remain unchanged. Study title, report, delay, modality, workflow, and patient binding are cloned without changes.
+
+Inspect an already registered asset without changing files:
+
+```sh
+npm run imaging:preview -- --asset-id demo.head-ct.image01.v1
+```
+
+This lightweight preview verifies the full asset manifest, resolves the normal `BUNDLED_LOCAL` registry entry, and reports dimensions, orientation-relevant width/height, media type, package target, and resolver key. It does not edit or render the image.

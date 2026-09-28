@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G24/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/IMG-ASSET-G01–IMG-ASSET-G16/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G24/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/IMG-ASSET-G01–IMG-ASSET-G16/IMG-AUTH-G01–IMG-AUTH-G16/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Transport lifecycle regression guardrails
 
@@ -285,6 +285,29 @@ The local authoring pipeline validates image bytes, freezes exact integrity and 
 | IMG-ASSET-G14 | License provenance | Optional source, attribution, and license metadata is preserved. |
 | IMG-ASSET-G15 | No checkpoint binary | Generated metadata and canonical checkpoints contain no image bytes or data URLs. |
 | IMG-ASSET-G16 | Bundled local resolution | Generated registration resolves through the existing `BUNDLED_LOCAL` runtime contract. |
+
+### Imaging package-authoring guardrails
+
+The authoring command binds one validated local asset by generating a later immutable package version. Exact IDs are required; historical package content is never rewritten, and a failed multi-file operation rolls back its complete write set.
+
+| ID | Guardrail | Frozen invariant |
+| --- | --- | --- |
+| IMG-AUTH-G01 | New package version | A valid operation creates one new immutable package version with the requested binding. |
+| IMG-AUTH-G02 | Published base unchanged | The base package and hash remain byte/semantically unchanged. |
+| IMG-AUTH-G03 | Dry-run no write | Dry-run reports every intended output without writing. |
+| IMG-AUTH-G04 | Wrong package rejected | Unknown package identity fails before ingest. |
+| IMG-AUTH-G05 | Wrong patient rejected | Patient mismatch fails; fuzzy matching is forbidden. |
+| IMG-AUTH-G06 | Wrong definition rejected | Unknown Imaging definition fails before writing. |
+| IMG-AUTH-G07 | Version collision rejected | An existing package version cannot be reused. |
+| IMG-AUTH-G08 | Replacement identity | Replacement requires a later package and distinct immutable asset identity. |
+| IMG-AUTH-G09 | Transaction rollback | Partial failure restores manifests/registries and removes new asset residue. |
+| IMG-AUTH-G10 | Package hash valid | Canonical package hashing produces and validates the new hash. |
+| IMG-AUTH-G11 | Asset registry valid | The bound asset remains exact in the generated static registry. |
+| IMG-AUTH-G12 | Historical hashes unchanged | Frozen historical package hashes remain unchanged. |
+| IMG-AUTH-G13 | Clinical semantics unchanged | Title, report, delay, modality, order and patient binding are preserved. |
+| IMG-AUTH-G14 | Provenance preserved | Supplied source/license/attribution metadata is preserved exactly. |
+| IMG-AUTH-G15 | Bounded JSON output | Machine output contains metadata only, never image bytes. |
+| IMG-AUTH-G16 | Normal package loader | Generated versions load through the canonical package loader. |
 
 ## Laboratory regression guardrails
 
