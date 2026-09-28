@@ -11,7 +11,7 @@ import type { LabPatientBloodIdentity, NarvaLabPackageId } from "@/models/Labora
 import { handleImagingOrder } from "@/services/runtime/instructor/ImagingCommandService";
 import { handleEndotrachealIntubationCommand } from
   "@/services/runtime/instructor/EndotrachealIntubationCommandService";
-import { materializePatientCompletion } from
+import { materializePatientCompletionAuthoritatively } from
   "@/services/runtime/exercise/PatientCompletionMaterializationService";
 import { materializePatientInternalTransfer } from
   "@/services/runtime/exercise/PatientInternalTransferService";
@@ -20,7 +20,9 @@ function rejected(reason: string): RuntimePatientCommandMaterialization {
   return Object.freeze({ status: "REJECTED", result: Object.freeze({ ok: false, reason }) });
 }
 
-export function materializeRuntimePatientCommand(command: AcceptedRuntimePatientCommand): RuntimePatientCommandMaterialization {
+export function materializeRuntimePatientCommand(command: AcceptedRuntimePatientCommand): RuntimePatientCommandMaterialization;
+export function materializeRuntimePatientCommand(command: AcceptedRuntimePatientCommand):
+RuntimePatientCommandMaterialization | Promise<RuntimePatientCommandMaterialization> {
   try {
     if (command.commandType === "RESOURCE_APPLY") {
       const resourceId = command.payload.resourceId;
@@ -112,10 +114,13 @@ export function materializeRuntimePatientCommand(command: AcceptedRuntimePatient
     }
     if (command.commandType === "PATIENT_COMPLETE") {
       if (Object.keys(command.payload).length !== 0) return rejected("INVALID_COMMAND_PAYLOAD");
-      const result = materializePatientCompletion(command.commandId, command.patientId,
-        command.simulationTimeSec, command.actorUserId);
-      return Object.freeze({ status: result.ok ? "MATERIALIZED" : "REJECTED",
-        result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
+      return materializePatientCompletionAuthoritatively({ commandId: command.commandId,
+        exerciseId: command.exerciseId, patientId: command.patientId,
+        simulationTimeSec: command.simulationTimeSec, actorUserId: command.actorUserId,
+        acceptedPatientRevision: command.patientResultingRevision })
+        .then(result => Object.freeze({ status: result.ok ? "MATERIALIZED" as const : "REJECTED" as const,
+          result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> }))
+        .catch(() => rejected("RUNTIME_MATERIALIZATION_FAILURE"));
     }
     if (command.commandType === "PATIENT_LOCATION_TRANSFER") {
       const actionId = command.payload.actionId;

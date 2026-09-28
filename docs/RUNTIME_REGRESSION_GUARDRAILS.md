@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G15/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G24/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Transport lifecycle regression guardrails
 
@@ -102,6 +102,15 @@ Patient completion is a durable patient command. EXCON submits through the share
 | PATCOMP-G13 | Exercise independence | Patient completion never completes the exercise. |
 | PATCOMP-G14 | Reader no local completion | Readers submit durably and never apply completion effects locally. |
 | PATCOMP-G15 | Readiness fails closed | UI and tap-time submission reject while durable command readiness is unsafe. |
+| PATCOMP-G16 | Completion clears canonical owner | Successful durable completion publishes an unowned canonical shared-workflow head. |
+| PATCOMP-G17 | Completion closes assignment | Completion closes the canonical assignment with the completed reason exactly once. |
+| PATCOMP-G18 | Release replay idempotency | Replay neither advances the released head nor duplicates assignment or evidence state. |
+| PATCOMP-G19 | Reader cannot release locally | Reader submission changes neither patient lifecycle nor ownership before writer materialization. |
+| PATCOMP-G20 | Takeover releases once | A takeover writer completes the accepted patient and deterministic ownership release once. |
+| PATCOMP-G21 | Completed-unowned restore | Restart and reconciliation preserve Completed plus unowned state and repair the defined partial state. |
+| PATCOMP-G22 | Stale owner cannot return | Older ownership projections cannot reclaim a completed unowned patient. |
+| PATCOMP-G23 | Completion-release transport isolation | Ownership release does not mutate transport or resource lifecycle state. |
+| PATCOMP-G24 | No stale-ownership completion fence | Fully materialized patient completion leaves no active owner or assignment to fence exercise finalization. |
 
 ## Procedure availability regression guardrails
 
