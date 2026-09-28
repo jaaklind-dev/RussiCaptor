@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G24/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G24/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/IMG-ASSET-G01–IMG-ASSET-G16/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Transport lifecycle regression guardrails
 
@@ -262,6 +262,29 @@ Package-owned Imaging uses the existing order, delayed workflow, persistence, an
 | IMG-G43 | Asset restore determinism | Restart and takeover preserve the exact released asset reference. |
 | IMG-G44 | Reader asset convergence | Readers restore asset metadata without local generation or mutation. |
 | IMG-G45 | Unsupported attachment safety | Unregistered workbook paths and URLs remain explicitly unresolved and never become trusted assets. |
+
+### Imaging asset-ingest guardrails
+
+The local authoring pipeline validates image bytes, freezes exact integrity and package provenance, and generates Metro-compatible static resolvers. It does not fetch remote content or change runtime clinical behavior.
+
+| ID | Guardrail | Frozen invariant |
+| --- | --- | --- |
+| IMG-ASSET-G01 | JPEG ingest | Valid JPEG bytes produce exact deterministic metadata and registration. |
+| IMG-ASSET-G02 | PNG ingest | Valid PNG bytes produce exact deterministic metadata and registration. |
+| IMG-ASSET-G03 | Invalid image fail-closed | Unsupported, corrupt, empty, and extension-mismatched input is rejected. |
+| IMG-ASSET-G04 | Exact integrity metadata | Byte length, SHA-256, media type, and dimensions derive from exact bundled bytes. |
+| IMG-ASSET-G05 | Package provenance | Package ID and immutable package version are recorded. |
+| IMG-ASSET-G06 | Patient provenance | The package-owned patient identity is recorded. |
+| IMG-ASSET-G07 | Definition provenance | The package-owned Imaging definition identity is recorded. |
+| IMG-ASSET-G08 | Static Metro resolver | Generated resolver code uses a compile-time static `require(...)`. |
+| IMG-ASSET-G09 | Path traversal rejection | Identity fields cannot escape the deterministic package asset destination. |
+| IMG-ASSET-G10 | Immutable collision rejection | Different bytes or metadata cannot replace an existing semantic identity. |
+| IMG-ASSET-G11 | Idempotent re-ingest | Identical bytes and metadata are a no-op. |
+| IMG-ASSET-G12 | Published package immutability | An already-published package ID/version cannot gain a new asset. |
+| IMG-ASSET-G13 | Dry-run no write | Dry-run validates the complete plan without writing repository state. |
+| IMG-ASSET-G14 | License provenance | Optional source, attribution, and license metadata is preserved. |
+| IMG-ASSET-G15 | No checkpoint binary | Generated metadata and canonical checkpoints contain no image bytes or data URLs. |
+| IMG-ASSET-G16 | Bundled local resolution | Generated registration resolves through the existing `BUNDLED_LOCAL` runtime contract. |
 
 ## Laboratory regression guardrails
 

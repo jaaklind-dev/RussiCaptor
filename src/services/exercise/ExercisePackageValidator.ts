@@ -88,7 +88,9 @@ export class ExercisePackageValidator {
         if (item.study.asset) {
           try {
             validateImagingAssetReference(item.study.asset);
-            if (item.study.asset.packageId !== pkg.packageId || item.study.asset.definitionId !== item.study.id) {
+            if (!item.study.asset.packageVersion || !item.study.asset.patientId ||
+              item.study.asset.packageId !== pkg.packageId || item.study.asset.packageVersion !== pkg.packageVersion ||
+              item.study.asset.patientId !== item.study.patientId || item.study.asset.definitionId !== item.study.id) {
               add("INVALID_IMAGING_CONFIGURATION", `${path}.study.asset`, "Imaging asset provenance must match package and definition");
             }
           } catch {

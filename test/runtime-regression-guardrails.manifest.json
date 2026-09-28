@@ -77,6 +77,24 @@
     { "id": "IMG-G44", "name": "reader-asset-convergence", "description": "Readers restore asset metadata without local generation or mutation.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingReportAssetContract-test.ts"] },
     { "id": "IMG-G45", "name": "unsupported-attachment-safety", "description": "Unregistered workbook paths and URLs remain explicitly unresolved and never become trusted assets.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingReportAssetContract-test.ts", "src/providers/excel/__tests__/WorkbookDataMapper-test.ts"] }
   ],
+  "imagingAssetIngestGuardrails": [
+    { "id": "IMG-ASSET-G01", "name": "jpeg-ingest", "description": "A valid JPEG is inspected and registered with exact deterministic metadata.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G02", "name": "png-ingest", "description": "A valid PNG is inspected and registered with exact deterministic metadata.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G03", "name": "invalid-image-fail-closed", "description": "Unsupported, corrupt, empty and extension-mismatched inputs fail closed.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G04", "name": "exact-integrity-metadata", "description": "Registered byte length, SHA-256, media type and dimensions derive from the exact bundled bytes.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G05", "name": "package-provenance", "description": "Every ingested asset records exact package ID and immutable package version provenance.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G06", "name": "patient-provenance", "description": "Every ingested asset records its package-owned patient identity.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G07", "name": "definition-provenance", "description": "Every ingested asset records its package-owned Imaging definition identity.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G08", "name": "static-metro-resolver", "description": "Generated registry entries use compile-time static require calls resolvable by Metro.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G09", "name": "path-traversal-rejection", "description": "Asset identity fields cannot escape the deterministic package asset destination.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G10", "name": "immutable-collision-rejection", "description": "An existing semantic asset identity cannot be replaced with different bytes or metadata.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G11", "name": "idempotent-reingest", "description": "Re-ingesting identical bytes and metadata is a no-op.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G12", "name": "published-package-immutability", "description": "Ingest cannot add assets to a package ID and version already published in production definitions.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G13", "name": "dry-run-no-write", "description": "Dry-run validates the complete ingest plan without writing repository state.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G14", "name": "license-provenance", "description": "Optional source, attribution and license metadata is preserved without altering clinical content.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts"] },
+    { "id": "IMG-ASSET-G15", "name": "no-checkpoint-binary", "description": "Generated metadata and canonical checkpoints never embed image bytes or data URLs.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts", "src/services/runtime/persistence/__tests__/ImagingRuntimePersistence-test.ts"] },
+    { "id": "IMG-ASSET-G16", "name": "bundled-local-resolution", "description": "Generated registration resolves through the existing BUNDLED_LOCAL runtime contract.", "phase": "FOUNDATION", "tests": ["scripts/__tests__/ImagingAssetIngest-test.ts", "src/services/runtime/imaging/__tests__/ImagingReportAssetContract-test.ts"] }
+  ],
   "questionGuardrails": [
     { "id": "Q-G01", "name": "package-owned-questions", "description": "Narva question definitions are immutable content of an exact package version.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts"] },
     { "id": "Q-G02", "name": "p01-pelvic-mapping", "description": "Only PT-PELVIC-001 receives the two source P01 questions.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedNarvaQuestions-test.ts"] },
@@ -334,7 +352,8 @@
       "src/services/runtime/persistence/__tests__/ImagingRuntimePersistence-test.ts",
       "src/components/patient/__tests__/ImagingTabDurableLifecycle-test.tsx",
       "src/providers/excel/__tests__/WorkbookDataMapper-test.ts",
-      "src/services/__tests__/ScenarioWorkflow-test.ts"
+      "src/services/__tests__/ScenarioWorkflow-test.ts",
+      "scripts/__tests__/ImagingAssetIngest-test.ts"
     ],
     "laboratory": [
       "src/config/__tests__/NarvaLaboratoryCatalog-test.ts",

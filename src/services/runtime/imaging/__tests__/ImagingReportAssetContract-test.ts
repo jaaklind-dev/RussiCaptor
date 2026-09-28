@@ -44,7 +44,8 @@ describe("I4 immutable Imaging report/asset contract / IMG-G35..IMG-G45", () => 
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(DEMO_HEAD_CT_ASSET.sha256);
     expect(bytes.byteLength).toBe(DEMO_HEAD_CT_ASSET.byteLength);
     expect(resolveImagingAsset(DEMO_HEAD_CT_ASSET)).toMatchObject({ status: "RESOLVED",
-      asset: { assetId: "demo.head-ct.image01.v1", resolverKey: "image01.jpg", mediaType: "image/jpeg" } });
+      asset: { assetId: "demo.head-ct.image01.v1", resolverKey: "image01.jpg", mediaType: "image/jpeg",
+        width: 606, height: 606, packageVersion: "1.0.0", patientId: "PT-001" } });
   });
 
   test("I4-A3/A4 rejects hash mismatch and resolves missing registry keys safely", () => {
@@ -107,6 +108,13 @@ describe("I4 immutable Imaging report/asset contract / IMG-G35..IMG-G45", () => 
     expect(runtime.snapshot()).toMatchObject({ schemaVersion: 2, instances: [{ authoredSource: {
       reportText: "Legacy", asset: DEMO_HEAD_CT_ASSET }, result: { reportText: "Legacy", asset: DEMO_HEAD_CT_ASSET } }] });
     expect(JSON.stringify(runtime.snapshot())).not.toContain('"attachment"');
+  });
+
+  test("pre-ingest schema-2 demo references remain compatible without weakening new package provenance", () => {
+    const { packageVersion: _packageVersion, patientId: _patientId, width: _width, height: _height,
+      ...legacyDemo } = DEMO_HEAD_CT_ASSET;
+    expect(() => validateImagingAssetReference(legacyDemo)).not.toThrow();
+    expect(resolveImagingAsset(legacyDemo)).toMatchObject({ status: "RESOLVED" });
   });
 
   test("legacy checkpoint with unregistered attachment fails closed instead of trusting the path", () => {

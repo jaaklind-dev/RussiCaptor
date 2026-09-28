@@ -1,5 +1,14 @@
 export type ImagingAssetSourceKind = "BUNDLED_LOCAL" | "MANAGED_REMOTE";
 
+export type ImagingAssetProvenance = Readonly<{
+  sourceUrl?: string;
+  attribution?: string;
+  licenseId?: string;
+  licenseUrl?: string;
+  contributor?: string;
+  modificationNote?: string;
+}>;
+
 export type ImagingAssetReference = Readonly<{
   assetId: string;
   sourceKind: ImagingAssetSourceKind;
@@ -7,9 +16,16 @@ export type ImagingAssetReference = Readonly<{
   sha256: string;
   mediaType: string;
   byteLength?: number;
+  width?: number;
+  height?: number;
   role?: "PRIMARY_DIAGNOSTIC_IMAGE" | "SUPPORTING_IMAGE";
   packageId: string;
+  /** Present on assets produced by the package ingest pipeline; optional only for legacy checkpoint compatibility. */
+  packageVersion?: string;
+  /** Present on assets produced by the package ingest pipeline; optional only for legacy checkpoint compatibility. */
+  patientId?: string;
   definitionId: string;
+  provenance?: ImagingAssetProvenance;
 }>;
 
 export type ImagingAssetResolution<T = unknown> =

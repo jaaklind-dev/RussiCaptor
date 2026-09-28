@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "assetId": "demo.head-ct.image01.v1",
+      "sourceKind": "BUNDLED_LOCAL",
+      "resolverKey": "image01.jpg",
+      "sha256": "ae38226a9d0d803fcdfcc4b3bbcc3003a9e3b5ac7ffacc5378d6d18a7ef072b4",
+      "mediaType": "image/jpeg",
+      "byteLength": 71145,
+      "width": 606,
+      "height": 606,
+      "role": "PRIMARY_DIAGNOSTIC_IMAGE",
+      "packageId": "russicaptor.demo",
+      "packageVersion": "1.0.0",
+      "patientId": "PT-001",
+      "definitionId": "IMG-001"
+    }
+  ]
+}
