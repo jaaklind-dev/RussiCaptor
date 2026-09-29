@@ -8,6 +8,7 @@ import { createId } from "@/utils/id";
 import { executeAuthoritativePatientMutation } from "@/services/sharedWorkflow/AuthoritativePatientMutationService";
 import { getSharedWorkflowHead } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { hasPackageOwnedLocationAuthority } from "@/services/exercise/PackagePatientLocationAuthorityService";
 
 export function updatePatientLocationFromCurrentCm(patientId: string): boolean {
   const patient = findPatientById(patientId);
@@ -42,8 +43,17 @@ export function updatePatientLocationFromCurrentCm(patientId: string): boolean {
 export function updatePatientLocationFromCurrentCmConflictSafe(patientId:string){
   const patient = findPatientById(patientId);
   const zone = getCurrentLocationZone();
+  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  if (patient && hasPackageOwnedLocationAuthority(exerciseId, patientId, patient.location)) {
+    const head = getSharedWorkflowHead(exerciseId, patientId);
+    return Promise.resolve(Object.freeze({
+      result: Object.freeze({ status: "IDEMPOTENT" as const, revision: head.revision,
+        ownerUserId: head.ownerUserId }),
+      value: false,
+      message: "Patsiendi asukohta juhib paketipõhine asukohatoiming.",
+    }));
+  }
   if (!patient || !zone || patient.location === zone.name) {
-    const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
     const head = getSharedWorkflowHead(exerciseId, patientId);
     return Promise.resolve(Object.freeze({
       result: Object.freeze({ status: "IDEMPOTENT" as const, revision: head.revision,

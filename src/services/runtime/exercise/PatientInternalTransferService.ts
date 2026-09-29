@@ -6,14 +6,15 @@ import { notifySync } from "@/services/SyncService";
 import { runtimePatientCommandSubmissionReadiness, submitPatientRuntimeCommand,
   waitForPatientRuntimeCommandResult } from "@/services/runtime/commands/RuntimePatientCommandService";
 import { reconcilePatientTransportLocation } from "./PatientTransportRuntimeService";
+import { getPackageOwnedLocationTransitions } from "@/services/exercise/PackagePatientLocationAuthorityService";
 
 let sequence = 0;
 const evidenceId = (commandId: string) => `TL-INTERNAL-TRANSFER-${commandId}`;
 
 export function getAvailablePatientInternalTransfers(exerciseId: string, patientId: string) {
   const patient = dataProvider.getPatientById(patientId);
-  return (getExercisePackage(exerciseId).internalTransferConfiguration?.definitions ?? [])
-    .filter(item => item.patientId === patientId && patient?.location === item.fromLocationId);
+  if (!patient) return [];
+  return getPackageOwnedLocationTransitions(exerciseId, patientId, patient.location);
 }
 
 /** Authoritative-writer materialization. Clients must use submitPatientInternalTransfer. */
