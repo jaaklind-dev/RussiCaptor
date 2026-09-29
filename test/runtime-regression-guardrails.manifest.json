@@ -390,6 +390,7 @@
       "src/modules/massiveTransfusion/__tests__/MtpCalciumReplacement-test.ts"
     ],
     "runtime": [
+      "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeWriterAuthorityState-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeCheckpointAuthority-test.ts",
@@ -405,6 +406,7 @@
       "src/modules/massiveTransfusion/__tests__/GlobalTransfusionCalciumCounter-test.ts"
     ],
     "multi-device": [
+      "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts",
       "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts",
@@ -417,6 +419,7 @@
       "src/services/operations/__tests__/MultiDeviceRehearsalPreparation-test.ts"
     ],
     "persistence": [
+      "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeCheckpointCanonicalArtifact-test.ts",
       "src/services/runtime/persistence/__tests__/PersistedCanonicalCheckpointMigration-test.ts",
       "src/services/runtime/persistence/__tests__/PersistedCanonicalCheckpointPerformance-test.ts",

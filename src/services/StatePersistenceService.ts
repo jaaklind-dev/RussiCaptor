@@ -25,6 +25,7 @@ import {
 import { restoreCompletedExerciseArchives } from "@/services/exercise/CompletedExerciseArchiveService";
 import {
   exercisePackageRegistry,
+  exercisePackageLoader,
   getExercisePackage,
 } from "@/services/exercise/ExercisePackageService";
 import { installCurrentExercise } from "@/repositories/ExerciseRepository";
@@ -244,6 +245,33 @@ export function shouldPreserveValidatedReaderIdentity(authority: RuntimeWriterAu
   return authority === "READER" && sameExerciseReaderIsHydrated;
 }
 
+/**
+ * A discovery row carries identity only.  It must not erase a fully prepared,
+ * same-exercise Runtime before checkpoint authority has had its first chance
+ * to resolve.  This does not grant write authority: the guarded writer CAS is
+ * still the only path to WRITER, and an existing remote checkpoint replaces
+ * this seed during normal checkpoint resolution.
+ */
+export function shouldPreserveFreshRuntimeBootstrapSeed(input: Readonly<{
+  authority: RuntimeWriterAuthorityState;
+  localExerciseId: string;
+  remoteExerciseId: string;
+  localPackageId?: string;
+  localPackageVersion?: string;
+  remotePackageId?: string;
+  remotePackageVersion?: string;
+  patientMaterializationReady: boolean;
+  runtimeReady: boolean;
+}>): boolean {
+  return input.authority === "UNRESOLVED"
+    && input.localExerciseId === input.remoteExerciseId
+    && Boolean(input.localPackageId && input.localPackageVersion)
+    && input.localPackageId === input.remotePackageId
+    && input.localPackageVersion === input.remotePackageVersion
+    && input.patientMaterializationReady
+    && input.runtimeReady;
+}
+
 const readerRuntimeHydrationCounts = new Map<string, number>();
 
 function isReaderRuntimeHydrationInProgress(exerciseId: string): boolean {
@@ -257,13 +285,28 @@ export function restoreRemoteExerciseIdentity(restored: SharedExerciseState): vo
   // A confirmed writer keeps its canonical Runtime when receiving its own cloud
   // projection echo.
   const authority = getRuntimeWriterAuthorityState();
+  const localExercise = getCanonicalExerciseSnapshot();
+  const localPackage = exercisePackageLoader.getBound(localExercise.exerciseId);
+  const remotePackage = restored.exercisePackageReference;
+  const preserveFreshBootstrapSeed = shouldPreserveFreshRuntimeBootstrapSeed({
+    authority,
+    localExerciseId: localExercise.exerciseId,
+    remoteExerciseId: restored.exerciseSession.exerciseId,
+    localPackageId: localPackage?.packageId,
+    localPackageVersion: localPackage?.packageVersion,
+    remotePackageId: remotePackage?.packageId,
+    remotePackageVersion: remotePackage?.packageVersion,
+    patientMaterializationReady: Boolean(getPatientMaterialization(localExercise.exerciseId)?.patients.length),
+    runtimeReady: isClinicalReferenceRuntimeReadReady(localExercise.exerciseId),
+  });
   const sameExerciseReaderIsHydrated = authority === "READER"
     && (isClinicalReferenceRuntimeReadReady(restored.exerciseSession.exerciseId)
       || isReaderRuntimeHydrationInProgress(restored.exerciseSession.exerciseId));
   // A validated same-exercise checkpoint owns the reader's canonical clock
   // and Runtime. A bounded discovery row may lag far behind it, so ignore that
   // active projection wholesale instead of restoring its older session clock.
-  if (shouldPreserveValidatedReaderIdentity(authority, sameExerciseReaderIsHydrated)) return;
+  if (shouldPreserveValidatedReaderIdentity(authority, sameExerciseReaderIsHydrated)
+      || preserveFreshBootstrapSeed) return;
   if (shouldClearRuntimeForRemoteIdentity(authority, sameExerciseReaderIsHydrated)) {
     stopClockRunner();
     clearActiveClinicalReferenceRuntime();

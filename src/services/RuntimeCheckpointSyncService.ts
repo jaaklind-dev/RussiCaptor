@@ -25,7 +25,7 @@ import { interceptRuntimeCheckpointPublicationResponseForValidation } from "@/se
 import { getRuntimeWriterInstanceId } from "@/services/runtime/persistence/RuntimeWriterIdentityService";
 import { runtimeWritesAllowed, setRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { publishRuntimeCheckpointTerminal, type RuntimeCheckpointPublicationTerminal } from "@/services/runtime/persistence/RuntimeCheckpointPublicationService";
-import { isRemoteRuntimeLifecycleActive, waitForRemoteRuntimeLifecycleActive } from "@/services/CloudSyncService";
+import { getCloudSyncStatus, isRemoteRuntimeLifecycleActive, subscribeToCloudSyncStatus, waitForRemoteRuntimeLifecycleActive } from "@/services/CloudSyncService";
 import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
 import { parseRuntimeCheckpointMetadata, RuntimeCheckpointMetadataCoordinator } from "@/services/runtime/persistence/RuntimeCheckpointMetadataCoordinator";
 import { loadRuntimeCheckpointWithCache } from "@/services/runtime/persistence/RuntimeCheckpointHydrationService";
@@ -51,6 +51,8 @@ import {
   setRuntimeCommandAuthorityWriter,
   setRuntimeReaderConvergenceUnavailable,
 } from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
+import { getOperatorSession, hasActiveRole, subscribeOperatorSession } from "@/services/authorization/OperatorSessionService";
+import { getExercisePackageBindingVersion, subscribeToExercisePackageBindings } from "@/services/exercise/ExercisePackageService";
 
 const LEASE_SECONDS = 60;
 const RENEW_MS = 20_000;
@@ -58,6 +60,14 @@ export const ROUTINE_CHECKPOINT_PUBLICATION_MS = 5_000;
 const STARTUP_TIMEOUT_MS = 8_000;
 type Status = Readonly<{ state: "DISABLED"|"CONNECTING"|"ACQUIRING"|"WRITER"|"READER"|"OFFLINE"|"CONFLICT"|"FAILED"; code?: string; revision?: number }>;
 type SyncIdentity = Readonly<{ exerciseId: string; activeLifecycle: boolean }>;
+export type RuntimeBootstrapRetrySignal = Readonly<{
+  exerciseId: string;
+  activeLifecycle: boolean;
+  scopedAuthorityReady: boolean;
+  packageBindingVersion: number;
+  cloudConnected: boolean;
+  foregroundEpoch: number;
+}>;
 let status: Status = { state: supabase ? "CONNECTING" : "DISABLED" };
 let listeners: ((value: Status) => void)[] = [];
 let lease: RuntimeWriterLease | undefined;
@@ -499,6 +509,19 @@ export function checkpointForExercise(
 
 export function shouldRestartRuntimeCheckpointSync(previous: SyncIdentity, next: SyncIdentity): boolean {
   return previous.exerciseId !== next.exerciseId || previous.activeLifecycle !== next.activeLifecycle;
+}
+
+export function shouldRetryFreshRuntimeBootstrap(
+  previous: RuntimeBootstrapRetrySignal,
+  next: RuntimeBootstrapRetrySignal,
+  currentStatus: Status,
+): boolean {
+  if (!next.activeLifecycle || currentStatus.state === "WRITER") return false;
+  if (previous.exerciseId !== next.exerciseId || previous.activeLifecycle !== next.activeLifecycle) return false;
+  return previous.scopedAuthorityReady !== next.scopedAuthorityReady
+    || previous.packageBindingVersion !== next.packageBindingVersion
+    || previous.cloudConnected !== next.cloudConnected
+    || previous.foregroundEpoch !== next.foregroundEpoch;
 }
 export function shouldResetRuntimeCheckpointSyncForPrincipal(previousUserId: string, nextUserId?: string): boolean {
   return previousUserId !== (nextUserId ?? "");
@@ -1256,6 +1279,30 @@ async function startRuntimeCheckpointSyncOnce(): Promise<()=>void> {
   let switchChain=Promise.resolve();
   let activeExerciseId=getCanonicalExerciseSnapshot().exerciseId;
   let activeLifecycle=isActiveExercise();
+  let foregroundEpoch=0;
+  const bootstrapSignal=():RuntimeBootstrapRetrySignal=>{
+    const operator=getOperatorSession();
+    return Object.freeze({
+      exerciseId:activeExerciseId,
+      activeLifecycle,
+      scopedAuthorityReady:hasActiveRole(operator,"CM",activeExerciseId)||hasActiveRole(operator,"EXCON",activeExerciseId),
+      packageBindingVersion:getExercisePackageBindingVersion(),
+      cloudConnected:["synced","saving"].includes(getCloudSyncStatus().state),
+      foregroundEpoch,
+    });
+  };
+  let lastBootstrapSignal=bootstrapSignal();
+  const queueBootstrapRetry=()=>{
+    const next=bootstrapSignal();
+    const retry=shouldRetryFreshRuntimeBootstrap(lastBootstrapSignal,next,status);
+    lastBootstrapSignal=next;
+    if(!retry)return;
+    switchChain=switchChain.then(async()=>{
+      if(stopped||!isActiveExercise()||status.state==="WRITER")return;
+      stopActive();
+      stopActive=await startRuntimeCheckpointSyncForExercise(activeExerciseId);
+    }).catch(()=>setStatus({state:"FAILED",code:"WRITER_AUTHORITY_UNAVAILABLE"}));
+  };
   const { data: authSubscription }=supabase.auth.onAuthStateChange((_event,session)=>{
     if (session?.access_token) updateNativeHeartbeatTokenForCurrentWriter?.(session.access_token);
     const nextPrincipal=session?.user.id;
@@ -1289,7 +1336,18 @@ async function startRuntimeCheckpointSyncOnce(): Promise<()=>void> {
       if(stopped)nextStop();else stopActive=nextStop;
     }).catch(()=>setStatus({state:"FAILED",code:"WRITER_AUTHORITY_UNAVAILABLE"}));
   });
-  return()=>{stopped=true;stopSwitch();authSubscription.subscription.unsubscribe();stopActive();};
+  const stopOperator=subscribeOperatorSession(queueBootstrapRetry);
+  const stopPackage=subscribeToExercisePackageBindings(queueBootstrapRetry);
+  const stopCloud=subscribeToCloudSyncStatus(()=>queueBootstrapRetry());
+  const appStateSubscription=AppState.addEventListener("change",nextState=>{
+    if(nextState!=="active")return;
+    foregroundEpoch+=1;
+    queueBootstrapRetry();
+  });
+  // Close the narrow window where readiness changed while the initial
+  // per-exercise startup was awaiting network/auth work.
+  queueBootstrapRetry();
+  return()=>{stopped=true;stopSwitch();stopOperator();stopPackage();stopCloud();appStateSubscription.remove();authSubscription.subscription.unsubscribe();stopActive();};
 }
 
 export function startRuntimeCheckpointSync(): Promise<()=>void> {
