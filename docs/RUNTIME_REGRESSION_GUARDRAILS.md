@@ -48,7 +48,26 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G24/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/IMG-ASSET-G01–IMG-ASSET-G16/IMG-AUTH-G01–IMG-AUTH-G16/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/CM-HEAD-G01–CM-HEAD-G12/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G24/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/IMG-ASSET-G01–IMG-ASSET-G16/IMG-AUTH-G01–IMG-AUTH-G16/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+
+## Scoped CM reader workflow-head guardrails
+
+Canonical workflow-head creation remains writer-owned. An ordinary exercise-scoped CM consumes validated reader state and may submit durable intent, but never acquires writer authority as an implicit readiness side effect.
+
+| ID | Guardrail | Frozen invariant |
+| --- | --- | --- |
+| CM-HEAD-G01 | Scoped reader head resolution | A CM resolves writer-created canonical workflow heads without initializing them. |
+| CM-HEAD-G02 | Reader command readiness | A converged scoped CM becomes command-ready. |
+| CM-HEAD-G03 | Reader durable submit | A ready scoped CM may submit durable patient intent. |
+| CM-HEAD-G04 | Reader no materialization | A CM reader cannot acquire writer authority or materialize canonical state locally. |
+| CM-HEAD-G05 | Writer exactly once | The writer consumes each accepted reader command once. |
+| CM-HEAD-G06 | No EXCON workaround | Normal CM submission needs no temporary EXCON role. |
+| CM-HEAD-G07 | Wrong exercise denied | Role authority remains bound to its exercise. |
+| CM-HEAD-G08 | Late head readiness | Readers fail closed until canonical state arrives, then become ready. |
+| CM-HEAD-G09 | Late role readiness | A late scoped assignment retriggers startup evaluation. |
+| CM-HEAD-G10 | Takeover/reconnect convergence | Foreground, reconnect and authority changes retrigger canonical reader convergence. |
+| CM-HEAD-G11 | Stale denial cleared | A historical initialization denial cannot survive successful reader convergence. |
+| CM-HEAD-G12 | No GLOBAL role | Exercise-scoped readiness and submission require no GLOBAL assignment. |
 
 ## Transport lifecycle regression guardrails
 

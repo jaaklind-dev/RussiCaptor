@@ -51,7 +51,12 @@ import {
   setRuntimeCommandAuthorityWriter,
   setRuntimeReaderConvergenceUnavailable,
 } from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
-import { getOperatorSession, hasActiveRole, subscribeOperatorSession } from "@/services/authorization/OperatorSessionService";
+import {
+  getOperatorSession,
+  hasActiveRole,
+  subscribeOperatorSession,
+  type OperatorSessionState,
+} from "@/services/authorization/OperatorSessionService";
 import { getExercisePackageBindingVersion, subscribeToExercisePackageBindings } from "@/services/exercise/ExercisePackageService";
 
 const LEASE_SECONDS = 60;
@@ -518,13 +523,33 @@ export function shouldRetryFreshRuntimeBootstrap(
 ): boolean {
   if (!next.activeLifecycle || currentStatus.state === "WRITER") return false;
   if (previous.exerciseId !== next.exerciseId || previous.activeLifecycle !== next.activeLifecycle) return false;
+  // Applying an authoritative checkpoint refreshes the package binding. Once a
+  // reader is healthy, that projection notification must not tear down the
+  // reader generation that produced it and start an endless rehydration loop.
+  // Package readiness may still retry a bootstrap that has not reached a
+  // healthy reader state.
+  const packageBindingBecameReady = previous.packageBindingVersion !== next.packageBindingVersion
+    && (currentStatus.state !== "READER" || Boolean(currentStatus.code));
   return previous.scopedAuthorityReady !== next.scopedAuthorityReady
-    || previous.packageBindingVersion !== next.packageBindingVersion
+    || packageBindingBecameReady
     || previous.cloudConnected !== next.cloudConnected
     || previous.foregroundEpoch !== next.foregroundEpoch;
 }
 export function shouldResetRuntimeCheckpointSyncForPrincipal(previousUserId: string, nextUserId?: string): boolean {
   return previousUserId !== (nextUserId ?? "");
+}
+
+/**
+ * Runtime writer ownership is exercise-controller authority. A scoped CM may
+ * consume the canonical reader checkpoint and submit durable intents, but it
+ * must never acquire a writer lease merely because its restored checkpoint is
+ * equal to (or ahead of) the last remote payload.
+ */
+export function runtimeWriterAcquisitionAllowed(
+  operator: OperatorSessionState,
+  exerciseId: string,
+): boolean {
+  return hasActiveRole(operator, "EXCON", exerciseId);
 }
 
 export function runtimeWriterAppStateAction(nextState: string): "PRESERVE" | "RECONCILE" {
@@ -580,6 +605,9 @@ export async function takeOverRuntimeWriter(): Promise<Status> {
   if (!supabase) return { state:"DISABLED" };
   const repository=new SupabaseRuntimeCheckpointRepository(supabase);
   const exerciseId=getCanonicalExerciseSnapshot().exerciseId;
+  if (!runtimeWriterAcquisitionAllowed(getOperatorSession(),exerciseId)) {
+    return setAndReturn({state:"READER",code:"AUTHORIZATION_DENIED"});
+  }
   if (isRemoteRuntimeLifecycleActive(exerciseId) === false) {
     stopClockRunner();
     return setAndReturn({state:"DISABLED",code:"EXERCISE_NOT_ACTIVE"});
@@ -645,6 +673,10 @@ async function reacquireRuntimeFromRemoteCheckpointForIntent(intentId: string): 
   if (!supabase) return { state:"DISABLED" };
   const repository=new SupabaseRuntimeCheckpointRepository(supabase);
   const exerciseId=getCanonicalExerciseSnapshot().exerciseId;
+  if (!runtimeWriterAcquisitionAllowed(getOperatorSession(),exerciseId)) {
+    lastRecoveryOutcome=Object.freeze({state:"DENIED",code:"AUTHORIZATION_DENIED",occurredAt:new Date().toISOString()});
+    return setAndReturn({state:"READER",code:"AUTHORIZATION_DENIED"});
+  }
   if (isRemoteRuntimeLifecycleActive(exerciseId) === false) {
     stopClockRunner(); return setAndReturn({state:"DISABLED",code:"EXERCISE_NOT_ACTIVE"});
   }
@@ -816,44 +848,61 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   }
   else if (resolved.status!=="NONE" && isActiveExercise()) {
     remoteRevision=remote?.checkpointRevision??0;
-    const acquired=await acquireRuntimeWriterTerminal(repository,exerciseId,writerId,remoteRevision,LEASE_SECONDS);
-    if ("lease" in acquired) {
-      // A process recreation may restore the envelope before the in-memory
-      // Runtime owner registrations exist. Rehydrate the resolved canonical
-      // checkpoint atomically before publishing writer authority.
-      // The acquired lease already grants authority; expose it to the internal
-      // mutation boundary before restore so a concurrent cloud projection echo
-      // cannot dispose the freshly registered Runtime owners.
-      lease=acquired.lease;
-      setRuntimeWriterAuthorityState("WRITER");
-      setStatus({state:"WRITER",revision:remoteRevision});
-      await acceptAuthoritativeRuntimeCheckpointAsync(resolved.checkpoint, true, yieldToEventLoop);
-      if (!await ensureWorkflowHeads()) {
-        await repository.releaseWriter(acquired.lease); lease=undefined; stopClockRunner();
-        setRuntimeWriterAuthorityState("READER");
-        setStatus({state:"READER",code:"WORKFLOW_HEAD_INITIALIZATION_FAILED",revision:remoteRevision});
-      } else if (!establishRuntimeOwner()) {
-        await repository.releaseWriter(acquired.lease); lease=undefined;
-        setRuntimeWriterAuthorityState("READER");
-        setStatus({state:"READER",code:"RUNTIME_OWNER_NOT_READY",revision:remoteRevision});
-      } else setRuntimeCommandAuthorityWriter(exerciseId);
-    }
-    else {
-      // A discovery projection can clear the locally restored Runtime while
-      // writer acquisition is unresolved. Once another writer is confirmed,
-      // rebuild the validated checkpoint explicitly as a read-only Runtime.
-      // Reader authority is established before the cooperative rebuild so a
-      // same-exercise cloud echo cannot dispose the in-flight reader state.
-      setStatus({state:"READER",code:"READER_CHECKPOINT_SYNCHRONIZING",revision:acquired.checkpointRevision});
-      // Once another writer is confirmed, its validated durable payload owns
-      // reader state even when a historical reader cache minted a numerically
-      // higher local-only revision.
+    if (!runtimeWriterAcquisitionAllowed(getOperatorSession(),exerciseId)) {
+      // A normal CM is a durable-command reader/submitter, never an implicit
+      // writer candidate. Prefer the server-confirmed checkpoint even when a
+      // restored local cache is numerically newer. Realtime advances this
+      // reader after the controller publishes canonical state.
       if(remote){
+        setStatus({state:"READER",code:"READER_CHECKPOINT_SYNCHRONIZING",revision:remote.checkpointRevision});
         remoteRevision=remote.checkpointRevision;
         await acceptReaderCheckpoint(remote,local===remote?"CACHE":"REMOTE");
-        setStatus({state:"READER",code:acquired.code,revision:remoteRevision});
-      } else setRuntimeReaderConvergenceUnavailable(exerciseId,"AUTHORITATIVE_CHECKPOINT_PENDING");
+        setStatus({state:"READER",revision:remoteRevision});
+      } else {
+        setRuntimeReaderConvergenceUnavailable(exerciseId,"AUTHORITATIVE_CHECKPOINT_PENDING");
+        setStatus({state:"READER",code:"AUTHORITATIVE_CHECKPOINT_PENDING"});
+      }
       stopClockRunner();
+    } else {
+      const acquired=await acquireRuntimeWriterTerminal(repository,exerciseId,writerId,remoteRevision,LEASE_SECONDS);
+      if ("lease" in acquired) {
+        // A process recreation may restore the envelope before the in-memory
+        // Runtime owner registrations exist. Rehydrate the resolved canonical
+        // checkpoint atomically before publishing writer authority.
+        // The acquired lease already grants authority; expose it to the internal
+        // mutation boundary before restore so a concurrent cloud projection echo
+        // cannot dispose the freshly registered Runtime owners.
+        lease=acquired.lease;
+        setRuntimeWriterAuthorityState("WRITER");
+        setStatus({state:"WRITER",revision:remoteRevision});
+        await acceptAuthoritativeRuntimeCheckpointAsync(resolved.checkpoint, true, yieldToEventLoop);
+        if (!await ensureWorkflowHeads()) {
+          await repository.releaseWriter(acquired.lease); lease=undefined; stopClockRunner();
+          setRuntimeWriterAuthorityState("READER");
+          setStatus({state:"READER",code:"WORKFLOW_HEAD_INITIALIZATION_FAILED",revision:remoteRevision});
+        } else if (!establishRuntimeOwner()) {
+          await repository.releaseWriter(acquired.lease); lease=undefined;
+          setRuntimeWriterAuthorityState("READER");
+          setStatus({state:"READER",code:"RUNTIME_OWNER_NOT_READY",revision:remoteRevision});
+        } else setRuntimeCommandAuthorityWriter(exerciseId);
+      }
+      else {
+        // A discovery projection can clear the locally restored Runtime while
+        // writer acquisition is unresolved. Once another writer is confirmed,
+        // rebuild the validated checkpoint explicitly as a read-only Runtime.
+        // Reader authority is established before the cooperative rebuild so a
+        // same-exercise cloud echo cannot dispose the in-flight reader state.
+        setStatus({state:"READER",code:"READER_CHECKPOINT_SYNCHRONIZING",revision:acquired.checkpointRevision});
+        // Once another writer is confirmed, its validated durable payload owns
+        // reader state even when a historical reader cache minted a numerically
+        // higher local-only revision.
+        if(remote){
+          remoteRevision=remote.checkpointRevision;
+          await acceptReaderCheckpoint(remote,local===remote?"CACHE":"REMOTE");
+          setStatus({state:"READER",code:acquired.code,revision:remoteRevision});
+        } else setRuntimeReaderConvergenceUnavailable(exerciseId,"AUTHORITATIVE_CHECKPOINT_PENDING");
+        stopClockRunner();
+      }
     }
   } else if(resolved.status==="NONE") setStatus({state:"DISABLED"});
   else setStatus({state:"READER",revision:remoteRevision});

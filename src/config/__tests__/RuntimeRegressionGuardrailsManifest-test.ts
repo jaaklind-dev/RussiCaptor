@@ -6,6 +6,13 @@ type GuardrailManifest = Readonly<{
   document: string;
   runner: string;
   guardrails: readonly Readonly<{ id: string; name: string; tests: readonly string[] }>[];
+  cmReaderWorkflowHeadGuardrails: readonly Readonly<{
+    id: string;
+    name: string;
+    description: string;
+    phase: "FOUNDATION";
+    tests: readonly string[];
+  }>[];
   imagingGuardrails: readonly Readonly<{
     id: string;
     name: string;
@@ -100,6 +107,10 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
     expect(manifest.schemaVersion).toBe(1);
     expect(manifest.guardrails.map(guardrail => guardrail.id)).toEqual(alphabet);
     expect(manifest.guardrails.every(guardrail => guardrail.name.length > 0 && guardrail.tests.length > 0)).toBe(true);
+    expect(manifest.cmReaderWorkflowHeadGuardrails.map(guardrail => guardrail.id))
+      .toEqual(Array.from({ length: 12 }, (_, index) => `CM-HEAD-G${String(index + 1).padStart(2, "0")}`));
+    expect(manifest.cmReaderWorkflowHeadGuardrails.every(guardrail => guardrail.phase === "FOUNDATION" &&
+      guardrail.name.length > 0 && guardrail.description.length > 0 && guardrail.tests.length > 0)).toBe(true);
     expect(manifest.historicalFailures.map(failure => failure.id))
       .toEqual(Array.from({ length: 18 }, (_, index) => `H${String(index + 1).padStart(2, "0")}`));
     expect(manifest.historicalFailures.every(failure => failure.invariant.length > 0 &&
@@ -111,6 +122,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       manifest.document,
       manifest.runner,
       ...manifest.guardrails.flatMap(guardrail => guardrail.tests),
+      ...manifest.cmReaderWorkflowHeadGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.imagingGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.imagingAssetIngestGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.imagingAuthoringGuardrails.flatMap(guardrail => guardrail.tests),

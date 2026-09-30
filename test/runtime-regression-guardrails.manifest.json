@@ -30,6 +30,20 @@
     { "id": "Y", "name": "multi-cm", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowConcurrency-test.ts", "src/services/sharedWorkflow/__tests__/CmOwnershipProjectionRestore-test.ts", "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts"] },
     { "id": "Z", "name": "physical-acceptance-policy", "tests": ["src/services/operations/__tests__/MultiDeviceRehearsalPreparation-test.ts", "src/config/__tests__/SharedWorkflowValidationHarness-test.ts"] }
   ],
+  "cmReaderWorkflowHeadGuardrails": [
+    { "id": "CM-HEAD-G01", "name": "scoped-reader-head-resolution", "description": "A scoped CM reader resolves the writer-created canonical workflow head without initializing it.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
+    { "id": "CM-HEAD-G02", "name": "reader-command-readiness", "description": "A converged scoped CM reader becomes command-ready.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
+    { "id": "CM-HEAD-G03", "name": "reader-durable-submit", "description": "A ready scoped CM reader may submit a durable patient command.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
+    { "id": "CM-HEAD-G04", "name": "reader-no-materialization", "description": "A CM reader cannot acquire writer authority or materialize canonical state locally.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
+    { "id": "CM-HEAD-G05", "name": "writer-exactly-once", "description": "The canonical writer consumes a reader command exactly once.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
+    { "id": "CM-HEAD-G06", "name": "no-excon-reader-workaround", "description": "Normal CM command submission never requires a temporary EXCON role.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
+    { "id": "CM-HEAD-G07", "name": "wrong-exercise-denied", "description": "CM and EXCON authority remains bound to the assigned exercise.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
+    { "id": "CM-HEAD-G08", "name": "late-head-readiness", "description": "A reader initially fails closed and becomes ready after canonical state arrives.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
+    { "id": "CM-HEAD-G09", "name": "late-role-readiness", "description": "A late scoped role re-evaluates Runtime bootstrap readiness.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
+    { "id": "CM-HEAD-G10", "name": "takeover-reconnect-convergence", "description": "Foreground, reconnect and authority changes retrigger reader convergence.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
+    { "id": "CM-HEAD-G11", "name": "stale-denial-cleared", "description": "A historical initialization denial cannot remain after canonical reader convergence.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
+    { "id": "CM-HEAD-G12", "name": "no-global-role", "description": "Exercise-scoped CM readiness and submission require no GLOBAL assignment.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] }
+  ],
   "imagingGuardrails": [
     { "id": "IMG-G01", "name": "package-ownership", "description": "Predefined Imaging definitions come only from the authoritative exercise package and dataset binding.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
     { "id": "IMG-G02", "name": "no-patient-id-leakage", "description": "Equal patient IDs across packages cannot implicitly share predefined Imaging.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
@@ -391,6 +405,7 @@
     ],
     "runtime": [
       "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
+      "src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeWriterAuthorityState-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeCheckpointAuthority-test.ts",
@@ -407,6 +422,7 @@
     ],
     "multi-device": [
       "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
+      "src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts",
       "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts",

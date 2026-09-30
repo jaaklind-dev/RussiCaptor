@@ -70,6 +70,9 @@ describe("FRESH-RUNTIME-BOOTSTRAP-AUTHORITY-01", () => {
     const packageReady = signal({ packageBindingVersion: 8 });
     expect(shouldRetryFreshRuntimeBootstrap(initial, roleReady, { state: "READER" })).toBe(true);
     expect(shouldRetryFreshRuntimeBootstrap(initial, packageReady, { state: "DISABLED" })).toBe(true);
+    expect(shouldRetryFreshRuntimeBootstrap(initial, packageReady,
+      { state: "READER", code: "AUTHORITATIVE_CHECKPOINT_PENDING" })).toBe(true);
+    expect(shouldRetryFreshRuntimeBootstrap(initial, packageReady, { state: "READER", revision: 447 })).toBe(false);
     expect(shouldRetryFreshRuntimeBootstrap(roleReady, roleReady, { state: "READER" })).toBe(false);
   });
 
