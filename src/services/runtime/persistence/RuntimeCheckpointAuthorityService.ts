@@ -543,6 +543,39 @@ export function resolveAgainstValidatedLocalCheckpoint(
   return resolveAuthoritativeCheckpoint(local, remote);
 }
 
+export type RuntimeWriterCandidateCheckpointResolution = Readonly<
+  | CheckpointResolution<SharedExerciseState>
+  | {
+    status: "REMOTE_REBASE";
+    checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>;
+    code: "CANONICAL_CHECKPOINT_CONFLICT";
+  }
+>;
+
+/**
+ * A lease-free writer candidate may repair an equal-revision conflict only by
+ * adopting the already validated durable remote checkpoint. This is narrower
+ * than subscription resolution: a client that already owns writer authority
+ * keeps the normal fail-closed divergence semantics.
+ */
+export function resolveWriterCandidateCheckpoint(
+  local: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined,
+  remote: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined,
+  validatedResolution = resolveAgainstValidatedLocalCheckpoint(local, remote),
+): RuntimeWriterCandidateCheckpointResolution {
+  if (validatedResolution.status !== "CONFLICT" ||
+      validatedResolution.code !== "CHECKPOINT_REVISION_DIVERGENCE" ||
+      !local || !remote ||
+      local.exerciseId !== remote.exerciseId ||
+      local.checkpointRevision !== remote.checkpointRevision ||
+      local.payloadHash === remote.payloadHash) return validatedResolution;
+  return Object.freeze({
+    status: "REMOTE_REBASE",
+    checkpoint: remote,
+    code: "CANONICAL_CHECKPOINT_CONFLICT",
+  });
+}
+
 /** A lease-free reader follows the validated durable subscription payload.
  * Local reader revisions are cache metadata, not publication authority; this
  * also repairs historical clients that minted a higher read-only revision.

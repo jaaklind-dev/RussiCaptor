@@ -1,6 +1,6 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { AppState, Platform } from "react-native";
-import type { RuntimeCheckpointEnvelope, RuntimeWriterLease } from "@/models/RuntimeCheckpointAuthority";
+import type { CheckpointAuthorityDiagnosticCode, RuntimeCheckpointEnvelope, RuntimeWriterLease } from "@/models/RuntimeCheckpointAuthority";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { stopClockRunner } from "@/services/ClockRunner";
 import {
@@ -14,7 +14,7 @@ import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { supabase } from "@/services/SupabaseService";
 import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
 import { subscribeToSync } from "@/services/SyncService";
-import { isValidRuntimeCheckpoint, localRuntimeCheckpointStore, resolveAgainstValidatedLocalCheckpoint, resolveAuthoritativeCheckpointAsync, resolveSubscribedCheckpoint } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
+import { isValidRuntimeCheckpoint, localRuntimeCheckpointStore, resolveAuthoritativeCheckpointAsync, resolveSubscribedCheckpoint, resolveWriterCandidateCheckpoint, type RuntimeWriterCandidateCheckpointResolution } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 import { yieldToEventLoop } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import {
   SupabaseRuntimeCheckpointRepository,
@@ -601,6 +601,40 @@ export function checkpointPublicationPriority(
   return checkpointLifecycle(checkpoint) === "COMPLETED" ? "LIFECYCLE_CRITICAL" : "ROUTINE";
 }
 
+type PreparedWriterCandidate = Readonly<
+  | { state: "READY"; checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>; rebased: boolean }
+  | { state: "REJECTED"; code: CheckpointAuthorityDiagnosticCode }
+>;
+
+/** Rebuilds a lease-free candidate from durable authority before any writer
+ * lease is requested. A failed or incomplete rebase cannot cross the writer
+ * publication boundary. */
+export async function prepareRuntimeWriterCandidateBeforeLease(
+  resolution: RuntimeWriterCandidateCheckpointResolution,
+  acceptRemote: (checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>) => Promise<void>,
+  current: () => RuntimeCheckpointEnvelope<SharedExerciseState> | undefined,
+): Promise<PreparedWriterCandidate> {
+  if (resolution.status === "NONE") return { state: "REJECTED", code: "CHECKPOINT_NOT_FOUND" };
+  if (resolution.status === "CONFLICT") return { state: "REJECTED", code: resolution.code };
+  const shouldRebase = resolution.status === "REMOTE" || resolution.status === "REMOTE_REBASE";
+  if (shouldRebase) {
+    try {
+      await acceptRemote(resolution.checkpoint);
+    } catch {
+      return { state: "REJECTED", code: "CANONICAL_CHECKPOINT_CONFLICT" };
+    }
+    const accepted = current();
+    if (!accepted || accepted.exerciseId !== resolution.checkpoint.exerciseId ||
+        accepted.checkpointRevision !== resolution.checkpoint.checkpointRevision ||
+        accepted.payloadHash !== resolution.checkpoint.payloadHash ||
+        accepted.provenanceHash !== resolution.checkpoint.provenanceHash) {
+      return { state: "REJECTED", code: "CANONICAL_CHECKPOINT_CONFLICT" };
+    }
+    return { state: "READY", checkpoint: accepted, rebased: true };
+  }
+  return { state: "READY", checkpoint: resolution.checkpoint, rebased: false };
+}
+
 export async function takeOverRuntimeWriter(): Promise<Status> {
   if (!supabase) return { state:"DISABLED" };
   const repository=new SupabaseRuntimeCheckpointRepository(supabase);
@@ -615,8 +649,11 @@ export async function takeOverRuntimeWriter(): Promise<Status> {
   const localCheckpoint=checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId);
   const remote=await loadRuntimeCheckpointWithCache(repository,exerciseId,localCheckpoint,"takeover");
   if (!remote) return setAndReturn({state:"CONFLICT",code:"CHECKPOINT_NOT_FOUND"});
-  const resolved=resolveAgainstValidatedLocalCheckpoint(checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId),remote);
-  if (resolved.status==="CONFLICT" || resolved.status==="NONE") return setAndReturn({state:"CONFLICT",code:resolved.status==="CONFLICT"?resolved.code:"CHECKPOINT_NOT_FOUND"});
+  const resolved=resolveWriterCandidateCheckpoint(checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId),remote);
+  const prepared=await prepareRuntimeWriterCandidateBeforeLease(resolved,
+    checkpoint=>acceptAuthoritativeRuntimeCheckpointForReaderAsync(checkpoint,yieldToEventLoop),
+    ()=>checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId));
+  if (prepared.state==="REJECTED") return setAndReturn({state:"CONFLICT",code:prepared.code});
   const writerId=await startupAwait(getRuntimeWriterInstanceId());
   const acquired=await acquireRuntimeWriterTerminal(repository,exerciseId,writerId,remote.checkpointRevision,LEASE_SECONDS);
   if ("code" in acquired) return setAndReturn({state:"READER",code:acquired.code,revision:acquired.checkpointRevision});
@@ -638,9 +675,10 @@ export async function takeOverRuntimeWriter(): Promise<Status> {
   // clear the Runtime owners being installed by rehydration.
   lease=confirmed; remoteRevision=latest.checkpointRevision;
   setStatus({state:"WRITER",revision:remoteRevision});
-  // `resolved.checkpoint` is the payload already validated above. The second
+  // `prepared.checkpoint` is the payload already validated and, when needed,
+  // durably rebased above. The second
   // check reads only atomic metadata unless a rollout-safe fallback is needed.
-  await acceptAuthoritativeRuntimeCheckpointAsync(resolved.checkpoint, true, yieldToEventLoop);
+  await acceptAuthoritativeRuntimeCheckpointAsync(prepared.checkpoint, true, yieldToEventLoop);
   if (!await ensureSharedWorkflowHeadsForCurrentWriter?.()) {
     await repository.releaseWriter(confirmed); lease=undefined; stopClockRunner();
     return setAndReturn({state:"READER",code:"WORKFLOW_HEAD_INITIALIZATION_FAILED",revision:remoteRevision});
@@ -836,8 +874,21 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     localCheckpointRevision: local?.checkpointRevision,
     remoteCheckpointRevision: remote?.checkpointRevision,
   });
-  const resolved=await resolveAuthoritativeCheckpointAsync(local,remote,yieldToEventLoop);
+  let resolved=await resolveAuthoritativeCheckpointAsync(local,remote,yieldToEventLoop);
   endRemoteResolution({ status: resolved.status });
+  if (resolved.status==="CONFLICT" && resolved.code==="CHECKPOINT_REVISION_DIVERGENCE" && remote &&
+      runtimeWriterAcquisitionAllowed(getOperatorSession(),exerciseId)) {
+    const writerCandidate=resolveWriterCandidateCheckpoint(local,remote,resolved);
+    setStatus({state:"READER",code:"READER_CHECKPOINT_SYNCHRONIZING",revision:remote.checkpointRevision});
+    const prepared=await prepareRuntimeWriterCandidateBeforeLease(writerCandidate,
+      checkpoint=>acceptReaderCheckpoint(checkpoint,"REMOTE"),
+      ()=>checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId));
+    if(prepared.state==="READY"){
+      local=prepared.checkpoint;
+      remoteRevision=prepared.checkpoint.checkpointRevision;
+      resolved={status:"EQUIVALENT",checkpoint:prepared.checkpoint};
+    } else resolved={status:"CONFLICT",code:prepared.code};
+  }
   if (resolved.status==="CONFLICT") setStatus({state:"CONFLICT",code:resolved.code});
   else if (resolved.status==="REMOTE") {
     remoteRevision=resolved.checkpoint.checkpointRevision;

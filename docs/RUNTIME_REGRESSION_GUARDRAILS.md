@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H18/CM-HEAD-G01–CM-HEAD-G12/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G24/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/IMG-ASSET-G01–IMG-ASSET-G16/IMG-AUTH-G01–IMG-AUTH-G16/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H19/CHK-G01–CHK-G12/CM-HEAD-G01–CM-HEAD-G12/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G24/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/IMG-ASSET-G01–IMG-ASSET-G16/IMG-AUTH-G01–IMG-AUTH-G16/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Scoped CM reader workflow-head guardrails
 
@@ -68,6 +68,25 @@ Canonical workflow-head creation remains writer-owned. An ordinary exercise-scop
 | CM-HEAD-G10 | Takeover/reconnect convergence | Foreground, reconnect and authority changes retrigger canonical reader convergence. |
 | CM-HEAD-G11 | Stale denial cleared | A historical initialization denial cannot survive successful reader convergence. |
 | CM-HEAD-G12 | No GLOBAL role | Exercise-scoped readiness and submission require no GLOBAL assignment. |
+
+## Equal-revision takeover checkpoint guardrails
+
+Revision equality is not canonical equality. A lease-free writer candidate must compare the stable canonical payload hash and adopt durable remote authority before requesting a lease whenever an equal revision carries different content.
+
+| ID | Guardrail | Frozen invariant |
+| --- | --- | --- |
+| CHK-G01 | Equal revision and hash | Equal revision plus equal canonical hash is safe equivalence. |
+| CHK-G02 | Equal-revision divergence | Equal revision plus different canonical hash is an explicit conflict. |
+| CHK-G03 | No divergent publication | A divergent local candidate cannot acquire publication authority before reconciliation. |
+| CHK-G04 | Remote canonical wins | Durable remote state owns equal-revision conflict recovery. |
+| CHK-G05 | Timeline preservation | Remote rebase retains canonical timeline evidence exactly once. |
+| CHK-G06 | Lifecycle preservation | Remote rebase cannot regress PAUSED or terminal lifecycle to RUNNING. |
+| CHK-G07 | Patient-state preservation | Remote rebase retains canonical patient location and clinical state. |
+| CHK-G08 | Durable-command preservation | Remote rebase retains the canonical durable command cursor and effects. |
+| CHK-G09 | Rebase failure fence | Failed or incomplete rebase blocks lease acquisition and publication. |
+| CHK-G10 | Restart before takeover | Restart reconciles remote canonical state before writer candidacy. |
+| CHK-G11 | Concurrent takeover | Repository CAS permits at most one writer and preserves one canonical lineage. |
+| CHK-G12 | Stale writer rejection | A stale client cannot restore or publish its divergent equal-revision payload. |
 
 ## Transport lifecycle regression guardrails
 
@@ -466,6 +485,7 @@ Required release checks remain the unchanged persistence-performance test, Runti
 | H16 | Lost publication response followed by a same-lineage CAS conflict manufactured publication authority loss and stranded accepted durable commands | A/G/P/U | `RuntimeCheckpointPublication-test.ts`, `RuntimeCheckpointPublicationValidationHarness-test.ts`, `RuntimeCheckpointStartup-test.ts` | Same-lineage lost-response reconciliation gate |
 | H17 | MTP calcium became due after only three qualifying RBC doses | C/G/K/X | `MtpCalciumReplacement-test.ts`, `GlobalTransfusionCalciumCounter-test.ts` | Single-device third-to-fourth MTP-dose boundary gate |
 | H18 | EXCON-only Runtime patient lacked a durable shared-workflow head and patient commands failed closed | A/G/H/I/S/U/Y | `SharedWorkflowHeadInitialization-test.ts`, `RuntimeCheckpointStartup-test.ts` | Existing-fixture workflow-head initialization and one-command smoke gate |
+| H19 | A stale device reacquired writer authority from a same-revision divergent local checkpoint and erased canonical evidence/lifecycle state | A/B/C/M/U/X | `EqualRevisionTakeoverConflict-test.ts`, `RuntimeCheckpointStartup-test.ts` | Two-device equal-revision conflict rebase and takeover gate |
 
 No historical blocker may be removed from the manifest or left without an executable regression and a documented physical acceptance boundary.
 

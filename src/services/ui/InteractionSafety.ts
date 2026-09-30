@@ -26,6 +26,7 @@ export class SingleFlightActionGate {
 const operatorMessages: Readonly<Record<string, string>> = Object.freeze({
   CHECKPOINT_REVISION_CONFLICT: "Seadme andmed ei ole serveriga kooskõlas. Taasta pilve kontrollpunktist.",
   CHECKPOINT_REVISION_DIVERGENCE: "Seadme kontrollpunkt on aegunud. Oota ühenduse taastumist või taasta serveri seis.",
+  CANONICAL_CHECKPOINT_CONFLICT: "Serveri kontrollpunkti taastamine ebaõnnestus. Kirjutamisõigust ei aktiveeritud.",
   LEASE_CONFLICT: "Simulatsiooni juhib teine seade. Jätkamiseks võta Runtime üle.",
   ACTIVE_ON_ANOTHER_DEVICE: "Simulatsiooni juhib teine seade. Jätkamiseks võta Runtime üle.",
 });

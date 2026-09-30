@@ -624,7 +624,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const lease = takeover.indexOf("lease=acquired.lease");
     const acquiring = takeover.indexOf('setStatus({state:"ACQUIRING"');
     const writer = takeover.indexOf('setStatus({state:"WRITER"');
-    const restore = takeover.indexOf("acceptAuthoritativeRuntimeCheckpointAsync(resolved.checkpoint, true");
+    const restore = takeover.indexOf("acceptAuthoritativeRuntimeCheckpointAsync(prepared.checkpoint, true");
     const owner = takeover.indexOf("establishExerciseRuntimeOwnerForCurrentWriter", restore);
     const resumeCompletion = takeover.indexOf("resumePendingCompletionForCurrentWriter", owner);
     const routinePublication = takeover.indexOf("wakeCheckpointPublicationForCurrentWriter", resumeCompletion);
@@ -870,7 +870,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     });
 
     test("RB-A4 fresh startup has one writer-acquisition decision", () => {
-      const authority = startup.slice(startup.indexOf("const resolved="), startup.indexOf("let publishInFlight=false"));
+      const authority = startup.slice(startup.indexOf("let resolved="), startup.indexOf("let publishInFlight=false"));
       expect(authority.match(/acquireRuntimeWriterTerminal\(/g)).toHaveLength(1);
       expect(authority).toContain('if ("lease" in acquired)');
       expect(authority).toContain("setRuntimeCommandAuthorityWriter(exerciseId)");

@@ -44,6 +44,20 @@
     { "id": "CM-HEAD-G11", "name": "stale-denial-cleared", "description": "A historical initialization denial cannot remain after canonical reader convergence.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
     { "id": "CM-HEAD-G12", "name": "no-global-role", "description": "Exercise-scoped CM readiness and submission require no GLOBAL assignment.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] }
   ],
+  "checkpointConflictGuardrails": [
+    { "id": "CHK-G01", "name": "equal-revision-equal-hash", "description": "Equal revision plus equal canonical hash is safe equivalence.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts"] },
+    { "id": "CHK-G02", "name": "equal-revision-divergence", "description": "Equal revision plus different canonical hash is an explicit conflict.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts"] },
+    { "id": "CHK-G03", "name": "no-divergent-publication", "description": "A divergent local candidate cannot acquire publication authority before reconciliation.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"] },
+    { "id": "CHK-G04", "name": "remote-canonical-wins", "description": "Durable remote state owns equal-revision conflict recovery.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts"] },
+    { "id": "CHK-G05", "name": "timeline-preservation", "description": "Remote rebase retains canonical timeline evidence exactly once.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts"] },
+    { "id": "CHK-G06", "name": "lifecycle-preservation", "description": "Remote rebase cannot regress PAUSED or terminal lifecycle to RUNNING.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts"] },
+    { "id": "CHK-G07", "name": "patient-state-preservation", "description": "Remote rebase retains canonical patient location and clinical state.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts"] },
+    { "id": "CHK-G08", "name": "durable-command-preservation", "description": "Remote rebase retains canonical durable command cursor and effects.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts"] },
+    { "id": "CHK-G09", "name": "rebase-failure-fence", "description": "Failed or incomplete rebase blocks lease acquisition and publication.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts"] },
+    { "id": "CHK-G10", "name": "restart-before-takeover", "description": "Restart reconciles remote canonical state before writer candidacy.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"] },
+    { "id": "CHK-G11", "name": "concurrent-takeover", "description": "Repository CAS permits at most one writer and preserves one canonical lineage.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"] },
+    { "id": "CHK-G12", "name": "stale-writer-rejection", "description": "A stale client cannot restore or publish its divergent equal-revision payload.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"] }
+  ],
   "imagingGuardrails": [
     { "id": "IMG-G01", "name": "package-ownership", "description": "Predefined Imaging definitions come only from the authoritative exercise package and dataset binding.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
     { "id": "IMG-G02", "name": "no-patient-id-leakage", "description": "Equal patient IDs across packages cannot implicitly share predefined Imaging.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
@@ -406,6 +420,7 @@
     "runtime": [
       "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts",
+      "src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeWriterAuthorityState-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeCheckpointAuthority-test.ts",
@@ -423,6 +438,7 @@
     "multi-device": [
       "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts",
+      "src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts",
       "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts",
@@ -436,6 +452,7 @@
     ],
     "persistence": [
       "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
+      "src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeCheckpointCanonicalArtifact-test.ts",
       "src/services/runtime/persistence/__tests__/PersistedCanonicalCheckpointMigration-test.ts",
       "src/services/runtime/persistence/__tests__/PersistedCanonicalCheckpointPerformance-test.ts",
@@ -470,6 +487,7 @@
     { "id": "H15", "failure": "HOLD/RESUME near irreversible threshold lost timely durable CORRECT intent to materialization latency", "invariant": "D/G/L/X", "tests": ["src/services/runtime/commands/__tests__/NarvaIroScenarioControlCommand-test.ts", "src/services/runtime/__tests__/NarvaIroScenarioRuntime-test.ts", "src/components/excon/__tests__/NarvaIroScenarioControlsCard-test.tsx"], "physicalGate": "two-device near-threshold RESUME/CORRECT gate" },
     { "id": "H16", "failure": "lost publication response followed by same-lineage CAS conflict manufactured publication authority loss and stranded accepted durable commands", "invariant": "A/G/P/U", "tests": ["src/services/runtime/persistence/__tests__/RuntimeCheckpointPublication-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointPublicationValidationHarness-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"], "physicalGate": "same-lineage lost-response reconciliation gate" },
     { "id": "H17", "failure": "MTP calcium became due after only three qualifying RBC doses", "invariant": "C/G/K/X", "tests": ["src/modules/massiveTransfusion/__tests__/MtpCalciumReplacement-test.ts", "src/modules/massiveTransfusion/__tests__/GlobalTransfusionCalciumCounter-test.ts"], "physicalGate": "single-device third-to-fourth MTP-dose boundary gate" },
-    { "id": "H18", "failure": "EXCON-only Runtime patient lacked a durable shared-workflow head and patient commands failed closed", "invariant": "A/G/H/I/S/U/Y", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowHeadInitialization-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"], "physicalGate": "existing-fixture workflow-head initialization and one-command smoke gate" }
+    { "id": "H18", "failure": "EXCON-only Runtime patient lacked a durable shared-workflow head and patient commands failed closed", "invariant": "A/G/H/I/S/U/Y", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowHeadInitialization-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"], "physicalGate": "existing-fixture workflow-head initialization and one-command smoke gate" },
+    { "id": "H19", "failure": "stale device reacquired writer authority from a same-revision divergent local checkpoint and erased canonical evidence and lifecycle state", "invariant": "A/B/C/M/U/X", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"], "physicalGate": "two-device equal-revision conflict rebase and takeover gate" }
   ]
 }
