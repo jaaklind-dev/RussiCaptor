@@ -48,7 +48,7 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 | Y | Multi-CM | CM-A ownership is isolated from CM-B; non-writer commands route through the sole writer; supported transfer updates both projections without creating another writer. | `SharedWorkflowConcurrency-test.ts`, `CmOwnershipProjectionRestore-test.ts`, `RuntimePatientCommandConcurrency-test.ts` |
 | Z | Physical acceptance policy | Authority, persistence, canonical restore/publication, durable routing, convergence/time, ownership, native control activation, restart, and terminal changes require a scoped physical gate before release. | `MultiDeviceRehearsalPreparation-test.ts`, `SharedWorkflowValidationHarness-test.ts` |
 
-Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H20/CHK-G01–CHK-G12/WF-CAN-G01–WF-CAN-G12/CM-HEAD-G01–CM-HEAD-G12/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G24/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/IMG-ASSET-G01–IMG-ASSET-G16/IMG-AUTH-G01–IMG-AUTH-G16/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
+Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H20/CHK-G01–CHK-G12/WF-CAN-G01–WF-CAN-G12/CM-HEAD-G01–CM-HEAD-G12/READINESS-G01–READINESS-G12/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G24/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/IMG-ASSET-G01–IMG-ASSET-G16/IMG-AUTH-G01–IMG-AUTH-G16/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
 ## Scoped CM reader workflow-head guardrails
 
@@ -68,6 +68,25 @@ Canonical workflow-head creation remains writer-owned. An ordinary exercise-scop
 | CM-HEAD-G10 | Takeover/reconnect convergence | Foreground, reconnect and authority changes retrigger canonical reader convergence. |
 | CM-HEAD-G11 | Stale denial cleared | A historical initialization denial cannot survive successful reader convergence. |
 | CM-HEAD-G12 | No GLOBAL role | Exercise-scoped readiness and submission require no GLOBAL assignment. |
+
+## CM reader command-readiness reconciliation guardrails
+
+Reader readiness combines authoritative checkpoint convergence with scoped workflow ownership. Restoring the same immutable package binding is not a semantic package change and must not tear down a healthy reader generation. Genuine disconnection, scope mismatch, stale authority, or terminal state remains fail-closed.
+
+| ID | Guardrail | Frozen invariant |
+| --- | --- | --- |
+| READINESS-G01 | Hydrated reader allowed | A valid hydrated exercise-scoped CM reader becomes command-ready. |
+| READINESS-G02 | Stale reconnect clears | Authoritative hydration clears a historical reconnect reason. |
+| READINESS-G03 | Claim recompute | Successful patient claim projection updates cannot strand command readiness. |
+| READINESS-G04 | Checkpoint/head recompute | Canonical revision updates re-evaluate readiness without restarting a healthy reader. |
+| READINESS-G05 | Late role recompute | A late scoped role retries incomplete bootstrap without disturbing a healthy reader. |
+| READINESS-G06 | Reconnect/foreground refresh | Reconnect and foreground refresh metadata without permanently latching reconnect state. |
+| READINESS-G07 | Takeover generation refresh | Writer-generation changes fence temporarily and restore readiness after convergence. |
+| READINESS-G08 | Disconnected reader blocked | A genuinely disconnected reader remains fail-closed. |
+| READINESS-G09 | Wrong scope denied | Exercise scope remains mandatory for reader command authority. |
+| READINESS-G10 | Terminal state blocked | Terminal patients and exercises reject new durable commands. |
+| READINESS-G11 | Reader no local mutation | Reader submission cannot materialize clinical state or publish writer state locally. |
+| READINESS-G12 | Imaging writer exactly once | One ready-reader Imaging intent is materialized once by the canonical writer. |
 
 ## Equal-revision takeover checkpoint guardrails
 

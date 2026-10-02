@@ -13,6 +13,13 @@ type GuardrailManifest = Readonly<{
     phase: "FOUNDATION";
     tests: readonly string[];
   }>[];
+  readerReadinessGuardrails: readonly Readonly<{
+    id: string;
+    name: string;
+    description: string;
+    phase: "FOUNDATION";
+    tests: readonly string[];
+  }>[];
   checkpointConflictGuardrails: readonly Readonly<{
     id: string;
     name: string;
@@ -125,6 +132,10 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       .toEqual(Array.from({ length: 12 }, (_, index) => `CM-HEAD-G${String(index + 1).padStart(2, "0")}`));
     expect(manifest.cmReaderWorkflowHeadGuardrails.every(guardrail => guardrail.phase === "FOUNDATION" &&
       guardrail.name.length > 0 && guardrail.description.length > 0 && guardrail.tests.length > 0)).toBe(true);
+    expect(manifest.readerReadinessGuardrails.map(guardrail => guardrail.id))
+      .toEqual(Array.from({ length: 12 }, (_, index) => `READINESS-G${String(index + 1).padStart(2, "0")}`));
+    expect(manifest.readerReadinessGuardrails.every(guardrail => guardrail.phase === "FOUNDATION" &&
+      guardrail.name.length > 0 && guardrail.description.length > 0 && guardrail.tests.length > 0)).toBe(true);
     expect(manifest.checkpointConflictGuardrails.map(guardrail => guardrail.id))
       .toEqual(Array.from({ length: 12 }, (_, index) => `CHK-G${String(index + 1).padStart(2, "0")}`));
     expect(manifest.checkpointConflictGuardrails.every(guardrail => guardrail.phase === "FOUNDATION" &&
@@ -145,6 +156,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       manifest.runner,
       ...manifest.guardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.cmReaderWorkflowHeadGuardrails.flatMap(guardrail => guardrail.tests),
+      ...manifest.readerReadinessGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.checkpointConflictGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.sharedWorkflowCanonicalGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.imagingGuardrails.flatMap(guardrail => guardrail.tests),

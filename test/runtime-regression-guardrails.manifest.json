@@ -44,6 +44,20 @@
     { "id": "CM-HEAD-G11", "name": "stale-denial-cleared", "description": "A historical initialization denial cannot remain after canonical reader convergence.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
     { "id": "CM-HEAD-G12", "name": "no-global-role", "description": "Exercise-scoped CM readiness and submission require no GLOBAL assignment.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] }
   ],
+  "readerReadinessGuardrails": [
+    { "id": "READINESS-G01", "name": "hydrated-reader-allowed", "description": "A valid hydrated exercise-scoped CM reader becomes command-ready.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/RuntimeCmReaderReadinessReconciliation-test.ts", "src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
+    { "id": "READINESS-G02", "name": "stale-reconnect-clears", "description": "A historical reconnect reason clears after authoritative checkpoint hydration.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/RuntimeCmReaderReadinessReconciliation-test.ts", "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts"] },
+    { "id": "READINESS-G03", "name": "claim-recompute", "description": "Successful patient claim projection updates cannot strand canonical command readiness.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/RuntimeCmReaderReadinessReconciliation-test.ts", "src/services/sharedWorkflow/__tests__/CmOwnershipProjectionRestore-test.ts"] },
+    { "id": "READINESS-G04", "name": "checkpoint-head-recompute", "description": "Canonical checkpoint and workflow-head updates re-evaluate readiness without restarting a healthy reader generation.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/RuntimeCmReaderReadinessReconciliation-test.ts", "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts"] },
+    { "id": "READINESS-G05", "name": "late-role-recompute", "description": "A newly active scoped role retries an incomplete bootstrap while leaving a healthy reader intact.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts", "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts"] },
+    { "id": "READINESS-G06", "name": "reconnect-foreground-refresh", "description": "Reconnect and foreground signals refresh canonical metadata without permanently latching reconnect state.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts", "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts"] },
+    { "id": "READINESS-G07", "name": "takeover-generation-refresh", "description": "Writer-generation changes fence temporarily and restore reader readiness after canonical convergence.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts", "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts"] },
+    { "id": "READINESS-G08", "name": "disconnected-reader-blocked", "description": "A genuinely disconnected or unavailable reader remains fail-closed.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/RuntimeCmReaderReadinessReconciliation-test.ts", "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts"] },
+    { "id": "READINESS-G09", "name": "wrong-scope-denied", "description": "A reader without the matching exercise scope cannot gain Runtime command authority.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts"] },
+    { "id": "READINESS-G10", "name": "terminal-state-blocked", "description": "Terminal patients and exercises remain fenced from new durable commands.", "phase": "FOUNDATION", "tests": ["src/services/sharedWorkflow/__tests__/TerminalSharedWorkflowFence-test.ts", "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts"] },
+    { "id": "READINESS-G11", "name": "reader-no-local-mutation", "description": "Reader command submission cannot materialize clinical state or publish a writer checkpoint locally.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts", "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts"] },
+    { "id": "READINESS-G12", "name": "imaging-writer-exactly-once", "description": "A ready reader Imaging intent is materialized exactly once by the canonical writer.", "phase": "FOUNDATION", "tests": ["src/services/runtime/imaging/__tests__/ImagingWorkflowCommandService-test.ts", "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts", "src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts"] }
+  ],
   "checkpointConflictGuardrails": [
     { "id": "CHK-G01", "name": "equal-revision-equal-hash", "description": "Equal revision plus equal canonical hash is safe equivalence.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts"] },
     { "id": "CHK-G02", "name": "equal-revision-divergence", "description": "Equal revision plus different canonical hash is an explicit conflict.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts"] },
@@ -432,6 +446,7 @@
       "src/modules/massiveTransfusion/__tests__/MtpCalciumReplacement-test.ts"
     ],
     "runtime": [
+      "src/services/runtime/persistence/__tests__/RuntimeCmReaderReadinessReconciliation-test.ts",
       "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts",
@@ -452,6 +467,7 @@
       "src/modules/massiveTransfusion/__tests__/GlobalTransfusionCalciumCounter-test.ts"
     ],
     "multi-device": [
+      "src/services/runtime/persistence/__tests__/RuntimeCmReaderReadinessReconciliation-test.ts",
       "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts",

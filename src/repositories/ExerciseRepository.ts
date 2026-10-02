@@ -24,11 +24,18 @@ export function getCurrentExercise(): Exercise {
 }
 
 export function installCurrentExercise(id: string, name: string, exercisePackage?: ExercisePackage): void {
-  const selectedPackage = exercisePackage ?? exercisePackageLoader.getBound(id) ?? DEFAULT_EXERCISE_PACKAGE;
+  const currentPackage = exercisePackageLoader.getBound(id);
+  const selectedPackage = exercisePackage
+    ? exercisePackageLoader.load(exercisePackage)
+    : currentPackage ?? DEFAULT_EXERCISE_PACKAGE;
   currentExercise.id = id;
   currentExercise.name = name === id ? selectedPackage.metadata.name : name;
   currentExercise.description = "Excelist imporditud harjutus";
   currentExercise.status = "draft";
-  if (exercisePackage) exercisePackageLoader.unbind(id);
+  const sameBinding = Boolean(currentPackage && exercisePackage &&
+    currentPackage.packageId === selectedPackage.packageId &&
+    currentPackage.packageVersion === selectedPackage.packageVersion &&
+    currentPackage.packageHash === selectedPackage.packageHash);
+  if (exercisePackage && currentPackage && !sameBinding) exercisePackageLoader.unbind(id);
   if (!exercisePackageLoader.getBound(id)) exercisePackageLoader.bind(id, selectedPackage);
 }
