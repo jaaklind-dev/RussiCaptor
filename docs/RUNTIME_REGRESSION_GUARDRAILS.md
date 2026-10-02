@@ -226,6 +226,24 @@ Procedure definitions and physical resources are reusable Runtime capabilities, 
 | PROC-G30 | Reader/writer consistency | Reader and writer controls expose the same readiness semantics. |
 | PROC-G31 | Terminal readiness fence | Terminal exercises are disabled in UI and rejected by submission. |
 | PROC-G32 | Convergence recovery | Controls re-enable automatically after authoritative convergence. |
+
+### Canonical ETT materialization
+
+| ID | Invariant | Required proof |
+|---|---|---|
+| ETT-G01 | Canonical effect before acknowledgement | `MATERIALIZED` requires the command-tied ETT instance in an acknowledged checkpoint. |
+| ETT-G02 | Canonical evidence before acknowledgement | The same checkpoint contains exactly one deterministic ETT timeline event. |
+| ETT-G03 | Ordered status transition | The backend status write follows, and never precedes, canonical checkpoint acknowledgement. |
+| ETT-G04 | Restart before mutation | An accepted command can be consumed once by the replacement writer. |
+| ETT-G05 | Mutation before checkpoint | Replay uses deterministic identity and does not duplicate intervention or evidence. |
+| ETT-G06 | Checkpoint before status | A lost status response catches up without replaying canonical effects. |
+| ETT-G07 | Historical false acknowledgement | A materialized command behind the cursor is verified and missing canonical state is repaired. |
+| ETT-G08 | Exactly one intervention | Command replay, restart and takeover preserve one ETT instance. |
+| ETT-G09 | Exactly one evidence event | Deterministic evidence identity prevents duplicate timeline entries. |
+| ETT-G10 | Reader isolation | A reader submits only and never invokes the canonical commit path locally. |
+| ETT-G11 | Takeover recovery | The current writer verifies or completes the canonical commit exactly once. |
+| ETT-G12 | Stale-writer safety | Loss of publication authority rejects the pending commit and cannot acknowledge status. |
+
 | PROC-G33 | Narva P02 oxygen availability | Only the source-backed P02 chest patient receives generic oxygen therapy. |
 | PROC-G34 | Narva P01 no oxygen inheritance | P01 remains unauthorized for P02 oxygen therapy. |
 | PROC-G35 | Oxygen resource is not authorization | Resource presence cannot bypass package/patient authorization. |

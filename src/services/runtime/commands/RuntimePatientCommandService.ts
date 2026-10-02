@@ -18,6 +18,8 @@ export interface RuntimePatientCommandGateway {
   submit(command: RuntimePatientCommandSubmission): Promise<RuntimePatientCommandSubmissionResult>;
   loadAfter(exerciseId: string, cursor: number, throughSequence?: number): Promise<readonly AcceptedRuntimePatientCommand[]>;
   loadResult?(exerciseId: string, commandSequence: number): Promise<RuntimePatientCommandMaterialization | undefined>;
+  loadCanonicalReconciliationCandidates?(exerciseId: string, throughSequence: number):
+    Promise<readonly AcceptedRuntimePatientCommand[]>;
   record(exerciseId: string, commandSequence: number, lease: RuntimeWriterLease,
     materialization: RuntimePatientCommandMaterialization): Promise<void>;
 }
@@ -75,6 +77,24 @@ export class SupabaseRuntimePatientCommandGateway implements RuntimePatientComma
     if (!data || data.status === "ACCEPTED") return undefined;
     return Object.freeze({ status: data.status === "MATERIALIZED" ? "MATERIALIZED" : "REJECTED",
       result: Object.freeze((data.materialization_result ?? {}) as Record<string, unknown>) });
+  }
+
+  async loadCanonicalReconciliationCandidates(exerciseId: string, throughSequence: number):
+  Promise<readonly AcceptedRuntimePatientCommand[]> {
+    if (throughSequence < 1) return Object.freeze([]);
+    const { data, error } = await this.client.from("runtime_patient_commands")
+      .select("command_sequence,exercise_id,patient_id,command_id,command_type,command_payload,patient_base_revision,patient_resulting_revision,simulation_time_sec,actor_user_id")
+      .eq("exercise_id", exerciseId).eq("command_type", "ENDOTRACHEAL_INTUBATION")
+      .eq("status", "MATERIALIZED").lte("command_sequence", throughSequence)
+      .order("command_sequence", { ascending: true });
+    if (error) throw new Error("RUNTIME_COMMAND_RECONCILIATION_LOAD_FAILED");
+    return Object.freeze((data ?? []).map(row => Object.freeze({
+      exerciseId: String(row.exercise_id), patientId: String(row.patient_id), commandId: String(row.command_id),
+      commandType: "ENDOTRACHEAL_INTUBATION" as const,
+      patientBaseRevision: Number(row.patient_base_revision), patientResultingRevision: Number(row.patient_resulting_revision),
+      simulationTimeSec: Number(row.simulation_time_sec), payload: row.command_payload as Readonly<Record<string, unknown>>,
+      commandSequence: Number(row.command_sequence), actorUserId: String(row.actor_user_id),
+    })));
   }
 
   async record(exerciseId: string, commandSequence: number, lease: RuntimeWriterLease,
@@ -151,13 +171,17 @@ export async function waitForPatientRuntimeCommandResult(exerciseId: string, com
 
 export type RuntimePatientCommandMaterializer = (command: AcceptedRuntimePatientCommand) =>
   Promise<RuntimePatientCommandMaterialization> | RuntimePatientCommandMaterialization;
+export type RuntimePatientCommandCanonicalCommit = (command: AcceptedRuntimePatientCommand,
+  materialization: RuntimePatientCommandMaterialization) => Promise<void>;
 
 export class RuntimePatientCommandConsumer {
   private active?: Promise<number>;
   private pending: readonly AcceptedRuntimePatientCommand[] | undefined;
+  private readonly reconciledCanonicalCommands = new Set<number>();
   constructor(private readonly commandGateway: RuntimePatientCommandGateway,
     private readonly materialize: RuntimePatientCommandMaterializer,
-    private readonly currentSimulationTimeSec: () => number = () => Number.POSITIVE_INFINITY) {}
+    private readonly currentSimulationTimeSec: () => number = () => Number.POSITIVE_INFINITY,
+    private readonly commitCanonical?: RuntimePatientCommandCanonicalCommit) {}
 
   hasDeferredCommands(): boolean { return Boolean(this.pending?.length); }
 
@@ -172,6 +196,16 @@ export class RuntimePatientCommandConsumer {
 
   private async drainOnce(exerciseId: string, lease: RuntimeWriterLease, throughSequence?: number): Promise<number> {
     let cursor = getRuntimePatientCommandCursor(exerciseId);
+    if (this.commitCanonical && this.commandGateway.loadCanonicalReconciliationCandidates && cursor > 0) {
+      const candidates = await this.commandGateway.loadCanonicalReconciliationCandidates(exerciseId, cursor);
+      for (const command of candidates) {
+        if (this.reconciledCanonicalCommands.has(command.commandSequence)) continue;
+        const materialization = await this.materialize(command);
+        if (materialization.status !== "MATERIALIZED") throw new Error("CANONICAL_COMMAND_RECONCILIATION_FAILED");
+        await this.commitCanonical(command, materialization);
+        this.reconciledCanonicalCommands.add(command.commandSequence);
+      }
+    }
     const commands = this.pending ?? await this.commandGateway.loadAfter(exerciseId, cursor, throughSequence);
     for (const [index, command] of commands.entries()) {
       // A command accepted while no writer exists can be newer than the last
@@ -183,6 +217,7 @@ export class RuntimePatientCommandConsumer {
         return cursor;
       }
       const materialization = await this.materialize(command);
+      await this.commitCanonical?.(command, materialization);
       await this.commandGateway.record(exerciseId, command.commandSequence, lease, materialization);
       advanceRuntimePatientCommandCursor(exerciseId, command.commandSequence);
       cursor = command.commandSequence;

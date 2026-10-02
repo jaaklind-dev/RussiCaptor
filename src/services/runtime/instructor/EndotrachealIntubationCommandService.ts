@@ -1,9 +1,10 @@
-import { addTimelineEvent } from "@/repositories/TimelineRepository";
+import { addTimelineEvent, getAllTimelineEvents } from "@/repositories/TimelineRepository";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getCanonicalPatientRuntimeSnapshot } from "@/services/RuntimeSnapshotService";
 import { getInstructorRuntimeOwner } from "./InstructorRuntimeEventRegistry";
 import { isResourceInterventionAllowed } from "@/services/exercise/PackageInterventionAvailabilityService";
 import { submitPatientRuntimeCommand } from "@/services/runtime/commands/RuntimePatientCommandService";
+import { canonicalEttEvidenceId } from "@/services/runtime/commands/EndotrachealIntubationCanonicalCommit";
 
 export type EndotrachealIntubationCommand = Readonly<{
   commandId: string; exerciseId: string; patientId: string; tubeResourceId: string;
@@ -51,9 +52,12 @@ export function handleEndotrachealIntubationCommand(command: EndotrachealIntubat
       : { ok: false, commandId: command.commandId, errorCode, message: applied.reason };
   if (result.ok) {
     const simulationTimeSec = getCanonicalPatientRuntimeSnapshot(command.patientId)?.state.exerciseTimeSec ?? 0;
-    addTimelineEvent({ id: `TL-ETT-${command.commandId}`, exerciseId: command.exerciseId, patientId: command.patientId,
-      timestamp: `T+${simulationTimeSec}s`, simulationTimeSec, type: "intervention", title: "Endotrahheaalne intubatsioon",
-      description: `ETT ${command.tubeSize} paigaldati ja asend kinnitati`, author: command.issuedBy, visibility: "revealed" });
+    const evidenceId = canonicalEttEvidenceId(command.commandId);
+    if (!getAllTimelineEvents().some(event => event.id === evidenceId)) {
+      addTimelineEvent({ id: evidenceId, exerciseId: command.exerciseId, patientId: command.patientId,
+        timestamp: `T+${simulationTimeSec}s`, simulationTimeSec, type: "intervention", title: "Endotrahheaalne intubatsioon",
+        description: `ETT ${command.tubeSize} paigaldati ja asend kinnitati`, author: command.issuedBy, visibility: "revealed" });
+    }
   }
   results.set(command.commandId, structuredClone(result));
   return structuredClone(result);

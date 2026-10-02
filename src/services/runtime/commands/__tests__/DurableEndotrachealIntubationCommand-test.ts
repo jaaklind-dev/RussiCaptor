@@ -25,6 +25,7 @@ import { resetRuntimePatientCommandCursor, restoreRuntimePatientCommandCursor } 
   "../RuntimePatientCommandCursor";
 import { resetRuntimeReaderConvergence, setRuntimeCommandAuthorityWriter } from
   "@/services/runtime/persistence/RuntimeReaderConvergenceService";
+import { clearTimelineEvents, getAllTimelineEvents } from "@/repositories/TimelineRepository";
 
 const exerciseId = "EX-DURABLE-ETT";
 const patientId = "PT-PELVIC-001";
@@ -53,6 +54,7 @@ describe("PROC-G13..G22 durable endotracheal intubation", () => {
   beforeEach(() => {
     actor = { userId: "CM-A", role: "CM", exerciseIds: [exerciseId] };
     clearInstructorRuntimeOwners(); resetEndotrachealIntubationCommands(); resetRuntimePatientCommandCursor();
+    clearTimelineEvents();
     resetSharedWorkflowConflictMetrics(); setRuntimeWriterAuthorityState("WRITER");
     setRuntimePatientCommandGateway(undefined); resetRuntimeReaderConvergence();
     restoreExerciseSession({ exerciseId, lifecycleState: "RUNNING", simulationTimeSec: 120,
@@ -108,6 +110,79 @@ describe("PROC-G13..G22 durable endotracheal intubation", () => {
     await consumer.drain(exerciseId, lease);
     expect(engine.getInterventionInstances().filter(item => item.definitionId === "ENDOTRACHEAL_INTUBATION"))
       .toHaveLength(1);
+  });
+
+  test("ETT-G01..G03 status acknowledgement waits for canonical commit", async () => {
+    const engine = setupEngine(); const gateway = new InMemoryRuntimePatientCommandGateway(() => actor);
+    gateway.seed(exerciseId, patientId, "CM-A"); await gateway.submit(request("ETT-COMMIT-BARRIER"));
+    let releaseCommit!: () => void;
+    const commit = jest.fn(() => new Promise<void>(resolve => { releaseCommit = resolve; }));
+    const consumer = new RuntimePatientCommandConsumer(gateway, materializeRuntimePatientCommand,
+      () => engine.getSimulationTimeSec(), commit);
+    const draining = consumer.drain(exerciseId, lease);
+    await Promise.resolve(); await Promise.resolve();
+    expect(engine.getInterventionInstances().filter(item => item.sourceInterventionId ===
+      "CLINICAL:ETT-COMMIT-BARRIER")).toHaveLength(1);
+    expect(getAllTimelineEvents().filter(item => item.id === "TL-ETT-ETT-COMMIT-BARRIER")).toHaveLength(1);
+    expect(gateway.materialized(1)).toBeUndefined();
+    releaseCommit(); await draining;
+    expect(gateway.materialized(1)?.status).toBe("MATERIALIZED");
+  });
+
+  test("ETT-G05 mutation before checkpoint retries without duplicate instance or evidence", async () => {
+    const engine = setupEngine(); const gateway = new InMemoryRuntimePatientCommandGateway(() => actor);
+    gateway.seed(exerciseId, patientId, "CM-A"); await gateway.submit(request("ETT-PRE-CHECKPOINT"));
+    const failedCommit = jest.fn(async () => { throw new Error("PUBLICATION_INTERRUPTED"); });
+    const first = new RuntimePatientCommandConsumer(gateway, materializeRuntimePatientCommand,
+      () => engine.getSimulationTimeSec(), failedCommit);
+    await expect(first.drain(exerciseId, lease)).rejects.toThrow("PUBLICATION_INTERRUPTED");
+    expect(gateway.materialized(1)).toBeUndefined();
+    const takeover = new RuntimePatientCommandConsumer(gateway, materializeRuntimePatientCommand,
+      () => engine.getSimulationTimeSec(), async () => undefined);
+    await takeover.drain(exerciseId, { ...lease, writerInstanceId: "TAKEOVER-WRITER" });
+    expect(engine.getInterventionInstances().filter(item => item.sourceInterventionId ===
+      "CLINICAL:ETT-PRE-CHECKPOINT")).toHaveLength(1);
+    expect(getAllTimelineEvents().filter(item => item.id === "TL-ETT-ETT-PRE-CHECKPOINT")).toHaveLength(1);
+  });
+
+  test("ETT-G06 checkpoint before status catches up without replaying canonical effects", async () => {
+    const engine = setupEngine(); const backing = new InMemoryRuntimePatientCommandGateway(() => actor);
+    backing.seed(exerciseId, patientId, "CM-A"); await backing.submit(request("ETT-CHECKPOINT-FIRST"));
+    let failRecord = true;
+    const gateway = { ...backing,
+      submit: backing.submit.bind(backing), loadAfter: backing.loadAfter.bind(backing),
+      loadResult: backing.loadResult.bind(backing),
+      loadCanonicalReconciliationCandidates: backing.loadCanonicalReconciliationCandidates.bind(backing),
+      record: async (...args: Parameters<typeof backing.record>) => {
+        if (failRecord) { failRecord = false; throw new Error("STATUS_WRITE_INTERRUPTED"); }
+        return backing.record(...args);
+      } };
+    const first = new RuntimePatientCommandConsumer(gateway, materializeRuntimePatientCommand,
+      () => engine.getSimulationTimeSec(), async () => undefined);
+    await expect(first.drain(exerciseId, lease)).rejects.toThrow("STATUS_WRITE_INTERRUPTED");
+    const retry = new RuntimePatientCommandConsumer(gateway, materializeRuntimePatientCommand,
+      () => engine.getSimulationTimeSec(), async () => undefined);
+    await retry.drain(exerciseId, lease);
+    expect(backing.materialized(1)?.status).toBe("MATERIALIZED");
+    expect(engine.getInterventionInstances().filter(item => item.sourceInterventionId ===
+      "CLINICAL:ETT-CHECKPOINT-FIRST")).toHaveLength(1);
+    expect(getAllTimelineEvents().filter(item => item.id === "TL-ETT-ETT-CHECKPOINT-FIRST")).toHaveLength(1);
+  });
+
+  test("ETT-G07 historical MATERIALIZED without canonical effect self-heals", async () => {
+    const gateway = new InMemoryRuntimePatientCommandGateway(() => actor);
+    gateway.seed(exerciseId, patientId, "CM-A"); await gateway.submit(request("ETT-HISTORICAL-FALSE-POSITIVE"));
+    gateway.seedMaterialization(1, Object.freeze({ status: "MATERIALIZED", result: Object.freeze({ ok: true }) }));
+    restoreRuntimePatientCommandCursor(exerciseId, 1);
+    const engine = setupEngine(); const commit = jest.fn(async () => undefined);
+    const consumer = new RuntimePatientCommandConsumer(gateway, materializeRuntimePatientCommand,
+      () => engine.getSimulationTimeSec(), commit);
+    await consumer.drain(exerciseId, lease);
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(engine.getInterventionInstances().filter(item => item.sourceInterventionId ===
+      "CLINICAL:ETT-HISTORICAL-FALSE-POSITIVE")).toHaveLength(1);
+    expect(getAllTimelineEvents().filter(item => item.id ===
+      "TL-ETT-ETT-HISTORICAL-FALSE-POSITIVE")).toHaveLength(1);
   });
 
   test("accepted command survives writer absence and a takeover consumes it once", async () => {

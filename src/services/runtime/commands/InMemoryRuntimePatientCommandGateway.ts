@@ -25,6 +25,9 @@ export class InMemoryRuntimePatientCommandGateway implements RuntimePatientComma
   fence(exerciseId: string): void { this.fenced.add(exerciseId); }
   accepted(): readonly AcceptedRuntimePatientCommand[] { return structuredClone(this.commands); }
   materialized(sequence: number): RuntimePatientCommandMaterialization | undefined { return this.results.get(sequence); }
+  seedMaterialization(sequence: number, materialization: RuntimePatientCommandMaterialization): void {
+    this.results.set(sequence, structuredClone(materialization));
+  }
 
   async submit(command: RuntimePatientCommandSubmission): Promise<RuntimePatientCommandSubmissionResult> {
     const actor = this.actor();
@@ -61,6 +64,12 @@ export class InMemoryRuntimePatientCommandGateway implements RuntimePatientComma
   }
   async loadResult(_exerciseId: string, commandSequence: number): Promise<RuntimePatientCommandMaterialization | undefined> {
     return this.results.get(commandSequence);
+  }
+  async loadCanonicalReconciliationCandidates(exerciseId: string, throughSequence: number):
+  Promise<readonly AcceptedRuntimePatientCommand[]> {
+    return structuredClone(this.commands.filter(item => item.exerciseId === exerciseId &&
+      item.commandType === "ENDOTRACHEAL_INTUBATION" && item.commandSequence <= throughSequence &&
+      this.results.get(item.commandSequence)?.status === "MATERIALIZED"));
   }
   async record(_exerciseId: string, commandSequence: number, _lease: RuntimeWriterLease,
     materialization: RuntimePatientCommandMaterialization): Promise<void> { this.results.set(commandSequence, structuredClone(materialization)); }

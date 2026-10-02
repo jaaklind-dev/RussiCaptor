@@ -13,7 +13,7 @@ import {
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { supabase } from "@/services/SupabaseService";
 import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
-import { subscribeToSync } from "@/services/SyncService";
+import { notifySync, subscribeToSync } from "@/services/SyncService";
 import { isValidRuntimeCheckpoint, localRuntimeCheckpointStore, resolveAuthoritativeCheckpointAsync, resolveSubscribedCheckpoint, resolveWriterCandidateCheckpoint, type RuntimeWriterCandidateCheckpointResolution } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 import { yieldToEventLoop } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import {
@@ -35,6 +35,9 @@ import { getNativeLeaseHeartbeatDiagnostic, isNativeLeaseHeartbeatAvailable } fr
 import { RuntimeNativeLeaseHeartbeatController, type NativeLeaseHeartbeatSession } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeatController";
 import { installRuntimeCompletionIntentListener } from "@/services/runtime/persistence/RuntimeCheckpointLifecycleIntent";
 import { RuntimePatientCommandConsumer, getRuntimePatientCommandGateway } from "@/services/runtime/commands/RuntimePatientCommandService";
+import { checkpointHasCanonicalEttMaterialization } from
+  "@/services/runtime/commands/EndotrachealIntubationCanonicalCommit";
+import type { AcceptedRuntimePatientCommand } from "@/models/RuntimePatientCommand";
 import { getAllPatients } from "@/repositories/PatientRepository";
 import { ensureSharedWorkflowPatientHeads } from "@/services/sharedWorkflow/SharedWorkflowHeadInitializationService";
 import { materializeRuntimePatientCommand } from "@/services/runtime/commands/RuntimePatientCommandMaterializer";
@@ -979,10 +982,42 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     checkpoint:RuntimeCheckpointEnvelope<SharedExerciseState>;
     resolve:(result:RuntimeCheckpointPublicationTerminal)=>void;
   }>|undefined;
+  type CanonicalCommandCommitWaiter = Readonly<{
+    command: AcceptedRuntimePatientCommand;
+    promise: Promise<void>;
+    resolve: () => void;
+    reject: (error: Error) => void;
+  }>;
+  const canonicalCommandCommitWaiters=new Map<string,CanonicalCommandCommitWaiter>();
+  let requestCanonicalCommandPublication=()=>{};
+  const settleCanonicalCommandCommitWaiters=(checkpoint:RuntimeCheckpointEnvelope<SharedExerciseState>)=>{
+    for(const [commandId,waiter] of canonicalCommandCommitWaiters){
+      if(!checkpointHasCanonicalEttMaterialization(checkpoint,waiter.command))continue;
+      canonicalCommandCommitWaiters.delete(commandId);waiter.resolve();
+    }
+  };
+  const rejectCanonicalCommandCommitWaiters=(code:string)=>{
+    for(const waiter of canonicalCommandCommitWaiters.values())waiter.reject(new Error(code));
+    canonicalCommandCommitWaiters.clear();
+  };
+  const commitCanonicalPatientCommand=async(command:AcceptedRuntimePatientCommand,
+    materialization:Readonly<{status:"MATERIALIZED"|"REJECTED"}>):Promise<void>=>{
+    if(command.commandType!=="ENDOTRACHEAL_INTUBATION"||materialization.status!=="MATERIALIZED")return;
+    if(checkpointHasCanonicalEttMaterialization(lastPublishedCheckpoint,command))return;
+    const existing=canonicalCommandCommitWaiters.get(command.commandId);
+    if(existing)return existing.promise;
+    let resolve!:()=>void;let reject!:(error:Error)=>void;
+    const promise=new Promise<void>((onResolve,onReject)=>{resolve=onResolve;reject=onReject;});
+    canonicalCommandCommitWaiters.set(command.commandId,Object.freeze({command,promise,resolve,reject}));
+    // The durable status stays ACCEPTED until a remote acknowledgement proves
+    // that both the deterministic ETT instance and its evidence are canonical.
+    requestCanonicalCommandPublication();
+    return promise;
+  };
   const patientCommandGateway=getRuntimePatientCommandGateway();
   const patientCommandConsumer=patientCommandGateway
     ? new RuntimePatientCommandConsumer(patientCommandGateway,materializeRuntimePatientCommand,
-      ()=>getCanonicalExerciseSnapshot().simulationTimeSec) : undefined;
+      ()=>getCanonicalExerciseSnapshot().simulationTimeSec,commitCanonicalPatientCommand) : undefined;
   const completionGateway=getRuntimeCompletionGateway();
   let activeCompletion:RuntimeCompletionRequest|undefined;
   let completionProcessing:Promise<void>|undefined;
@@ -1117,6 +1152,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
           if(shouldAccept)localRuntimeCheckpointStore.acceptPublishedAcknowledgement(checkpoint,result.checkpoint);
           endLocalAcknowledgement({checkpointRevision:result.checkpoint.checkpointRevision,accepted:shouldAccept});
           lastPublishedCheckpoint=result.checkpoint;lastPublicationAt=Date.now();lastCheckpointPublicationAt=new Date(lastPublicationAt).toISOString();remoteRevision=result.checkpoint.checkpointRevision;
+          settleCanonicalCommandCommitWaiters(result.checkpoint);
           publicationDirty=Boolean(currentLocal&&!isIdenticalCheckpointPayload(result.checkpoint,currentLocal));
           let terminalFinalized=false;
           if(priority==="LIFECYCLE_CRITICAL"){
@@ -1144,7 +1180,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
             reconciledRevision:result.checkpointRevision});
           continue;
         }
-        else if(publicationResultRevokesWriter(result.state)) { endPublish({ outcome: result.state }); releaseRuntimeOwner("PUBLICATION_AUTHORITY_LOST"); lease=undefined; stopClockRunner(); setStatus({state:"CONFLICT",code:result.code}); return; }
+        else if(publicationResultRevokesWriter(result.state)) { endPublish({ outcome: result.state });rejectCanonicalCommandCommitWaiters("CANONICAL_COMMAND_WRITER_AUTHORITY_LOST"); releaseRuntimeOwner("PUBLICATION_AUTHORITY_LOST"); lease=undefined; stopClockRunner(); setStatus({state:"CONFLICT",code:result.code}); return; }
         else { endPublish({ outcome: result.state }); publicationDirty=true;setStatus({state:"WRITER",code:result.code,revision:remoteRevision});schedulePublicationRetry(); }
       } while(publishQueued);
     } catch {
@@ -1174,6 +1210,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     const remaining=Math.max(0,ROUTINE_CHECKPOINT_PUBLICATION_MS-(Date.now()-lastPublicationAt));
     routinePublishTimer=setTimeout(()=>{routinePublishTimer=undefined;publishNow();},remaining);
   };
+  requestCanonicalCommandPublication=()=>{notifySync("local");requestPublish();};
   wakeCheckpointPublicationForCurrentWriter=requestPublish;
   // Register lifecycle priority as soon as the canonical lifecycle changes;
   // terminal checkpoint preparation may still be cooperatively in progress.
@@ -1365,7 +1402,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         .catch(()=>setRuntimeCompletionPhase(exerciseId,"FAILED","COMPLETION_REQUEST_LOAD_FAILED"));
     }
   });
-  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });releaseRuntimeOwner("GENERATION_CLEANUP");stopped=true;appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();stopLifecyclePriority();stopCompletionIntent();stopDeferredPatientCommandDrain();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");terminalAuthorityFinalizer=undefined;if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;if(establishExerciseRuntimeOwnerForCurrentWriter===establishRuntimeOwner)establishExerciseRuntimeOwnerForCurrentWriter=undefined;if(ensureSharedWorkflowHeadsForCurrentWriter===ensureWorkflowHeads)ensureSharedWorkflowHeadsForCurrentWriter=undefined;if(drainPatientCommandsForCurrentWriter===drainPendingPatientCommands)drainPatientCommandsForCurrentWriter=undefined;if(resumePendingCompletionForCurrentWriter===resumePendingCompletion)resumePendingCompletionForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration){lease=undefined;resetRuntimeReaderConvergence(exerciseId);}};
+  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });rejectCanonicalCommandCommitWaiters("CANONICAL_COMMAND_GENERATION_STOPPED");releaseRuntimeOwner("GENERATION_CLEANUP");stopped=true;appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();stopLifecyclePriority();stopCompletionIntent();stopDeferredPatientCommandDrain();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");terminalAuthorityFinalizer=undefined;if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;if(establishExerciseRuntimeOwnerForCurrentWriter===establishRuntimeOwner)establishExerciseRuntimeOwnerForCurrentWriter=undefined;if(ensureSharedWorkflowHeadsForCurrentWriter===ensureWorkflowHeads)ensureSharedWorkflowHeadsForCurrentWriter=undefined;if(drainPatientCommandsForCurrentWriter===drainPendingPatientCommands)drainPatientCommandsForCurrentWriter=undefined;if(resumePendingCompletionForCurrentWriter===resumePendingCompletion)resumePendingCompletionForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration){lease=undefined;resetRuntimeReaderConvergence(exerciseId);}};
 }
 
 async function startRuntimeCheckpointSyncOnce(): Promise<()=>void> {
