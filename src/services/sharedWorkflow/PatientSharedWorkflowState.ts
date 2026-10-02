@@ -16,6 +16,12 @@ export type PatientSharedWorkflowState = Readonly<Record<string, unknown>> & Rea
   vitalSigns: readonly Readonly<Record<string,unknown>>[];
 }>;
 
+export type PatientSharedWorkflowCanonicalReconciliation = Readonly<{
+  accepted: boolean;
+  mode: "FULL_SHARED_WORKFLOW" | "OWNERSHIP_ONLY" | "REJECTED";
+  conflicts: readonly string[];
+}>;
+
 const copy = <T extends object>(value:T):T => ({...value});
 const patientItems = <T extends {patientId:string}>(items:readonly T[],patientId:string):T[] => items.filter(item=>item.patientId===patientId).map(copy);
 
@@ -61,7 +67,41 @@ export function restoreAuthoritativePatientSharedWorkflowState(input: Readonly<{
   revision: number;
   ownerUserId?: string;
   state: PatientSharedWorkflowState;
+  /** Only the client whose mutation was accepted may advance Runtime-owned
+   * fields directly. Remote/head hydration must reconcile against the
+   * checkpoint-restored canonical collections instead. */
+  allowRuntimeAdvance?: boolean;
+  preserveCanonicalRuntime?: boolean;
 }>): boolean {
+  return reconcileAuthoritativePatientSharedWorkflowState(input).accepted;
+}
+
+const protectedCollectionKeys = ["questions", "labs", "imagingStudies", "orders", "notes", "timelineEvents",
+  "interventions", "medicationAdministrations", "vitalSigns"] as const;
+
+function stableItemIds(items: unknown): Set<string> {
+  if (!Array.isArray(items)) return new Set();
+  return new Set(items.flatMap(item => item && typeof item === "object" &&
+    typeof (item as Readonly<Record<string, unknown>>).id === "string"
+    ? [String((item as Readonly<Record<string, unknown>>).id)] : []));
+}
+
+/**
+ * Runtime checkpoint collections are canonical. A shared-workflow row may
+ * contribute ownership, and a newer non-conflicting row may add workflow
+ * content, but it may never remove checkpoint-restored identities or regress
+ * patient location/status. This is deliberately field-scoped rather than a
+ * broad object replacement selected by revision equality.
+ */
+export function reconcileAuthoritativePatientSharedWorkflowState(input: Readonly<{
+  exerciseId: string;
+  patientId: string;
+  revision: number;
+  ownerUserId?: string;
+  state: PatientSharedWorkflowState;
+  allowRuntimeAdvance?: boolean;
+  preserveCanonicalRuntime?: boolean;
+}>): PatientSharedWorkflowCanonicalReconciliation {
   const ownershipAccepted = restoreAuthoritativePatientOwnershipProjection({
     exerciseId: input.exerciseId,
     patientId: input.patientId,
@@ -70,7 +110,26 @@ export function restoreAuthoritativePatientSharedWorkflowState(input: Readonly<{
     assignments: input.state.assignments,
     transfers: input.state.transfers,
   });
-  if (!ownershipAccepted) return false;
-  restorePatientSharedWorkflowState(input.patientId, input.state);
-  return true;
+  if (!ownershipAccepted) return Object.freeze({ accepted: false, mode: "REJECTED", conflicts: Object.freeze([]) });
+  if (input.allowRuntimeAdvance || !input.preserveCanonicalRuntime) {
+    restorePatientSharedWorkflowState(input.patientId, input.state);
+    return Object.freeze({ accepted: true, mode: "FULL_SHARED_WORKFLOW", conflicts: Object.freeze([]) });
+  }
+  const canonical = capturePatientSharedWorkflowState(input.patientId);
+  const conflicts: string[] = [];
+  if (canonical.patient && input.state.patient) {
+    for (const field of ["location", "status"] as const) {
+      if (canonical.patient[field] !== input.state.patient[field]) conflicts.push(`patient.${field}`);
+    }
+  }
+  for (const key of protectedCollectionKeys) {
+    const candidateIds = stableItemIds(input.state[key]);
+    if ([...stableItemIds(canonical[key])].some(id => !candidateIds.has(id))) conflicts.push(key);
+  }
+  // Once a canonical checkpoint has been restored, a remote workflow head is
+  // never a Runtime-content authority. Equal IDs do not prove equal item
+  // payloads, so even an apparently non-conflicting head contributes only its
+  // ownership/assignment projection. Runtime advancement is reserved for the
+  // accepted local mutation path above.
+  return Object.freeze({ accepted: true, mode: "OWNERSHIP_ONLY", conflicts: Object.freeze([...conflicts]) });
 }

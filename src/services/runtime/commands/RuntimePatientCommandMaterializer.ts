@@ -13,7 +13,7 @@ import { handleEndotrachealIntubationCommand } from
   "@/services/runtime/instructor/EndotrachealIntubationCommandService";
 import { materializePatientCompletionAuthoritatively } from
   "@/services/runtime/exercise/PatientCompletionMaterializationService";
-import { materializePatientInternalTransfer } from
+import { materializePatientInternalTransferAuthoritatively } from
   "@/services/runtime/exercise/PatientInternalTransferService";
 
 function rejected(reason: string): RuntimePatientCommandMaterialization {
@@ -127,10 +127,13 @@ RuntimePatientCommandMaterialization | Promise<RuntimePatientCommandMaterializat
       if (typeof actionId !== "string" || Object.keys(command.payload).length !== 1) {
         return rejected("INVALID_COMMAND_PAYLOAD");
       }
-      const result = materializePatientInternalTransfer(command.commandId, command.patientId, actionId,
-        command.simulationTimeSec, command.actorUserId);
-      return Object.freeze({ status: result.ok ? "MATERIALIZED" : "REJECTED",
-        result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> });
+      return materializePatientInternalTransferAuthoritatively({ commandId: command.commandId,
+        exerciseId: command.exerciseId, patientId: command.patientId, actionId,
+        simulationTimeSec: command.simulationTimeSec, actorUserId: command.actorUserId,
+        acceptedPatientRevision: command.patientResultingRevision })
+        .then(result => Object.freeze({ status: result.ok ? "MATERIALIZED" as const : "REJECTED" as const,
+          result: Object.freeze({ ...result }) as Readonly<Record<string, unknown>> }))
+        .catch(() => rejected("RUNTIME_MATERIALIZATION_FAILURE"));
     }
     return rejected("UNSUPPORTED_COMMAND_TYPE");
   } catch {

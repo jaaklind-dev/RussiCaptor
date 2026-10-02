@@ -58,6 +58,20 @@
     { "id": "CHK-G11", "name": "concurrent-takeover", "description": "Repository CAS permits at most one writer and preserves one canonical lineage.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"] },
     { "id": "CHK-G12", "name": "stale-writer-rejection", "description": "A stale client cannot restore or publish its divergent equal-revision payload.", "phase": "FOUNDATION", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"] }
   ],
+  "sharedWorkflowCanonicalGuardrails": [
+    { "id": "WF-CAN-G01", "name": "checkpoint-outranks-stale-head", "description": "Checkpoint-restored Runtime state outranks a conflicting workflow payload.", "phase": "FOUNDATION", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts"] },
+    { "id": "WF-CAN-G02", "name": "divergent-head-detected", "description": "Semantic divergence in protected patient fields and collection identities is detected.", "phase": "FOUNDATION", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts"] },
+    { "id": "WF-CAN-G03", "name": "evidence-preserved", "description": "Workflow hydration cannot remove canonical timeline evidence.", "phase": "FOUNDATION", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts"] },
+    { "id": "WF-CAN-G04", "name": "lifecycle-preserved", "description": "Workflow hydration cannot regress canonical lifecycle ownership.", "phase": "FOUNDATION", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"] },
+    { "id": "WF-CAN-G05", "name": "location-preserved", "description": "Workflow hydration cannot replace canonical patient location with a stale value.", "phase": "FOUNDATION", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts"] },
+    { "id": "WF-CAN-G06", "name": "durable-effects-preserved", "description": "Workflow hydration cannot erase durable command effects or cursor lineage.", "phase": "FOUNDATION", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts", "src/services/runtime/commands/__tests__/DurablePatientInternalTransferCommand-test.ts"] },
+    { "id": "WF-CAN-G07", "name": "ownership-converges", "description": "Valid owner, assignment and transfer metadata remain workflow-owned.", "phase": "FOUNDATION", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts", "src/services/sharedWorkflow/__tests__/CmOwnershipProjectionRestore-test.ts"] },
+    { "id": "WF-CAN-G08", "name": "field-authority-matrix", "description": "Conflicting Runtime fields select ownership-only reconciliation instead of broad replacement.", "phase": "FOUNDATION", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts"] },
+    { "id": "WF-CAN-G09", "name": "reconcile-before-publication", "description": "Accepted durable transfer reflection completes before writer publication can include it.", "phase": "FOUNDATION", "tests": ["src/services/runtime/commands/__tests__/DurablePatientInternalTransferCommand-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"] },
+    { "id": "WF-CAN-G10", "name": "restart-preserves-checkpoint", "description": "Cold restart with a stale workflow head preserves checkpoint-restored Runtime content.", "phase": "FOUNDATION", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"] },
+    { "id": "WF-CAN-G11", "name": "reconciliation-idempotent", "description": "Repeated reconciliation cannot duplicate or remove canonical state.", "phase": "FOUNDATION", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts"] },
+    { "id": "WF-CAN-G12", "name": "competing-takeover-safety", "description": "Single-writer takeover preserves canonical workflow lineage.", "phase": "FOUNDATION", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts", "src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts"] }
+  ],
   "imagingGuardrails": [
     { "id": "IMG-G01", "name": "package-ownership", "description": "Predefined Imaging definitions come only from the authoritative exercise package and dataset binding.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
     { "id": "IMG-G02", "name": "no-patient-id-leakage", "description": "Equal patient IDs across packages cannot implicitly share predefined Imaging.", "phase": "FOUNDATION", "tests": ["src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts"] },
@@ -421,6 +435,8 @@
       "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts",
+      "src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts",
+      "src/services/runtime/commands/__tests__/DurablePatientInternalTransferCommand-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeWriterAuthorityState-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeCheckpointAuthority-test.ts",
@@ -439,6 +455,8 @@
       "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts",
+      "src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts",
+      "src/services/runtime/commands/__tests__/DurablePatientInternalTransferCommand-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts",
       "src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts",
@@ -453,6 +471,8 @@
     "persistence": [
       "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts",
+      "src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts",
+      "src/services/runtime/commands/__tests__/DurablePatientInternalTransferCommand-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeCheckpointCanonicalArtifact-test.ts",
       "src/services/runtime/persistence/__tests__/PersistedCanonicalCheckpointMigration-test.ts",
       "src/services/runtime/persistence/__tests__/PersistedCanonicalCheckpointPerformance-test.ts",
@@ -488,6 +508,7 @@
     { "id": "H16", "failure": "lost publication response followed by same-lineage CAS conflict manufactured publication authority loss and stranded accepted durable commands", "invariant": "A/G/P/U", "tests": ["src/services/runtime/persistence/__tests__/RuntimeCheckpointPublication-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointPublicationValidationHarness-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"], "physicalGate": "same-lineage lost-response reconciliation gate" },
     { "id": "H17", "failure": "MTP calcium became due after only three qualifying RBC doses", "invariant": "C/G/K/X", "tests": ["src/modules/massiveTransfusion/__tests__/MtpCalciumReplacement-test.ts", "src/modules/massiveTransfusion/__tests__/GlobalTransfusionCalciumCounter-test.ts"], "physicalGate": "single-device third-to-fourth MTP-dose boundary gate" },
     { "id": "H18", "failure": "EXCON-only Runtime patient lacked a durable shared-workflow head and patient commands failed closed", "invariant": "A/G/H/I/S/U/Y", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowHeadInitialization-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"], "physicalGate": "existing-fixture workflow-head initialization and one-command smoke gate" },
-    { "id": "H19", "failure": "stale device reacquired writer authority from a same-revision divergent local checkpoint and erased canonical evidence and lifecycle state", "invariant": "A/B/C/M/U/X", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"], "physicalGate": "two-device equal-revision conflict rebase and takeover gate" }
+    { "id": "H19", "failure": "stale device reacquired writer authority from a same-revision divergent local checkpoint and erased canonical evidence and lifecycle state", "invariant": "A/B/C/M/U/X", "tests": ["src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"], "physicalGate": "two-device equal-revision conflict rebase and takeover gate" },
+    { "id": "H20", "failure": "stale equal-revision shared-workflow head overwrote checkpoint-restored patient collections and removed durable transfer evidence", "invariant": "A/B/C/I/M/U/X/Y", "tests": ["src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts", "src/services/runtime/commands/__tests__/DurablePatientInternalTransferCommand-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"], "physicalGate": "two-device shared-workflow canonical takeover reconciliation gate" }
   ]
 }

@@ -9,6 +9,7 @@ import { isSupabaseConfigured, supabase, synchronizeRealtimeAuthorization } from
 import { notifySync, subscribeToSync } from "@/services/SyncService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
+import { getRuntimeReaderConvergenceState } from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
 import { exerciseLifecycle, resolveCurrentExercise } from "@/services/exercise/CurrentExerciseSelectionService";
 import type { CurrentExerciseCandidate } from "@/services/exercise/CurrentExerciseSelectionService";
 import { captureCompletedExerciseArchive } from "@/services/exercise/ExercisePreparationService";
@@ -339,12 +340,23 @@ async function refreshSharedWorkflowPatients(cloudClient: NonNullable<typeof sup
     const known = getSharedWorkflowHead(authoritative.exercise_id, authoritative.patient_id);
     if (authoritative.revision < known.revision) continue;
     if (!restoreAuthoritativePatientSharedWorkflowState({exerciseId:authoritative.exercise_id,patientId:authoritative.patient_id,
-      revision:authoritative.revision,ownerUserId:authoritative.owner_user_id,state:authoritative.state})) return false;
+      revision:authoritative.revision,ownerUserId:authoritative.owner_user_id,state:authoritative.state,
+      preserveCanonicalRuntime:sharedWorkflowHydrationMustPreserveCanonicalRuntime(authoritative.exercise_id)})) return false;
     observeSharedWorkflowHead(authoritative.exercise_id,authoritative.patient_id,authoritative.revision,authoritative.owner_user_id);
   }
   completeCmOwnershipProjectionHydration(exerciseId);
   notifySync("remote");
   return true;
+}
+
+export function sharedWorkflowHydrationMustPreserveCanonicalRuntime(exerciseId: string): boolean {
+  const checkpoint = getLocalRuntimeCheckpoint();
+  if (checkpoint?.exerciseId !== exerciseId) return false;
+  const authority = getRuntimeWriterAuthorityState();
+  if (authority === "WRITER" || authority === "ACQUIRING") return true;
+  const reader = getRuntimeReaderConvergenceState();
+  return authority === "READER" && reader.exerciseId === exerciseId && reader.phase === "READY" &&
+    reader.appliedRevision === checkpoint.checkpointRevision && reader.payloadHash === checkpoint.payloadHash;
 }
 
 async function performRemoteCurrentExerciseRefresh(_trigger: ExerciseDiscoveryRefreshTrigger): Promise<void> {
@@ -713,7 +725,8 @@ export async function startCloudSync(): Promise<() => void> {
           recordSupabaseTraffic({operation:"SELECT",endpoint:"shared_workflow.patient_state",data});if(error||!data)return;
           const authoritative=data as {exercise_id:string;patient_id:string;revision:number;owner_user_id?:string;state:PatientSharedWorkflowState};
           if(!restoreAuthoritativePatientSharedWorkflowState({exerciseId:authoritative.exercise_id,patientId:authoritative.patient_id,
-            revision:authoritative.revision,ownerUserId:authoritative.owner_user_id,state:authoritative.state}))return;
+            revision:authoritative.revision,ownerUserId:authoritative.owner_user_id,state:authoritative.state,
+            preserveCanonicalRuntime:sharedWorkflowHydrationMustPreserveCanonicalRuntime(authoritative.exercise_id)}))return;
           observeSharedWorkflowHead(authoritative.exercise_id,authoritative.patient_id,authoritative.revision,authoritative.owner_user_id);
           notifySync("remote");
         });

@@ -20,6 +20,13 @@ type GuardrailManifest = Readonly<{
     phase: "FOUNDATION";
     tests: readonly string[];
   }>[];
+  sharedWorkflowCanonicalGuardrails: readonly Readonly<{
+    id: string;
+    name: string;
+    description: string;
+    phase: "FOUNDATION";
+    tests: readonly string[];
+  }>[];
   imagingGuardrails: readonly Readonly<{
     id: string;
     name: string;
@@ -122,8 +129,12 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       .toEqual(Array.from({ length: 12 }, (_, index) => `CHK-G${String(index + 1).padStart(2, "0")}`));
     expect(manifest.checkpointConflictGuardrails.every(guardrail => guardrail.phase === "FOUNDATION" &&
       guardrail.name.length > 0 && guardrail.description.length > 0 && guardrail.tests.length > 0)).toBe(true);
+    expect(manifest.sharedWorkflowCanonicalGuardrails.map(guardrail => guardrail.id))
+      .toEqual(Array.from({ length: 12 }, (_, index) => `WF-CAN-G${String(index + 1).padStart(2, "0")}`));
+    expect(manifest.sharedWorkflowCanonicalGuardrails.every(guardrail => guardrail.phase === "FOUNDATION" &&
+      guardrail.name.length > 0 && guardrail.description.length > 0 && guardrail.tests.length > 0)).toBe(true);
     expect(manifest.historicalFailures.map(failure => failure.id))
-      .toEqual(Array.from({ length: 19 }, (_, index) => `H${String(index + 1).padStart(2, "0")}`));
+      .toEqual(Array.from({ length: 20 }, (_, index) => `H${String(index + 1).padStart(2, "0")}`));
     expect(manifest.historicalFailures.every(failure => failure.invariant.length > 0 &&
       failure.tests.length > 0 && failure.physicalGate.length > 0)).toBe(true);
   });
@@ -135,6 +146,7 @@ describe("RussiCaptor Runtime Regression Guardrails manifest", () => {
       ...manifest.guardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.cmReaderWorkflowHeadGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.checkpointConflictGuardrails.flatMap(guardrail => guardrail.tests),
+      ...manifest.sharedWorkflowCanonicalGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.imagingGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.imagingAssetIngestGuardrails.flatMap(guardrail => guardrail.tests),
       ...manifest.imagingAuthoringGuardrails.flatMap(guardrail => guardrail.tests),

@@ -7,6 +7,9 @@ import { runtimePatientCommandSubmissionReadiness, submitPatientRuntimeCommand,
   waitForPatientRuntimeCommandResult } from "@/services/runtime/commands/RuntimePatientCommandService";
 import { reconcilePatientTransportLocation } from "./PatientTransportRuntimeService";
 import { getPackageOwnedLocationTransitions } from "@/services/exercise/PackagePatientLocationAuthorityService";
+import { executeAuthoritativePatientMutation } from "@/services/sharedWorkflow/AuthoritativePatientMutationService";
+import { getSharedWorkflowHead, observeSharedWorkflowHead, type SharedWorkflowMutationStatus } from
+  "@/services/sharedWorkflow/SharedWorkflowMutationService";
 
 let sequence = 0;
 const evidenceId = (commandId: string) => `TL-INTERNAL-TRANSFER-${commandId}`;
@@ -44,6 +47,50 @@ export function materializePatientInternalTransfer(commandId: string, patientId:
     author: "Internal Transfer Runtime", authorId: actorUserId, visibility: "revealed" });
   notifySync("local");
   return Object.freeze({ ok: true, status: "TRANSFERRED", actionId, locationId: definition.toLocationId });
+}
+
+const workflowReflectionCommandId = (commandId: string) => `${commandId}:WORKFLOW_REFLECTION`;
+
+/** Materializes the accepted durable transfer through the patient head as one
+ * authoritative proposal. A crash after the head commit is replay-safe via
+ * the deterministic derived command ID; a failed head commit restores the
+ * pre-transfer local state and therefore cannot mint a checkpoint ahead of
+ * the shared projection. */
+export async function materializePatientInternalTransferAuthoritatively(input: Readonly<{
+  commandId: string;
+  exerciseId: string;
+  patientId: string;
+  actionId: string;
+  simulationTimeSec: number;
+  actorUserId: string;
+  acceptedPatientRevision: number;
+}>) {
+  const acceptedHead = getSharedWorkflowHead(input.exerciseId, input.patientId);
+  if (acceptedHead.revision < input.acceptedPatientRevision) {
+    observeSharedWorkflowHead(input.exerciseId, input.patientId, input.acceptedPatientRevision,
+      acceptedHead.ownerUserId);
+  }
+  let ownershipStatus: SharedWorkflowMutationStatus = "UNAVAILABLE";
+  try {
+    const outcome = await executeAuthoritativePatientMutation({
+      patientId: input.patientId,
+      commandId: workflowReflectionCommandId(input.commandId),
+      kind: "MUTABLE",
+      mutate: () => materializePatientInternalTransfer(input.commandId, input.patientId, input.actionId,
+        input.simulationTimeSec, input.actorUserId),
+    });
+    ownershipStatus = outcome.result.status;
+    const result = outcome.value;
+    const canonicalPatient = dataProvider.getPatientById(input.patientId);
+    const canonicalEvidence = getAllTimelineEvents().filter(item => item.id === evidenceId(input.commandId));
+    if ((ownershipStatus === "APPLIED" || ownershipStatus === "IDEMPOTENT") && result?.ok &&
+        canonicalPatient?.location === result.locationId && canonicalEvidence.length === 1) {
+      return Object.freeze({ ...result, ownershipStatus });
+    }
+  } catch {
+    ownershipStatus = "UNAVAILABLE";
+  }
+  return Object.freeze({ ok: false, reason: "CANONICAL_WORKFLOW_REFLECTION_FAILED", ownershipStatus });
 }
 
 export async function submitPatientInternalTransfer(commandId: string, patientId: string, actionId: string) {

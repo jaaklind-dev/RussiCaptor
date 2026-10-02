@@ -29,7 +29,7 @@ export async function executeAuthoritativePatientMutation<T>(input:Readonly<{
   const result=await submitSharedWorkflowMutation({exerciseId,patientId:input.patientId,commandId:input.commandId,kind:input.kind,
     expectedRevision:head.revision,expectedOwnerUserId,nextOwnerUserId,state:proposed});
   if(result.state){restoreAuthoritativePatientSharedWorkflowState({exerciseId,patientId:input.patientId,revision:result.revision,
-    ownerUserId:result.ownerUserId,state:result.state as ReturnType<typeof capturePatientSharedWorkflowState>});
+    ownerUserId:result.ownerUserId,state:result.state as ReturnType<typeof capturePatientSharedWorkflowState>,allowRuntimeAdvance:true});
     notifySync(result.status==="APPLIED"||result.status==="IDEMPOTENT"?"device":"remote");}
   return Object.freeze({result,value:result.status==="APPLIED"||result.status==="IDEMPOTENT"?value:undefined,
     message:sharedWorkflowStatusMessage(result.status)+(operator.id===result.ownerUserId?"":"")});
