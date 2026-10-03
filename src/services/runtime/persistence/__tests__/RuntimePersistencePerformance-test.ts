@@ -8,7 +8,7 @@ import { canonicalRuntimePersistenceService, moduleCompositionHash } from "../Ca
 import { createRuntimeCheckpoint, createRuntimeCheckpointAsync, localRuntimeCheckpointStore } from "../RuntimeCheckpointAuthorityService";
 import { stableJson, stableJsonAsync } from "@/utils/stableJson";
 import { sha256Text, sha256TextAsync } from "@/utils/sha256";
-import { BoundedObsoleteGenerationGate, LatestGenerationPipeline } from "../LatestGenerationPipeline";
+import { BoundedObsoleteGenerationGate, createBoundedFrameYield, LatestGenerationPipeline } from "../LatestGenerationPipeline";
 import { createRuntimeCheckpointDelta } from "../RuntimeCheckpointDeltaService";
 
 function fixture(pkg: ExercisePackage) {
@@ -21,6 +21,44 @@ function tick(patientId: string, step: number): GoldenInputEvent {
 }
 
 describe("WP-44B canonical persistence performance", () => {
+  test("cold-start cooperative work progresses when Android drops a requested frame", async () => {
+    jest.useFakeTimers();
+    try {
+      const cancelFrame = jest.fn();
+      const yieldControl = createBoundedFrameYield(() => 41, cancelFrame, 50);
+      let completed = false;
+      const pending = yieldControl().then(() => { completed = true; });
+
+      await jest.advanceTimersByTimeAsync(49);
+      expect(completed).toBe(false);
+      await jest.advanceTimersByTimeAsync(1);
+      await pending;
+
+      expect(completed).toBe(true);
+      expect(cancelFrame).toHaveBeenCalledWith(41);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("normal React Native frame remains the preferred cooperative boundary", async () => {
+    jest.useFakeTimers();
+    try {
+      let frameCallback: (() => void) | undefined;
+      const cancelFrame = jest.fn();
+      const yieldControl = createBoundedFrameYield(callback => { frameCallback = callback; return 42; }, cancelFrame, 50);
+      const pending = yieldControl();
+
+      frameCallback?.();
+      await pending;
+      await jest.advanceTimersByTimeAsync(50);
+
+      expect(cancelFrame).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   test("yielding canonical JSON and SHA are byte-identical to synchronous contracts", async () => {
     const values = [
       { z: [1, undefined, "õ\ud800"], a: { nested: true, omitted: undefined } },

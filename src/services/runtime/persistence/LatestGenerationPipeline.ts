@@ -7,9 +7,42 @@ export type PipelineYield = () => Promise<void>;
 const isReactNative = (): boolean =>
   typeof navigator !== "undefined" && (navigator as Navigator & { product?: string }).product === "ReactNative";
 
+const FRAME_YIELD_FALLBACK_MS = 50;
+
+/**
+ * A React Native frame is the preferred cooperative boundary, but Android may
+ * suppress frame callbacks while a cold-start Activity has not produced a
+ * drawable frame yet. Keep startup progress bounded without changing the
+ * normal frame-first scheduling path.
+ */
+export function createBoundedFrameYield(
+  requestFrame: (callback: () => void) => number,
+  cancelFrame?: (handle: number) => void,
+  fallbackMs = FRAME_YIELD_FALLBACK_MS,
+): PipelineYield {
+  return () => new Promise(resolve => {
+    let settled = false;
+    let frameHandle: number | undefined;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(fallback);
+      resolve();
+    };
+    const fallback = setTimeout(() => {
+      if (frameHandle !== undefined) cancelFrame?.(frameHandle);
+      finish();
+    }, fallbackMs);
+    frameHandle = requestFrame(finish);
+  });
+}
+
 export const yieldToEventLoop: PipelineYield = () =>
   isReactNative() && typeof requestAnimationFrame === "function"
-    ? new Promise(resolve => requestAnimationFrame(() => resolve()))
+    ? createBoundedFrameYield(
+      callback => requestAnimationFrame(callback),
+      typeof cancelAnimationFrame === "function" ? handle => cancelAnimationFrame(handle) : undefined,
+    )()
     : new Promise(resolve => setTimeout(resolve, 0));
 
 /** Drops one obsolete preparation, then forces progress under continuous input. */
