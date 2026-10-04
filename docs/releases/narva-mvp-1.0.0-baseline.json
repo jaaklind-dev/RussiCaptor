@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "baselineName": "Narva MVP 1.0.0 validated baseline",
+  "status": "VALIDATED",
+  "freezeDate": "2026-10-04",
+  "validatedRuntimeBaseline": {
+    "gitCommit": "987eb5fc0cacf6bf2fc027cbda81b791aa088926",
+    "branchAtFreeze": "wp-narva-10b1",
+    "workingTreeExpectation": "CLEAN",
+    "physicallyValidated": true
+  },
+  "releaseDocumentation": {
+    "physicallyValidated": false,
+    "note": "The documentation commit records evidence only; it is not the physically validated runtime baseline."
+  },
+  "apk": {
+    "artifact": "dist/field-release/RussiCaptor-1.0.0-126-upgrade-validation.apk",
+    "versionName": "1.0.0",
+    "versionCode": 126,
+    "sha256": "f8972c5c2115d54dd6bebc222aa8c617bdade036f38645fb2544d00f9e14910b",
+    "signerSha256": "b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d30198980e59fcde96b"
+  },
+  "exercisePackage": {
+    "packageId": "russicaptor.narva-trauma",
+    "packageVersion": "1.0.5",
+    "packageHash": "723d6c2fc57f34c2cf681215cf1a7149e5110ca1a34d618b2391a87aff5568c6"
+  },
+  "finalAcceptanceEvidence": {
+    "exerciseId": "EX-1791101412200-1",
+    "commands": {
+      "p02Completion": "PATIENT_COMPLETE:EX-1791101412200-1:PT-CHEST-001:1",
+      "p01Transfer": "PATIENT_LOCATION_TRANSFER:EX-1791101412200-1:PT-PELVIC-001:P01-MOVE-ED:1",
+      "p01Completion": "PATIENT_COMPLETE:EX-1791101412200-1:PT-PELVIC-001:1"
+    },
+    "terminalCheckpoint": {
+      "revision": 346,
+      "sha256": "c80771b747d7ee214fce6fd19f779deeda490ec5d354af18da3e9e5fa6b3dd46"
+    },
+    "finalState": {
+      "p01Lifecycle": "Completed",
+      "p02Lifecycle": "Completed",
+      "patientOwners": 0,
+      "activeAssignments": 0,
+      "globalAssignments": 0,
+      "activeWriterLeases": 0,
+      "stalePatientOwners": 0
+    }
+  },
+  "testEnvironment": {
+    "physicalClient": {
+      "manufacturer": "Samsung",
+      "model": "SM-X306B",
+      "serial": "R5GL236L6ZJ",
+      "androidVersion": "16"
+    },
+    "secondClient": {
+      "type": "Android emulator",
+      "avd": "Pixel_10_Pro_XL",
+      "androidVersion": "17"
+    }
+  },
+  "validationSummary": {
+    "result": "PASS",
+    "latestFinalGate": "PATIENT_COMPLETION_FINALIZATION_PHYSICAL_GATE",
+    "fullSuite": {
+      "suites": 271,
+      "tests": 2130,
+      "result": "PASS",
+      "evidenceType": "RECORDED_VALIDATED_RESULT"
+    },
+    "regressionGroups": {
+      "patientComplete": "PASS",
+      "finalization": "PASS",
+      "terminalCheckpoint": "PASS",
+      "hydration": "PASS",
+      "ownershipSharedWorkflow": "PASS",
+      "takeover": "PASS",
+      "runtimeGuardrails": "PASS",
+      "multiDeviceGuardrails": "PASS",
+      "typescript": "PASS",
+      "eslint": "PASS",
+      "gitDiffCheck": "PASS"
+    }
+  },
+  "closedGates": {
+    "runtimeBootstrap": "PASS",
+    "cmReaderReadiness": "PASS",
+    "p01PackageOwnedLocationAuthority": "PASS",
+    "imagingDurableLifecycle": "PASS",
+    "ettDurableCanonicalMaterialization": "PASS",
+    "transportPhysicalRegression": "PASS",
+    "patientCompleteCanonicalRelease": "PASS",
+    "twoClientConvergence": "PASS",
+    "restartPersistence": "PASS",
+    "emulatorColdStartHydration": "PASS",
+    "writerTakeover": "PASS",
+    "staleWriterRejection": "PASS",
+    "p01DurableTransfer": "PASS",
+    "p02Completion": "PASS",
+    "p01Completion": "PASS",
+    "bothPatientsCompleted": "PASS",
+    "exerciseFinalization": "PASS",
+    "terminalCheckpointValidation": "PASS",
+    "terminalRestartReadback": "PASS",
+    "terminalStaleClientRejection": "PASS",
+    "finalCleanup": "PASS",
+    "patientCompletionFinalizationPhysicalGate": "PASS"
+  },
+  "hydrationBaseline": {
+    "includedInCommit": "987eb5fc0cacf6bf2fc027cbda81b791aa088926",
+    "mechanism": [
+      "React Native cooperative frame yield",
+      "requestAnimationFrame",
+      "bounded 50 ms timer fallback",
+      "frame cancellation where applicable"
+    ],
+    "validatedOutcomes": [
+      "large two-patient checkpoint restores on emulator",
+      "both patient runtime artifacts restore",
+      "reader reaches READY",
+      "UI renders",
+      "writer takeover works after restart"
+    ]
+  },
+  "knownRemainingDefects": [],
+  "deferredItems": [],
+  "nonBlockingAuthorityDebt": [
+    "Destination-specific restriction and consult/OR/receiving semantics require new source authority before implementation."
+  ],
+  "freezePolicy": {
+    "identityTuple": [
+      "validatedRuntimeBaseline.gitCommit",
+      "apk.sha256",
+      "apk.signerSha256",
+      "exercisePackage.packageHash"
+    ],
+    "invalidationRule": "A change to any identity-tuple value is not this validated baseline and requires applicable revalidation.",
+    "revalidationMatrix": {
+      "documentationOnly": "Does not invalidate runtime acceptance.",
+      "uiOnlyNoRuntimeOrPackageSemantics": "Targeted UI regression required.",
+      "runtimePersistenceOrMultiClient": "Relevant automated and physical regression required.",
+      "clinicalOrPackageLogic": "Affected patient/package gate must be repeated.",
+      "supabaseSchemaRpcOrRls": "Backend and physical multi-client regression required.",
+      "buildOrSigning": "APK identity, signature, and release verification required."
+    }
+  }
+}
