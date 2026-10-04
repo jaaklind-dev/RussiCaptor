@@ -16,6 +16,12 @@ function authenticated(role: "CM" | "EXCON" | "EXERCISE_BOOTSTRAP", scopeId?: st
   };
 }
 
+function administrator(): OperatorSessionState {
+  const state = authenticated("CM", "EX-1");
+  if (state.state !== "AUTHENTICATED") throw new Error("test setup failed");
+  return { ...state, isPlatformAdmin: true };
+}
+
 describe("operator landing route", () => {
   test("routes an exercise-scoped CM to the dashboard for the current exercise", () => {
     expect(resolveOperatorLandingRoute(authenticated("CM", "EX-1"), "EX-1")).toBe("/dashboard");
@@ -28,6 +34,10 @@ describe("operator landing route", () => {
   });
   test("fails closed for a role scoped to another exercise", () => {
     expect(resolveOperatorLandingRoute(authenticated("CM", "EX-2"), "EX-1")).toBe("/");
+  });
+  test("routes explicit platform administration independently of exercise role", () => {
+    expect(resolveOperatorLandingRoute(administrator(), "EX-1")).toBe("/admin");
+    expect(resolveOperatorLandingNavigationTarget(administrator(), "EX-1", "/admin")).toBeUndefined();
   });
   test("does not replace the login route with itself while scoped exercise discovery is pending", () => {
     expect(resolveOperatorLandingNavigationTarget(authenticated("CM", "EX-2"), "EX-1")).toBeUndefined();

@@ -5,7 +5,7 @@ import { loadPersistedState, startStatePersistence } from "@/services/StatePersi
 import { getCloudSyncStatus, startCloudSync } from "@/services/CloudSyncService";
 import { failRuntimeCheckpointStartup, startRuntimeCheckpointSync } from "@/services/RuntimeCheckpointSyncService";
 import { startAfterCurrentExerciseDiscovery } from "@/services/exercise/StartupOrchestrationService";
-import { getOperatorSession, hasActiveRole, startOperatorSession, subscribeOperatorSession } from "@/services/authorization/OperatorSessionService";
+import { getOperatorSession, hasActiveRole, hasOperationalAuthority, hasPlatformAdminAuthority, startOperatorSession, subscribeOperatorSession } from "@/services/authorization/OperatorSessionService";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -21,8 +21,9 @@ function ProductionRouteGate() {
     if (operator.state !== "AUTHENTICATED") { router.replace("/"); return; }
     const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
     const bootstrap = hasActiveRole(operator, "EXERCISE_BOOTSTRAP");
-    if (root === "excon" && !hasActiveRole(operator, "EXCON", exerciseId) && !bootstrap) router.replace("/");
-    else if (root !== "excon" && !hasActiveRole(operator, "CM", exerciseId)) router.replace(hasActiveRole(operator, "EXCON", exerciseId) || bootstrap ? "/excon" : "/");
+    if (root === "admin" && !hasPlatformAdminAuthority(operator)) router.replace("/");
+    else if (root === "excon" && !hasActiveRole(operator, "EXCON", exerciseId) && !bootstrap) router.replace(hasPlatformAdminAuthority(operator) ? "/admin" : "/");
+    else if (root !== "excon" && root !== "admin" && !hasActiveRole(operator, "CM", exerciseId)) router.replace(hasActiveRole(operator, "EXCON", exerciseId) || bootstrap ? "/excon" : hasPlatformAdminAuthority(operator) ? "/admin" : "/");
   }, [operator, segments]);
   return null;
 }
@@ -49,16 +50,25 @@ export default function RootLayout() {
       unsubscribeOperator = startOperatorSession();
       // Remote current-exercise discovery is the startup gate. A stale local
       // RUNNING projection must never acquire writer authority before the
-      // authoritative identity is resolved, and a conflict remains fail-closed.
-      const startAuthenticatedApplication = () => {
-        if (getOperatorSession().state !== "AUTHENTICATED") {
-          if (applicationStarted) {
-            unsubscribeCloud(); unsubscribeCloud = () => {};
-            unsubscribeRuntimeCheckpoint(); unsubscribeRuntimeCheckpoint = () => {};
+          // authoritative identity is resolved, and a conflict remains fail-closed.
+          const startAuthenticatedApplication = () => {
+            if (getOperatorSession().state !== "AUTHENTICATED") {
+              if (applicationStarted) {
+                unsubscribeCloud(); unsubscribeCloud = () => {};
+                unsubscribeRuntimeCheckpoint(); unsubscribeRuntimeCheckpoint = () => {};
             applicationStarted = false;
-          }
-          return;
-        }
+              }
+              return;
+            }
+            const currentOperator = getOperatorSession();
+            if (!hasOperationalAuthority(currentOperator)) {
+              if (applicationStarted) {
+                unsubscribeCloud(); unsubscribeCloud = () => {};
+                unsubscribeRuntimeCheckpoint(); unsubscribeRuntimeCheckpoint = () => {};
+                applicationStarted = false;
+              }
+              return;
+            }
         if (applicationStarted) return;
         applicationStarted = true;
         void startAfterCurrentExerciseDiscovery({

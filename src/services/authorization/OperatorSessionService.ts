@@ -12,7 +12,7 @@ export type OperatorSessionState = Readonly<
   | { state: "UNAUTHENTICATED" }
   | { state: "UNAUTHORIZED"; userId: string; message: string }
   | { state: "UNAVAILABLE"; message: string }
-  | { state: "AUTHENTICATED"; principal: Extract<PrincipalState, { state: "AUTHENTICATED" }>["principal"]; profile: OperatorProfile }
+  | { state: "AUTHENTICATED"; principal: Extract<PrincipalState, { state: "AUTHENTICATED" }>["principal"]; profile: OperatorProfile; isPlatformAdmin?: boolean }
 >;
 
 let snapshot: OperatorSessionState = Object.freeze({ state: "LOADING" });
@@ -42,6 +42,13 @@ async function resolveProfile(userId: string): Promise<OperatorProfile | undefin
   return Object.freeze({ userId, displayName: data.display_name.trim() });
 }
 
+async function resolvePlatformAdmin(): Promise<boolean | undefined> {
+  if (!supabase) return undefined;
+  const { data, error } = await supabase.rpc("is_platform_admin");
+  if (error || typeof data !== "boolean") return undefined;
+  return data;
+}
+
 export async function refreshOperatorSession(): Promise<OperatorSessionState> {
   if (!supabase) {
     publish({ state: "UNAVAILABLE", message: "Supabase pole seadistatud." });
@@ -55,13 +62,15 @@ export async function refreshOperatorSession(): Promise<OperatorSessionState> {
   else if (principalState.state === "UNAVAILABLE") publish({ state: "UNAVAILABLE", message: "Operaatori õigusi ei saanud kontrollida." });
   else {
     const assignments = activeAssignments(principalState.principal.roleAssignments);
-    if (!assignments.length) publish({ state: "UNAUTHORIZED", userId: principalState.principal.userId, message: "Operaatorile pole aktiivset rolli määratud." });
+    const isPlatformAdmin = await resolvePlatformAdmin();
+    if (isPlatformAdmin === undefined) publish({ state: "UNAVAILABLE", message: "Administraatori õigusi ei saanud kontrollida." });
+    else if (!assignments.length && !isPlatformAdmin) publish({ state: "UNAUTHORIZED", userId: principalState.principal.userId, message: "Operaatorile pole aktiivset rolli määratud." });
     else {
       const profile = await resolveProfile(principalState.principal.userId);
       if (!profile) publish({ state: "UNAUTHORIZED", userId: principalState.principal.userId, message: "Operaatori kinnitatud profiil puudub." });
       else {
         setAuthenticatedCaseManager({ id: profile.userId, name: profile.displayName });
-        publish({ state: "AUTHENTICATED", principal: principalState.principal, profile });
+        publish({ state: "AUTHENTICATED", principal: principalState.principal, profile, isPlatformAdmin });
       }
     }
   }
@@ -96,4 +105,12 @@ export function hasActiveRole(state: OperatorSessionState, role: RoleAssignment[
   if (state.state !== "AUTHENTICATED") return false;
   return activeAssignments(state.principal.roleAssignments).some(item => item.role === role &&
     (item.scope.scopeType === "GLOBAL" || Boolean(exerciseId && item.scope.scopeId === exerciseId)));
+}
+
+export function hasPlatformAdminAuthority(state: OperatorSessionState): boolean {
+  return state.state === "AUTHENTICATED" && state.isPlatformAdmin === true;
+}
+
+export function hasOperationalAuthority(state: OperatorSessionState): boolean {
+  return state.state === "AUTHENTICATED" && activeAssignments(state.principal.roleAssignments).length > 0;
 }
