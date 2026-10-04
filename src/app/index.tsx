@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import Constants from "expo-constants";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -12,6 +12,7 @@ import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepo
 import { getSyncVersion, subscribeToSync } from "@/services/SyncService";
 
 export default function LoginScreen() {
+  const { passwordUpdated } = useLocalSearchParams<{ passwordUpdated?: string }>();
   const build = getBuildProvenance();
   const releaseConfigurationError = getReleaseConfigurationError();
   const operator = useOperatorSession();
@@ -52,6 +53,7 @@ export default function LoginScreen() {
       <Text style={styles.build}>Build {build.gitSha === "development" ? "arendus" : build.gitSha.slice(0, 12)} · {build.environment}</Text>
       {build.supabaseProjectRef && <Text style={styles.build}>Supabase {build.supabaseProjectRef}</Text>}
       {releaseConfigurationError && <Text accessibilityRole="alert" style={styles.error}>{releaseConfigurationError}</Text>}
+      {passwordUpdated === "1" && <Text accessibilityLiveRegion="polite" style={styles.success}>Parool on uuendatud. Logi uue parooliga sisse.</Text>}
       <TextInput accessibilityLabel="E-posti aadress" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder="E-post" style={styles.input} />
       <TextInput accessibilityLabel="Parool" autoCapitalize="none" autoComplete="current-password" secureTextEntry value={password} onChangeText={setPassword} placeholder="Parool" style={styles.input} />
       {operator.state === "LOADING" && <ActivityIndicator />}
@@ -127,6 +129,7 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.5 },
   input: { width: "100%", maxWidth: 380, borderWidth: 1, borderColor: "#98A2B3", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, fontSize: 17, marginBottom: 12 },
   error: { color: "#B42318", marginBottom: 12, textAlign: "center" },
+  success: { color: "#067647", marginBottom: 12, textAlign: "center" },
 
   buttonText: {
 

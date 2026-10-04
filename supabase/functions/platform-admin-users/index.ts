@@ -7,7 +7,13 @@ type UserOperation =
   | Readonly<{ operation: "deactivate" | "reactivate"; userId: string }>;
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const allowedRedirect = Deno.env.get("ADMIN_AUTH_REDIRECT_URL")?.trim();
+const canonicalRedirect = "russicaptor://auth/callback";
+
+function authRedirect(): string {
+  const configured = Deno.env.get("ADMIN_AUTH_REDIRECT_URL")?.trim();
+  if (configured !== canonicalRedirect) throw new Error("AUTH_REDIRECT_NOT_CONFIGURED");
+  return configured;
+}
 
 function validEmail(value: unknown): string {
   const email = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -73,7 +79,7 @@ async function operate(context: AdminContext, body: UserOperation): Promise<Resp
     const displayName = typeof body.displayName === "string" ? body.displayName.trim() : "";
     if (!displayName || displayName.length > 120) throw new Error("INVALID_DISPLAY_NAME");
     const { data, error } = await context.service.auth.admin.inviteUserByEmail(email, {
-      data: { display_name: displayName }, ...(allowedRedirect ? { redirectTo: allowedRedirect } : {}),
+      data: { display_name: displayName }, redirectTo: authRedirect(),
     });
     if (error || !data.user) throw new Error(error?.code === "email_exists" ? "USER_ALREADY_EXISTS" : "USER_INVITE_FAILED");
     const { error: profileError } = await context.service.rpc("trusted_admin_upsert_operator_profile", {
@@ -85,7 +91,7 @@ async function operate(context: AdminContext, body: UserOperation): Promise<Resp
   }
   if (body.operation === "resetPassword") {
     const email = validEmail(body.email);
-    const { error } = await context.service.auth.resetPasswordForEmail(email, allowedRedirect ? { redirectTo: allowedRedirect } : undefined);
+    const { error } = await context.service.auth.resetPasswordForEmail(email, { redirectTo: authRedirect() });
     if (error) throw new Error("PASSWORD_RESET_FAILED");
     await audit(context, "PASSWORD_RESET_REQUESTED", "SUCCESS", undefined, undefined, { email });
     return json({ ok: true, status: "RESET_SENT" });

@@ -10,6 +10,7 @@ import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { startRuntimeLeaseTimerProbe } from "@/services/runtime/persistence/RuntimeLeaseTimerProbe";
+import AuthCallbackCoordinator from "@/components/auth/AuthCallbackCoordinator";
 
 function ProductionRouteGate() {
   const segments = useSegments();
@@ -18,6 +19,7 @@ function ProductionRouteGate() {
     if (operator.state === "LOADING") return;
     const root = segments[0];
     if (!root || root === "_sitemap") return;
+    if (root === "auth") return;
     if (operator.state !== "AUTHENTICATED") { router.replace("/"); return; }
     const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
     const bootstrap = hasActiveRole(operator, "EXERCISE_BOOTSTRAP");
@@ -113,7 +115,7 @@ export default function RootLayout() {
   }
 
   return <SafeAreaProvider><SafeAreaView edges={["top", "right", "bottom", "left"]} style={{ flex: 1, backgroundColor: "#F6F8FB" }}>
-    <ProductionRouteGate /><Stack screenOptions={{ headerShown: false }} />
+    <AuthCallbackCoordinator /><ProductionRouteGate /><Stack screenOptions={{ headerShown: false }} />
   </SafeAreaView></SafeAreaProvider>;
 
 }
