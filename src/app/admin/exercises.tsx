@@ -1,8 +1,8 @@
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { grantExerciseBootstrap, grantExerciseRole, listAdminExercises, listAdminUsers, revokeExerciseRole, type AdminExercise, type AdminUser } from "@/services/admin/PlatformAdminService";
-import { refreshOperatorSession } from "@/services/authorization/OperatorSessionService";
+import { createAdminExercise } from "@/services/admin/PlatformAdminExerciseCreation";
+import { grantExerciseRole, listAdminExercises, listAdminUsers, revokeExerciseRole, type AdminExercise, type AdminUser } from "@/services/admin/PlatformAdminService";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 
 export default function AdminExercisesScreen() {
@@ -21,13 +21,15 @@ export default function AdminExercisesScreen() {
   const createExercise = async () => {
     if (operator.state !== "AUTHENTICATED") return;
     setBusy(true); setMessage(undefined);
-    try { await grantExerciseBootstrap(operator.profile.userId); await refreshOperatorSession(); router.push("/excon/catalog"); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Õppuse loomise volitus ebaõnnestus."); setBusy(false); }
+    try { const exerciseId = await createAdminExercise(operator.profile.userId); setMessage(`Õppus ${exerciseId} loodud.`); await load(); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Õppuse loomine ebaõnnestus."); }
+    finally { setBusy(false); }
   };
   return <ScrollView contentContainerStyle={styles.page}>
     <Pressable onPress={() => router.back()}><Text style={styles.back}>‹ Administratsioon</Text></Pressable><Text style={styles.title}>Õppused</Text>
+    <Pressable style={styles.catalog} onPress={() => router.push("/excon/catalog")}><Text style={styles.catalogText}>Vali pakett</Text></Pressable>
     <Pressable disabled={busy} style={styles.primary} onPress={() => void createExercise()}><Text style={styles.primaryText}>Loo uus õppus</Text></Pressable>
-    <Text style={styles.note}>Pakett valitakse olemasolevast kontrollitud kataloogist ja õppus luuakse olemasoleva bootstrap-vooga.</Text>
+    <Text style={styles.note}>Valitud aktiivne pakett valmistatakse uueks õppuseks olemasoleva bootstrap- ja kanoonilise ettevalmistusvooga.</Text>
     {message && <Text accessibilityRole="alert" style={styles.message}>{message}</Text>}
     {exercises.map(item => <Pressable key={item.exerciseId} style={[styles.panel, selectedExercise === item.exerciseId && styles.selected]} onPress={() => setSelectedExercise(item.exerciseId)}>
       <Text style={styles.panelTitle}>{item.exerciseId}</Text><Text style={styles.meta}>{item.packageId ?? "Pakett määramata"}{item.packageVersion ? `@${item.packageVersion}` : ""} · {item.lifecycleState}</Text>
@@ -47,6 +49,7 @@ export default function AdminExercisesScreen() {
 const styles = StyleSheet.create({
   page: { backgroundColor: "#F6F8FB", padding: 20, gap: 12 }, back: { color: "#005BBB", fontWeight: "700" }, title: { fontSize: 30, fontWeight: "900", color: "#101828" },
   primary: { backgroundColor: "#005BBB", padding: 13, borderRadius: 9, alignItems: "center" }, primaryText: { color: "#fff", fontWeight: "800" }, note: { color: "#667085", fontSize: 12 },
+  catalog: { borderWidth: 1, borderColor: "#005BBB", padding: 12, borderRadius: 9, alignItems: "center" }, catalogText: { color: "#005BBB", fontWeight: "800" },
   message: { color: "#344054", fontWeight: "700" }, panel: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#D0D5DD", borderRadius: 14, padding: 15, gap: 8 }, selected: { borderColor: "#005BBB", borderWidth: 2 },
   panelTitle: { fontWeight: "800", fontSize: 18, color: "#101828" }, meta: { color: "#475467" }, warning: { color: "#B42318", fontWeight: "800" }, label: { color: "#344054", fontWeight: "700" },
   choices: { flexDirection: "row", flexWrap: "wrap", gap: 7 }, choice: { borderWidth: 1, borderColor: "#98A2B3", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 7 }, choiceSelected: { borderColor: "#005BBB", backgroundColor: "#EFF8FF" }, choiceText: { color: "#344054", fontWeight: "600" },
