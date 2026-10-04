@@ -20,22 +20,29 @@ function userId(value: unknown): string {
 
 async function listExercises(context: AdminContext): Promise<Response> {
   const [{ data: states, error: stateError }, { data: assignments, error: assignmentError }, { data: leases, error: leaseError }] = await Promise.all([
-    context.service.from("exercise_states").select("exercise_id,revision,state,updated_at,updated_by").order("updated_at", { ascending: false }).limit(200),
+    context.service.from("exercise_states").select([
+      "exercise_id", "revision", "updated_at", "updated_by",
+      "exercise_session:state->exerciseSession",
+      "exercise_package_reference:state->exercisePackageReference",
+    ].join(",")).order("updated_at", { ascending: false }).limit(200),
     context.service.from("authorization_role_assignments").select("id,user_id,role,scope_id,status,issued_at,revoked_at").eq("scope_type", "EXERCISE"),
     context.service.from("runtime_writer_leases").select("exercise_id,writer_user_id,expires_at,released_at"),
   ]);
   if (stateError || assignmentError || leaseError) throw new Error("EXERCISE_LIST_FAILED");
   return json({ ok: true, exercises: (states ?? []).map(row => {
-    const state = row.state && typeof row.state === "object" ? row.state as Record<string, unknown> : {};
+    const session = row.exercise_session && typeof row.exercise_session === "object"
+      ? row.exercise_session as Record<string, unknown> : {};
+    const packageReference = row.exercise_package_reference && typeof row.exercise_package_reference === "object"
+      ? row.exercise_package_reference as Record<string, unknown> : {};
     const scoped = (assignments ?? []).filter(item => item.scope_id === row.exercise_id);
     const active = scoped.filter(item => item.status === "ACTIVE");
     const lease = (leases ?? []).find(item => item.exercise_id === row.exercise_id && !item.released_at);
     return {
       exerciseId: row.exercise_id,
       revision: row.revision,
-      packageId: state.packageId ?? state.exercisePackageId ?? null,
-      packageVersion: state.packageVersion ?? state.exercisePackageVersion ?? null,
-      lifecycleState: state.lifecycleState ?? "UNKNOWN",
+      packageId: packageReference.packageId ?? null,
+      packageVersion: packageReference.packageVersion ?? null,
+      lifecycleState: session.lifecycleState ?? session.state ?? "UNKNOWN",
       updatedAt: row.updated_at,
       participantCount: new Set(active.map(item => item.user_id)).size,
       cmCount: active.filter(item => item.role === "CM").length,

@@ -40,6 +40,12 @@ describe("USER-EXERCISE-ADMIN-V1 authority boundary", () => {
     expect(exercisesFunction).not.toContain("authorization_role_assignments\").insert");
   });
 
+  test("EX-ADMIN-02: exercise listing projects only bounded discovery metadata", () => {
+    expect(exercisesFunction).toContain('"exercise_session:state->exerciseSession"');
+    expect(exercisesFunction).toContain('"exercise_package_reference:state->exercisePackageReference"');
+    expect(exercisesFunction).not.toContain('select("exercise_id,revision,state,updated_at,updated_by")');
+  });
+
   test("AUDIT-01: admin actions are bounded and secret-shaped fields are stripped", () => {
     expect(migration).toContain("create table public.administrative_action_audit");
     expect(migration).toContain("- 'password' - 'token' - 'secret'");
