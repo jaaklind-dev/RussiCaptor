@@ -5,7 +5,7 @@ import { setAuthenticatedCaseManager } from "@/services/CurrentUserService";
 import { SupabaseAuthenticationAdapter } from "./SupabaseAuthenticationAdapter";
 import { SupabaseRoleAuthority } from "./SupabaseRoleAuthority";
 import { PrincipalService } from "./PrincipalService";
-import { prepareOperatorSignOut } from "./OperatorSignOutLifecycle";
+import { completeOperatorSignOutDrain, prepareOperatorSignOut } from "./OperatorSignOutLifecycle";
 
 export type OperatorProfile = Readonly<{ userId: string; displayName: string }>;
 export type OperatorSessionState = Readonly<
@@ -97,6 +97,7 @@ export function signOutOperator(): Promise<void> {
         const { error } = await supabase.auth.signOut({ scope: "local" });
         if (error) throw error;
       }
+      completeOperatorSignOutDrain();
       publish({ state: "UNAUTHENTICATED" });
     } catch {
       throw new Error("Väljalogimine ei õnnestunud täielikult. Proovi uuesti.");
@@ -113,7 +114,10 @@ export function startOperatorSession(): () => void {
   stopAuth?.();
   if (!supabase) { publish({ state: "UNAVAILABLE", message: "Supabase pole seadistatud." }); return () => {}; }
   const { data } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
-    if (event === "SIGNED_OUT" || !session || session.user.is_anonymous) publish({ state: "UNAUTHENTICATED" });
+    if (event === "SIGNED_OUT" || !session || session.user.is_anonymous) {
+      completeOperatorSignOutDrain();
+      publish({ state: "UNAUTHENTICATED" });
+    }
     else if (event === "TOKEN_REFRESHED" || event === "SIGNED_IN" || event === "USER_UPDATED") void refreshOperatorSession();
   });
   stopAuth = () => data.subscription.unsubscribe();

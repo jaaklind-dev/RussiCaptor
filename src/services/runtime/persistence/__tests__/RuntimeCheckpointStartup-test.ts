@@ -377,7 +377,7 @@ describe("WP-44B checkpoint startup coordination", () => {
 
   test("reconnect and legitimate authority acquisition rearm the same publication scheduler", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
-    expect(source).toMatch(/if\(channelStatus==="SUBSCRIBED"&&!generationStopped\(\)\)\{\s*renewalLoop\?\.wake\(\);requestPublish\(\);/);
+    expect(source).toMatch(/if\(channelStatus==="SUBSCRIBED"&&!generationStopped\(\)&&!isOperatorSignOutDraining\(\)\)\{\s*renewalLoop\?\.wake\(\);requestPublish\(\);/);
     expect(source).toContain('table:"runtime_checkpoint_notifications"');
     expect(source).toContain('"runtime_checkpoint_notifications.reconnect_metadata"');
     expect(source).not.toContain('table:"runtime_checkpoints",filter:');
@@ -948,7 +948,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const generation = source.indexOf("const generation = ++exerciseSyncGeneration;");
     const fence = source.indexOf("const generationStopped = () => stopped || generation !== exerciseSyncGeneration;", generation);
     const publishFence = source.indexOf("if(generationStopped())return;", source.indexOf("const publish=()=>", fence));
-    const renewalFence = source.indexOf("isWriter:()=>!generationStopped()", publishFence);
+    const renewalFence = source.indexOf("isWriter:()=>!isOperatorSignOutDraining()&&!generationStopped()", publishFence);
     const realtimeFence = source.indexOf("if(generationStopped())return;", source.indexOf("const handleMetadata=", renewalFence));
     const guardedRelease = source.indexOf("if(generation===exerciseSyncGeneration&&lease)", realtimeFence);
     expect(generation).toBeGreaterThan(-1);

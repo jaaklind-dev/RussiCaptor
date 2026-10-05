@@ -34,6 +34,7 @@ describe("FRESH-RUNTIME-BOOTSTRAP-AUTHORITY-01", () => {
         return { status: "HELD_BY_OTHER_WRITER" as const, code: "WRITER_AUTHORITY_HELD" as const };
       },
       loadWriterLease: async () => undefined,
+      releaseWriter: jest.fn(async () => undefined),
     };
 
     const results = await Promise.all([
