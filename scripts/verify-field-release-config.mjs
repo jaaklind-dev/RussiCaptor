@@ -9,7 +9,10 @@ const fail = (message) => { throw new Error(`FIELD_RELEASE_CONFIG_INVALID: ${mes
 if (manifest.environment !== "production") fail("environment must be production");
 if (manifest.packageId !== app.android.package) fail("package ID mismatch");
 if (manifest.applicationVersion !== app.version) fail("application version mismatch");
+if (manifest.applicationVersion !== pkg.version) fail("package version mismatch");
 if (manifest.versionCode !== app.android.versionCode) fail("versionCode mismatch");
+if (!Number.isInteger(manifest.minimumVersionCodeExclusive)) fail("minimum prior versionCode must be declared");
+if (manifest.versionCode <= manifest.minimumVersionCodeExclusive) fail("versionCode must exceed the prior distributed maximum");
 if (!/^[0-9a-f]{64}$/.test(manifest.signingCertificateSha256)) fail("stable signing fingerprint missing");
 if (!Array.isArray(manifest.requiredSupabaseMigrations) || !manifest.requiredSupabaseMigrations.length) fail("required migrations missing");
 const remoteVersions = new Set();

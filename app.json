@@ -2,7 +2,7 @@
   "expo": {
     "name": "RussiCaptor",
     "slug": "RussiCaptor",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "russicaptor",
@@ -20,7 +20,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.jaaklind.RussiCaptor",
-      "versionCode": 90,
+      "versionCode": 134,
       "allowBackup": false,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW"

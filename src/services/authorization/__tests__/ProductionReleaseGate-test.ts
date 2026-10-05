@@ -42,6 +42,16 @@ describe("WP-NEXT-02 production release gate", () => {
     expect(read("config/ReleaseConfig.ts")).toContain("EXPO_PUBLIC_RELEASE_ENVIRONMENT");
   });
 
+  test("canonical Android release identity is consistent and monotonic", () => {
+    const app = JSON.parse(read("../app.json")).expo;
+    const manifest = JSON.parse(read("../release/field-release.json"));
+    const pkg = JSON.parse(read("../package.json"));
+    expect(manifest.applicationVersion).toBe(app.version);
+    expect(manifest.applicationVersion).toBe(pkg.version);
+    expect(manifest.versionCode).toBe(app.android.versionCode);
+    expect(manifest.versionCode).toBeGreaterThan(manifest.minimumVersionCodeExclusive);
+  });
+
   test("release verification fails closed when a required remote migration is absent", () => {
     const script = path.join(root, "../scripts/verify-field-release-config.mjs");
     const rejected = spawnSync(process.execPath, [script], { encoding: "utf8", env: {
