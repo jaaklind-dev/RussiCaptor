@@ -2,7 +2,7 @@ import { router, useFocusEffect } from "expo-router";
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import AppHeader from "@/components/AppHeader";
 
@@ -27,6 +27,8 @@ import { hasActiveRole, signOutOperator } from "@/services/authorization/Operato
 
 export default function DashboardScreen() {
   const operator = useOperatorSession();
+  const signOut = () => void signOutOperator().then(() => router.replace("/"))
+    .catch(() => Alert.alert("Väljalogimine ebaõnnestus", "Väljalogimine ei õnnestunud täielikult. Proovi uuesti."));
 
   useSyncExternalStore(subscribeToSync, getSyncVersion, getSyncVersion);
 
@@ -133,7 +135,7 @@ export default function DashboardScreen() {
 
       </Pressable>
       {hasActiveRole(operator, "EXCON", canonicalExercise.exerciseId) && <Pressable style={styles.secondaryButton} onPress={() => router.push("/excon")}><Text style={styles.secondaryButtonText}>EXCON</Text></Pressable>}
-      <Pressable style={styles.logoutButton} onPress={() => void signOutOperator().then(() => router.replace("/"))}><Text style={styles.logoutButtonText}>Logi välja</Text></Pressable>
+      <Pressable style={styles.logoutButton} onPress={signOut}><Text style={styles.logoutButtonText}>Logi välja</Text></Pressable>
 
     </ScrollView>
 

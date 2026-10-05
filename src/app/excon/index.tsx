@@ -12,12 +12,14 @@ import { useEffect, useState } from "react";
 
 import { router } from "expo-router";
 
-import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text } from "react-native";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { hasActiveRole, signOutOperator } from "@/services/authorization/OperatorSessionService";
 
 export default function ExconScreen() {
   const operator = useOperatorSession();
+  const signOut = () => void signOutOperator().then(() => router.replace("/"))
+    .catch(() => Alert.alert("Väljalogimine ebaõnnestus", "Väljalogimine ei õnnestunud täielikult. Proovi uuesti."));
 
   const [snapshot, setSnapshot] = useState({
 
@@ -74,7 +76,7 @@ export default function ExconScreen() {
       >
         <Text style={styles.backButtonText}>Tagasi töölauale</Text>
       </Pressable>
-      <Pressable style={styles.logoutButton} onPress={() => void signOutOperator().then(() => router.replace("/"))}><Text style={styles.logoutButtonText}>Logi välja</Text></Pressable>
+      <Pressable style={styles.logoutButton} onPress={signOut}><Text style={styles.logoutButtonText}>Logi välja</Text></Pressable>
 
     </ScrollView>
 

@@ -61,6 +61,7 @@ import {
   type OperatorSessionState,
 } from "@/services/authorization/OperatorSessionService";
 import { getExercisePackageBindingVersion, subscribeToExercisePackageBindings } from "@/services/exercise/ExercisePackageService";
+import { registerOperatorSignOutPreparation } from "@/services/authorization/OperatorSignOutLifecycle";
 
 const LEASE_SECONDS = 60;
 const RENEW_MS = 20_000;
@@ -1402,7 +1403,40 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         .catch(()=>setRuntimeCompletionPhase(exerciseId,"FAILED","COMPLETION_REQUEST_LOAD_FAILED"));
     }
   });
-  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });rejectCanonicalCommandCommitWaiters("CANONICAL_COMMAND_GENERATION_STOPPED");releaseRuntimeOwner("GENERATION_CLEANUP");stopped=true;appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();stopLifecyclePriority();stopCompletionIntent();stopDeferredPatientCommandDrain();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");terminalAuthorityFinalizer=undefined;if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;if(establishExerciseRuntimeOwnerForCurrentWriter===establishRuntimeOwner)establishExerciseRuntimeOwnerForCurrentWriter=undefined;if(ensureSharedWorkflowHeadsForCurrentWriter===ensureWorkflowHeads)ensureSharedWorkflowHeadsForCurrentWriter=undefined;if(drainPatientCommandsForCurrentWriter===drainPendingPatientCommands)drainPatientCommandsForCurrentWriter=undefined;if(resumePendingCompletionForCurrentWriter===resumePendingCompletion)resumePendingCompletionForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration){lease=undefined;resetRuntimeReaderConvergence(exerciseId);}};
+  let signOutReleaseInFlight:Promise<void>|undefined;
+  const prepareWriterSignOut=():Promise<void>=>{
+    if(signOutReleaseInFlight)return signOutReleaseInFlight;
+    const currentLease=lease;
+    if(generationStopped()||!currentLease)return Promise.resolve();
+    const task=(async()=>{
+      traceRuntimeLeaseLifecycle("OPERATOR_SIGN_OUT_RELEASE_STARTED",{generation:traceGeneration,detail:{exerciseId}});
+      // Fail closed immediately: no new local command may enter while an
+      // already-prepared canonical publication is allowed to settle.
+      setRuntimeWriterAuthorityState("READER");
+      beginRuntimeReaderConvergence(exerciseId);
+      releaseRuntimeOwner("OPERATOR_SIGN_OUT");
+      rejectCanonicalCommandCommitWaiters("CANONICAL_COMMAND_OPERATOR_SIGN_OUT");
+      if(publicationDirty||publishInFlight){publishNow();await publicationBarrier;
+        if(publicationDirty)throw new Error("WRITER_SIGNOUT_PUBLICATION_UNSETTLED");}
+      renewalLoop?.stop("EXPLICIT_STOP");renewalLoop=undefined;
+      stopNativeHeartbeat("EXPLICIT_STOP");
+      await repository.releaseWriter(currentLease);
+      if(lease?.leaseId===currentLease.leaseId)lease=undefined;
+      stopClockRunner();
+      setStatus({state:"READER",code:"OPERATOR_SIGNED_OUT",revision:remoteRevision});
+      traceRuntimeLeaseLifecycle("OPERATOR_SIGN_OUT_RELEASED",{generation:traceGeneration,detail:{exerciseId}});
+    })().catch(error=>{
+      // Keep the authenticated session and the lease identity available for a
+      // bounded retry, but never restore local write authority.
+      setStatus({state:"FAILED",code:"WRITER_SIGNOUT_RELEASE_FAILED",revision:remoteRevision});
+      traceRuntimeLeaseLifecycle("OPERATOR_SIGN_OUT_RELEASE_FAILED",{generation:traceGeneration,detail:{exerciseId}});
+      throw error;
+    }).finally(()=>{if(signOutReleaseInFlight===task)signOutReleaseInFlight=undefined;});
+    signOutReleaseInFlight=task;
+    return task;
+  };
+  const stopSignOutPreparation=registerOperatorSignOutPreparation(prepareWriterSignOut);
+  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });rejectCanonicalCommandCommitWaiters("CANONICAL_COMMAND_GENERATION_STOPPED");releaseRuntimeOwner("GENERATION_CLEANUP");stopped=true;stopSignOutPreparation();appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();stopLifecyclePriority();stopCompletionIntent();stopDeferredPatientCommandDrain();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");terminalAuthorityFinalizer=undefined;if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;if(establishExerciseRuntimeOwnerForCurrentWriter===establishRuntimeOwner)establishExerciseRuntimeOwnerForCurrentWriter=undefined;if(ensureSharedWorkflowHeadsForCurrentWriter===ensureWorkflowHeads)ensureSharedWorkflowHeadsForCurrentWriter=undefined;if(drainPatientCommandsForCurrentWriter===drainPendingPatientCommands)drainPatientCommandsForCurrentWriter=undefined;if(resumePendingCompletionForCurrentWriter===resumePendingCompletion)resumePendingCompletionForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration){lease=undefined;resetRuntimeReaderConvergence(exerciseId);}};
 }
 
 async function startRuntimeCheckpointSyncOnce(): Promise<()=>void> {

@@ -1,8 +1,10 @@
 import { router } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { signOutOperator } from "@/services/authorization/OperatorSessionService";
 
 export default function AdministrationScreen() {
+  const signOut = () => void signOutOperator().then(() => router.replace("/"))
+    .catch(() => Alert.alert("Väljalogimine ebaõnnestus", "Väljalogimine ei õnnestunud täielikult. Proovi uuesti."));
   return <ScrollView contentContainerStyle={styles.page}>
     <View><Text style={styles.kicker}>RussiCaptor</Text><Text style={styles.title}>Administratsioon</Text>
       <Text style={styles.subtitle}>Kasutajakontod ja õppusepõhised CM/EXCON rollid</Text></View>
@@ -15,7 +17,7 @@ export default function AdministrationScreen() {
     <Pressable accessibilityRole="button" style={styles.diagnostics} onPress={() => router.push("/excon/diagnostics" as never)}>
       <Text style={styles.diagnosticsTitle}>Tehnilised üksikasjad</Text><Text style={styles.cardText}>Tugiteave ja toetatud taastamistoimingud.</Text>
     </Pressable>
-    <Pressable accessibilityRole="button" style={styles.secondary} onPress={() => void signOutOperator()}><Text style={styles.secondaryText}>Logi välja</Text></Pressable>
+    <Pressable accessibilityRole="button" style={styles.secondary} onPress={signOut}><Text style={styles.secondaryText}>Logi välja</Text></Pressable>
   </ScrollView>;
 }
 

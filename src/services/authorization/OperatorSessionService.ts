@@ -5,6 +5,7 @@ import { setAuthenticatedCaseManager } from "@/services/CurrentUserService";
 import { SupabaseAuthenticationAdapter } from "./SupabaseAuthenticationAdapter";
 import { SupabaseRoleAuthority } from "./SupabaseRoleAuthority";
 import { PrincipalService } from "./PrincipalService";
+import { prepareOperatorSignOut } from "./OperatorSignOutLifecycle";
 
 export type OperatorProfile = Readonly<{ userId: string; displayName: string }>;
 export type OperatorSessionState = Readonly<
@@ -18,6 +19,7 @@ export type OperatorSessionState = Readonly<
 let snapshot: OperatorSessionState = Object.freeze({ state: "LOADING" });
 const listeners = new Set<() => void>();
 let stopAuth: (() => void) | undefined;
+let signOutInFlight: Promise<void> | undefined;
 
 function publish(next: OperatorSessionState): void {
   snapshot = Object.freeze(next);
@@ -84,9 +86,27 @@ export async function signInOperator(email: string, password: string): Promise<O
   return refreshOperatorSession();
 }
 
-export async function signOutOperator(): Promise<void> {
-  if (supabase) await supabase.auth.signOut({ scope: "local" });
-  publish({ state: "UNAUTHENTICATED" });
+export function signOutOperator(): Promise<void> {
+  if (signOutInFlight) return signOutInFlight;
+  const task = (async () => {
+    try {
+      // Canonical writer authority is authenticated state. It must be released
+      // before Supabase removes that state and emits SIGNED_OUT.
+      await prepareOperatorSignOut();
+      if (supabase) {
+        const { error } = await supabase.auth.signOut({ scope: "local" });
+        if (error) throw error;
+      }
+      publish({ state: "UNAUTHENTICATED" });
+    } catch {
+      throw new Error("Väljalogimine ei õnnestunud täielikult. Proovi uuesti.");
+    }
+  })();
+  const inFlight = task.finally(() => {
+    if (signOutInFlight === inFlight) signOutInFlight = undefined;
+  });
+  signOutInFlight = inFlight;
+  return inFlight;
 }
 
 export function startOperatorSession(): () => void {
