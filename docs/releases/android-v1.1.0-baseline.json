@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "baselineName": "RussiCaptor Android 1.1.0 validated release",
+  "status": "VALIDATED",
+  "validatedAt": "2026-10-05",
+  "sourceIdentity": {
+    "parentMainCommit": "f80fba151ab8516ae9604532a05861d3653d1e5f",
+    "releaseCodeCommit": "411f62350db8881ead0b8e090c1bfdfaee557578",
+    "evidenceCommit": "TAG_TARGET",
+    "tag": "android-v1.1.0-validated",
+    "artifactBuiltFromReleaseCodeCommit": true,
+    "evidenceFilesBundledInApk": false
+  },
+  "androidArtifact": {
+    "filename": "RussiCaptor-Android-1.1.0-v134.apk",
+    "versionName": "1.1.0",
+    "versionCode": 134,
+    "sha256": "3b37d841cf8e39eeb38b33912d63cf8d5277e078d77fbb19564a164005693ec3",
+    "signingCertificateSha256": "b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d30198980e59fcde96b",
+    "packageId": "com.jaaklind.RussiCaptor",
+    "minSdk": 24,
+    "targetSdk": 36,
+    "debuggable": false,
+    "validationHarness": false
+  },
+  "clinicalPackage": {
+    "id": "russicaptor.narva-trauma",
+    "version": "1.0.5",
+    "sha256": "723d6c2fc57f34c2cf681215cf1a7149e5110ca1a34d618b2391a87aff5568c6"
+  },
+  "automatedValidation": {
+    "fullSuite": { "suites": 280, "tests": 2196, "status": "PASS" },
+    "runtimeGuardrails": { "suites": 19, "tests": 241, "status": "PASS" },
+    "multiDeviceGuardrails": { "suites": 16, "tests": 182, "status": "PASS" },
+    "typescript": "PASS",
+    "eslint": "PASS",
+    "gitDiffCheck": "PASS",
+    "releaseConfig": "PASS"
+  },
+  "physicalValidation": {
+    "device": { "serial": "R5GL236L6ZJ", "model": "SM-X306B", "android": "16" },
+    "priorInstalledVersion": { "versionName": "1.0.0", "versionCode": 133 },
+    "upgradeWithoutDataClear": "PASS",
+    "startup": "PASS",
+    "login": "PASS",
+    "authCallbackScheme": "PASS",
+    "cmSurface": "PASS",
+    "exconSurface": "PASS",
+    "adminUsers": "PASS",
+    "adminExercises": "PASS",
+    "restrictedDiagnostics": "PASS",
+    "writerSignOutImmediateLeaseRelease": "PASS",
+    "freshInstall": "NOT_RUN_NOT_REQUIRED"
+  },
+  "cleanup": {
+    "activeExerciseAssignments": 0,
+    "activeGlobalAssignments": 0,
+    "activeWriterLeases": 0,
+    "ownedPatientsInSmokeExercise": 0,
+    "status": "PASS"
+  },
+  "previousBaseline": {
+    "tag": "narva-mvp-v1.0.0-validated",
+    "commit": "987eb5fc0cacf6bf2fc027cbda81b791aa088926",
+    "immutable": true
+  },
+  "invalidationPolicy": "Any change to release code, APK bytes, signer, version identity, backend authority semantics, or clinical package requires proportionate revalidation."
+}
