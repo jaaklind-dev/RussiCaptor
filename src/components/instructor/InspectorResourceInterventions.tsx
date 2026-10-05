@@ -11,6 +11,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { isResourceInterventionAllowed } from "@/services/exercise/PackageInterventionAvailabilityService";
 import { useRuntimePatientCommandSubmissionReadiness } from
   "@/services/runtime/commands/useRuntimePatientCommandSubmissionReadiness";
+import { resourceTypeLabel } from "@/localization/et";
 
 export function InspectorResourceInterventions({ patientId }: Readonly<{ patientId: string }>) {
   useSyncExternalStore(subscribeToResourceRuntimeDebug, getResourceRuntimeDebugVersion, getResourceRuntimeDebugVersion);
@@ -37,10 +38,10 @@ export function InspectorResourceInterventions({ patientId }: Readonly<{ patient
   };
   return <View style={styles.card} testID="resource-intervention-card">
     <Text style={styles.title}>Saadaval ressursipõhised sekkumised</Text>
-    <Text style={styles.help}>Canonical resource path · advances the clinical reference by 60 seconds.</Text>
+    <Text style={styles.help}>Vali patsiendile sobiv sekkumine.</Text>
     {available.map(resource => <Pressable key={resource.resourceId} disabled={Boolean(submitting) || !commandReadiness.ready}
       onPress={() => void apply(resource.resourceId)} style={styles.button}>
-      <Text style={styles.buttonText}>{submitting === resource.resourceId ? "Applying…" : `Apply ${resource.type}`}</Text>
+      <Text style={styles.buttonText}>{submitting === resource.resourceId ? "Rakendan…" : `Rakenda: ${resourceTypeLabel(resource.type)}`}</Text>
     </Pressable>)}
     {mtp && <View style={styles.mtp}><Text style={styles.title}>Massiivse transfusiooni protokoll</Text>
       {(["MTP_ACTIVATION", "RBC_ADMINISTRATION", "PLASMA_ADMINISTRATION", "PLATELET_ADMINISTRATION", ...(calcium?.rbcUnitsPerCalcium ? ["CALCIUM_ADMINISTRATION" as const] : [])] as Exclude<MtpAction,"BLOOD_PRODUCT_DELIVERY_MODE_CHANGE">[]).map(action =>
@@ -62,7 +63,7 @@ export function InspectorResourceInterventions({ patientId }: Readonly<{ patient
       setResult(advancePatientRuntime({ commandId, exerciseId, patientId, durationSec: 60, issuedBy: "Exercise Controller" }));
     }} style={styles.advance}><Text style={styles.buttonText}>Keri kliinilist simulatsiooni 60 s edasi</Text></Pressable>
     {result?.ok && <Text style={styles.success}>Korraldus võeti autoritaarsesse tööjärjekorda.</Text>}
-    {result && !result.ok && <Text style={styles.error}>{result.errorCode}: {result.message}</Text>}
+    {result && !result.ok && <Text style={styles.error}>Sekkumist ei saanud rakendada. Kontrolli patsiendi seisu ja proovi uuesti.</Text>}
   </View>;
 }
 

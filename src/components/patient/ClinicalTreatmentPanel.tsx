@@ -115,9 +115,9 @@ export function ClinicalTreatmentPanel({ patientId, readOnly = false, exercisePa
 
   return <View style={styles.card} testID="clinical-treatment-panel">
     <Text style={styles.title}>Ravi</Text>
-    <Text style={styles.help}>Vali ravi ja saada korraldus patsiendi autoriteetsesse Runtime&apos;i.</Text>
+    <Text style={styles.help}>Vali ravi ja saada korraldus patsiendi kinnitatud töövoogu.</Text>
     {!canMutate && <Text style={styles.readOnly} accessibilityRole="alert">{readOnly ?
-      "Ravi muutmine ei ole vaatamisrežiimis lubatud." : readiness.reason}</Text>}
+      "Ravi muutmine ei ole vaatamisrežiimis lubatud." : "Patsiendi andmeid sünkroniseeritakse…"}</Text>}
     {!selected && canMutate && [...grouped.entries()].map(([category, items]) => <View key={category}
       style={styles.category}>
       <Text style={styles.categoryTitle}>{CLINICAL_TREATMENT_CATEGORY_LABELS[category]}</Text>

@@ -34,7 +34,7 @@ export default function PrepareNewExerciseCard({ snapshot, onPrepared }: { snaps
     if (result.ok) onPrepared?.();
   };
   return <View style={styles.card} testID="prepare-new-exercise-card"><Text style={styles.title}>Järgmine õppus</Text>
-    {activePackage ? <><Text style={styles.package}>{exercisePackageNameLabel(activePackage.metadata.name)}</Text><Text style={styles.meta}>{activePackage.packageId}@{activePackage.packageVersion}</Text>
+    {activePackage ? <><Text style={styles.package}>{exercisePackageNameLabel(activePackage.metadata.name)}</Text><Text style={styles.meta}>Versioon {activePackage.packageVersion}</Text>
       <Pressable testID="prepare-new-exercise" disabled={submitting} onPress={prepare} style={[styles.button, submitting && styles.disabled]}><Text style={styles.buttonText}>{submitting ? "Valmistan…" : "Valmista uus õppus"}</Text></Pressable></>
       : <><Text style={styles.guidance}>Vali enne uue õppuse ettevalmistamist õppusepakett.</Text><Pressable testID="prepare-open-catalog" style={styles.catalog} onPress={() => router.push("/excon/catalog")}><Text style={styles.catalogText}>Ava õppuste kataloog</Text></Pressable></>}
     {error && <Text testID="prepare-error" style={styles.error}>{error}</Text>}

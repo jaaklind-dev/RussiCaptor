@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 
 import AppHeader from "@/components/AppHeader";
 import { getBuildProvenance, getReleaseConfigurationError } from "@/config/ReleaseConfig";
+import { publicErrorMessage } from "@/localization/et";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { signInOperator } from "@/services/authorization/OperatorSessionService";
 import { resolveOperatorLandingNavigationTarget } from "@/services/ui/OperatorRouteService";
@@ -29,13 +30,13 @@ export default function LoginScreen() {
   }, [operator, syncVersion]);
 
   async function submit(): Promise<void> {
-    if (releaseConfigurationError) { setError(releaseConfigurationError); return; }
+    if (releaseConfigurationError) { setError("Rakenduse seadistus pole valmis. Võta ühendust administraatoriga."); return; }
     setSubmitting(true); setError(undefined);
     try {
       const result = await signInOperator(email, password);
-      if (result.state === "UNAUTHORIZED") setError(result.message);
-      else if (result.state === "UNAVAILABLE") setError(result.message);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Sisselogimine ebaõnnestus."); }
+      if (result.state === "UNAUTHORIZED") setError("E-posti aadress või parool ei ole õige.");
+      else if (result.state === "UNAVAILABLE") setError("Sisselogimisteenus pole praegu saadaval. Proovi hiljem uuesti.");
+    } catch (cause) { setError(publicErrorMessage(cause, "Sisselogimine ebaõnnestus.")); }
     finally { setSubmitting(false); }
   }
 
@@ -49,10 +50,8 @@ export default function LoginScreen() {
 
       <Text style={styles.subtitle}>Õppuste juhtimise platvorm</Text>
 
-      <Text style={styles.version}>Versioon {Constants.expoConfig?.version ?? "tundmatu"} ({build.versionCode})</Text>
-      <Text style={styles.build}>Build {build.gitSha === "development" ? "arendus" : build.gitSha.slice(0, 12)} · {build.environment}</Text>
-      {build.supabaseProjectRef && <Text style={styles.build}>Supabase {build.supabaseProjectRef}</Text>}
-      {releaseConfigurationError && <Text accessibilityRole="alert" style={styles.error}>{releaseConfigurationError}</Text>}
+      <Text style={styles.version}>Versioon {Constants.expoConfig?.version ?? "tundmatu"} · järk {build.versionCode}</Text>
+      {releaseConfigurationError && <Text accessibilityRole="alert" style={styles.error}>Rakenduse seadistus pole valmis. Võta ühendust administraatoriga.</Text>}
       {passwordUpdated === "1" && <Text accessibilityLiveRegion="polite" style={styles.success}>Parool on uuendatud. Logi uue parooliga sisse.</Text>}
       <TextInput accessibilityLabel="E-posti aadress" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder="E-post" style={styles.input} />
       <TextInput accessibilityLabel="Parool" autoCapitalize="none" autoComplete="current-password" secureTextEntry value={password} onChangeText={setPassword} placeholder="Parool" style={styles.input} />
@@ -113,7 +112,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
 
   },
-  build: { fontSize: 12, color: "#667085", marginBottom: 4 },
 
   button: {
 

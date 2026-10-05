@@ -34,7 +34,7 @@ describe("WP-45B patient History presentation", () => {
   test("uses Estonian lifecycle-appropriate chest-drain wording", () => {
     expect(patientHistoryTitleLabel(event({ title: "Chest drain insertion started" }))).toBe("Pleuradreeni paigaldamine");
     expect(patientHistoryTitleLabel(event())).toBe("Pleuradreen paigaldati");
-    expect(patientHistoryDescriptionLabel(event().description)).toBe("Kanooniline pleuradreeni sekkumine rakendati");
+    expect(patientHistoryDescriptionLabel(event().description)).toBe("Pleuradreeni sekkumine rakendati");
   });
 
   test("presentation preserves canonical identity and cannot create duplicate rows", () => {

@@ -137,12 +137,12 @@ export function NarvaIroScenarioControlsCard({ exerciseId, patientId }: Readonly
       correctionTypes.has(commandType));
   return <View style={styles.card} testID="narva-iro-scenario-controls">
     <Text style={styles.title}>IRO stsenaariumi juhtimine</Text>
-    <Text style={styles.help}>Autenditud EXCON-käsk liigub püsivasse tööjärjekorda ja rakendub ainult autoritaarses Runtime’is.</Text>
+    <Text style={styles.help}>EXCON-i korraldus salvestatakse ja rakendub ainult õppuse kinnitatud seisus.</Text>
     <View style={styles.state}>
       <Text style={styles.stateText}>Vasopressor: {vasoStatus} · {scenario?.vasopressorStage ?? "—"}</Text>
       <Text style={styles.stateText}>Ventilatsioon: {ventilationStatus} · {scenario?.ventilationFault
         ? faultLabels[scenario.ventilationFault.type] : "haru puudub"} · {scenario?.ventilationStage ?? "—"}</Text>
-      <Text style={styles.stateText}>Stsenaariumikell: {scenario?.hold ? "HOLD" : "RUNNING"}</Text>
+      <Text style={styles.stateText}>Stsenaariumikell: {scenario?.hold ? "Peatatud" : "Käib"}</Text>
       <Text style={styles.stateText}>T+{scenario?.lastUpdatedSimulationTimeSec ?? 0}s</Text>
     </View>
     <Text style={styles.section}>Vasopressor</Text>
@@ -168,9 +168,9 @@ export function NarvaIroScenarioControlsCard({ exerciseId, patientId }: Readonly
     </View>
     {actions.map(action => <Text key={action.commandId} accessibilityLiveRegion="polite"
       style={action.status === "REJECTED" ? styles.error : styles.result}>
-      {action.status === "SUBMITTING" ? "Saadan käsku…" : action.status === "ACCEPTED" ? "Käsk vastu võetud; ootan Runtime’i kinnitust…"
-        : action.status === "MATERIALIZED" ? "Käsk rakendati autoritaarses Runtime’is."
-          : `Käsk lükati tagasi: ${action.message ?? "teadmata põhjus"}`}
+      {action.status === "SUBMITTING" ? "Saadan korraldust…" : action.status === "ACCEPTED" ? "Korraldus vastu võetud; ootan kinnitatud seisu…"
+        : action.status === "MATERIALIZED" ? "Korraldus rakendati."
+          : "Korraldust ei saanud rakendada. Kontrolli õppuse seisu."}
     </Text>)}
   </View>;
 }

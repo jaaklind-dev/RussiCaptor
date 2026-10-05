@@ -1,7 +1,7 @@
 import { instructorEventCatalogue } from "@/features/instructor/commands/InstructorEventCatalogue";
 import { handleInstructorPatientCommand } from "@/features/instructor/commands/InstructorPatientCommandHandler";
 import { createInstructorPatientCommand } from "@/features/instructor/commands/InstructorCommandFactory";
-import type { InstructorCommandResult, InstructorEventType } from "@/models/InstructorCommand";
+import type { InstructorEventType } from "@/models/InstructorCommand";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getInstructorEventAvailability } from "@/services/runtime/instructor/InstructorRuntimeEventRegistry";
 import { useState } from "react";
@@ -14,7 +14,6 @@ export function InstructorEventInjectionModal({ visible, patient, onClose }: Pro
   const exercise = getCanonicalExerciseSnapshot();
   const [selected, setSelected] = useState<InstructorEventType>();
   const [submission, setSubmission] = useState<Submission>("Ready");
-  const [result, setResult] = useState<InstructorCommandResult>();
   const definitions = instructorEventCatalogue.map(definition => ({
     definition, availability: getInstructorEventAvailability(exercise.exerciseId, patient.patientId, definition.eventType),
   }));
@@ -25,27 +24,26 @@ export function InstructorEventInjectionModal({ visible, patient, onClose }: Pro
     setSubmission("Submitting");
     const next = handleInstructorPatientCommand(createInstructorPatientCommand({ exerciseId: exercise.exerciseId, patientId: patient.patientId,
       eventType: selectedDefinition.definition.eventType, issuedBy: "Exercise Controller", simulationTime: patient.simulationTimeSec ?? 0 }));
-    setResult(next);
     setSubmission(next.ok ? "Succeeded" : "Failed");
   }
 
-  function close() { setSelected(undefined); setSubmission("Ready"); setResult(undefined); onClose(); }
+  function close() { setSelected(undefined); setSubmission("Ready"); onClose(); }
   return <Modal visible={visible} animationType="slide" transparent onRequestClose={close}>
     <View style={styles.backdrop}><View style={styles.sheet}>
-      <View style={styles.heading}><View><Text style={styles.title}>Lisa sündmus</Text><Text style={styles.patient}>{patient.patientId} · {patient.name} · {patient.location}</Text></View>
+      <View style={styles.heading}><View><Text style={styles.title}>Lisa sündmus</Text><Text style={styles.patient}>{patient.name} · {patient.location}</Text></View>
         <Pressable accessibilityRole="button" onPress={close}><Text style={styles.close}>Sulge</Text></Pressable></View>
       <ScrollView contentContainerStyle={styles.list}>{definitions.map(({ definition, availability }) =>
         <Pressable key={definition.eventType} disabled={!availability.available || submission === "Submitting"}
-          onPress={() => { setSelected(definition.eventType); setSubmission("Ready"); setResult(undefined); }}
+          onPress={() => { setSelected(definition.eventType); setSubmission("Ready"); }}
           style={[styles.event, selected === definition.eventType && styles.selected, !availability.available && styles.disabled]}>
           <Text style={styles.eventTitle}>{definition.label}</Text><Text style={styles.description}>{definition.description}</Text>
-          <Text style={[styles.availability, availability.available ? styles.available : styles.unavailable]}>{availability.available ? "Saadaval" : `Pole saadaval: ${availability.reason}`}</Text>
+          <Text style={[styles.availability, availability.available ? styles.available : styles.unavailable]}>{availability.available ? "Saadaval" : "Praegu pole saadaval"}</Text>
         </Pressable>)}</ScrollView>
-      {selectedDefinition?.availability.available && <View style={styles.confirm}><Text style={styles.confirmText}>Inject “{selectedDefinition.definition.label}” into {patient.patientId}?</Text>
+      {selectedDefinition?.availability.available && <View style={styles.confirm}><Text style={styles.confirmText}>Kas lisada sündmus „{selectedDefinition.definition.label}”?</Text>
         <Text style={styles.description}>{patient.name} · {patient.location}</Text>
-        <Pressable accessibilityRole="button" disabled={submission === "Submitting"} onPress={submit} style={[styles.submit, submission === "Submitting" && styles.disabled]}><Text style={styles.submitText}>{submission === "Submitting" ? "Submitting…" : "Confirm injection"}</Text></Pressable></View>}
-      {submission === "Succeeded" && <Text style={styles.success}>Event injected · {result?.ok ? result.runtimeEventId : ""}</Text>}
-      {submission === "Failed" && <Text style={styles.failure}>{result && !result.ok ? result.message : "Event injection failed"}</Text>}
+        <Pressable accessibilityRole="button" disabled={submission === "Submitting"} onPress={submit} style={[styles.submit, submission === "Submitting" && styles.disabled]}><Text style={styles.submitText}>{submission === "Submitting" ? "Lisan…" : "Kinnita sündmus"}</Text></Pressable></View>}
+      {submission === "Succeeded" && <Text style={styles.success}>Sündmus on lisatud.</Text>}
+      {submission === "Failed" && <Text style={styles.failure}>Sündmust ei saanud lisada. Proovi uuesti.</Text>}
     </View></View>
   </Modal>;
 }

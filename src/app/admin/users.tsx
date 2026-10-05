@@ -2,21 +2,22 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { inviteAdminUser, listAdminUsers, requestAdminPasswordReset, setAdminUserActive, type AdminUser } from "@/services/admin/PlatformAdminService";
+import { accountStatusLabel, assignmentStatusLabel, publicErrorMessage } from "@/localization/et";
 
 export default function AdminUsersScreen() {
   const [users, setUsers] = useState<readonly AdminUser[]>([]);
   const [email, setEmail] = useState(""); const [displayName, setDisplayName] = useState("");
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState<string>();
-  const load = useCallback(async () => { try { setUsers(await listAdminUsers()); } catch (error) { setMessage(String(error)); } }, []);
+  const load = useCallback(async () => { try { setUsers(await listAdminUsers()); } catch (error) { setMessage(publicErrorMessage(error, "Kasutajate laadimine ebaõnnestus.")); } }, []);
   useEffect(() => {
     let active = true;
     void listAdminUsers().then(next => { if (active) setUsers(next); })
-      .catch(error => { if (active) setMessage(String(error)); });
+      .catch(error => { if (active) setMessage(publicErrorMessage(error, "Kasutajate laadimine ebaõnnestus.")); });
     return () => { active = false; };
   }, []);
   const perform = async (operation: () => Promise<void>, success: string) => {
     setBusy(true); setMessage(undefined);
-    try { await operation(); setMessage(success); await load(); } catch (error) { setMessage(error instanceof Error ? error.message : "Toiming ebaõnnestus."); }
+    try { await operation(); setMessage(success); await load(); } catch (error) { setMessage(publicErrorMessage(error)); }
     finally { setBusy(false); }
   };
   return <ScrollView contentContainerStyle={styles.page}>
@@ -32,13 +33,13 @@ export default function AdminUsersScreen() {
     {message && <Text accessibilityRole="alert" style={styles.message}>{message}</Text>}
     {users.map(user => <View key={user.userId} style={styles.panel}>
       <Text style={styles.panelTitle}>{user.displayName || "Kutse ootel"}</Text><Text style={styles.email}>{user.email}</Text>
-      <Text style={styles.badge}>{user.status}</Text>
-      <Text style={styles.meta}>{user.assignments.filter(item => item.status === "ACTIVE").map(item => `${item.role} · ${item.scope_id}`).join("\n") || "Aktiivseid õppuserolle pole"}</Text>
+      <Text style={styles.badge}>{accountStatusLabel(user.status)}</Text>
+      <Text style={styles.meta}>{user.assignments.filter(item => item.status === "ACTIVE").map(item => `${item.role} · ${assignmentStatusLabel(item.status)} õppuseroll`).join("\n") || "Aktiivseid õppuserolle pole"}</Text>
       <View style={styles.row}>
         <Pressable disabled={busy} style={styles.outline} onPress={() => Alert.alert("Parooli lähtestamine", `Saada lähtestuslink aadressile ${user.email}?`, [
           { text: "Loobu", style: "cancel" }, { text: "Saada", onPress: () => void perform(() => requestAdminPasswordReset(user.email), "Lähtestuslink saadetud.") },
         ])}><Text style={styles.outlineText}>Lähtesta parool</Text></Pressable>
-        <Pressable disabled={busy} style={styles.outline} onPress={() => Alert.alert(user.status === "DISABLED" ? "Aktiveeri konto" : "Deaktiveeri konto", user.status === "DISABLED" ? "Kas aktiveerida kasutaja konto?" : "Aktiivsed rollid tühistatakse. Runtime-omand või writer lease peatab toimingu turvaliselt.", [
+        <Pressable disabled={busy} style={styles.outline} onPress={() => Alert.alert(user.status === "DISABLED" ? "Aktiveeri konto" : "Deaktiveeri konto", user.status === "DISABLED" ? "Kas aktiveerida kasutaja konto?" : "Aktiivsed õppuserollid tühistatakse. Kui kasutaja juhib parajasti õppust, palutakse juhtimine enne turvaliselt üle anda.", [
           { text: "Loobu", style: "cancel" }, { text: "Kinnita", style: user.status === "DISABLED" ? "default" : "destructive", onPress: () => void perform(() => setAdminUserActive(user.userId, user.status === "DISABLED"), user.status === "DISABLED" ? "Konto aktiveeritud." : "Konto deaktiveeritud.") },
         ])}><Text style={styles.outlineText}>{user.status === "DISABLED" ? "Aktiveeri" : "Deaktiveeri"}</Text></Pressable>
       </View>

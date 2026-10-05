@@ -19,7 +19,7 @@ describe("WP-46 Estonian presentation foundation", () => {
   });
 
   test("unknown future values fail visibly and safely", () => {
-    expect(exerciseLifecycleLabel("FUTURE_STATE")).toBe("Tundmatu olek: FUTURE_STATE");
+    expect(exerciseLifecycleLabel("FUTURE_STATE")).toBe("Tundmatu olek");
   });
 
   test("uses the user-approved general terminology without changing dictionary keys", () => {

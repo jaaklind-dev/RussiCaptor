@@ -164,8 +164,8 @@ function CanonicalRuntimeCard({ runtime }: Readonly<{ runtime: CanonicalPatientR
   const hemorrhage = runtime.processes.find(process => process.moduleId === "HEMORRHAGE_V1")?.clinicalState;
   const value = (candidate: unknown) => typeof candidate === "number" ? Math.round(candidate * 100) / 100 : "–";
   return <View style={styles.card} testID="canonical-runtime-vitals">
-    <Text style={styles.title}>Kanooniline Runtime</Text>
-    <Text style={styles.timestamp}>T+{state.exerciseTimeSec}s · versioon {state.stateVersion}</Text>
+    <Text style={styles.title}>Hetkeseis</Text>
+    <Text style={styles.timestamp}>Õppuse aeg T+{state.exerciseTimeSec}s</Text>
     <View style={styles.grid}>
       <Vital label="Pulss" value={`${value(vitals.readings.heartRate.current)} /min`} />
       <Vital label="Vererõhk" value={`${value(vitals.readings.systolicBp.current)}/${value(vitals.readings.diastolicBp.current)} mmHg`} />

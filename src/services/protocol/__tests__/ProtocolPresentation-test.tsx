@@ -23,21 +23,23 @@ describe("WP-37 read-only protocol presentation", () => {
   const provenance = pkg.definition.protocolProvenance!;
   const report = reconstructDebrief({ exercise: { exerciseId: "WP37", lifecycleState: "COMPLETED", simulationTimeSec: 1, speed: 1, version: 1 }, patients: [], timeline: [], protocolProvenance: provenance });
 
-  test("Catalog detail displays exact protocol, hash and requirements", () => {
+  test("Catalog detail displays readable protocol identity and requirements without hashes", () => {
     const output = text(PackageDetail({ entry: { exercisePackage: pkg, compatibility: "SUPPORTED" }, active: false, onActivate: jest.fn() }));
-    expect(output).toMatch(/ALS_GENERIC_V1\s*@\s*1\.0\.0/); expect(output).toContain(provenance.protocolHash);
+    expect(output).toContain(provenance.name); expect(output).toContain(`versioon ${provenance.version}`);
+    expect(output).not.toContain(provenance.protocolHash);
     expect(output).toContain("CARDIAC_ARREST");
   });
 
-  test("ExCon information displays active protocol provenance", () => {
+  test("ExCon operational information hides development-only protocol identifiers and hashes", () => {
     const definition = text(ExerciseInformationCard({ definition: pkg.definition }));
     const packageInfo = text(ExercisePackageInformationCard({ exercisePackage: pkg, compatibility: "SUPPORTED" }));
-    expect(definition).toMatch(/ALS_GENERIC_V1\s*@\s*1\.0\.0/); expect(packageInfo).toContain(provenance.protocolHash);
+    expect(`${definition} ${packageInfo}`).not.toContain(provenance.protocolHash);
+    expect(packageInfo).toContain("Versioon");
   });
 
-  test("Debrief displays factual protocol provenance without scoring", () => {
+  test("Debrief displays human-readable protocol provenance without hashes or scoring", () => {
     const output = text(DebriefSummary({ report }));
-    expect(output).toMatch(/ALS_GENERIC_V1\s*@\s*1\.0\.0/); expect(output).toContain(provenance.protocolHash);
+    expect(output).toContain(provenance.name); expect(output).not.toContain(provenance.protocolHash);
     expect(output).not.toMatch(/score|correct|incorrect/i);
   });
 });

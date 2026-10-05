@@ -32,6 +32,8 @@ const statusLabel: Readonly<Record<string, string>> = Object.freeze({
 
 const abnormalLabel = (row: LaboratoryPresentedRow) => row.abnormalFlag === "HIGH" ? "KÕRGE"
   : row.abnormalFlag === "LOW" ? "MADAL" : row.abnormalFlag === "NORMAL" ? "Normis" : undefined;
+const referenceRangeLabel = (value: string) => value.replace(/female/gi, "naine")
+  .replace(/male/gi, "mees").replace(/adult/gi, "täiskasvanu");
 
 const rowValueAccessibilityLabel = (row: LaboratoryPresentedRow): string => {
   if (row.kind === "NOT_APPLICABLE") return `${row.name}: ei kohaldu, ei ole negatiivne tulemus`;
@@ -55,7 +57,7 @@ const LaboratoryResultRow = memo(function LaboratoryResultRow(
       row.abnormalFlag === "LOW" && styles.resultLow]}>
       <View style={styles.resultNameColumn}>
         <Text style={styles.resultName}>{row.name}</Text>
-        {row.referenceRange && <Text style={styles.reference}>Võrdlus: {row.referenceRange}</Text>}
+        {row.referenceRange && <Text style={styles.reference}>Võrdlus: {referenceRangeLabel(row.referenceRange)}</Text>}
         {row.sourceMetadata && !row.referenceRange && row.kind !== "QUALITATIVE" &&
           <Text style={styles.reference}>Allikas: {row.sourceMetadata}</Text>}
       </View>
@@ -116,7 +118,7 @@ const LaboratoryResultGroupSection = memo(function LaboratoryResultGroupSection(
         <Text style={styles.groupMeta}>Valmib T+{group.availableAtSimulationTimeSec}s
           {group.generatedAtSimulationTimeSec !== undefined
             ? ` · avaldatud T+${group.generatedAtSimulationTimeSec}s` : ""}
-          {group.generationVersion ? ` · ${group.generationVersion}` : ""}</Text>
+          </Text>
         {pending
           ? <Text style={styles.processingMessage}>Tulemused on töötlemisel. Väärtusi ei ole veel avaldatud.</Text>
           : group.rows.map(row => <LaboratoryResultRow key={row.key} row={row} />)}
@@ -388,7 +390,7 @@ export default function LaboratoryWorkflowCard({ workflow, packageId, workflowSc
         onIntentRelease={onIntentRelease} onDispatch={onDispatch} />}
       {!readOnly && (!projectionReady || !commandReadiness.ready) &&
         <Text testID="laboratory-command-readiness" pointerEvents="none" style={styles.readOnly}>
-          {commandReadiness.reason ?? "Labori töövoog sünkroniseerub…"}
+          Labori töövoog sünkroniseerub…
         </Text>}
       {readOnly && <Text style={styles.readOnly}>Uue labori tellimine ja proovivõtt ei ole lubatud.</Text>}
       {feedback && <Text accessibilityRole="alert" pointerEvents="none" style={styles.feedback}>{feedback}</Text>}
@@ -400,8 +402,8 @@ export default function LaboratoryWorkflowCard({ workflow, packageId, workflowSc
         return (
           <View key={order.orderId} style={styles.order}>
             <Text style={styles.orderTitle}>{order.packageId === "NARVA_IRO_ASTRUP" ? "Astrup" : "POLÜTRAUMA"}</Text>
-            <Text style={styles.meta}>{statusLabel[order.status] ?? order.status} · T+{order.orderedAtSimulationTimeSec}s</Text>
-            {sample && <Text style={styles.meta}>Proov {sample.sampleId} · sampledAt T+{sample.sampledAtSimulationTimeSec}s · lähterevisjon {sample.sourcePatientRevision}</Text>}
+            <Text style={styles.meta}>{statusLabel[order.status] ?? "Tundmatu olek"} · T+{order.orderedAtSimulationTimeSec}s</Text>
+            {sample && <Text style={styles.meta}>Proov kogutud T+{sample.sampledAtSimulationTimeSec}s</Text>}
             {resultGroups.map(group => <LaboratoryResultGroupSection key={group.key} group={group} />)}
           </View>
         );

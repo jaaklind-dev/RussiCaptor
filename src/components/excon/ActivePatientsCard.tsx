@@ -33,11 +33,11 @@ export default function ActivePatientsCard() {
   function confirmFinish(patientId: string, patientName: string): void {
     Alert.alert(
       "Lõpeta patsiendi käsitlus?",
-      `${patientId} · ${patientName}\n\nAndmed ja ajalugu säilivad, kuid patsient eemaldatakse aktiivsest tööst.`,
+      `${patientName}\n\nAndmed ja ajalugu säilivad, kuid patsient eemaldatakse aktiivsest tööst.`,
       [
         { text: "Katkesta", style: "cancel" },
         {
-          text: "Finish",
+          text: "Lõpeta",
           style: "destructive",
           onPress: () => void completePatient(patientId),
         },
@@ -55,12 +55,12 @@ export default function ActivePatientsCard() {
         activeAssignments.map(({ assignment, patient }) => (
           <View key={patient.id} style={styles.patientRow}>
             <View style={styles.patientInfo}>
-              <Text style={styles.patientName}>{patient.id} · {patient.name}</Text>
+              <Text style={styles.patientName}>{patient.name}</Text>
               <Text style={styles.patientMeta}>
                 {patient.triage} · {patient.location}
               </Text>
               <Text style={styles.owner}>
-                Case Manager: {assignment.caseManagerName}
+                Juhtumikorraldaja: {assignment.caseManagerName}
               </Text>
             </View>
             <Pressable

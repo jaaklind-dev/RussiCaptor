@@ -9,7 +9,7 @@ export const et = Object.freeze({
   apply: "Rakenda", available: "Saadaval", evidence: "tõendusallikad", canonicalSource: "andmete lähteallikas",
 });
 
-const safe = (value: string, labels: Readonly<Record<string, string>>): string => labels[value] ?? `${et.unknown}: ${value}`;
+const safe = (value: string, labels: Readonly<Record<string, string>>): string => labels[value] ?? et.unknown;
 
 export const exerciseLifecycleLabel = (value: string): string => safe(value, {
   READY: "Valmis", RUNNING: "Käimas", PAUSED: "Peatatud", COMPLETED: "Lõpetatud", DRAFT: "Mustand",
@@ -42,6 +42,53 @@ export const processStatusLabel = (value: string): string => safe(value, {
   ACTIVE: "Aktiivne", RUNNING: "Käimas", COMPLETED: "Lõpetatud", CANCELLED: "Tühistatud", FAILED: "Ebaõnnestunud",
   Active: "Aktiivne", Resolved: "Lahenenud", Pending: "Ootel",
 });
+export const accountStatusLabel = (value: string): string => safe(value, {
+  ACTIVE: "Aktiivne", INVITED: "Kutse saadetud", DISABLED: "Deaktiveeritud",
+});
+export const assignmentStatusLabel = (value: string): string => safe(value, {
+  ACTIVE: "Aktiivne", REVOKED: "Tühistatud", EXPIRED: "Aegunud",
+});
+export const transportStateLabel = (value: string): string => safe(value, {
+  AVAILABLE: "Vaba", RESERVED: "Broneeritud", OUTBOUND: "Teel patsiendiga",
+  IN_TRANSIT: "Transpordil", ARRIVED: "Saabunud", HANDOVER: "Üleandmisel",
+  HANDED_OVER: "Üle antud", RETURNING: "Tagasiteel", TURNAROUND: "Valmistatakse ette",
+  COMPLETED: "Lõpetatud", FAILED: "Ebaõnnestunud",
+});
+export const locationLabel = (value: string): string => ({
+  NARVA_ED: "Narva haigla erakorraline osakond",
+  NARVA_HOSPITAL_OUTDOOR: "Narva haigla väliala",
+  IN_TRANSIT: "Transpordil",
+}[value] ?? value.replaceAll("_", " "));
+export const resourceTypeLabel = (value: string): string => ({
+  pelvicBinder: "vaagnalahas", chestDrain: "rindkeredreen", peripheralIV: "perifeerne veenitee",
+  centralVenousCatheter: "tsentraalveenitee", oxygen: "hapnik", oxygenMask: "hapnikumask",
+  BVM: "hingamiskott", bagValveMask: "hingamiskott", ventilator: "ventilaator",
+  endotrachealTube: "endotrahheaaltoru", monitor: "monitor", directLaryngoscope: "otsene larüngoskoop",
+  videoLaryngoscope: "videolarüngoskoop",
+}[value] ?? "kliiniline ressurss");
+export const cardiacRhythmLabel = (value: string): string => ({
+  SINUS_RHYTHM: "Siinusrütm", VENTRICULAR_FIBRILLATION: "Vatsakeste virvendus",
+  PULSELESS_VENTRICULAR_TACHYCARDIA: "Pulsita ventrikulaarne tahhükardia",
+  ASYSTOLE: "Asüstoolia", PEA: "Pulsita elektriline aktiivsus",
+}[value] ?? "Määramata rütm");
+
+export function publicErrorMessage(error: unknown, fallback = "Toiming ebaõnnestus. Proovi uuesti."): string {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  const normalized = message.toLocaleLowerCase("et");
+  if (normalized.includes("already") || normalized.includes("duplicate") || normalized.includes("juba")) {
+    return "See kirje on juba olemas.";
+  }
+  if (normalized.includes("email") && (normalized.includes("invalid") || normalized.includes("malformed"))) {
+    return "Kontrolli e-posti aadressi.";
+  }
+  if (normalized.includes("network") || normalized.includes("fetch") || normalized.includes("ühendus")) {
+    return "Võrguühendus ebaõnnestus. Kontrolli ühendust ja proovi uuesti.";
+  }
+  if (normalized.includes("unauthorized") || normalized.includes("forbidden") || normalized.includes("permission")) {
+    return "Sul pole selle toimingu jaoks õigust.";
+  }
+  return fallback;
+}
 export const judgementLabel = (value: string): string => safe(value, {
   NOT_ASSESSED: "Hindamata", MEETS_EXPECTATION: "Vastab ootusele", PARTIALLY_MEETS: "Vastab osaliselt",
   DOES_NOT_MEET: "Ei vasta ootusele", NOT_APPLICABLE: "Ei kohaldu",
@@ -70,6 +117,10 @@ export const exercisePackageNameLabel = (value: string): string => ({
   "CUSTOM Template Package": "Kohandatud õppuse mallpakett",
   "BOTULISM Template Package": "Botulismiõppuse mallpakett",
 }[value] ?? value);
+
+export const exercisePackageIdLabel = (value?: string | null): string => ({
+  "russicaptor.narva-trauma": "Narva traumastsenaarium",
+}[value ?? ""] ?? "Õppus");
 
 export const exercisePackageTagLabel = (value: string): string => ({
   airway: "hingamisteed", als: "ALS", botulism: "botulism", canonical: "kanooniline",

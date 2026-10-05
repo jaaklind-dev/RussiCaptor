@@ -30,12 +30,12 @@ export default function LiveOperationsDiagnosticsScreen() {
   const run=async(label:string,operation:()=>Promise<unknown>)=>{if(pending)return;setPending(label);try{await operation();refresh();}catch{Alert.alert("Toiming ebaõnnestus","Autoriteetset seisu ei muudetud. Kontrolli ühendust ja õigusi.");}finally{setPending(undefined);}};
   const canRecover=snapshot.session.recoveryPermission==="ALLOWED";
   return <ScrollView contentContainerStyle={styles.container}>
-    <Text style={styles.title}>Live-operatsioonide diagnostika</Text>
-    <Text style={styles.subtitle}>Patsiendiandmeteta operatsiooniseis ja toetatud recovery-toimingud</Text>
+    <Text style={styles.title}>Tehnilised üksikasjad</Text>
+    <Text style={styles.subtitle}>Tugiteave ja toetatud taastamistoimingud. Patsiendi kliinilisi andmeid siin ei kuvata.</Text>
     {snapshot.issues.map(item=><View key={item.code} style={[styles.issue,item.severity==="EXERCISE_BLOCKING"&&styles.blocking]}>
       <Text style={styles.severity}>{severityLabel[item.severity]} · {item.title}</Text><Text style={styles.text}>{item.explanation}</Text><Text style={styles.action}>Järgmine samm: {item.nextAction}</Text>
     </View>)}
-    <Section title="Identiteet ja backend" rows={[["Sessioon",snapshot.session.state],["EXCON scope",snapshot.session.exconScope],["Recovery õigus",snapshot.session.recoveryPermission],["Supabase",snapshot.app.supabaseProjectRef??"puudub"],["Realtime",snapshot.sync.realtimeConnected?"ÜHENDATUD":snapshot.sync.state.toUpperCase()]]}/>
+    <Section title="Ühendus ja õigused" rows={[["Sessioon",snapshot.session.state],["EXCON-i ulatus",snapshot.session.exconScope],["Taastamisõigus",snapshot.session.recoveryPermission],["Reaalajaühendus",snapshot.sync.realtimeConnected?"ÜHENDATUD":snapshot.sync.state.toUpperCase()]]}/>
     <Section title="Õppus ja Runtime" rows={[["Õppus",snapshot.exercise.exerciseId],["Lifecycle",snapshot.exercise.lifecycle],["Runtime",snapshot.runtime.state],["Kontrollpunkt",`${snapshot.runtime.localCheckpointRevision??"puudub"}`],["Lease",snapshot.runtime.writerInstanceId?"aktiivne":"aktiivne lease puudub"],["Lease aegub",snapshot.runtime.leaseExpiresAt??"–"],["Viimane renewal",snapshot.runtime.renewalDiagnostics.at(-1)?.event??"–"],["Viimane publication",snapshot.runtime.lastCheckpointPublicationAt??"–"]]}/>
     <Section title="Sünkroniseerimine" rows={[["Projection revision",`${snapshot.sync.authoritativeProjectionRevision??"–"}`],["Workflow revision",`${snapshot.exercise.authoritativeWorkflowRevision}`],["Lokaalne durable cache",snapshot.runtime.durableCache],["Viimane sync",snapshot.sync.syncedAt??"–"],["Ootel mutatsioonid",`${snapshot.sync.pendingMutationCount}`],["Lahendamata konfliktid",`${snapshot.sync.unresolvedConflictCount}`]]}/>
     <Text style={styles.sectionTitle}>Toetatud toimingud</Text>
@@ -55,7 +55,7 @@ export default function LiveOperationsDiagnosticsScreen() {
       disabled={Boolean(pending)||lostResponseArmed}
       onPress={()=>setLostResponseArmed(armNextRuntimeCheckpointPublicationLostResponseForValidation(snapshot.exercise.exerciseId))}/>}
     {snapshot.runtime.durableCache==="MISSING_OR_DIFFERENT_EXERCISE"&&<Text style={styles.warning}>Puuduva kontrollpunktiga RUNNING õppust ei taastata lokaalselt. Kasuta töölaua auditeeritud lõpetamist, kui recovery õigus on olemas.</Text>}
-    <Action label="Jaga ohutu diagnostikasnapshot" disabled={Boolean(pending)} onPress={()=>void Share.share({title:"RussiCaptor operatsioonidiagnostika",message:exportOperationalDiagnostics(captureOperationalDiagnosticSnapshot())})}/>
+    <Action label="Jaga ohutu diagnostikaülevaade" disabled={Boolean(pending)} onPress={()=>void Share.share({title:"RussiCaptor operatsioonidiagnostika",message:exportOperationalDiagnostics(captureOperationalDiagnosticSnapshot())})}/>
     <Pressable style={styles.back} onPress={()=>router.back()}><Text style={styles.backText}>Tagasi</Text></Pressable>
   </ScrollView>;
 }

@@ -7,7 +7,7 @@ export function InspectorClinicalState({ state }: { state: InspectorClinicalStat
   return (
     <View style={styles.panel}>
       <Text style={styles.title}>Praegune kliiniline seisund</Text>
-      {!state.hasCanonicalRuntime ? <Text style={styles.pending}>Canonical runtime on ootel</Text> : (
+      {!state.hasCanonicalRuntime ? <Text style={styles.pending}>Patsiendi andmeid laaditakse…</Text> : (
         <View style={styles.grid}>
           <Text style={styles.vital}>HR {show(state.heartRate)}</Text>
           <Text style={styles.vital}>RR {show(state.respiratoryRate)}</Text>

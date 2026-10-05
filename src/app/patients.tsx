@@ -9,6 +9,7 @@ import AppHeader from "@/components/AppHeader";
 import { getMyPatients } from "@/services/AssignmentRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { getSyncVersion, subscribeToSync } from "@/services/SyncService";
+import { patientStatusLabel } from "@/localization/et";
 
 export default function PatientsScreen() {
 
@@ -59,22 +60,17 @@ export default function PatientsScreen() {
             >
 
               <View style={styles.patientHeader}>
-
-                <Text style={styles.patientId}>{patient.id}</Text>
-
+                <Text style={styles.patientName}>{patient.name}</Text>
                 <Text style={styles.triageBadge}>{patient.triage}</Text>
-
               </View>
-
-              <Text style={styles.patientName}>{patient.name}</Text>
 
               <Text style={styles.patientMeta}>
 
-                {patient.status} · {patient.location}
+                {patientStatusLabel(patient.status)} · {patient.location}
 
               </Text>
 
-              <Text style={styles.patientTime}>Last seen: {patient.lastSeen}</Text>
+              <Text style={styles.patientTime}>Viimati uuendatud: {patient.lastSeen}</Text>
 
             </Pressable>
 
@@ -206,14 +202,6 @@ const styles = StyleSheet.create({
 
   },
 
-  patientId: {
-
-    fontSize: 18,
-
-    fontWeight: "bold",
-
-  },
-
   triageBadge: {
 
     backgroundColor: "#f5c542",
@@ -234,7 +222,7 @@ const styles = StyleSheet.create({
 
     fontWeight: "bold",
 
-    marginTop: 8,
+    flex: 1,
 
   },
 

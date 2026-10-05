@@ -30,14 +30,14 @@ export function getRuntimeAuthorityPresentation(
 ) {
   const runtimeActive = lifecycleState === "RUNNING" || lifecycleState === "PAUSED";
   if (!runtimeActive) {
-    return Object.freeze({ label: "Runtime peatatud", takeoverVisible: false });
+    return Object.freeze({ label: "Õppus ei ole aktiivne", takeoverVisible: false });
   }
   return Object.freeze({
-    label: runtimeStatus.state === "WRITER" ? `${authorityStateLabel("WRITER")} · versioon ${runtimeStatus.revision ?? 0}`
-      : runtimeStatus.state === "ACQUIRING" ? "Võtan Runtime’i üle ja kinnitan kirjutusõigust…"
+    label: runtimeStatus.state === "WRITER" ? "See seade juhib õppust"
+      : runtimeStatus.state === "ACQUIRING" ? "Võtan õppuse juhtimise üle…"
       : runtimeStatus.state === "READER" ? "Simulatsioon töötab teises seadmes · ainult vaatamine"
       : runtimeStatus.state === "CONFLICT" ? operatorSafeIssueMessage(runtimeStatus.code)
-      : runtimeStatus.state === "OFFLINE" ? "Simulatsiooni kontrollpunkti teenus pole saadaval"
+      : runtimeStatus.state === "OFFLINE" ? "Õppuse keskne seis pole praegu saadaval"
       : runtimeStatus.state === "FAILED" ? operatorSafeIssueMessage(runtimeStatus.code)
       : authorityStateLabel("CONNECTING"),
     takeoverVisible: runtimeStatus.state === "READER",
@@ -49,7 +49,7 @@ function statusText(status: CloudSyncStatus): string {
     case "disabled":
       return "Pilvesünkroniseerimine pole seadistatud";
     case "connecting":
-      return "Ühendan Supabase’iga…";
+      return "Ühendan pilveteenusega…";
     case "saving":
       return "Salvestan pilve…";
     case "offline":
@@ -57,12 +57,12 @@ function statusText(status: CloudSyncStatus): string {
     case "error":
       return "Pilvesünkroniseerimine vajab seadistamist";
     case "synced": {
-      if (!status.syncedAt) return "Supabase’iga sünkroniseeritud";
+      if (!status.syncedAt) return "Pilvega sünkroniseeritud";
       const time = new Date(status.syncedAt).toLocaleTimeString("et-EE", {
         hour: "2-digit",
         minute: "2-digit",
       });
-      return `Supabase’iga sünkroniseeritud kell ${time}`;
+      return `Pilvega sünkroniseeritud kell ${time}`;
     }
   }
 }
@@ -117,7 +117,7 @@ export default function CloudSyncStatusCard({ lifecycleState }: { lifecycleState
             }}
           >
             <Text style={styles.takeoverText}>
-              {takeoverPending ? "Võtan Runtime’i üle…" : "Võta Runtime üle"}
+              {takeoverPending ? "Võtan juhtimise üle…" : "Võta õppuse juhtimine üle"}
             </Text>
           </Pressable>
         )}
@@ -126,7 +126,7 @@ export default function CloudSyncStatusCard({ lifecycleState }: { lifecycleState
             accessibilityLabel="Taasta pilve kontrollpunktist" hitSlop={8} disabled={takeoverPending}
             style={[styles.takeoverButton, takeoverPending && styles.takeoverButtonDisabled]}
             onPress={() => { setTakeoverPending(true); void recoverRuntimeFromRemoteCheckpoint().finally(() => setTakeoverPending(false)); }}>
-            <Text style={styles.takeoverText}>{takeoverPending ? "Taastan Runtime’i…" : "Taasta pilve kontrollpunktist"}</Text>
+            <Text style={styles.takeoverText}>{takeoverPending ? "Taastan õppuse seisu…" : "Taasta õppuse seis pilvest"}</Text>
           </Pressable>
         )}
         {multipleExerciseConflict && <Pressable style={styles.takeoverButton} onPress={() => router.push("/excon/active-exercise-conflict" as never)}><Text style={styles.takeoverText}>Lahenda aktiivsete õppuste konflikt</Text></Pressable>}

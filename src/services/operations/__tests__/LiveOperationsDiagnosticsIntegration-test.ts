@@ -1,8 +1,11 @@
 import fs from "node:fs"; import path from "node:path";
 const root=path.resolve(__dirname,"../../.."); const read=(file:string)=>fs.readFileSync(path.join(root,file),"utf8");
 describe("WP-NEXT-06 EXCON diagnostics integration",()=>{
-  test("EXCON exposes privacy-safe diagnostics and supported recovery only",()=>{
-    expect(read("app/excon/index.tsx")).toContain("Diagnostika ja taastamine");
+  test("platform administration exposes privacy-safe diagnostics and supported recovery only",()=>{
+    expect(read("app/admin/index.tsx")).toContain("Tehnilised üksikasjad");
+    expect(read("app/excon/index.tsx")).not.toContain("Diagnostika ja taastamine");
+    expect(read("app/_layout.tsx")).toContain('if (isDiagnostics)');
+    expect(read("app/_layout.tsx")).toContain('if (!hasPlatformAdminAuthority(operator))');
     const screen=read("app/excon/diagnostics.tsx");
     expect(screen).toContain("captureOperationalDiagnosticSnapshot");
     expect(screen).toContain("refreshRemoteCurrentExercise");

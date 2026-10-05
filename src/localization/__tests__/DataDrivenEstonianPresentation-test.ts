@@ -25,7 +25,7 @@ describe("WP-46A data-driven Estonian presentation", () => {
   });
 
   test("localizes canonical description templates while preserving authored text", () => {
-    expect(timelineEventDescriptionLabel("Canonical patient runtime advanced by 60 seconds")).toBe("Patsiendi kanooniline simulatsioon liikus 60 sekundit edasi");
+    expect(timelineEventDescriptionLabel("Canonical patient runtime advanced by 60 seconds")).toBe("Patsiendi simulatsioon liikus 60 sekundit edasi");
     expect(timelineEventDescriptionLabel("Kliiniline vabatekst")).toBe("Kliiniline vabatekst");
   });
 
@@ -50,8 +50,8 @@ describe("WP-46A data-driven Estonian presentation", () => {
   });
 
   test("unknown canonical values remain explicit and detectable", () => {
-    expect(timelineCategoryLabel("FUTURE" as never)).toBe("Tundmatu ajajoone kategooria: FUTURE");
-    expect(analyticsCategoryLabel("FUTURE" as never)).toBe("Tundmatu analüütikakategooria: FUTURE");
+    expect(timelineCategoryLabel("FUTURE" as never)).toBe("Tundmatu ajajoone kategooria");
+    expect(analyticsCategoryLabel("FUTURE" as never)).toBe("Tundmatu analüütikakategooria");
     expect(analyticsMetricNameLabel("future.metric", "Future Metric")).toBe("Mõõdik: future.metric");
   });
 });

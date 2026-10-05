@@ -43,7 +43,7 @@ export default function TakeoverRequestsCard() {
         return (
           <View key={request.id} style={styles.request}>
             <Text style={styles.patientName}>
-              {request.patientId} · {patient?.name ?? "Tundmatu patsient"}
+              {patient?.name ?? "Tundmatu patsient"}
             </Text>
             <Text style={styles.meta}>
               Taotleja: {request.toCaseManagerName}

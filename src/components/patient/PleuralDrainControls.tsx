@@ -19,7 +19,7 @@ export function PleuralDrainControls({ patientId, readOnly = false }: Readonly<{
   if (readOnly || !allowed || resources.length === 0) return null;
   return <View style={styles.card} testID="canonical-pleural-drain-controls">
     <Text style={styles.title}>Pleuradrenaaž</Text>
-    <Text style={styles.help}>Paigalda rindkeredreen kanoonilise pleuravigastuse raviks.</Text>
+    <Text style={styles.help}>Paigalda rindkeredreen pleuravigastuse raviks.</Text>
     {resources.map(resource => <Pressable key={resource.resourceId} disabled={submitting || !commandReadiness.ready} style={styles.button} onPress={() => {
       if (submitting || !commandReadiness.ready) return;
       setSubmitting(true); setMessage(undefined);

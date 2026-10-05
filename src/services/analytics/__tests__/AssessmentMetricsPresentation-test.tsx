@@ -11,6 +11,7 @@ test("assessment summary presents neutral exercise and patient metrics without s
   const exerciseText = text(AssessmentMetricsSummary({ metrics: exercise })).replace(/\s+/gu, " ");
   const patientText = text(AssessmentMetricsSummary({ metrics: patient, patientId: "P001" })).replace(/\s+/gu, " ");
   expect(exerciseText).toContain("Hinnatavaid 8 / kohalduvaid 10"); expect(exerciseText).toContain("Ootuste täitmine 75%");
-  expect(patientText).toContain("Hindamise mõõdikud · P001"); expect(patientText).toContain("Ootuste täitmine 50%");
+  expect(patientText).toContain("Patsiendi hindamise mõõdikud"); expect(patientText).toContain("Ootuste täitmine 50%");
+  expect(patientText).not.toContain("P001");
   expect(`${exerciseText} ${patientText}`).not.toMatch(/Score:|Grade:|Performance:|pass|fail/i);
 });

@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { ImagingWorkflowSnapshot } from "@/models/ImagingWorkflow";
 import type { ImagingAssetReference } from "@/models/ImagingAsset";
 import { classifyLegacyImagingAttachment, resolveImagingAsset } from "@/services/imaging/ImagingAssetRegistry";
+import { processStatusLabel } from "@/localization/et";
 type Props = {
   studies: ImagingStudy[];
   onOpenImage: (study: ImagingStudy) => void;
@@ -35,7 +36,7 @@ export default function ImagingTab({
       {(workflow?.instances ?? []).map(instance => (
         <View key={instance.imagingInstanceId} style={styles.study}>
           <Text style={styles.studyTitle}>{instance.title} #{instance.repeatOrdinal}</Text>
-          <Text style={styles.status}>{instance.status}</Text>
+          <Text style={styles.status}>{processStatusLabel(instance.status)}</Text>
           {instance.status === "RESULTED" && instance.result ? (
             <>
               <Text style={styles.report}>{instance.result.reportText}</Text>

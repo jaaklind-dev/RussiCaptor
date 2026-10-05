@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { signOutOperator } from "@/services/authorization/OperatorSessionService";
 import { type AuthSetupFlow, updateAuthenticatedPassword, validateNewPassword } from "@/services/auth/AuthCallbackService";
 import { supabase } from "@/services/SupabaseService";
+import { publicErrorMessage } from "@/localization/et";
 
 export default function SetPasswordScreen() {
   const { flow } = useLocalSearchParams<{ flow?: AuthSetupFlow }>();
@@ -36,7 +37,7 @@ export default function SetPasswordScreen() {
       await signOutOperator();
       router.replace({ pathname: "/", params: { passwordUpdated: "1" } });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Parooli ei saanud uuendada.");
+      setError(publicErrorMessage(cause, "Parooli ei saanud uuendada. Küsi uus paroolilink ja proovi uuesti."));
     } finally { setSubmitting(false); }
   }
 

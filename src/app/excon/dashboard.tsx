@@ -110,7 +110,6 @@ export default function ExerciseDashboardScreen() {
           <ExerciseInformationCard definition={exerciseDefinition} />
           <Pressable style={styles.timelineButton} onPress={() => router.push("/excon/timeline")}><Text style={styles.timelineButtonText}>Ava õppuse ajajoon</Text></Pressable>
           <Pressable style={styles.debriefButton} onPress={() => router.push("/excon/debrief")}><Text style={styles.timelineButtonText}>Ava debriif</Text></Pressable>
-          <Pressable style={styles.diagnosticsButton} onPress={() => router.push("/excon/diagnostics" as never)}><Text style={styles.timelineButtonText}>Diagnostika ja taastamine</Text></Pressable>
           <InstructorFilterBar
             filters={filters}
             options={options}

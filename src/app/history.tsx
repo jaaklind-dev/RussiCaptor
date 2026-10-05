@@ -81,7 +81,7 @@ function HistorySection({ title, entries }: { title: string; entries: HistoryEnt
             onPress={() => router.push(`/patient/${patient.id}`)}
           >
             <View style={styles.patientHeader}>
-              <Text style={styles.patientId}>{patient.id}</Text>
+              <Text style={styles.patientName}>{patient.name}</Text>
               <Text
                 style={[
                   styles.badge,
@@ -91,7 +91,6 @@ function HistorySection({ title, entries }: { title: string; entries: HistoryEnt
                 {isTransferred ? "Üle antud" : "Lõpetatud"}
               </Text>
             </View>
-            <Text style={styles.patientName}>{patient.name}</Text>
             <Text style={styles.patientMeta}>{patient.triage} · {patient.location}</Text>
             {isTransferred && (
               <Text style={styles.transferMeta}>

@@ -3,6 +3,7 @@ import { terminateCurrentExerciseWithMissingRuntime } from "@/services/ExerciseR
 import { getRuntimePersistenceFailure, getRuntimePersistenceFailureVersion, subscribeToRuntimePersistenceFailure } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useState, useSyncExternalStore } from "react";
+import { publicErrorMessage } from "@/localization/et";
 
 export function runtimeRecoveryAvailable(snapshot: CanonicalExerciseSnapshot, failure = getRuntimePersistenceFailure()): boolean {
   return (snapshot.lifecycleState === "RUNNING" || snapshot.lifecycleState === "PAUSED") && failure?.exerciseId === snapshot.exerciseId && failure.code === "ACTIVE_RUNTIME_PERSISTENCE_MISSING";
@@ -16,14 +17,14 @@ export default function RuntimeRecoveryCard({ snapshot, onRecovered }: { snapsho
     setPending(true); setError(undefined);
     const result = await terminateCurrentExerciseWithMissingRuntime();
     setPending(false);
-    if (!result.ok) setError(result.message); else onRecovered?.();
+    if (!result.ok) setError(publicErrorMessage(result.message, "Õppuse lõpetamine ebaõnnestus.")); else onRecovered?.();
   };
   const confirm = () => Alert.alert("Kas lõpetada taastamatu õppus?", "Simulatsiooni ei saa ohutult jätkata. Puuduvat olekut ei rekonstrueerita, õppus lõpetatakse ja auditikirje säilitatakse.", [
     { text: "Tühista", style: "cancel" }, { text: "Lõpeta katkine õppus", style: "destructive", onPress: () => void recover() },
   ]);
   return <View style={styles.card} testID="runtime-recovery-card">
     <Text style={styles.title}>Simulatsiooni olek pole saadaval</Text>
-    <Text style={styles.body}>Simulatsiooni ei saa ohutult taastada, sest canonical Runtime’i püsiandmed puuduvad.</Text>
+    <Text style={styles.body}>Simulatsiooni kinnitatud seis puudub, mistõttu õppust ei saa ohutult jätkata.</Text>
     <Pressable testID="terminate-missing-runtime" disabled={pending} onPress={confirm} style={[styles.button, pending && styles.disabled]}><Text style={styles.buttonText}>{pending ? "Lõpetan…" : "Lõpeta katkine õppus"}</Text></Pressable>
     {error && <Text style={styles.error}>{error}</Text>}
   </View>;

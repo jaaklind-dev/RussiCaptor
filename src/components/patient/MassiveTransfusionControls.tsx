@@ -84,11 +84,11 @@ export function MassiveTransfusionControls({ patientId, readOnly = false }: Read
     <Text style={styles.status}>Lõpetatud erütrotsüüdiühikuid: {calcium?.completedRbcUnitsTotal ?? 0}</Text>
     {state?.vascularAccessLines && <View style={styles.accessCard}>
       <Text style={styles.status}>Veeniteed: {state.vascularAccessCount ?? 0}/3</Text>
-      {state.vascularAccessLines.map(line => { const lineId = line.lineId as VascularAccessLineId; const administration = state.administrations?.find(item => item.administrationId === line.administrationId);
+      {state.vascularAccessLines.map((line, lineIndex) => { const lineId = line.lineId as VascularAccessLineId; const administration = state.administrations?.find(item => item.administrationId === line.administrationId);
         const remaining = administration?.expectedCompletionAtSec === undefined ? undefined : Math.max(0, administration.expectedCompletionAtSec - (runtimeSnapshot?.state.exerciseTimeSec ?? 0));
         const activeMode = administration?.deliveryMode ?? lineModes[lineId] ?? "GRAVITY";
         return <View key={line.lineId} style={styles.line}><Pressable disabled={line.status !== "FREE"} onPress={() => setSelectedLineId(lineId)}>
-          <Text style={line.status === "OCCUPIED" ? styles.due : selectedLineId === lineId ? styles.selectedLine : styles.status}>{line.lineId}: {line.status === "MISSING" ? "PUUDUB" : line.status === "FREE"
+          <Text style={line.status === "OCCUPIED" ? styles.due : selectedLineId === lineId ? styles.selectedLine : styles.status}>Veenitee {lineIndex + 1}: {line.status === "MISSING" ? "PUUDUB" : line.status === "FREE"
             ? `VABA · ${line.accessType === "CENTRAL_ACCESS" ? "tsentraalveenitee" : "perifeerne veenitee"}` :
               `HÕIVATUD · ${administration?.product ?? "verekomponent"} · ${activeMode} · ${administration?.deliveredVolumeMl ?? "?"}/${administration?.totalVolumeMl ?? "?"} ml · ${remaining ?? "?"} s`}</Text></Pressable>
           {!readOnly && line.status !== "MISSING" && <View style={styles.row}>{modes.map(mode => <Pressable key={mode}

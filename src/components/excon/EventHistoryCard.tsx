@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { getResolvedScenarioEvents } from "@/repositories/ScenarioRepository";
 import { subscribeToSync } from "@/services/SyncService";
+import { findPatientById } from "@/repositories/PatientRepository";
 
 export default function EventHistoryCard() {
   const [, setRefreshKey] = useState(0);
@@ -28,7 +29,7 @@ export default function EventHistoryCard() {
               <View style={styles.eventInfo}>
                 <Text style={styles.eventTitle}>{event.title}</Text>
                 <Text style={styles.eventMeta}>
-                  {event.patientId} · õppuse minut {event.resolvedAtMinute ?? "–"}
+                  {findPatientById(event.patientId)?.name ?? "Tundmatu patsient"} · õppuse minut {event.resolvedAtMinute ?? "–"}
                 </Text>
               </View>
               <Text

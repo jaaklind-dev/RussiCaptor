@@ -22,7 +22,7 @@ export function VascularAccessControls({ patientId, readOnly = false }: Readonly
   if (readOnly || (resources.length === 0 && accessInstances.length === 0)) return null;
   return <View style={styles.card} testID="canonical-vascular-access-controls">
     <Text style={styles.title}>Vaskulaarne ligipääs</Text>
-    <Text style={styles.help}>Verekomponentide manustamisliinid tekivad kanoonilistest ligipääsusekkumistest.</Text>
+    <Text style={styles.help}>Verekomponentide manustamiseks kasuta patsiendile rajatud veeniteid.</Text>
     {accessInstances.map(instance => { const label = instance.definitionId === "CENTRAL_VENOUS_ACCESS" ? "Tsentraalveenitee" : "Perifeerne veenitee";
       const durationSec = instance.definitionId === "CENTRAL_VENOUS_ACCESS" ? 600 : 180;
       const remaining = Math.max(0, instance.startedAt + durationSec - snapshot.updatedAt);

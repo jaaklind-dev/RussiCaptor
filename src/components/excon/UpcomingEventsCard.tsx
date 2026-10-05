@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { subscribeToSync } from "@/services/SyncService";
 import { ExerciseSession } from "@/models/ExerciseSession";
+import { findPatientById } from "@/repositories/PatientRepository";
 
 type Props = {
   session: ExerciseSession;
@@ -78,7 +79,7 @@ const status =
            </Text>
 
            <Text style={styles.patient}>
-             {event.patientId}
+             {findPatientById(event.patientId)?.name ?? "Tundmatu patsient"}
            </Text>
 
            <View
@@ -118,7 +119,7 @@ const status =
            onPress={() => {
              Alert.alert(
                "Käivita sündmus kohe?",
-               `${event.patientId} · ${event.title}`,
+               `${findPatientById(event.patientId)?.name ?? "Tundmatu patsient"} · ${event.title}`,
                [
                  { text: "Katkesta", style: "cancel" },
                  {

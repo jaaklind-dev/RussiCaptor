@@ -210,46 +210,6 @@ const styles = StyleSheet.create({
 
   },
 
-  demoUserBlock: {
-    width: "100%",
-    maxWidth: 360,
-    marginTop: 16,
-  },
-
-  demoUserLabel: {
-    color: "#667085",
-    fontWeight: "600",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-
-  demoUserRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-
-  demoUserButton: {
-    flex: 1,
-    borderColor: "#005BBB",
-    borderWidth: 2,
-    borderRadius: 10,
-    paddingVertical: 9,
-    alignItems: "center",
-  },
-
-  demoUserButtonActive: {
-    backgroundColor: "#005BBB",
-  },
-
-  demoUserButtonText: {
-    color: "#005BBB",
-    fontWeight: "bold",
-  },
-
-  demoUserButtonTextActive: {
-    color: "#fff",
-  },
-
   row: {
 
     fontSize: 20,

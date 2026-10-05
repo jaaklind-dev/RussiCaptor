@@ -1,6 +1,7 @@
 import type { InspectorListItem } from "@/models/InstructorPatientInspector";
 import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { processStatusLabel } from "@/localization/et";
 
 const Row = memo(function Row({ item }: { item: InspectorListItem }) {
   return (
@@ -10,7 +11,7 @@ const Row = memo(function Row({ item }: { item: InspectorListItem }) {
         {item.detail ? <Text style={styles.detail}>{item.detail}</Text> : null}
       </View>
       <View style={styles.trailing}>
-        {item.status ? <Text style={styles.status}>{item.status}</Text> : null}
+        {item.status ? <Text style={styles.status}>{processStatusLabel(item.status)}</Text> : null}
         {item.time ? <Text style={styles.time}>{item.time}</Text> : null}
       </View>
     </View>

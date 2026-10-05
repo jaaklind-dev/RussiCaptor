@@ -4,6 +4,7 @@ import OrdersTab from "@/components/patient/OrdersTab";
 import { getOrders } from "@/repositories/OrderRepository";
 import { placeOrderConflictSafe } from "@/services/OrderService";
 import AppHeader from "@/components/AppHeader";
+import { patientStatusLabel } from "@/localization/et";
 import ImagingTab from "@/components/patient/ImagingTab";
 import LabsTab from "@/components/patient/LabsTab";
 import QuestionsTab from "@/components/patient/QuestionsTab";
@@ -167,13 +168,11 @@ useEffect(() => {
 
       <View style={styles.headerBlock}>
 
-        <Text style={styles.patientId}>{patient.id}</Text>
-
         <Text style={styles.patientName}>{patient.name}</Text>
 
         <Text style={styles.patientMeta}>
 
-          {patient.triage} · {patient.location} · {patient.status}
+          {patient.triage} · {patient.location} · {patientStatusLabel(patient.status)}
 
         </Text>
 

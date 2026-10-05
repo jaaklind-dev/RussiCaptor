@@ -3,13 +3,14 @@ import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { timelineActorLabel, timelineCategoryLabel, timelineEventTitleLabel } from "@/localization/dataDrivenEt";
 import { formatSimulationTime } from "@/localization/simulationTimeEt";
+import { findPatientById } from "@/repositories/PatientRepository";
 
 const icons: Record<ExerciseTimelineEvent["category"], string> = { EXERCISE: "▶", PATIENT: "●", COMMAND: "⌁", SYSTEM: "⚙", AUDIT: "✓" };
 export const ExerciseTimelineEventCard = memo(function ExerciseTimelineEventCard({ event, onPress }: { event: ExerciseTimelineEvent; onPress: (id: string) => void }) {
   return <Pressable style={styles.card} onPress={() => onPress(event.id)}>
     <View style={styles.header}><Text style={styles.time}>{formatSimulationTime(event.simulationTimeSec)}</Text><Text style={styles.category}>{icons[event.category]} {timelineCategoryLabel(event.category)}</Text><View style={[styles.severity, styles[event.severity.toLowerCase() as "info" | "warning" | "error"]]} /></View>
     <Text style={styles.title}>{timelineEventTitleLabel(event)}</Text>
-    {event.patientId && <Text style={styles.meta}>Patsient: {event.patientId}</Text>}
+    {event.patientId && <Text style={styles.meta}>Patsient: {findPatientById(event.patientId)?.name ?? "Tundmatu patsient"}</Text>}
     {event.issuedBy && <Text style={styles.meta}>Autor: {timelineActorLabel(event.issuedBy)}</Text>}
   </Pressable>;
 });

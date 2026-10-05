@@ -22,17 +22,17 @@ describe("WP-44B Runtime Resume control", () => {
     expect(source).toContain('alignSelf: "stretch"');
     expect(source).toContain("minHeight: 48");
     expect(source).toContain("void resumeRuntime().finally(() => setTakeoverPending(false))");
-    expect(source).toContain('"Võta Runtime üle"');
-    expect(source).toContain('"Võtan Runtime’i üle…"');
+    expect(source).toContain('"Võta õppuse juhtimine üle"');
+    expect(source).toContain('"Võtan juhtimise üle…"');
   });
 
   test("terminal exercise lifecycle suppresses stale reader authority presentation", () => {
     expect(getRuntimeAuthorityPresentation("COMPLETED", { state: "READER", revision: 137 })).toEqual({
-      label: "Runtime peatatud",
+      label: "Õppus ei ole aktiivne",
       takeoverVisible: false,
     });
     expect(getRuntimeAuthorityPresentation("READY", { state: "READER", revision: 137 })).toEqual({
-      label: "Runtime peatatud",
+      label: "Õppus ei ole aktiivne",
       takeoverVisible: false,
     });
   });
@@ -58,7 +58,7 @@ describe("WP-44B Runtime Resume control", () => {
     expect(source).toContain('runtimeStatus.code === "CHECKPOINT_REVISION_CONFLICT"');
     expect(source).toContain('testID="runtime-checkpoint-recovery"');
     expect(source).toContain("recoverRuntimeFromRemoteCheckpoint().finally");
-    expect(source).toContain("Taasta pilve kontrollpunktist");
+    expect(source).toContain("Taasta õppuse seis pilvest");
   });
   test("recovery press handler dispatches exactly one recovery command", async () => {
     const recover = jest.fn(async () => ({ state: "WRITER" as const, revision: 718 }));

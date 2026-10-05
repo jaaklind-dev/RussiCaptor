@@ -12,7 +12,8 @@ function text(value: ReactNode): string {
 const result: ProtocolAssessmentResult = Object.freeze({ assessmentId: "ALS:EXPECT-CPR:PT-001", expectationId: "EXPECT-CPR", protocolId: "ALS_GENERIC_V1", protocolVersion: "1.0.0", subjectId: "PT-001", patientId: "PT-001", status: "MET", evidence: Object.freeze([{ sourceType: "PATIENT_PROCESS" as const, sourceId: "ARREST", patientId: "PT-001", simulationTimeSec: 10 }, { sourceType: "INTERVENTION" as const, sourceId: "CPR", patientId: "PT-001", simulationTimeSec: 12 }]), diagnostics: Object.freeze([]) });
 
 test("WP-38 presentation shows neutral status and evidence without scoring", () => {
-  const list = text(AssessmentResultList({ results: [result], onSelect: jest.fn() })); const detail = text(AssessmentResultDetail({ result }));
-  expect(list).toContain("EXPECT-CPR"); expect(list).toContain("Täidetud"); expect(detail).toContain("ARREST"); expect(detail).toContain("CPR");
+  const list = text(AssessmentResultList({ results: [result], onSelect: jest.fn() })).replace(/\s+/gu, " "); const detail = text(AssessmentResultDetail({ result })).replace(/\s+/gu, " ");
+  expect(list).toContain("Nõue 1"); expect(list).toContain("Täidetud"); expect(detail).toContain("patsiendi protsess"); expect(detail).toContain("sekkumine");
+  expect(`${list} ${detail}`).not.toMatch(/EXPECT-CPR|ARREST|CPR/);
   expect(`${list} ${detail}`).not.toMatch(/score|grade|correct|incorrect|pass|fail/i);
 });

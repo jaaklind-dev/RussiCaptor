@@ -18,12 +18,15 @@ function ProductionRouteGate() {
   useEffect(() => {
     if (operator.state === "LOADING") return;
     const root = segments[0];
+    const isDiagnostics = segments.join("/") === "excon/diagnostics";
     if (!root || root === "_sitemap") return;
     if (root === "auth") return;
     if (operator.state !== "AUTHENTICATED") { router.replace("/"); return; }
     const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
     const bootstrap = hasActiveRole(operator, "EXERCISE_BOOTSTRAP");
-    if (root === "admin" && !hasPlatformAdminAuthority(operator)) router.replace("/");
+    if (isDiagnostics) {
+      if (!hasPlatformAdminAuthority(operator)) router.replace("/");
+    } else if (root === "admin" && !hasPlatformAdminAuthority(operator)) router.replace("/");
     else if (root === "excon" && !hasActiveRole(operator, "EXCON", exerciseId) && !bootstrap) router.replace(hasPlatformAdminAuthority(operator) ? "/admin" : "/");
     else if (root !== "excon" && root !== "admin" && !hasActiveRole(operator, "CM", exerciseId)) router.replace(hasActiveRole(operator, "EXCON", exerciseId) || bootstrap ? "/excon" : hasPlatformAdminAuthority(operator) ? "/admin" : "/");
   }, [operator, segments]);

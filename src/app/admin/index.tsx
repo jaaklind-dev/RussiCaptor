@@ -12,6 +12,9 @@ export default function AdministrationScreen() {
     <Pressable accessibilityRole="button" style={styles.card} onPress={() => router.push("/admin/exercises")}>
       <Text style={styles.cardTitle}>Õppused</Text><Text style={styles.cardText}>Loo õppusi ning määra või tühista õppusepõhiseid rolle.</Text>
     </Pressable>
+    <Pressable accessibilityRole="button" style={styles.diagnostics} onPress={() => router.push("/excon/diagnostics" as never)}>
+      <Text style={styles.diagnosticsTitle}>Tehnilised üksikasjad</Text><Text style={styles.cardText}>Tugiteave ja toetatud taastamistoimingud.</Text>
+    </Pressable>
     <Pressable accessibilityRole="button" style={styles.secondary} onPress={() => void signOutOperator()}><Text style={styles.secondaryText}>Logi välja</Text></Pressable>
   </ScrollView>;
 }
@@ -21,6 +24,6 @@ const styles = StyleSheet.create({
   kicker: { color: "#005BBB", fontWeight: "800", marginTop: 12 }, title: { fontSize: 32, fontWeight: "900", color: "#101828" },
   subtitle: { color: "#475467", fontSize: 16, marginTop: 6 }, card: { padding: 20, backgroundColor: "#fff", borderRadius: 14, borderWidth: 1, borderColor: "#D0D5DD" },
   cardTitle: { fontSize: 21, fontWeight: "800", color: "#101828" }, cardText: { color: "#475467", marginTop: 5, lineHeight: 21 },
+  diagnostics: { padding: 16, backgroundColor: "#EAECF0", borderRadius: 12 }, diagnosticsTitle: { fontSize: 18, fontWeight: "800", color: "#344054" },
   secondary: { alignSelf: "flex-start", padding: 12 }, secondaryText: { color: "#B42318", fontWeight: "700" },
 });
-

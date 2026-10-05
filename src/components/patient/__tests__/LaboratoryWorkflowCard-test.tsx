@@ -123,7 +123,7 @@ describe("LaboratoryWorkflowCard canonical Runtime projection", () => {
     const button = actionByTestId(renderer, "laboratory-order-action");
     expect(button.props.disabled).toBe(true);
     expect(renderer.root.findByProps({ testID: "laboratory-command-readiness" }).props.children)
-      .toBe("Patsiendi Runtime sünkroniseerib värskeimat kontrollpunkti.");
+      .toBe("Labori töövoog sünkroniseerub…");
     await act(async () => { button.props.onPress(); });
     expect(onOrder).not.toHaveBeenCalled();
   });
@@ -396,9 +396,9 @@ describe("LaboratoryWorkflowCard canonical Runtime projection", () => {
     const text = renderer.root.findAllByType("Text" as never).map(node => node.props.children).flat(Infinity)
       .join(" ").replace(/\s+/g, " ");
     const compact = text.replace(/\s/g, "");
-    expect(compact).toContain("sampledAtT+100s");
+    expect(compact).toContain("ProovkogutudT+100s");
     expect(compact).toContain("ValmibT+1600s");
-    expect(text).toContain("narva-lab-physiology-v1");
+    expect(text).not.toContain("narva-lab-physiology-v1");
     expect(compact).toContain("pH");
     expect(compact).toContain("7.12");
     expect(compact).toContain("Ionizedcalcium");

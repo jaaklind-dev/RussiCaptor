@@ -6,15 +6,15 @@ import { processStatusLabel } from "@/localization/et";
 export function PatientPlayback({ view }: { view?: PatientPlaybackView }) {
   if (!view) return <View style={styles.card}><Text style={styles.empty}>Vali patsient, kelle sündmusi taasesitada.</Text></View>;
   return <View style={styles.card}>
-    <Text style={styles.title}>{view.patient.patientId} · {view.patient.name}</Text>
+    <Text style={styles.title}>{view.patient.name}</Text>
     <Text style={styles.meta}>{view.patient.initialLocation} → {view.patient.finalLocation} · {patientOutcomeLabel(view.patient.outcome)}</Text>
     <Text style={styles.heading}>Hetkel T+{view.simulationTimeSec}s</Text>
     <Text style={styles.meta}>{view.events.length} patsiendisündmust · {view.processes.length} protsessi</Text>
-    {view.processes.map(process => { const calcium = process.clinicalState?.transfusionCalcium as Readonly<{
+    {view.processes.map((process, processIndex) => { const calcium = process.clinicalState?.transfusionCalcium as Readonly<{
       completedRbcUnitsTotal?: number; calciumRecommended?: boolean;
       calciumAdministrations?: readonly Readonly<{ administrationId?: string; product?: string; dose?: string; route?: string; completedAtSec?: number }>[];
     }> | undefined; return <View key={`${process.processId}:${process.moduleId}`}>
-      <Text style={styles.process}>• {process.processId} · {processStatusLabel(process.status)}</Text>
+      <Text style={styles.process}>• Kliiniline protsess {processIndex + 1} · {processStatusLabel(process.status)}</Text>
       {process.moduleId === "MASSIVE_TRANSFUSION_V1" && (Number(calcium?.completedRbcUnitsTotal ?? 0) > 0 ||
         (Array.isArray(calcium?.calciumAdministrations) && calcium.calciumAdministrations.length > 0)) && <View>
         {Array.isArray(process.clinicalState?.vascularAccessLines) && <Text style={styles.meta}>
@@ -22,7 +22,7 @@ export function PatientPlayback({ view }: { view?: PatientPlaybackView }) {
         </Text>}
         {Array.isArray(process.clinicalState?.administrations) && process.clinicalState.administrations.map((item, index) =>
           <Text key={String(item.administrationId ?? index)} style={styles.meta}>
-            {String(item.product)} · {String(item.deliveryMode ?? "pärandkiirus")} · {String(item.vascularAccessLineId ?? "veenitee määramata")} · {String(item.state)}
+            Manustamine {index + 1}: {String(item.product)} · {String(item.deliveryMode ?? "tavakiirus").replaceAll("_", " ").toLocaleLowerCase("et")} · {processStatusLabel(String(item.state))}
           </Text>)}
         <Text style={calcium?.calciumRecommended ? styles.miss : styles.meta}>
           Erütrotsüüdiühikuid: {String(calcium?.completedRbcUnitsTotal ?? 0)} · {calcium?.calciumRecommended

@@ -52,7 +52,7 @@ export default function DebriefScreen() {
     return () => clearInterval(timer);
   }, [cursor.playing, report.simulationDurationSec]);
   return <FlatList data={visibleTimeline} keyExtractor={event => event.id} contentContainerStyle={styles.container}
-    ListHeaderComponent={<View><View style={styles.top}><View><Text style={styles.title}>Debriif</Text><Text style={styles.subtitle}>Kanoonilise õppuse kirjutuskaitstud rekonstruktsioon</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Tagasi</Text></Pressable></View>
+    ListHeaderComponent={<View><View style={styles.top}><View><Text style={styles.title}>Debriif</Text><Text style={styles.subtitle}>Lõppenud õppuse taasesitus ja kokkuvõte</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Tagasi</Text></Pressable></View>
       <DebriefSummary report={report} />
       {report.protocolProvenance && <AssessmentMetricsSummary metrics={analytics.metrics} onOpenAssessment={() => router.push("/excon/assessment")} />}
       {evaluation && <><ExerciseEvaluationSummary result={evaluation} compact /><InstructorEvaluationPanel source={evaluation} readOnly /><Pressable style={styles.evaluationButton} onPress={() => router.push("/excon/evaluation" as never)}><Text style={styles.analyticsButtonText}>Ava õppuse hinnang</Text></Pressable></>}
@@ -68,9 +68,9 @@ export default function DebriefScreen() {
         {outcomes.map(value => <FilterChip key={value} label={patientOutcomeLabel(value)} active={outcome === value} onPress={() => setOutcome(current => current === value ? undefined : value)} />)}
         {caseManagers.map(value => <FilterChip key={value} label={`CM: ${value}`} active={caseManager === value} onPress={() => setCaseManager(current => current === value ? undefined : value)} />)}
       </ScrollView>
-      <View style={styles.chips}>{visiblePatients.map(item => <Pressable key={item.patientId} style={[styles.chip, cursor.selectedPatientId === item.patientId && styles.chipActive]} onPress={() => setCursor(current => jumpToPatient(current, item.patientId))}><Text style={styles.chipText}>{item.patientId}</Text></Pressable>)}</View>
+      <View style={styles.chips}>{visiblePatients.map(item => <Pressable key={item.patientId} style={[styles.chip, cursor.selectedPatientId === item.patientId && styles.chipActive]} onPress={() => setCursor(current => jumpToPatient(current, item.patientId))}><Text style={styles.chipText}>{item.name}</Text></Pressable>)}</View>
       <PatientPlayback view={patient} /><Text style={styles.section}>Taasesituse hetkel nähtavad sündmused · {visibleTimeline.length}</Text></View>}
-    renderItem={({ item }) => <Pressable style={[styles.event, item.id === cursor.selectedEventId && styles.selected]} onPress={() => setCursor(current => jumpToEvent(current, item))}><Text style={styles.eventTime}>T+{item.simulationTimeSec}s · {timelineCategoryLabel(item.category)}</Text><Text style={styles.eventTitle}>{timelineEventTitleLabel(item)}</Text><Text style={styles.eventMeta}>{item.patientId ?? "Õppus"}</Text></Pressable>}
+    renderItem={({ item }) => <Pressable style={[styles.event, item.id === cursor.selectedEventId && styles.selected]} onPress={() => setCursor(current => jumpToEvent(current, item))}><Text style={styles.eventTime}>T+{item.simulationTimeSec}s · {timelineCategoryLabel(item.category)}</Text><Text style={styles.eventTitle}>{timelineEventTitleLabel(item)}</Text><Text style={styles.eventMeta}>{item.patientId ? report.patients.find(patientItem => patientItem.patientId === item.patientId)?.name ?? "Tundmatu patsient" : "Õppus"}</Text></Pressable>}
     ListEmptyComponent={<Text style={styles.empty}>Selles taasesituse asukohas sündmusi ei ole.</Text>} />;
 }
 function FilterChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {

@@ -93,10 +93,10 @@ describe("IRO EXCON scenario-control presentation", () => {
         .includes("Vasopressor: puudub"))).toBe(true);
     await pressRenderedControl(renderer, "Alusta katkestust");
     expect(renderer.root.findAllByType("Text" as never).some(node =>
-      String(node.props.children).includes("ootan Runtime’i kinnitust"))).toBe(true);
+      String(node.props.children).includes("ootan kinnitatud seisu"))).toBe(true);
     await act(async () => { resolveResult?.({ status: "MATERIALIZED", result: { ok: true } }); await result; });
     expect(renderer.root.findAllByType("Text" as never).some(node =>
-      String(node.props.children).includes("rakendati autoritaarses Runtime’is"))).toBe(true);
+      String(node.props.children).includes("Korraldus rakendati"))).toBe(true);
     await act(async () => renderer.unmount());
   });
 
@@ -119,7 +119,7 @@ describe("IRO EXCON scenario-control presentation", () => {
       Array.isArray(node.props.children) ? node.props.children.join("") : String(node.props.children)).join("\n");
     expect(text).toContain("Vasopressor: aktiivne · S2");
     expect(text).toContain("Ventilatsioon: aktiivne · Kontuuri ühenduse katkemine · DETERIORATING");
-    expect(text).toContain("Stsenaariumikell: HOLD");
+    expect(text).toContain("Stsenaariumikell: Peatatud");
     expect(text).toContain("T+75s");
     expect(renderer.root.findByProps({ accessibilityLabel: "Taasta vasopressor" }).props.disabled).toBe(false);
     expect(renderer.root.findByProps({ accessibilityLabel: "RESUME" }).props.disabled).toBe(false);
@@ -177,12 +177,12 @@ describe("IRO EXCON scenario-control presentation", () => {
     await act(async () => publishScenario(iroScenario("PT-IRO-001", { hold: true, lastUpdatedSimulationTimeSec: 105,
       ventilationFault: { type: "CIRCUIT_DISCONNECT", startedAtSimulationTimeSec: 90, accumulatedHoldSec: 0,
         heldAtSimulationTimeSec: 105 }, ventilationStage: "DETERIORATING" })));
-    expect(renderedText(renderer)).toContain("Stsenaariumikell: HOLD");
+    expect(renderedText(renderer)).toContain("Stsenaariumikell: Peatatud");
     expect(renderer.root.findByProps({ accessibilityLabel: "RESUME" }).props.disabled).toBe(false);
     await act(async () => publishScenario(iroScenario("PT-IRO-001", { lastUpdatedSimulationTimeSec: 120,
       ventilationFault: { type: "CIRCUIT_DISCONNECT", startedAtSimulationTimeSec: 90, accumulatedHoldSec: 15 },
       ventilationStage: "DETERIORATING" })));
-    expect(renderedText(renderer)).toContain("Stsenaariumikell: RUNNING");
+    expect(renderedText(renderer)).toContain("Stsenaariumikell: Käib");
     expect(renderedText(renderer)).toContain("T+120s");
     await act(async () => renderer.unmount());
   });
@@ -221,7 +221,7 @@ describe("IRO EXCON scenario-control presentation", () => {
     expect(gateway.submit).toHaveBeenCalledTimes(1);
     expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({ exerciseId: "EX-IRO-PRESS",
       patientId: "PT-IRO-001", commandType: "IRO_VASOPRESSOR_FAULT_START", payload: {} }));
-    expect(renderedText(renderer)).toContain("Käsk rakendati autoritaarses Runtime’is.");
+    expect(renderedText(renderer)).toContain("Korraldus rakendati.");
     await act(async () => renderer.unmount());
   });
 
@@ -282,7 +282,7 @@ describe("IRO EXCON scenario-control presentation", () => {
     await act(async () => { renderer = TestRenderer.create(<NarvaIroScenarioControlsCard
       exerciseId="EX-IRO-PENDING" patientId="PT-IRO-001" />); });
     await pressRenderedControl(renderer, "Alusta katkestust");
-    expect(renderedText(renderer)).toContain("Saadan käsku…");
+    expect(renderedText(renderer)).toContain("Saadan korraldust…");
     const disabledStart = renderer.root.findByProps({ testID: "iro-control-IRO_VASOPRESSOR_FAULT_START" });
     expect(disabledStart.props.disabled).toBe(true);
     expect(disabledStart.props.accessibilityState.disabled).toBe(true);
@@ -290,7 +290,7 @@ describe("IRO EXCON scenario-control presentation", () => {
     expect(renderer.root.findAll((node: ReactTestInstance) => node.props.accessibilityLabel === "Alusta katkestust" &&
       typeof node.props.onStartShouldSetResponder === "function")[0].props.onStartShouldSetResponder()).toBe(false);
     await act(async () => { resolveSubmit({ status: "AUTHORIZATION_DENIED", patientRevision: 0 }); await pending; });
-    expect(renderedText(renderer)).toContain("Käsk lükati tagasi: IRO juhtimiseks on vajalik aktiivne õppuse EXCON-õigus.");
+    expect(renderedText(renderer)).toContain("Korraldust ei saanud rakendada. Kontrolli õppuse seisu.");
     await act(async () => renderer.unmount());
   });
 
@@ -339,7 +339,7 @@ describe("IRO EXCON scenario-control presentation", () => {
       resolveResume({ status: "MATERIALIZED", result: { ok: true } });
       await resumeResult;
     });
-    expect(renderedText(renderer)).toContain("Käsk rakendati autoritaarses Runtime’is.");
+    expect(renderedText(renderer)).toContain("Korraldus rakendati.");
     await act(async () => renderer.unmount());
   });
 

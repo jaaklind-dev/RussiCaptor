@@ -21,15 +21,14 @@ function InstructorPatientCardComponent({ patient, onPress }: {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Ava patsient ${patient.patientId}`}
+      accessibilityLabel={`Ava patsient ${patient.name}`}
       onPress={() => onPress(patient.patientId)}
       style={({ pressed }) => [styles.card, { borderColor: colors.border, backgroundColor: colors.background }, pressed && styles.pressed]}
     >
       <View style={styles.heading}>
-        <Text style={styles.patientId}>{patient.patientId}</Text>
+        <Text numberOfLines={1} style={styles.name}>{patient.name}</Text>
         <Text style={[styles.status, { color: colors.text }]}>{patientStatusLabel(patient.status)}</Text>
       </View>
-      <Text numberOfLines={1} style={styles.name}>{patient.name}</Text>
       <Text style={styles.meta}>{patient.location} · {patient.triage}</Text>
       <Text numberOfLines={1} style={styles.owner}>CM: {patient.caseManagerName ?? "—"}</Text>
       <View style={styles.vitals}>
@@ -41,7 +40,7 @@ function InstructorPatientCardComponent({ patient, onPress }: {
       </View>
       <Text style={styles.time}>Simulatsioon: {value(patient.simulationTimeSec, "s")}</Text>
       <Text style={styles.updated}>Uuendatud: {patient.lastUpdate ?? "—"}</Text>
-      {!patient.hasCanonicalRuntime && <Text style={styles.missing}>Canonical runtime on ootel</Text>}
+      {!patient.hasCanonicalRuntime && <Text style={styles.missing}>Patsiendi andmeid laaditakse…</Text>}
     </Pressable>
   );
 }
@@ -51,8 +50,7 @@ export const InstructorPatientCard = memo(InstructorPatientCardComponent);
 const styles = StyleSheet.create({
   card: { flex: 1, minWidth: 250, maxWidth: 390, borderWidth: 2, borderRadius: 14, padding: 14, margin: 6 },
   pressed: { opacity: 0.75 }, heading: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
-  patientId: { fontSize: 20, fontWeight: "800", color: "#172b4d" },
-  status: { fontWeight: "800", fontSize: 13 }, name: { marginTop: 3, fontSize: 16, fontWeight: "700", color: "#172b4d" },
+  status: { fontWeight: "800", fontSize: 13 }, name: { flex: 1, fontSize: 18, fontWeight: "800", color: "#172b4d" },
   meta: { marginTop: 5, color: "#42526e", fontWeight: "600" }, owner: { marginTop: 3, color: "#005bbb" },
   vitals: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 },
   vital: { fontVariant: ["tabular-nums"], color: "#172b4d", fontWeight: "700" },

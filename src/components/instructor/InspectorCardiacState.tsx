@@ -3,6 +3,7 @@ import type { CardiacInterventionAction, CardiacInterventionCommandResult } from
 import { handleCardiacInterventionCommand } from "@/services/runtime/instructor/CardiacInterventionCommandService";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { cardiacRhythmLabel } from "@/localization/et";
 
 type Props = Readonly<{ exerciseId: string; patientId: string; cardiac: NonNullable<InstructorPatientInspectorModel["cardiac"]> }>;
 
@@ -19,21 +20,21 @@ export function InspectorCardiacState({ exerciseId, patientId, cardiac }: Props)
   return <View style={styles.card} testID="cardiac-state-card">
     <Text style={styles.title}>Südameseiskus</Text>
     <View style={styles.grid}>
-      <Text style={styles.label}>Seisund</Text><Text style={styles.value}>{cardiac.cardiacState}</Text>
-      <Text style={styles.label}>Rütm</Text><Text style={styles.value}>{cardiac.rhythm}</Text>
-      <Text style={styles.label}>Defibrilleeritavus</Text><Text style={styles.value}>{cardiac.rhythmClassification}</Text>
-      <Text style={styles.label}>CPR</Text><Text style={styles.value}>{cardiac.cprActive ? "ACTIVE" : "STOPPED"}</Text>
+      <Text style={styles.label}>Seisund</Text><Text style={styles.value}>{cardiac.cardiacState === "ARREST" ? "Südameseiskus" : "Vereringe olemas"}</Text>
+      <Text style={styles.label}>Rütm</Text><Text style={styles.value}>{cardiacRhythmLabel(cardiac.rhythm)}</Text>
+      <Text style={styles.label}>Defibrilleeritavus</Text><Text style={styles.value}>{cardiac.rhythmClassification === "SHOCKABLE" ? "Defibrilleeritav" : "Mittedefibrilleeritav"}</Text>
+      <Text style={styles.label}>Elustamine</Text><Text style={styles.value}>{cardiac.cprActive ? "Käib" : "Peatatud"}</Text>
       <Text style={styles.label}>Defibrillatsioonikatsed</Text><Text style={styles.value}>{cardiac.shockAttemptCount}</Text>
-      {cardiac.lastEvent && <><Text style={styles.label}>Viimane sündmus</Text><Text style={styles.value}>{cardiac.lastEvent} · T+{cardiac.lastEventTimeSec ?? 0}s</Text></>}
+      {cardiac.lastEvent && <><Text style={styles.label}>Viimane sündmus</Text><Text style={styles.value}>Südametegevuse muudatus · T+{cardiac.lastEventTimeSec ?? 0}s</Text></>}
     </View>
     <View style={styles.actions}>
       <Pressable disabled={Boolean(submitting) || !arrest} onPress={() => issue(cardiac.cprActive ? "STOP_CPR" : "START_CPR")}
         style={[styles.button, (Boolean(submitting) || !arrest) && styles.disabled]}><Text style={styles.buttonText}>{submitting?.includes("CPR") ? "Saatmine…" : cardiac.cprActive ? "Lõpeta CPR" : "Alusta CPR-i"}</Text></Pressable>
       <Pressable disabled={Boolean(submitting) || !arrest} onPress={() => issue("DEFIBRILLATION")}
-        style={[styles.shock, (Boolean(submitting) || !arrest) && styles.disabled]}><Text style={styles.buttonText}>{submitting === "DEFIBRILLATION" ? "Submitting…" : "Defibrillate"}</Text></Pressable>
+        style={[styles.shock, (Boolean(submitting) || !arrest) && styles.disabled]}><Text style={styles.buttonText}>{submitting === "DEFIBRILLATION" ? "Saadan…" : "Defibrilleeri"}</Text></Pressable>
     </View>
-    {result?.ok && <Text style={styles.success}>Command accepted; awaiting canonical snapshot.</Text>}
-    {result && !result.ok && <Text style={styles.error}>{result.errorCode}: {result.message}</Text>}
+    {result?.ok && <Text style={styles.success}>Korraldus vastu võetud. Ootan kinnitatud patsiendiseisu.</Text>}
+    {result && !result.ok && <Text style={styles.error}>Korraldust ei saanud rakendada. Kontrolli patsiendi seisu ja proovi uuesti.</Text>}
   </View>;
 }
 

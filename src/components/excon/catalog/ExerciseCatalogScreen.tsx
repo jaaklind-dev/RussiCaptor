@@ -52,7 +52,7 @@ export function ExerciseCatalogScreen() {
   };
 
   return <ScrollView contentContainerStyle={styles.container}>
-    <View style={styles.top}><View><Text style={styles.title}>Õppuste kataloog</Text><Text style={styles.subtitle}>ExercisePackageRegistry kanoonilised paketid</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Tagasi</Text></Pressable></View>
+    <View style={styles.top}><View><Text style={styles.title}>Õppuste kataloog</Text><Text style={styles.subtitle}>Saadaolevad õppusepaketid</Text></View><Pressable onPress={() => router.back()}><Text style={styles.back}>Tagasi</Text></Pressable></View>
     <PackageFilters search={search} profile={profile} compatibility={compatibility} tag={tag} profiles={profiles} tags={tags} onSearch={setSearch} onProfile={setProfile} onCompatibility={setCompatibility} onTag={setTag} />
     <Text style={styles.count}>{filtered.length} / {entries.length} paketti</Text>
     <View style={[styles.layout, desktop && styles.desktop]}>

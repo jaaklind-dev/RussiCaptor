@@ -1,7 +1,7 @@
 import type { AnalyticsCategory, MetricEvidenceReference, MetricScope, MetricUnit } from "@/models/analytics/Analytics";
 import type { ExerciseTimelineCategory, ExerciseTimelineEvent, ExerciseTimelineGroup, ExerciseTimelineSeverity } from "@/models/exercise/ExerciseTimelineEvent";
 
-const explicit = (value: string, labels: Readonly<Record<string, string>>, kind: string): string => labels[value] ?? `Tundmatu ${kind}: ${value}`;
+const explicit = (value: string, labels: Readonly<Record<string, string>>, kind: string): string => labels[value] ?? `Tundmatu ${kind}`;
 
 export const timelineCategoryLabel = (value: ExerciseTimelineCategory | string): string => explicit(value, {
   EXERCISE: "õppus", PATIENT: "patsient", COMMAND: "käsk", SYSTEM: "süsteem", AUDIT: "audit",
@@ -41,15 +41,15 @@ const authoredTitleLabels: Readonly<Record<string, string>> = {
   TRANSPORT_HANDOVER_COMPLETED: "Patsiendi üleandmine lõpetati", TRANSPORT_RETURNING: "Reanimobiil alustas tagasisõitu",
   TRANSPORT_RESOURCE_AVAILABLE: "Reanimobiil on jälle saadaval", TRANSPORT_CANCELLED: "Transport tühistati",
 };
-export const timelineEventTitleLabel = (event: Pick<ExerciseTimelineEvent, "type" | "title">): string => eventTypeLabels[event.type] ?? authoredTitleLabels[event.title] ?? `Sündmus: ${event.type}`;
+export const timelineEventTitleLabel = (event: Pick<ExerciseTimelineEvent, "type" | "title">): string => eventTypeLabels[event.type] ?? authoredTitleLabels[event.title] ?? "Muu sündmus";
 
 export const timelineEventDescriptionLabel = (description?: string): string | undefined => {
   if (!description) return undefined;
   const runtimeAdvance = description.match(/^Canonical patient runtime advanced by (\d+) seconds$/);
-  if (runtimeAdvance) return `Patsiendi kanooniline simulatsioon liikus ${runtimeAdvance[1]} sekundit edasi`;
+  if (runtimeAdvance) return `Patsiendi simulatsioon liikus ${runtimeAdvance[1]} sekundit edasi`;
   return ({
-    "Canonical pleural drainage intervention applied": "Kanooniline pleuradreeni sekkumine rakendati",
-    "Canonical cardiac state ARREST": "Kanooniline südameseiskuse seisund",
+    "Canonical pleural drainage intervention applied": "Pleuradreeni sekkumine rakendati",
+    "Canonical cardiac state ARREST": "Südameseiskus",
   } as Readonly<Record<string, string>>)[description] ?? description;
 };
 
@@ -103,4 +103,5 @@ export const analyticsMetricNameLabel = (metricId: string, canonicalName: string
 export const evidenceSourceLabel = (value: MetricEvidenceReference["sourceType"] | string): string => explicit(value, {
   TIMELINE_EVENT: "ajajoone sündmus", PATIENT_SUMMARY: "patsiendi kokkuvõte", EXERCISE_SUMMARY: "õppuse kokkuvõte",
   AUDIT_EVENT: "auditisündmus", DEBRIEF_FIELD: "debriifi väli", ASSESSMENT_RESULT: "hindamistulemus", ASSESSMENT_REPORT: "hindamisaruanne",
+  INTERVENTION: "sekkumine", MEDICATION: "ravim", PATIENT_PROCESS: "patsiendi protsess",
 }, "tõendusallikas");
