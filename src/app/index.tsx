@@ -8,7 +8,8 @@ import { getBuildProvenance, getReleaseConfigurationError } from "@/config/Relea
 import { publicErrorMessage } from "@/localization/et";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { signInOperator } from "@/services/authorization/OperatorSessionService";
-import { resolveOperatorLandingNavigationTarget } from "@/services/ui/OperatorRouteService";
+import { resolveSelectedModeNavigationTarget } from "@/services/ui/OperatorRouteService";
+import { reconcileOperatorMode } from "@/services/ui/OperatorModeService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getSyncVersion, subscribeToSync } from "@/services/SyncService";
 
@@ -25,7 +26,8 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (operator.state !== "AUTHENTICATED") return;
-    const target = resolveOperatorLandingNavigationTarget(operator, getCanonicalExerciseSnapshot().exerciseId);
+    const mode = reconcileOperatorMode(operator).selectedMode;
+    const target = resolveSelectedModeNavigationTarget(operator, mode, getCanonicalExerciseSnapshot().exerciseId);
     if (target) router.replace(target);
   }, [operator, syncVersion]);
 

@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { signOutOperator } from "@/services/authorization/OperatorSessionService";
+import RoleModeSwitcher from "@/components/RoleModeSwitcher";
 
 export default function AdministrationScreen() {
   const signOut = () => void signOutOperator().then(() => router.replace("/"))
@@ -8,6 +9,7 @@ export default function AdministrationScreen() {
   return <ScrollView contentContainerStyle={styles.page}>
     <View><Text style={styles.kicker}>RussiCaptor</Text><Text style={styles.title}>Administratsioon</Text>
       <Text style={styles.subtitle}>Kasutajakontod ja õppusepõhised CM/EXCON rollid</Text></View>
+    <RoleModeSwitcher />
     <Pressable accessibilityRole="button" style={styles.card} onPress={() => router.push("/admin/users")}>
       <Text style={styles.cardTitle}>Kasutajad</Text><Text style={styles.cardText}>Kutsu kasutajaid, lähtesta paroole ja halda konto olekut.</Text>
     </Pressable>

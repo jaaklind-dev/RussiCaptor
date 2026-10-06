@@ -15,6 +15,7 @@ import { router } from "expo-router";
 import { Alert, Pressable, ScrollView, StyleSheet, Text } from "react-native";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { hasActiveRole, signOutOperator } from "@/services/authorization/OperatorSessionService";
+import RoleModeSwitcher from "@/components/RoleModeSwitcher";
 
 export default function ExconScreen() {
   const operator = useOperatorSession();
@@ -51,6 +52,8 @@ export default function ExconScreen() {
 
       <Text style={styles.title}>Õppuse juhtimine</Text>
 
+      <RoleModeSwitcher />
+
       <Text style={styles.subtitle}>EXCON · Õppuse juhtimiskeskus</Text>
       {operator.state === "AUTHENTICATED" && <Text style={styles.operator}>Operaator: {operator.profile.displayName}</Text>}
 
@@ -70,12 +73,6 @@ export default function ExconScreen() {
 
       <EventHistoryCard />
 
-      <Pressable
-        style={styles.backButton}
-        onPress={() => router.replace("/dashboard")}
-      >
-        <Text style={styles.backButtonText}>Tagasi töölauale</Text>
-      </Pressable>
       <Pressable style={styles.logoutButton} onPress={signOut}><Text style={styles.logoutButtonText}>Logi välja</Text></Pressable>
 
     </ScrollView>

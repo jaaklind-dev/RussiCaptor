@@ -1,5 +1,5 @@
 import type { OperatorSessionState } from "@/services/authorization/OperatorSessionService";
-import { resolveOperatorLandingNavigationTarget, resolveOperatorLandingRoute } from "../OperatorRouteService";
+import { resolveOperatorLandingNavigationTarget, resolveOperatorLandingRoute, resolveSelectedModeRoute } from "../OperatorRouteService";
 
 function authenticated(role: "CM" | "EXCON" | "EXERCISE_BOOTSTRAP", scopeId?: string): OperatorSessionState {
   return {
@@ -44,5 +44,14 @@ describe("operator landing route", () => {
     expect(resolveOperatorLandingNavigationTarget(authenticated("CM", "EX-1"), "EX-1")).toBe("/dashboard");
     expect(resolveOperatorLandingNavigationTarget(authenticated("EXCON", "EX-1"), "EX-1")).toBe("/excon");
     expect(resolveOperatorLandingNavigationTarget(authenticated("EXCON", "EX-1"), "EX-1", "/excon")).toBeUndefined();
+  });
+  test("MODE-NAV-02/03/04 routes only through the selected authorized mode", () => {
+    expect(resolveSelectedModeRoute(administrator(), "ADMIN", "EX-1")).toBe("/admin");
+    expect(resolveSelectedModeRoute(administrator(), "CM", "EX-1")).toBe("/dashboard");
+    expect(resolveSelectedModeRoute(authenticated("EXCON", "EX-1"), "EXCON", "EX-1")).toBe("/excon");
+  });
+  test("MODE-NAV-06 fails a stale or cross-exercise selection into mode choice", () => {
+    expect(resolveSelectedModeRoute(administrator(), "EXCON", "EX-1")).toBe("/mode");
+    expect(resolveSelectedModeRoute(authenticated("CM", "EX-2"), "CM", "EX-1")).toBe("/mode");
   });
 });

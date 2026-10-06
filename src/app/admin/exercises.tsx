@@ -4,6 +4,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { createAdminExercise } from "@/services/admin/PlatformAdminExerciseCreation";
 import { grantExerciseRole, listAdminExercises, listAdminUsers, revokeExerciseRole, type AdminExercise, type AdminUser } from "@/services/admin/PlatformAdminService";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
+import { refreshOperatorSession } from "@/services/authorization/OperatorSessionService";
 import { assignmentStatusLabel, exerciseLifecycleLabel, exercisePackageIdLabel, publicErrorMessage } from "@/localization/et";
 
 export default function AdminExercisesScreen() {
@@ -25,7 +26,7 @@ export default function AdminExercisesScreen() {
     return users.filter(user => user.status !== "DISABLED" &&
       `${user.displayName} ${user.email}`.toLocaleLowerCase("et").includes(query)).slice(0, 20);
   }, [userSearch, users]);
-  const perform = async (action: () => Promise<void>, success: string) => { setBusy(true); setMessage(undefined); try { await action(); setMessage(success); await load(); } catch (error) { setMessage(publicErrorMessage(error)); } finally { setBusy(false); } };
+  const perform = async (action: () => Promise<void>, success: string) => { setBusy(true); setMessage(undefined); try { await action(); setMessage(success); await Promise.all([load(), refreshOperatorSession()]); } catch (error) { setMessage(publicErrorMessage(error)); } finally { setBusy(false); } };
   const createExercise = async () => {
     if (operator.state !== "AUTHENTICATED") return;
     setBusy(true); setMessage(undefined);

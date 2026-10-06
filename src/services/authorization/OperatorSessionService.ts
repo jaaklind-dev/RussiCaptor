@@ -33,8 +33,18 @@ export function subscribeOperatorSession(listener: () => void): () => void {
 
 export function getOperatorSession(): OperatorSessionState { return snapshot; }
 
-function activeAssignments(assignments: readonly RoleAssignment[], now = new Date().toISOString()): readonly RoleAssignment[] {
+export function activeAssignments(assignments: readonly RoleAssignment[], now = new Date().toISOString()): readonly RoleAssignment[] {
   return assignments.filter(item => item.status === "ACTIVE" && (!item.expiresAt || item.expiresAt > now));
+}
+
+export function activeScopedExerciseIds(
+  state: OperatorSessionState,
+  role: Extract<RoleAssignment["role"], "CM" | "EXCON">,
+  now = new Date().toISOString(),
+): readonly string[] {
+  if (state.state !== "AUTHENTICATED") return Object.freeze([]);
+  return Object.freeze([...new Set(activeAssignments(state.principal.roleAssignments, now)
+    .flatMap(item => item.role === role && item.scope.scopeType === "EXERCISE" ? [item.scope.scopeId] : []))].sort());
 }
 
 async function resolveProfile(userId: string): Promise<OperatorProfile | undefined> {

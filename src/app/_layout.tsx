@@ -1,20 +1,31 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { Stack, router, useSegments } from "expo-router";
 import { loadPersistedState, startStatePersistence } from "@/services/StatePersistenceService";
 import { getCloudSyncStatus, startCloudSync } from "@/services/CloudSyncService";
 import { failRuntimeCheckpointStartup, startRuntimeCheckpointSync } from "@/services/RuntimeCheckpointSyncService";
 import { startAfterCurrentExerciseDiscovery } from "@/services/exercise/StartupOrchestrationService";
-import { getOperatorSession, hasActiveRole, hasOperationalAuthority, hasPlatformAdminAuthority, startOperatorSession, subscribeOperatorSession } from "@/services/authorization/OperatorSessionService";
+import { getOperatorSession, hasActiveRole, hasPlatformAdminAuthority, startOperatorSession, subscribeOperatorSession } from "@/services/authorization/OperatorSessionService";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { startRuntimeLeaseTimerProbe } from "@/services/runtime/persistence/RuntimeLeaseTimerProbe";
 import AuthCallbackCoordinator from "@/components/auth/AuthCallbackCoordinator";
+import { useOperatorMode } from "@/hooks/useOperatorMode";
+import {
+  getOperatorModeSnapshot,
+  reconcileOperatorMode,
+  resolveAvailableUserModes,
+  subscribeOperatorMode,
+} from "@/services/ui/OperatorModeService";
+import { getSyncVersion, subscribeToSync } from "@/services/SyncService";
 
 function ProductionRouteGate() {
   const segments = useSegments();
   const operator = useOperatorSession();
+  const mode = useOperatorMode();
+  const syncVersion = useSyncExternalStore(subscribeToSync, getSyncVersion, getSyncVersion);
+  useEffect(() => { reconcileOperatorMode(operator); }, [operator]);
   useEffect(() => {
     if (operator.state === "LOADING") return;
     const root = segments[0];
@@ -22,14 +33,19 @@ function ProductionRouteGate() {
     if (!root || root === "_sitemap") return;
     if (root === "auth") return;
     if (operator.state !== "AUTHENTICATED") { router.replace("/"); return; }
+    if (root === "mode") return;
     const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
     const bootstrap = hasActiveRole(operator, "EXERCISE_BOOTSTRAP");
     if (isDiagnostics) {
-      if (!hasPlatformAdminAuthority(operator)) router.replace("/");
-    } else if (root === "admin" && !hasPlatformAdminAuthority(operator)) router.replace("/");
-    else if (root === "excon" && !hasActiveRole(operator, "EXCON", exerciseId) && !bootstrap) router.replace(hasPlatformAdminAuthority(operator) ? "/admin" : "/");
-    else if (root !== "excon" && root !== "admin" && !hasActiveRole(operator, "CM", exerciseId)) router.replace(hasActiveRole(operator, "EXCON", exerciseId) || bootstrap ? "/excon" : hasPlatformAdminAuthority(operator) ? "/admin" : "/");
-  }, [operator, segments]);
+      if (!hasPlatformAdminAuthority(operator)) router.replace("/mode");
+      else if (mode.selectedMode !== "ADMIN") router.replace("/mode");
+    } else if (root === "admin") {
+      if (!hasPlatformAdminAuthority(operator)) router.replace("/mode");
+      else if (mode.selectedMode !== "ADMIN") router.replace("/mode");
+    }
+    else if (root === "excon" && (mode.selectedMode !== "EXCON" || (!hasActiveRole(operator, "EXCON", exerciseId) && !bootstrap))) router.replace("/mode");
+    else if (root !== "excon" && root !== "admin" && (mode.selectedMode !== "CM" || !hasActiveRole(operator, "CM", exerciseId))) router.replace("/mode");
+  }, [mode, operator, segments, syncVersion]);
   return null;
 }
 
@@ -42,8 +58,11 @@ export default function RootLayout() {
     let unsubscribeRuntimeCheckpoint = () => {};
     let unsubscribeOperator = () => {};
     let unsubscribeOperatorState = () => {};
+    let unsubscribeModeState = () => {};
     const stopLeaseTimerProbe = startRuntimeLeaseTimerProbe();
     let applicationStarted = false;
+    let applicationMode: "CM" | "EXCON" | undefined;
+    let applicationGeneration = 0;
     let mounted = true;
 
     loadPersistedState().finally(() => {
@@ -53,44 +72,57 @@ export default function RootLayout() {
 
       unsubscribeLocal = startStatePersistence();
       unsubscribeOperator = startOperatorSession();
+      const stopAuthenticatedApplication = () => {
+        applicationGeneration += 1;
+        unsubscribeCloud(); unsubscribeCloud = () => {};
+        unsubscribeRuntimeCheckpoint(); unsubscribeRuntimeCheckpoint = () => {};
+        applicationStarted = false;
+        applicationMode = undefined;
+      };
       // Remote current-exercise discovery is the startup gate. A stale local
       // RUNNING projection must never acquire writer authority before the
           // authoritative identity is resolved, and a conflict remains fail-closed.
           const startAuthenticatedApplication = () => {
             if (getOperatorSession().state !== "AUTHENTICATED") {
-              if (applicationStarted) {
-                unsubscribeCloud(); unsubscribeCloud = () => {};
-                unsubscribeRuntimeCheckpoint(); unsubscribeRuntimeCheckpoint = () => {};
-            applicationStarted = false;
-              }
+              if (applicationStarted) stopAuthenticatedApplication();
               return;
             }
             const currentOperator = getOperatorSession();
-            if (!hasOperationalAuthority(currentOperator)) {
-              if (applicationStarted) {
-                unsubscribeCloud(); unsubscribeCloud = () => {};
-                unsubscribeRuntimeCheckpoint(); unsubscribeRuntimeCheckpoint = () => {};
-                applicationStarted = false;
-              }
+            const selectedMode = getOperatorModeSnapshot().selectedMode;
+            const operationalMode = selectedMode === "CM" || selectedMode === "EXCON" ? selectedMode : undefined;
+            const available = resolveAvailableUserModes(currentOperator);
+            const operationalAuthority = Boolean(operationalMode && available.some(item => item.mode === operationalMode));
+            if (!operationalAuthority) {
+              if (applicationStarted) stopAuthenticatedApplication();
               return;
             }
-        if (applicationStarted) return;
+        if (applicationStarted && applicationMode === operationalMode) return;
+        if (applicationStarted) stopAuthenticatedApplication();
         applicationStarted = true;
+        applicationMode = operationalMode;
+        const modeGeneration = ++applicationGeneration;
         void startAfterCurrentExerciseDiscovery({
         discover: async () => {
           const unsubscribe = await startCloudSync();
-          if (mounted) unsubscribeCloud = unsubscribe;
-          else unsubscribe();
+          if (!mounted || modeGeneration !== applicationGeneration) {
+            unsubscribe();
+            throw new Error("OPERATOR_MODE_CHANGED");
+          }
+          unsubscribeCloud = unsubscribe;
           return getCloudSyncStatus();
         },
         startRuntime: startRuntimeCheckpointSync,
         }).then((runtimeUnsubscribe) => {
         if (!runtimeUnsubscribe) return;
-        if (mounted) unsubscribeRuntimeCheckpoint = runtimeUnsubscribe;
+        if (mounted && modeGeneration === applicationGeneration) unsubscribeRuntimeCheckpoint = runtimeUnsubscribe;
         else runtimeUnsubscribe();
-        }).catch((error) => { applicationStarted = false; failRuntimeCheckpointStartup(error); });
+        }).catch((error) => {
+          if (modeGeneration !== applicationGeneration) return;
+          applicationStarted = false; applicationMode = undefined; failRuntimeCheckpointStartup(error);
+        });
       };
       unsubscribeOperatorState = subscribeOperatorSession(startAuthenticatedApplication);
+      unsubscribeModeState = subscribeOperatorMode(startAuthenticatedApplication);
       startAuthenticatedApplication();
       setIsReady(true);
     });
@@ -101,6 +133,7 @@ export default function RootLayout() {
       unsubscribeCloud();
       unsubscribeRuntimeCheckpoint();
       unsubscribeOperatorState();
+      unsubscribeModeState();
       unsubscribeOperator();
       stopLeaseTimerProbe();
     };

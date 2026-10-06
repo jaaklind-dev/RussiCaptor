@@ -23,7 +23,8 @@ import SharedWorkflowValidationCard from "@/components/dashboard/SharedWorkflowV
 import { isSharedWorkflowValidationHarnessEnabled } from "@/config/SharedWorkflowValidationHarness";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
-import { hasActiveRole, signOutOperator } from "@/services/authorization/OperatorSessionService";
+import { signOutOperator } from "@/services/authorization/OperatorSessionService";
+import RoleModeSwitcher from "@/components/RoleModeSwitcher";
 
 export default function DashboardScreen() {
   const operator = useOperatorSession();
@@ -71,6 +72,8 @@ export default function DashboardScreen() {
     <ScrollView contentContainerStyle={styles.container}>
 
       <AppHeader />
+
+      <RoleModeSwitcher />
 
       <Text style={styles.title}>Juhtumikorraldaja töölaud</Text>
 
@@ -134,7 +137,6 @@ export default function DashboardScreen() {
         <Text style={styles.secondaryButtonText}>Ajalugu</Text>
 
       </Pressable>
-      {hasActiveRole(operator, "EXCON", canonicalExercise.exerciseId) && <Pressable style={styles.secondaryButton} onPress={() => router.push("/excon")}><Text style={styles.secondaryButtonText}>EXCON</Text></Pressable>}
       <Pressable style={styles.logoutButton} onPress={signOut}><Text style={styles.logoutButtonText}>Logi välja</Text></Pressable>
 
     </ScrollView>

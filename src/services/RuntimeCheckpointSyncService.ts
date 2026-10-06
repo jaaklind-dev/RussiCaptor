@@ -65,8 +65,9 @@ import {
   beginOperatorSignOutDrain,
   getOperatorSignOutDrainContext,
   isOperatorSignOutDraining,
-  registerOperatorSignOutPreparation,
+  registerOperatorRuntimeExitPreparation,
 } from "@/services/authorization/OperatorSignOutLifecycle";
+import { getSelectedOperatorMode, type OperatorMode } from "@/services/ui/OperatorModeService";
 
 const LEASE_SECONDS = 60;
 const RENEW_MS = 20_000;
@@ -571,8 +572,10 @@ export function shouldResetRuntimeCheckpointSyncForPrincipal(previousUserId: str
 export function runtimeWriterAcquisitionAllowed(
   operator: OperatorSessionState,
   exerciseId: string,
+  selectedMode: OperatorMode | undefined = getSelectedOperatorMode(),
 ): boolean {
-  return !isOperatorSignOutDraining() && hasActiveRole(operator, "EXCON", exerciseId);
+  return !isOperatorSignOutDraining() && selectedMode === "EXCON"
+    && hasActiveRole(operator, "EXCON", exerciseId);
 }
 
 export function runtimeWriterAppStateAction(nextState: string): "PRESERVE" | "RECONCILE" {
@@ -1476,7 +1479,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     signOutReleaseInFlight=task;
     return task;
   };
-  const stopSignOutPreparation=registerOperatorSignOutPreparation(prepareWriterSignOut);
+  const stopSignOutPreparation=registerOperatorRuntimeExitPreparation(prepareWriterSignOut);
   return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });rejectCanonicalCommandCommitWaiters("CANONICAL_COMMAND_GENERATION_STOPPED");releaseRuntimeOwner("GENERATION_CLEANUP");stopped=true;stopSignOutPreparation();appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();stopLifecyclePriority();stopCompletionIntent();stopDeferredPatientCommandDrain();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");terminalAuthorityFinalizer=undefined;if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;if(establishExerciseRuntimeOwnerForCurrentWriter===establishRuntimeOwner)establishExerciseRuntimeOwnerForCurrentWriter=undefined;if(ensureSharedWorkflowHeadsForCurrentWriter===ensureWorkflowHeads)ensureSharedWorkflowHeadsForCurrentWriter=undefined;if(drainPatientCommandsForCurrentWriter===drainPendingPatientCommands)drainPatientCommandsForCurrentWriter=undefined;if(resumePendingCompletionForCurrentWriter===resumePendingCompletion)resumePendingCompletionForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration){lease=undefined;resetRuntimeReaderConvergence(exerciseId);}};
 }
 

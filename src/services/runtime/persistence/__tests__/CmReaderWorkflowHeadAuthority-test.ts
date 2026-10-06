@@ -66,11 +66,12 @@ describe("CM-HEAD scoped reader authority", () => {
   });
 
   test("CM-HEAD-G01/G04/G06/G07/G12: only scoped EXCON may acquire writer authority", () => {
-    expect(runtimeWriterAcquisitionAllowed(session(assignment("CM")), exerciseId)).toBe(false);
-    expect(runtimeWriterAcquisitionAllowed(session(assignment("CM", "EX-OTHER")), exerciseId)).toBe(false);
-    expect(runtimeWriterAcquisitionAllowed(session(assignment("EXCON", "EX-OTHER")), exerciseId)).toBe(false);
-    expect(runtimeWriterAcquisitionAllowed(session(assignment("EXCON")), exerciseId)).toBe(true);
-    expect(runtimeWriterAcquisitionAllowed({state:"LOADING"}, exerciseId)).toBe(false);
+    expect(runtimeWriterAcquisitionAllowed(session(assignment("CM")), exerciseId, "CM")).toBe(false);
+    expect(runtimeWriterAcquisitionAllowed(session(assignment("CM", "EX-OTHER")), exerciseId, "CM")).toBe(false);
+    expect(runtimeWriterAcquisitionAllowed(session(assignment("EXCON", "EX-OTHER")), exerciseId, "EXCON")).toBe(false);
+    expect(runtimeWriterAcquisitionAllowed(session(assignment("EXCON")), exerciseId, "EXCON")).toBe(true);
+    expect(runtimeWriterAcquisitionAllowed(session(assignment("EXCON")), exerciseId, "CM")).toBe(false);
+    expect(runtimeWriterAcquisitionAllowed({state:"LOADING"}, exerciseId, "EXCON")).toBe(false);
   });
 
   test("CM-HEAD-G02/G08/G11: reader fails closed before canonical state then becomes ready without stale denial", () => {

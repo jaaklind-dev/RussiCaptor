@@ -1,4 +1,4 @@
-type SignOutPreparation = () => Promise<void>;
+type RuntimeExitPreparation = () => Promise<void>;
 
 export type OperatorSignOutDrainContext = Readonly<{
   exerciseId: string;
@@ -8,24 +8,25 @@ export type OperatorSignOutDrainContext = Readonly<{
   checkpointRevision: number;
 }>;
 
-let preparation: SignOutPreparation | undefined;
+let preparation: RuntimeExitPreparation | undefined;
 let preparationInFlight: Promise<void> | undefined;
 let drainContext: OperatorSignOutDrainContext | undefined;
 
 /**
- * Runtime registers its authenticated teardown boundary here so Auth can wait
- * for canonical authority release without introducing an authorization/runtime
- * import cycle.
+ * Runtime registers its authenticated teardown boundary here so both sign-out
+ * and a role-mode transition can wait for canonical authority release without
+ * introducing an authorization/runtime import cycle.
  */
-export function registerOperatorSignOutPreparation(next: SignOutPreparation): () => void {
+export function registerOperatorRuntimeExitPreparation(next: RuntimeExitPreparation): () => void {
   preparation = next;
   return () => {
     if (preparation === next) preparation = undefined;
   };
 }
+export const registerOperatorSignOutPreparation = registerOperatorRuntimeExitPreparation;
 
 /** Double taps share the same preparation and never issue duplicate release RPCs. */
-export function prepareOperatorSignOut(): Promise<void> {
+export function prepareOperatorRuntimeExit(): Promise<void> {
   if (preparationInFlight) return preparationInFlight;
   const current = preparation;
   if (!current) return drainContext
@@ -43,17 +44,24 @@ export function prepareOperatorSignOut(): Promise<void> {
   return inFlight;
 }
 
+export function prepareOperatorSignOut(): Promise<void> { return prepareOperatorRuntimeExit(); }
+
 /** Freeze the one writer identity that this authenticated sign-out may drain. */
 export function beginOperatorSignOutDrain(context: OperatorSignOutDrainContext): OperatorSignOutDrainContext {
   if (!drainContext) drainContext = Object.freeze({ ...context });
   return drainContext;
 }
 
+export const beginOperatorRuntimeExitDrain = beginOperatorSignOutDrain;
+
 export function getOperatorSignOutDrainContext(): OperatorSignOutDrainContext | undefined { return drainContext; }
 export function isOperatorSignOutDraining(): boolean { return Boolean(drainContext); }
+export const getOperatorRuntimeExitDrainContext = getOperatorSignOutDrainContext;
+export const isOperatorRuntimeExitDraining = isOperatorSignOutDraining;
 
-/** Auth owns the terminal boundary: only completed local sign-out clears it. */
+/** The caller clears the fence only after sign-out or the mode transition commits. */
 export function completeOperatorSignOutDrain(): void { drainContext = undefined; }
+export const completeOperatorRuntimeExitDrain = completeOperatorSignOutDrain;
 
 export function resetOperatorSignOutLifecycleForTests(): void {
   preparation = undefined;
