@@ -10,7 +10,7 @@ import { getRuntimeCheckpointSyncStatus, reacquireRuntimeFromRemoteCheckpoint, s
 import { authorityStateLabel } from "@/localization/et";
 import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
 import { router } from "expo-router";
-import { operatorSafeIssueMessage } from "@/services/ui/InteractionSafety";
+import { cloudSyncSafeIssueMessage, operatorSafeIssueMessage } from "@/services/ui/InteractionSafety";
 
 export async function resumeRuntime(
   resume: typeof takeOverRuntimeWriter = takeOverRuntimeWriter,
@@ -99,7 +99,7 @@ export default function CloudSyncStatusCard({ lifecycleState }: { lifecycleState
         </Text>
         <Text style={styles.caption}>
           {hasProblem
-            ? status.message ?? "Sünkroniseerimine jätkub ühenduse taastumisel."
+            ? cloudSyncSafeIssueMessage(status.message)
             : "Muudatused jõuavad teiste õppuse seadmeteni reaalajas."}
         </Text>
         <Text style={styles.caption}>

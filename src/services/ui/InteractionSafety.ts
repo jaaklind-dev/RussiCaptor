@@ -29,9 +29,20 @@ const operatorMessages: Readonly<Record<string, string>> = Object.freeze({
   CANONICAL_CHECKPOINT_CONFLICT: "Serveri kontrollpunkti taastamine ebaõnnestus. Kirjutamisõigust ei aktiveeritud.",
   LEASE_CONFLICT: "Simulatsiooni juhib teine seade. Jätkamiseks võta Runtime üle.",
   ACTIVE_ON_ANOTHER_DEVICE: "Simulatsiooni juhib teine seade. Jätkamiseks võta Runtime üle.",
+  COMPLETION_FENCED: "Õppuse lõpetamist ei saanud praegu lõpule viia.",
 });
 
 export function operatorSafeIssueMessage(code?: string): string {
   if (!code) return "Juhtimisõiguse seis vajab kontrollimist.";
   return operatorMessages[code] ?? "Juhtimisõiguse seis vajab kontrollimist. Proovi pärast ühenduse taastumist uuesti.";
+}
+
+export function cloudSyncSafeIssueMessage(message?: string): string {
+  if (message?.startsWith("MULTIPLE_ACTIVE_EXERCISES:")) {
+    return "Mitme aktiivse õppuse konflikt vajab lahendamist.";
+  }
+  if (message?.includes("COMPLETION_FENCED")) {
+    return operatorMessages.COMPLETION_FENCED;
+  }
+  return "Sünkroniseerimine jätkub ühenduse taastumisel.";
 }

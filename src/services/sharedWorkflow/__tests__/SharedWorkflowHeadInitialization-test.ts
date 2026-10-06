@@ -11,7 +11,7 @@ import {
 } from "../SharedWorkflowHeadInitializationService";
 
 const migrationPath = path.resolve(process.cwd(),
-  "supabase/migrations/20260915140843_initialize_shared_workflow_patient_heads.sql");
+  "supabase/migrations/20261006120000_recover_pending_completion_takeover.sql");
 const migration = fs.readFileSync(migrationPath, "utf8");
 
 class InMemoryGateway implements SharedWorkflowHeadInitializationGateway {
@@ -113,6 +113,17 @@ describe("WP-NARVA-10B27F shared workflow head initialization", () => {
     expect(migration).toContain("EXERCISE_COMPLETED");
     expect(migration).toContain("COMPLETION_FENCED");
     expect(migration.indexOf("for update")).toBeLessThan(migration.indexOf("insert into public.shared_workflow_patient_states"));
+  });
+
+  test("pending completion may observe an existing head but cannot initialize a missing head", () => {
+    const existingHeadRead = migration.indexOf("select swps.* into v_head");
+    const existingReturn = migration.indexOf("return query select 'EXISTING'::text");
+    const pendingFence = migration.indexOf("v_completion_status = 'PENDING'");
+    const insert = migration.indexOf("insert into public.shared_workflow_patient_states");
+    expect(existingHeadRead).toBeGreaterThan(-1);
+    expect(existingReturn).toBeGreaterThan(existingHeadRead);
+    expect(pendingFence).toBeGreaterThan(existingReturn);
+    expect(insert).toBeGreaterThan(pendingFence);
   });
 
   test("migration inserts unowned revision zero without workflow commands, notifications or leases", () => {

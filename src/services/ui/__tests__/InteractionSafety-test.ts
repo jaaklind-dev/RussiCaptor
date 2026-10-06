@@ -1,4 +1,4 @@
-import { FIELD_TOUCH_TARGET_MIN_DP, SingleFlightActionGate, operatorSafeIssueMessage } from "../InteractionSafety";
+import { cloudSyncSafeIssueMessage, FIELD_TOUCH_TARGET_MIN_DP, SingleFlightActionGate, operatorSafeIssueMessage } from "../InteractionSafety";
 
 describe("WP-NEXT-05 rugged-tablet interaction safety", () => {
   test("double press shares one logical mutation", async () => {
@@ -21,5 +21,12 @@ describe("WP-NEXT-05 rugged-tablet interaction safety", () => {
     expect(operatorSafeIssueMessage("LEASE_CONFLICT")).toContain("teine seade");
     expect(operatorSafeIssueMessage("CHECKPOINT_REVISION_CONFLICT")).not.toContain("CHECKPOINT_");
     expect(operatorSafeIssueMessage("UNKNOWN_INTERNAL_CODE")).not.toContain("UNKNOWN_INTERNAL_CODE");
+  });
+
+  test("pending completion and cloud errors never expose raw backend codes", () => {
+    expect(operatorSafeIssueMessage("COMPLETION_FENCED")).toBe("Õppuse lõpetamist ei saanud praegu lõpule viia.");
+    expect(cloudSyncSafeIssueMessage("COMPLETION_FENCED")).not.toContain("COMPLETION_FENCED");
+    expect(cloudSyncSafeIssueMessage("MULTIPLE_ACTIVE_EXERCISES:EX-1,EX-2")).not.toContain("EX-1");
+    expect(cloudSyncSafeIssueMessage("postgres raw failure")).not.toContain("postgres");
   });
 });
