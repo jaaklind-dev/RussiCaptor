@@ -14,7 +14,7 @@ import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { supabase } from "@/services/SupabaseService";
 import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
 import { notifySync, subscribeToSync } from "@/services/SyncService";
-import { isValidRuntimeCheckpoint, localRuntimeCheckpointStore, resolveAuthoritativeCheckpointAsync, resolveSubscribedCheckpoint, resolveWriterCandidateCheckpoint, type RuntimeWriterCandidateCheckpointResolution } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
+import { isValidRuntimeCheckpoint, localRuntimeCheckpointStore, resolveAuthoritativeCheckpointAsync, resolvePendingCompletionWriterCandidateCheckpoint, resolveSubscribedCheckpoint, resolveWriterCandidateCheckpoint, type RuntimeWriterCandidateCheckpointResolution } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 import { yieldToEventLoop } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import {
   SupabaseRuntimeCheckpointRepository,
@@ -48,6 +48,8 @@ import { handleExerciseControlCommand } from "@/services/runtime/exercise/Exerci
 import { RuntimeExerciseOwnerGeneration } from "@/services/runtime/exercise/RuntimeExerciseOwnerGeneration";
 import { RuntimeCompletionFinalizerResumeCoordinator } from
   "@/services/runtime/exercise/RuntimeCompletionFinalizerResumeCoordinator";
+import { RuntimeCompletionCanonicalRebaseWake } from
+  "@/services/runtime/exercise/RuntimeCompletionCanonicalRebaseWake";
 import {
   acceptRuntimeReaderCheckpoint,
   advertiseRuntimeReaderCheckpoint,
@@ -694,11 +696,39 @@ export async function takeOverRuntimeWriter(): Promise<Status> {
   const localCheckpoint=checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId);
   const remote=await loadRuntimeCheckpointWithCache(repository,exerciseId,localCheckpoint,"takeover");
   if (!remote) return setAndReturn({state:"CONFLICT",code:"CHECKPOINT_NOT_FOUND"});
-  const resolved=resolveWriterCandidateCheckpoint(checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId),remote);
+  let completionRequestForCanonicalRebase:RuntimeCompletionRequest|undefined;
+  if(localCheckpoint && localCheckpoint.checkpointRevision>remote.checkpointRevision){
+    try {
+      const request=await getRuntimeCompletionGateway()?.load(exerciseId);
+      if(request?.status==="PENDING"){
+        completionRequestForCanonicalRebase=request;
+        setRuntimeCompletionPhase(exerciseId,"PENDING");
+      }
+    } catch {
+      // Keep the existing fail-closed writer-candidate decision when request
+      // authority cannot be inspected. The active generation will retry it.
+    }
+  }
+  const resolved=resolvePendingCompletionWriterCandidateCheckpoint(
+    localCheckpoint,remote,completionRequestForCanonicalRebase?.status,
+  );
+  if(resolved.status==="REMOTE_REBASE"&&completionRequestForCanonicalRebase){
+    traceRuntimeLeaseLifecycle("CANONICAL_REBASE_START",{detail:{
+      exerciseId,requestId:completionRequestForCanonicalRebase.commandId,
+      localCheckpointRevision:localCheckpoint?.checkpointRevision,
+      canonicalCheckpointRevision:remote.checkpointRevision,
+    }});
+  }
   const prepared=await prepareRuntimeWriterCandidateBeforeLease(resolved,
     checkpoint=>acceptAuthoritativeRuntimeCheckpointForReaderAsync(checkpoint,yieldToEventLoop),
     ()=>checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId));
   if (prepared.state==="REJECTED") return setAndReturn({state:"CONFLICT",code:prepared.code});
+  if(prepared.rebased&&completionRequestForCanonicalRebase){
+    traceRuntimeLeaseLifecycle("CANONICAL_REBASE_COMPLETE",{detail:{
+      exerciseId,requestId:completionRequestForCanonicalRebase.commandId,
+      canonicalCheckpointRevision:prepared.checkpoint.checkpointRevision,
+    }});
+  }
   const writerId=await startupAwait(getRuntimeWriterInstanceId());
   const acquired=await acquireRuntimeWriterTerminal(repository,exerciseId,writerId,remote.checkpointRevision,LEASE_SECONDS);
   if ("code" in acquired) return setAndReturn({state:"READER",code:acquired.code,revision:acquired.checkpointRevision});
@@ -732,6 +762,13 @@ export async function takeOverRuntimeWriter(): Promise<Status> {
   if (!writerReadyGeneration) {
     await repository.releaseWriter(confirmed); lease=undefined;
     return setAndReturn({state:"READER",code:"RUNTIME_OWNER_NOT_READY",revision:remoteRevision});
+  }
+  if(prepared.rebased&&completionRequestForCanonicalRebase){
+    traceRuntimeLeaseLifecycle("TERMINAL_INTENT_WAKE",{detail:{
+      exerciseId,requestId:completionRequestForCanonicalRebase.commandId,
+      generation:`exercise-gen-${writerReadyGeneration.generation}`,
+      reason:"CANONICAL_REBASE_COMPLETE",
+    }});
   }
   await resumeCompletionBeforeRoutinePublication(
     writerReadyGeneration.resumePendingCompletion,
@@ -896,6 +933,8 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   }
   const client = supabase;
   const repository=new SupabaseRuntimeCheckpointRepository(client);
+  const completionGateway=getRuntimeCompletionGateway();
+  let completionRequestForCanonicalRebase:RuntimeCompletionRequest|undefined;
   const writerId=await getRuntimeWriterInstanceId();
   let local:RuntimeCheckpointEnvelope<SharedExerciseState>|undefined=checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId);
   beginRuntimeReaderConvergence(exerciseId);
@@ -938,6 +977,40 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   });
   let resolved=await resolveAuthoritativeCheckpointAsync(local,remote,yieldToEventLoop);
   endRemoteResolution({ status: resolved.status });
+  if (local && remote && local.checkpointRevision > remote.checkpointRevision &&
+      runtimeWriterAcquisitionAllowed(getOperatorSession(),exerciseId) && completionGateway) {
+    try {
+      const completionRequest=await startupAwait(completionGateway.load(exerciseId));
+      if(completionRequest?.status==="PENDING"){
+        completionRequestForCanonicalRebase=completionRequest;
+        setRuntimeCompletionPhase(exerciseId,"PENDING");
+        const writerCandidate=resolvePendingCompletionWriterCandidateCheckpoint(
+          local,remote,completionRequest.status,resolved,
+        );
+        traceRuntimeLeaseLifecycle("CANONICAL_REBASE_START",{generation:traceGeneration,detail:{
+          exerciseId,requestId:completionRequest.commandId,
+          localCheckpointRevision:local.checkpointRevision,
+          canonicalCheckpointRevision:remote.checkpointRevision,
+        }});
+        setStatus({state:"READER",code:"READER_CHECKPOINT_SYNCHRONIZING",revision:remote.checkpointRevision});
+        const prepared=await prepareRuntimeWriterCandidateBeforeLease(writerCandidate,
+          checkpoint=>acceptReaderCheckpoint(checkpoint,"REMOTE"),
+          ()=>checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId));
+        if(prepared.state==="READY"){
+          local=prepared.checkpoint;
+          remoteRevision=prepared.checkpoint.checkpointRevision;
+          resolved={status:"EQUIVALENT",checkpoint:prepared.checkpoint};
+          traceRuntimeLeaseLifecycle("CANONICAL_REBASE_COMPLETE",{generation:traceGeneration,detail:{
+            exerciseId,requestId:completionRequest.commandId,
+            canonicalCheckpointRevision:prepared.checkpoint.checkpointRevision,
+          }});
+        } else resolved={status:"CONFLICT",code:prepared.code};
+      }
+    } catch {
+      // The request read is an authority hint, not a replacement for the
+      // existing fail-closed checkpoint resolver. Realtime will retry it.
+    }
+  }
   if (resolved.status==="CONFLICT" && resolved.code==="CHECKPOINT_REVISION_DIVERGENCE" && remote &&
       runtimeWriterAcquisitionAllowed(getOperatorSession(),exerciseId)) {
     const writerCandidate=resolveWriterCandidateCheckpoint(local,remote,resolved);
@@ -1077,7 +1150,6 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   const patientCommandConsumer=patientCommandGateway
     ? new RuntimePatientCommandConsumer(patientCommandGateway,materializeRuntimePatientCommand,
       ()=>getCanonicalExerciseSnapshot().simulationTimeSec,commitCanonicalPatientCommand) : undefined;
-  const completionGateway=getRuntimeCompletionGateway();
   let activeCompletion:RuntimeCompletionRequest|undefined;
   let completionProcessing:Promise<void>|undefined;
   let terminalAuthorityFinalizer:(()=>void)|undefined;
@@ -1157,6 +1229,21 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
       return true;
     }
   };
+  const completionCanonicalRebaseWake=new RuntimeCompletionCanonicalRebaseWake({
+    exerciseId,
+    generation:traceGeneration,
+    isCurrent:()=>!generationStopped(),
+    dispatch:async request=>{await processCompletionRequest(request);},
+    trace:(event,detail)=>traceRuntimeLeaseLifecycle(event,{generation:traceGeneration,detail}),
+  });
+  if(completionRequestForCanonicalRebase){
+    const request=completionRequestForCanonicalRebase;
+    void completionCanonicalRebaseWake.observe(request).then(()=>
+      completionCanonicalRebaseWake.canonicalRebaseComplete(request.commandId),
+    ).catch(error=>setRuntimeCompletionPhase(
+      exerciseId,"FAILED",error instanceof Error?error.message:"COMPLETION_REBASE_WAKE_FAILED",
+    ));
+  }
   const registerLifecycleCriticalIntent=(fromCommandIntent=false)=>{
     const snapshot=getCanonicalExerciseSnapshot();
     if(snapshot.exerciseId!==exerciseId||(!fromCommandIntent&&snapshot.lifecycleState!=="COMPLETED")||terminalIntentGeneration!==undefined)return;
@@ -1559,7 +1646,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     return task;
   };
   const stopSignOutPreparation=registerOperatorRuntimeExitPreparation(prepareWriterSignOut);
-  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });rejectCanonicalCommandCommitWaiters("CANONICAL_COMMAND_GENERATION_STOPPED");releaseRuntimeOwner("GENERATION_CLEANUP");completionResumeCoordinator?.stop();stopped=true;stopSignOutPreparation();appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();stopLifecyclePriority();stopCompletionIntent();stopDeferredPatientCommandDrain();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");terminalAuthorityFinalizer=undefined;if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;if(establishExerciseRuntimeOwnerForCurrentWriter===establishRuntimeOwner)establishExerciseRuntimeOwnerForCurrentWriter=undefined;if(ensureSharedWorkflowHeadsForCurrentWriter===ensureWorkflowHeads)ensureSharedWorkflowHeadsForCurrentWriter=undefined;if(drainPatientCommandsForCurrentWriter===drainPendingPatientCommands)drainPatientCommandsForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration){lease=undefined;resetRuntimeReaderConvergence(exerciseId);}};
+  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });rejectCanonicalCommandCommitWaiters("CANONICAL_COMMAND_GENERATION_STOPPED");releaseRuntimeOwner("GENERATION_CLEANUP");completionResumeCoordinator?.stop();completionCanonicalRebaseWake.stop();stopped=true;stopSignOutPreparation();appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();stopLifecyclePriority();stopCompletionIntent();stopDeferredPatientCommandDrain();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");terminalAuthorityFinalizer=undefined;if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;if(establishExerciseRuntimeOwnerForCurrentWriter===establishRuntimeOwner)establishExerciseRuntimeOwnerForCurrentWriter=undefined;if(ensureSharedWorkflowHeadsForCurrentWriter===ensureWorkflowHeads)ensureSharedWorkflowHeadsForCurrentWriter=undefined;if(drainPatientCommandsForCurrentWriter===drainPendingPatientCommands)drainPatientCommandsForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration){lease=undefined;resetRuntimeReaderConvergence(exerciseId);}};
 }
 
 async function startRuntimeCheckpointSyncOnce(): Promise<()=>void> {

@@ -576,6 +576,35 @@ export function resolveWriterCandidateCheckpoint(
   });
 }
 
+/**
+ * A durable PENDING completion request makes the server checkpoint the only
+ * valid writer-recovery base. A numerically newer local envelope may be an
+ * unpublished preparation left by the former writer; its revision does not
+ * grant publication authority and must not strand terminal recovery.
+ */
+export function resolvePendingCompletionWriterCandidateCheckpoint(
+  local: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined,
+  remote: RuntimeCheckpointEnvelope<SharedExerciseState> | undefined,
+  completionStatus: "PENDING" | "COMPLETED" | undefined,
+  validatedResolution = resolveAgainstValidatedLocalCheckpoint(local, remote),
+): RuntimeWriterCandidateCheckpointResolution {
+  if (completionStatus !== "PENDING" || !local || !remote ||
+      !isValidRuntimeCheckpoint(remote) || local.exerciseId !== remote.exerciseId) {
+    return resolveWriterCandidateCheckpoint(local, remote, validatedResolution);
+  }
+  const envelopeIdentical = local.envelopeVersion === remote.envelopeVersion &&
+    local.checkpointRevision === remote.checkpointRevision &&
+    local.persistedRuntimeVersion === remote.persistedRuntimeVersion &&
+    local.payloadHash === remote.payloadHash &&
+    local.provenanceHash === remote.provenanceHash;
+  if (envelopeIdentical) return { status: "EQUIVALENT", checkpoint: local };
+  return Object.freeze({
+    status: "REMOTE_REBASE",
+    checkpoint: remote,
+    code: "CANONICAL_CHECKPOINT_CONFLICT",
+  });
+}
+
 /** A lease-free reader follows the validated durable subscription payload.
  * Local reader revisions are cache metadata, not publication authority; this
  * also repairs historical clients that minted a higher read-only revision.

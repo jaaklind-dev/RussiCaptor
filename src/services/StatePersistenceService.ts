@@ -43,7 +43,7 @@ import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/Run
 import { BoundedObsoleteGenerationGate, LatestGenerationPipeline, yieldToEventLoop, type PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { capturePatientTransportRuntime, preparePatientTransportRuntime } from "@/services/runtime/exercise/PatientTransportRuntimeService";
 import { compactActiveExerciseState } from "@/services/runtime/persistence/ActiveCheckpointCompaction";
-import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { startRuntimeWorkTrace, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { RuntimeCheckpointClockMismatchError, terminalClockReconciliationDecision } from
   "@/services/runtime/persistence/RuntimeTerminalClockReconciliation";
 import { installRuntimeCompletionIntentListener } from "@/services/runtime/persistence/RuntimeCheckpointLifecycleIntent";
@@ -728,11 +728,10 @@ export function startStatePersistence(): () => void {
       }
       if (terminalCaptureGeneration !== undefined && error instanceof RuntimeCheckpointClockMismatchError) {
         const current = getCanonicalExerciseSnapshot();
-        const canonicalClockSec = "simulationTimeSec" in current
-          ? current.simulationTimeSec : current.currentMinute * 60;
+        const canonicalClockSec = current.simulationTimeSec;
         const liveRuntimeClocks = getActiveClinicalReferenceRuntimeClocks(current.exerciseId);
         const decision = terminalClockReconciliationDecision({
-          lifecycleState: "lifecycleState" in current ? current.lifecycleState : current.state,
+          lifecycleState: current.lifecycleState,
           preparationClockSec: error.expectedSimulationTimeSec,
           canonicalClockSec,
           detachedRuntimeClocks: error.observedRuntimeClocks,
