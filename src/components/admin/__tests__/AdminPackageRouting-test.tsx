@@ -28,6 +28,7 @@ jest.mock("@/hooks/useOperatorSession", () => ({ useOperatorSession: () => ({
 }) }));
 jest.mock("@/services/admin/PlatformAdminExerciseCreation", () => ({
   createAdminExercise: (...args: unknown[]) => mockCreate(...args),
+  createAdminExerciseOperationId: () => "ADMIN-CREATE-ROUTE-TEST",
 }));
 
 const registry = {
@@ -113,7 +114,11 @@ describe("Admin package-selection routing", () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => { renderer = TestRenderer.create(<AdminExerciseCreateScreen routeInput={adminPackageRouteParams(AIRWAY_EXERCISE_PACKAGE)} />); });
     await act(async () => renderer.root.findByProps({ testID: "admin-create-selected-package" }).props.onPress());
-    expect(mockCreate).toHaveBeenCalledWith("USER-ADMIN", adminPackageRouteParams(AIRWAY_EXERCISE_PACKAGE));
+    expect(mockCreate).toHaveBeenCalledWith(
+      "USER-ADMIN",
+      adminPackageRouteParams(AIRWAY_EXERCISE_PACKAGE),
+      "ADMIN-CREATE-ROUTE-TEST",
+    );
   });
 
   test("ADMIN-PKG-11 normal Admin UI does not render raw package identity or hash", async () => {
@@ -131,5 +136,38 @@ describe("Admin package-selection routing", () => {
     await act(async () => { renderer = TestRenderer.create(<AdminExerciseCreateScreen routeInput={adminPackageRouteParams(PELVIC_INJURY_EXERCISE_PACKAGE)} />); });
     await act(async () => renderer.root.findByProps({ testID: "admin-create-selected-package" }).props.onPress());
     expect(mockReplace).toHaveBeenCalledWith({ pathname: "/admin/exercises", params: { createdExerciseId: "EX-ADMIN-ROUTE-2" } });
+  });
+
+  test("ADMIN-CREATE-ACK-01 create screen does not navigate while durable acknowledgement is pending", async () => {
+    let resolveCreate!: (exerciseId: string) => void;
+    mockCreate.mockReturnValue(new Promise<string>(resolve => { resolveCreate = resolve; }));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<AdminExerciseCreateScreen routeInput={adminPackageRouteParams(AIRWAY_EXERCISE_PACKAGE)} />); });
+    await act(async () => { void renderer.root.findByProps({ testID: "admin-create-selected-package" }).props.onPress(); });
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(visibleText(renderer)).toContain("Loon õppust…");
+    await act(async () => { resolveCreate("EX-DURABLE"); await Promise.resolve(); });
+    expect(mockReplace).toHaveBeenCalledWith({ pathname: "/admin/exercises", params: { createdExerciseId: "EX-DURABLE" } });
+  });
+
+  test("ADMIN-CREATE-ACK-08 failed durable creation stays in flow with bounded error", async () => {
+    mockCreate.mockRejectedValue(new Error("sensitive backend detail"));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<AdminExerciseCreateScreen routeInput={adminPackageRouteParams(AIRWAY_EXERCISE_PACKAGE)} />); });
+    await act(async () => renderer.root.findByProps({ testID: "admin-create-selected-package" }).props.onPress());
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(visibleText(renderer)).toContain("Õppuse loomine ebaõnnestus.");
+    expect(visibleText(renderer)).not.toContain("sensitive backend detail");
+  });
+
+  test("ADMIN-CREATE-ACK-09 rapid double submit invokes one creation operation", async () => {
+    let resolveCreate!: (exerciseId: string) => void;
+    mockCreate.mockReturnValue(new Promise<string>(resolve => { resolveCreate = resolve; }));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<AdminExerciseCreateScreen routeInput={adminPackageRouteParams(AIRWAY_EXERCISE_PACKAGE)} />); });
+    const press = renderer.root.findByProps({ testID: "admin-create-selected-package" }).props.onPress;
+    await act(async () => { void press(); void press(); });
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    await act(async () => { resolveCreate("EX-ONE"); await Promise.resolve(); });
   });
 });

@@ -1,11 +1,14 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { exercisePackageNameLabel, publicErrorMessage } from "@/localization/et";
 import { resolveAdminPackageSelection, type AdminPackageRouteInput } from "@/services/admin/AdminPackageSelectionService";
-import { createAdminExercise } from "@/services/admin/PlatformAdminExerciseCreation";
+import {
+  createAdminExercise,
+  createAdminExerciseOperationId,
+} from "@/services/admin/PlatformAdminExerciseCreation";
 import { exercisePackageRegistry } from "@/services/exercise/ExercisePackageService";
 
 export default function AdminExerciseCreateScreen({ routeInput }: Readonly<{ routeInput: AdminPackageRouteInput }>) {
@@ -13,16 +16,22 @@ export default function AdminExerciseCreateScreen({ routeInput }: Readonly<{ rou
   const resolution = resolveAdminPackageSelection(routeInput, exercisePackageRegistry);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>();
+  const operationId = useRef(createAdminExerciseOperationId()).current;
+  const submission = useRef<Promise<string> | undefined>(undefined);
 
   const create = async () => {
     if (!resolution.ok || operator.state !== "AUTHENTICATED") return;
+    if (submission.current) return;
     setBusy(true); setMessage(undefined);
     try {
-      const exerciseId = await createAdminExercise(operator.profile.userId, resolution.identity);
+      const pending = createAdminExercise(operator.profile.userId, resolution.identity, operationId);
+      submission.current = pending;
+      const exerciseId = await pending;
       router.replace({ pathname: "/admin/exercises", params: { createdExerciseId: exerciseId } });
     } catch (error) {
       setMessage(publicErrorMessage(error, "Õppuse loomine ebaõnnestus."));
     } finally {
+      submission.current = undefined;
       setBusy(false);
     }
   };

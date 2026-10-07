@@ -50,6 +50,10 @@ import {
   isRuntimeCompletionPublicationFenced,
   subscribeToRuntimeCompletionPhase,
 } from "@/services/runtime/exercise/RuntimeCompletionService";
+import {
+  getPendingInitialExercisePublication,
+  shouldPreservePendingInitialExercise,
+} from "@/services/exercise/InitialExercisePublicationFence";
 
 export type CloudSyncStatus = {
   state: "disabled" | "connecting" | "synced" | "saving" | "offline" | "error";
@@ -299,6 +303,15 @@ function isSharedExerciseState(value: unknown): value is SharedExerciseState {
 }
 
 function applyRemoteRow(row: ExerciseStateRow): void {
+  const localExercise = getCanonicalExerciseSnapshot();
+  if (shouldPreservePendingInitialExercise(localExercise.exerciseId, row.exercise_id)) {
+    recordSupabaseTraffic({
+      operation: "INITIAL_EXERCISE_DISCOVERY_DEFERRED",
+      endpoint: "exercise_states.discovery",
+      avoidedRequests: 1,
+    });
+    return;
+  }
   const known = remoteVersions.get(row.exercise_id);
   const isOlder = Boolean(known && row.revision < known.revision);
   const isSameOrOlderTimestamp =
@@ -311,7 +324,6 @@ function applyRemoteRow(row: ExerciseStateRow): void {
   remoteVersions.set(row.exercise_id, { revision: row.revision, updatedAt: row.updated_at });
   const session = row.state.exerciseSession;
   const lifecycle = "lifecycleState" in session ? session.lifecycleState : session.state === "running" ? "RUNNING" : session.state === "paused" ? "PAUSED" : "READY";
-  const localExercise = getCanonicalExerciseSnapshot();
   if (shouldIgnoreHistoricalExerciseProjection(
     localExercise.exerciseId,
     localExercise.lifecycleState,
@@ -407,6 +419,21 @@ async function performRemoteCurrentExerciseRefresh(_trigger: ExerciseDiscoveryRe
       lastDiscoveryResponseBytes += serializedBytes(terminalRows);
       if (terminalError) { setStatus({ state: "error", message: terminalError.message }); return; }
       discoveryRows = (terminalRows ?? []) as unknown as ExerciseDiscoveryRow[];
+    }
+    const pendingPublication = getPendingInitialExercisePublication();
+    if (pendingPublication) {
+      const pendingRow = discoveryRows.find(row => row.exercise_id === pendingPublication.exerciseId);
+      if (!pendingRow) {
+        // The provisional READY identity must survive the read-before-insert
+        // window. Reads remain enabled; only applying an unrelated historical
+        // row is deferred until the first durable insert is acknowledged.
+        conflictingRemoteExercises = [];
+        explicitlySelectedExerciseId = undefined;
+        remoteSelectionState = "RESOLVED";
+        await saveToCloud();
+        return;
+      }
+      discoveryRows = [pendingRow];
     }
     const candidates = discoveryRows.map(row => ({
       exerciseId: row.exercise_id,
@@ -635,6 +662,120 @@ const projectionWriteCoordinator = new ExerciseProjectionWriteCoordinator(
 );
 
 async function saveToCloud(): Promise<void> { await projectionWriteCoordinator.flush(); }
+
+export type InitialExercisePublicationAcknowledgement = Readonly<{
+  exerciseId: string;
+  revision: number;
+  packageId: string;
+  packageVersion: string;
+  bootstrapAuthorizationId: string;
+}>;
+
+type InitialExerciseReadback = Readonly<{
+  exercise_id: string;
+  revision: number;
+  exercise_session?: SharedExerciseState["exerciseSession"];
+  exercise_package_reference?: SharedExerciseState["exercisePackageReference"];
+  updated_at: string;
+}>;
+
+type BootstrapConsumptionReadback = Readonly<{
+  id: string;
+  status: string;
+  consumed_exercise_id: string | null;
+  consumed_at: string | null;
+  expires_at: string;
+}>;
+
+const INITIAL_EXERCISE_ACK_DELAYS_MS = Object.freeze([0, 150, 300, 600, 1_200, 2_400]);
+
+function delay(ms: number): Promise<void> {
+  return ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve();
+}
+
+export function initialExerciseReadbackMatches(
+  row: InitialExerciseReadback | undefined,
+  exerciseId: string,
+  packageId: string,
+  packageVersion: string,
+): row is InitialExerciseReadback {
+  if (!row || row.exercise_id !== exerciseId || row.revision < 1) return false;
+  const session = row.exercise_session;
+  const reference = row.exercise_package_reference;
+  const lifecycle = session && "lifecycleState" in session
+    ? session.lifecycleState
+    : session?.state === "running" ? "RUNNING" : session?.state === "paused" ? "PAUSED" : "READY";
+  return session?.exerciseId === exerciseId
+    && lifecycle === "READY"
+    && reference?.packageId === packageId
+    && reference.packageVersion === packageVersion;
+}
+
+export function bootstrapConsumptionMatches(
+  row: BootstrapConsumptionReadback | undefined,
+  exerciseId: string,
+): row is BootstrapConsumptionReadback {
+  return Boolean(row?.id && row.status === "ACTIVE"
+    && row.consumed_exercise_id === exerciseId && row.consumed_at);
+}
+
+/**
+ * Forces the one-shot READY insert and waits for independent backend readback.
+ * No Runtime checkpoint is required at READY: bootstrap authority deliberately
+ * cannot create a writer lease or runtime_checkpoints row.
+ */
+export async function acknowledgeInitialExercisePublication(input: Readonly<{
+  operationId: string;
+  userId: string;
+  exerciseId: string;
+  packageId: string;
+  packageVersion: string;
+}>): Promise<InitialExercisePublicationAcknowledgement> {
+  if (!supabase) throw new Error("ADMIN_EXERCISE_DURABILITY_UNAVAILABLE");
+  const pending = getPendingInitialExercisePublication();
+  if (!pending || pending.operationId !== input.operationId || pending.exerciseId !== input.exerciseId) {
+    throw new Error("ADMIN_EXERCISE_CREATE_IDENTITY_MISMATCH");
+  }
+
+  // Explicit Admin creation owns this bounded first-write operation. Discovery
+  // remains readable but cannot replace the provisional identity while this
+  // fence is active.
+  remoteSelectionState = "RESOLVED";
+  await saveToCloud();
+
+  for (const waitMs of INITIAL_EXERCISE_ACK_DELAYS_MS) {
+    await delay(waitMs);
+    const [{ data: exerciseData, error: exerciseError }, { data: bootstrapData, error: bootstrapError }] = await Promise.all([
+      supabase.from("exercise_states")
+        .select(EXERCISE_DISCOVERY_COLUMNS)
+        .eq("exercise_id", input.exerciseId)
+        .maybeSingle(),
+      supabase.from("exercise_bootstrap_authorizations")
+        .select("id,status,consumed_exercise_id,consumed_at,expires_at")
+        .eq("user_id", input.userId)
+        .eq("consumed_exercise_id", input.exerciseId)
+        .maybeSingle(),
+    ]);
+    recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.initial_create_ack", data: exerciseData });
+    recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_bootstrap_authorizations.initial_create_ack", data: bootstrapData });
+    if (exerciseError || bootstrapError) continue;
+    const exerciseRow = exerciseData as unknown as InitialExerciseReadback | undefined;
+    const bootstrapRow = bootstrapData as unknown as BootstrapConsumptionReadback | undefined;
+    if (!initialExerciseReadbackMatches(exerciseRow, input.exerciseId, input.packageId, input.packageVersion)
+      || !bootstrapConsumptionMatches(bootstrapRow, input.exerciseId)) continue;
+
+    await refreshRemoteCurrentExercise("manual");
+    if (latestRemoteExercise?.exerciseId !== input.exerciseId || !remoteVersions.has(input.exerciseId)) continue;
+    return Object.freeze({
+      exerciseId: input.exerciseId,
+      revision: exerciseRow.revision,
+      packageId: input.packageId,
+      packageVersion: input.packageVersion,
+      bootstrapAuthorizationId: bootstrapRow.id,
+    });
+  }
+  throw new Error("ADMIN_EXERCISE_DURABLE_ACK_TIMEOUT");
+}
 
 /**
  * Moves legacy checkpoint-carried evidence to the historical row that owns it.
