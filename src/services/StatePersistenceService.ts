@@ -30,7 +30,7 @@ import {
 } from "@/services/exercise/ExercisePackageService";
 import { installCurrentExercise } from "@/repositories/ExerciseRepository";
 import { getPatientMaterialization, restorePatientMaterialization } from "@/services/exercise/PackagePatientMaterializationService";
-import { captureActiveClinicalReferenceRuntimes, captureActiveClinicalReferenceRuntimesAsync, clearActiveClinicalReferenceRuntime, fenceActiveLaboratoryWorkflowsAtTerminal, isClinicalReferenceRuntimeReadReady, prepareActiveClinicalReferenceRuntime, prepareActiveClinicalReferenceRuntimeAsync } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
+import { captureActiveClinicalReferenceRuntimes, captureActiveClinicalReferenceRuntimesAsync, clearActiveClinicalReferenceRuntime, fenceActiveLaboratoryWorkflowsAtTerminal, getActiveClinicalReferenceRuntimeClocks, isClinicalReferenceRuntimeReadReady, prepareActiveClinicalReferenceRuntime, prepareActiveClinicalReferenceRuntimeAsync } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
 import type { RuntimeCheckpointCanonicalRepresentation, RuntimeCheckpointEnvelope } from "@/models/RuntimeCheckpointAuthority";
 import {
   getRuntimeCheckpointCanonicalRepresentation,
@@ -44,6 +44,8 @@ import { BoundedObsoleteGenerationGate, LatestGenerationPipeline, yieldToEventLo
 import { capturePatientTransportRuntime, preparePatientTransportRuntime } from "@/services/runtime/exercise/PatientTransportRuntimeService";
 import { compactActiveExerciseState } from "@/services/runtime/persistence/ActiveCheckpointCompaction";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { RuntimeCheckpointClockMismatchError, terminalClockReconciliationDecision } from
+  "@/services/runtime/persistence/RuntimeTerminalClockReconciliation";
 import { installRuntimeCompletionIntentListener } from "@/services/runtime/persistence/RuntimeCheckpointLifecycleIntent";
 import { restorePersistedImportedExercisePackages } from "@/services/import/ImportedExercisePackageRegistry";
 import { getRuntimePatientCommandCursor, restoreRuntimePatientCommandCursor } from "@/services/runtime/commands/RuntimePatientCommandCursor";
@@ -640,6 +642,7 @@ async function restoreCanonicalRuntimeAsync(restored: SharedExerciseState, start
 export function startStatePersistence(): () => void {
   let stopped = false;
   let terminalCaptureGeneration: number | undefined;
+  let terminalClockRetryScheduled = false;
   const obsoleteGate = new BoundedObsoleteGenerationGate();
   const pipeline = new LatestGenerationPipeline(async (generation, yieldControl) => {
     const yieldForGeneration = async (): Promise<void> => {
@@ -649,6 +652,11 @@ export function startStatePersistence(): () => void {
       }
     };
     try {
+      if (terminalCaptureGeneration !== undefined && generation >= terminalCaptureGeneration) {
+        traceRuntimeLeaseLifecycle("COMPLETION_PREP_START", {
+          detail: { generation, terminalCaptureGeneration },
+        });
+      }
       const shared = await collectSharedExerciseStateAsync(yieldForGeneration);
       if (stopped) return;
       await yieldControl();
@@ -681,6 +689,13 @@ export function startStatePersistence(): () => void {
         pipeline.request();
         return;
       }
+      if (preparedCheckpoint && terminalCaptureGeneration !== undefined && generation >= terminalCaptureGeneration) {
+        traceRuntimeLeaseLifecycle("COMPLETION_PAYLOAD_READY", {
+          detail: { generation, checkpointRevision: preparedCheckpoint.checkpointRevision,
+            simulationTimeSec: "simulationTimeSec" in shared.exerciseSession
+              ? shared.exerciseSession.simulationTimeSec : shared.exerciseSession.currentMinute * 60 },
+        });
+      }
       // Remote discovery can request a save before authoritative Runtime
       // rehydration finishes. Keep the validated checkpoint for this exercise
       // instead of letting that transient projection erase the durable cache.
@@ -711,6 +726,38 @@ export function startStatePersistence(): () => void {
         startRuntimeWorkTrace("CHECKPOINT_PREPARATION_PREEMPTED")({ generation });
         return;
       }
+      if (terminalCaptureGeneration !== undefined && error instanceof RuntimeCheckpointClockMismatchError) {
+        const current = getCanonicalExerciseSnapshot();
+        const canonicalClockSec = "simulationTimeSec" in current
+          ? current.simulationTimeSec : current.currentMinute * 60;
+        const liveRuntimeClocks = getActiveClinicalReferenceRuntimeClocks(current.exerciseId);
+        const decision = terminalClockReconciliationDecision({
+          lifecycleState: "lifecycleState" in current ? current.lifecycleState : current.state,
+          preparationClockSec: error.expectedSimulationTimeSec,
+          canonicalClockSec,
+          detachedRuntimeClocks: error.observedRuntimeClocks,
+          liveRuntimeClocks,
+          retryAlreadyScheduled: terminalClockRetryScheduled,
+        });
+        traceRuntimeLeaseLifecycle("COMPLETION_CLOCK_CHECK", { detail: {
+          generation,
+          preparationClockSec: decision.preparationClockSec,
+          canonicalClockSec: decision.canonicalClockSec,
+          deltaSec: decision.deltaSec,
+          runtimeCount: liveRuntimeClocks.length,
+          decision: decision.state,
+        } });
+        if (decision.state === "RETRY_FROM_CANONICAL_CLOCK") {
+          terminalClockRetryScheduled = true;
+          traceRuntimeLeaseLifecycle("COMPLETION_CLOCK_RECONCILED", { detail: {
+            generation,
+            canonicalClockSec: decision.canonicalClockSec,
+            deltaSec: decision.deltaSec,
+          } });
+          terminalCaptureGeneration = pipeline.request();
+          return;
+        }
+      }
       // A partially restored active Runtime must never be persisted. The
       // authority resolver may still replace it with a valid remote checkpoint.
       setLocalSaveStatus({ state: "error", savedAt: localSaveStatus.savedAt });
@@ -719,8 +766,13 @@ export function startStatePersistence(): () => void {
   });
   const unsubscribe = subscribeToSync(() => pipeline.request());
   const stopCompletionIntent = installRuntimeCompletionIntentListener(active => {
-    if (active) terminalCaptureGeneration = pipeline.request();
-    else terminalCaptureGeneration = undefined;
+    if (active) {
+      terminalClockRetryScheduled = false;
+      terminalCaptureGeneration = pipeline.request();
+    } else {
+      terminalCaptureGeneration = undefined;
+      terminalClockRetryScheduled = false;
+    }
   });
   return () => { stopped = true; unsubscribe(); stopCompletionIntent(); };
 }

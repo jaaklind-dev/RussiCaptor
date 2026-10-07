@@ -1205,8 +1205,11 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         const publicationRepository:Pick<RuntimeCheckpointRepository,"loadLatest"|"loadLatestMetadata"|"publish">=completionForCheckpoint&&repository.finalizeCompletion ? {
           loadLatest:repository.loadLatest.bind(repository),
           loadLatestMetadata:repository.loadLatestMetadata.bind(repository),
-          publish:(publicationLease:RuntimeWriterLease,expectedRevision:number,terminalCheckpoint:RuntimeCheckpointEnvelope<SharedExerciseState>)=>
-            repository.finalizeCompletion!(completionForCheckpoint.commandId,publicationLease,expectedRevision,terminalCheckpoint),
+          publish:(publicationLease:RuntimeWriterLease,expectedRevision:number,terminalCheckpoint:RuntimeCheckpointEnvelope<SharedExerciseState>)=>{
+            traceRuntimeLeaseLifecycle("COMPLETION_FINALIZE_RPC_START", { generation:traceGeneration,
+              detail:{expectedRevision,terminalCheckpointRevision:terminalCheckpoint.checkpointRevision} });
+            return repository.finalizeCompletion!(completionForCheckpoint.commandId,publicationLease,expectedRevision,terminalCheckpoint);
+          },
         } : repository;
         const activePublicationRepository=isSharedWorkflowValidationHarnessEnabled() ? {
           loadLatest:publicationRepository.loadLatest.bind(publicationRepository),

@@ -13,6 +13,8 @@ import { registerExerciseClockTarget } from "@/services/runtime/exercise/Exercis
 import { createScenarioEngineExerciseClockTarget } from "@/services/runtime/exercise/ScenarioEngineExerciseClockTarget";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { RuntimeCheckpointClockMismatchError } from
+  "@/services/runtime/persistence/RuntimeTerminalClockReconciliation";
 import { clearPatientTransportRuntime, preparePatientTransportRuntime } from "./PatientTransportRuntimeService";
 import type { LaboratoryWorkflowSnapshot } from "@/models/LaboratoryWorkflow";
 import type { ImagingWorkflowSnapshot } from "@/models/ImagingWorkflow";
@@ -197,6 +199,14 @@ export async function prepareActiveClinicalReferenceRuntimeAsync(
 
 export function clearActiveClinicalReferenceRuntime(): void { active.forEach(item => item.dispose()); active = []; clearPatientTransportRuntime(); }
 
+/** Read-only clock evidence used to distinguish a cooperative capture race
+ * from a genuinely inconsistent canonical Runtime. */
+export function getActiveClinicalReferenceRuntimeClocks(exerciseId: string): readonly number[] {
+  if (active.some(item => item.exerciseId !== exerciseId)) return Object.freeze([]);
+  return Object.freeze(active.slice().sort((a, b) => a.patientId.localeCompare(b.patientId))
+    .map(item => item.engine.getSimulationTimeSec()));
+}
+
 /** Read-only canonical laboratory projection. Readers expose restored checkpoint state and never generate results here. */
 export function getActiveLaboratoryWorkflow(
   exerciseId: string,
@@ -255,7 +265,8 @@ export async function captureActiveClinicalReferenceRuntimesAsync(
   }
   endDetach({ runtimeCount: detached.length });
   if (expectedSimulationTimeSec !== undefined && detached.some(item => item.payload.simulationTimeSec !== expectedSimulationTimeSec)) {
-    throw new Error("RUNTIME_CHECKPOINT_CLOCK_MISMATCH");
+    throw new RuntimeCheckpointClockMismatchError(expectedSimulationTimeSec,
+      detached.map(item => item.payload.simulationTimeSec));
   }
   const captured: PersistedRuntimeState[] = [];
   for (const item of detached) {
