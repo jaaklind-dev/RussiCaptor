@@ -46,7 +46,11 @@ import { compactActiveExerciseState } from "@/services/runtime/persistence/Activ
 import { startRuntimeWorkTrace, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { RuntimeCheckpointClockMismatchError, terminalClockReconciliationDecision } from
   "@/services/runtime/persistence/RuntimeTerminalClockReconciliation";
-import { installRuntimeCompletionIntentListener } from "@/services/runtime/persistence/RuntimeCheckpointLifecycleIntent";
+import {
+  getRuntimeCompletionCheckpointIntent,
+  installRuntimeCompletionIntentListener,
+} from "@/services/runtime/persistence/RuntimeCheckpointLifecycleIntent";
+import { getRuntimeCompletionPhase } from "@/services/runtime/exercise/RuntimeCompletionService";
 import { restorePersistedImportedExercisePackages } from "@/services/import/ImportedExercisePackageRegistry";
 import { getRuntimePatientCommandCursor, restoreRuntimePatientCommandCursor } from "@/services/runtime/commands/RuntimePatientCommandCursor";
 
@@ -652,6 +656,13 @@ export function startStatePersistence(): () => void {
       }
     };
     try {
+      const completionPhase = getRuntimeCompletionPhase();
+      if (terminalCaptureGeneration !== undefined
+        && completionPhase.phase === "COMPLETED"
+        && completionPhase.exerciseId === getRuntimeCompletionCheckpointIntent()?.exerciseId) {
+        terminalCaptureGeneration = undefined;
+        terminalClockRetryScheduled = false;
+      }
       if (terminalCaptureGeneration !== undefined && generation >= terminalCaptureGeneration) {
         traceRuntimeLeaseLifecycle("COMPLETION_PREP_START", {
           detail: { generation, terminalCaptureGeneration },
@@ -766,6 +777,15 @@ export function startStatePersistence(): () => void {
   const unsubscribe = subscribeToSync(() => pipeline.request());
   const stopCompletionIntent = installRuntimeCompletionIntentListener(active => {
     if (active) {
+      const intent = getRuntimeCompletionCheckpointIntent();
+      const completionPhase = getRuntimeCompletionPhase();
+      if (intent
+        && completionPhase.exerciseId === intent.exerciseId
+        && completionPhase.phase === "COMPLETED") {
+        terminalCaptureGeneration = undefined;
+        terminalClockRetryScheduled = false;
+        return;
+      }
       terminalClockRetryScheduled = false;
       terminalCaptureGeneration = pipeline.request();
     } else {

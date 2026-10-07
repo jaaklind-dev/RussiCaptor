@@ -33,7 +33,10 @@ import { isSharedWorkflowValidationHarnessEnabled } from "@/config/SharedWorkflo
 import { getRuntimeLeaseLifecycleTrace, nextRuntimeLeaseTraceLabel, startRuntimeWorkTrace, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { getNativeLeaseHeartbeatDiagnostic, isNativeLeaseHeartbeatAvailable } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeat";
 import { RuntimeNativeLeaseHeartbeatController, type NativeLeaseHeartbeatSession } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeatController";
-import { installRuntimeCompletionIntentListener } from "@/services/runtime/persistence/RuntimeCheckpointLifecycleIntent";
+import {
+  installRuntimeCompletionIntentListener,
+  settleRuntimeCompletionCheckpointIntent,
+} from "@/services/runtime/persistence/RuntimeCheckpointLifecycleIntent";
 import { RuntimePatientCommandConsumer, getRuntimePatientCommandGateway } from "@/services/runtime/commands/RuntimePatientCommandService";
 import { checkpointHasCanonicalEttMaterialization } from
   "@/services/runtime/commands/EndotrachealIntubationCanonicalCommit";
@@ -44,7 +47,11 @@ import { materializeRuntimePatientCommand } from "@/services/runtime/commands/Ru
 import { getRuntimePatientCommandCursor } from "@/services/runtime/commands/RuntimePatientCommandCursor";
 import { drainRuntimePatientCommandsThroughFence } from
   "@/services/runtime/commands/RuntimePatientCommandFenceDrain";
-import { getRuntimeCompletionGateway, setRuntimeCompletionPhase } from "@/services/runtime/exercise/RuntimeCompletionService";
+import {
+  getRuntimeCompletionGateway,
+  getRuntimeCompletionPhase,
+  setRuntimeCompletionPhase,
+} from "@/services/runtime/exercise/RuntimeCompletionService";
 import type { RuntimeCompletionRequest } from "@/models/RuntimeCompletion";
 import { handleExerciseControlCommand } from "@/services/runtime/exercise/ExerciseControlCommandHandler";
 import { RuntimeExerciseOwnerGeneration } from "@/services/runtime/exercise/RuntimeExerciseOwnerGeneration";
@@ -1215,6 +1222,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     setRuntimeCompletionPhase(exerciseId,request.status==="COMPLETED"?"COMPLETED":"PENDING");
     if(request.status!=="PENDING"){
       completionResumeCoordinator?.completed(request.commandId);
+      settleRuntimeCompletionCheckpointIntent(exerciseId,request.commandId);
       return true;
     }
     await completionResumeCoordinator.observe(request);
@@ -1342,7 +1350,11 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
             if(completionForCheckpoint){activeCompletion=Object.freeze({...completionForCheckpoint,status:"COMPLETED",
               terminalCheckpointRevision:result.checkpoint.checkpointRevision,terminalPayloadHash:result.checkpoint.payloadHash});
               completionResumeCoordinator?.completed(completionForCheckpoint.commandId);
-              setRuntimeCompletionPhase(exerciseId,"COMPLETED");terminalFinalized=true;terminalAuthorityFinalizer?.();}
+              setRuntimeCompletionPhase(exerciseId,"COMPLETED");
+              const completionIntentSettled=settleRuntimeCompletionCheckpointIntent(exerciseId,completionForCheckpoint.commandId);
+              traceRuntimeLeaseLifecycle("COMPLETION_INTENT_SETTLED",{generation:traceGeneration,
+                detail:{commandId:completionForCheckpoint.commandId,settled:completionIntentSettled}});
+              terminalFinalized=true;terminalAuthorityFinalizer?.();}
             terminalIntentGeneration=undefined;
             resolveTerminalPublication?.();resolveTerminalPublication=undefined;
           }
@@ -1404,7 +1416,12 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   // Register lifecycle priority as soon as the canonical lifecycle changes;
   // terminal checkpoint preparation may still be cooperatively in progress.
   const stopLifecyclePriority=subscribeToSync(()=>registerLifecycleCriticalIntent(false));
-  const stopCompletionIntent=installRuntimeCompletionIntentListener(active=>active?registerLifecycleCriticalIntent(true):cancelLifecycleCriticalIntent());
+  const stopCompletionIntent=installRuntimeCompletionIntentListener(active=>{
+    const completionPhase=getRuntimeCompletionPhase();
+    if(active&&!(completionPhase.exerciseId===exerciseId&&completionPhase.phase==="COMPLETED")){
+      registerLifecycleCriticalIntent(true);
+    } else cancelLifecycleCriticalIntent();
+  });
   // Prepared checkpoints are the single canonical publication trigger.
   // Listening to SyncService here duplicated every trigger before capture.
   const stopPrepared=subscribeToLocalRuntimeCheckpointPrepared(requestPublish);

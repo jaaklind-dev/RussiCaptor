@@ -44,7 +44,7 @@ export function handleExerciseControlCommand(command: ExerciseControlCommand): E
         const owner = getExerciseRuntimeOwner();
         if (owner?.exerciseId === command.exerciseId
           && (current.lifecycleState === "RUNNING" || current.lifecycleState === "PAUSED")) {
-          const settleCompletionIntent = beginRuntimeCompletionCheckpointIntent();
+          const settleCompletionIntent = beginRuntimeCompletionCheckpointIntent(command.exerciseId, command.commandId);
           try {
             const applied = owner.apply(command);
             settleCompletionIntent(true);
@@ -94,7 +94,7 @@ export function handleExerciseControlCommand(command: ExerciseControlCommand): E
   }
   let applied: ReturnType<typeof owner.apply>;
   const settleCompletionIntent = command.commandType === "COMPLETE_EXERCISE"
-    ? beginRuntimeCompletionCheckpointIntent()
+    ? beginRuntimeCompletionCheckpointIntent(command.exerciseId, command.commandId)
     : undefined;
   try { applied = owner.apply(command); settleCompletionIntent?.(true); }
   catch {

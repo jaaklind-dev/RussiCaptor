@@ -153,7 +153,7 @@ describe("LEGACY-PENDING-COMPLETION-DISPATCH-TO-TERMINAL-INTENT-WAKE-03", () => 
     expect(source("src/services/RuntimeCheckpointSyncService.ts"))
       .toContain("dispatch:async request=>{await processCompletionRequest(request);}");
     expect(source("src/services/runtime/exercise/ExerciseControlCommandHandler.ts"))
-      .toContain("beginRuntimeCompletionCheckpointIntent()");
+      .toContain("beginRuntimeCompletionCheckpointIntent(command.exerciseId, command.commandId)");
   });
 
   test("TERM-WAKE-10 terminal payload builds exactly once", async () => {
