@@ -42,6 +42,8 @@ import { getAllPatients } from "@/repositories/PatientRepository";
 import { ensureSharedWorkflowPatientHeads } from "@/services/sharedWorkflow/SharedWorkflowHeadInitializationService";
 import { materializeRuntimePatientCommand } from "@/services/runtime/commands/RuntimePatientCommandMaterializer";
 import { getRuntimePatientCommandCursor } from "@/services/runtime/commands/RuntimePatientCommandCursor";
+import { drainRuntimePatientCommandsThroughFence } from
+  "@/services/runtime/commands/RuntimePatientCommandFenceDrain";
 import { getRuntimeCompletionGateway, setRuntimeCompletionPhase } from "@/services/runtime/exercise/RuntimeCompletionService";
 import type { RuntimeCompletionRequest } from "@/models/RuntimeCompletion";
 import { handleExerciseControlCommand } from "@/services/runtime/exercise/ExerciseControlCommandHandler";
@@ -1156,14 +1158,16 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
 
   const drainPatientCommands=async(throughSequence?:number):Promise<number>=>{
     if(isOperatorSignOutDraining()||!patientCommandConsumer||!lease||status.state!=="WRITER")return getRuntimePatientCommandCursor(exerciseId);
-    let previous=-1;
-    let cursor=getRuntimePatientCommandCursor(exerciseId);
-    do {
-      previous=cursor;
-      cursor=await patientCommandConsumer.drain(exerciseId,lease,throughSequence);
-    } while(throughSequence!==undefined&&cursor<throughSequence&&cursor>previous);
-    if(throughSequence!==undefined&&cursor<throughSequence)throw new Error("RUNTIME_COMMAND_FENCE_NOT_DRAINED");
-    return cursor;
+    if(throughSequence!==undefined){
+      return drainRuntimePatientCommandsThroughFence({
+        fence:throughSequence,
+        currentCursor:()=>getRuntimePatientCommandCursor(exerciseId),
+        drain:()=>patientCommandConsumer.drain(exerciseId,lease!,throughSequence),
+        isCurrentWriter:()=>!isOperatorSignOutDraining()&&!generationStopped()&&Boolean(lease)&&status.state==="WRITER",
+        trace:(event,detail)=>traceRuntimeLeaseLifecycle(event,{generation:traceGeneration,detail}),
+      });
+    }
+    return patientCommandConsumer.drain(exerciseId,lease);
   };
   const drainPendingPatientCommands=()=>drainPatientCommands();
   drainPatientCommandsForCurrentWriter=drainPendingPatientCommands;
