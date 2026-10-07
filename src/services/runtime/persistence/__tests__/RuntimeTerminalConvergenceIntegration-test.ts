@@ -90,8 +90,8 @@ describe("WP-NARVA-06 Runtime terminal convergence integration", () => {
 
   test("CloudSync cannot publish terminal projection outside the fenced checkpoint transaction", () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), "src/services/CloudSyncService.ts"), "utf8");
-    expect(source).toContain("terminalProjectionOwnedByCheckpointProtocol(exerciseId)");
-    expect(source.indexOf("terminalProjectionOwnedByCheckpointProtocol(exerciseId)")).toBeLessThan(source.indexOf("withTerminalExerciseArchive(baseProjection"));
+    expect(source).toContain("shouldSuppressCloudProjectionWrite(exerciseId)");
+    expect(source.indexOf("shouldSuppressCloudProjectionWrite(exerciseId)")).toBeLessThan(source.indexOf("withTerminalExerciseArchive(baseProjection"));
   });
 
   test("CM and EXCON patient controls use the same durable command-submission path", () => {

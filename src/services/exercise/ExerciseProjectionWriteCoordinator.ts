@@ -10,6 +10,8 @@ export type ExerciseProjectionCandidate<T> = Readonly<{
   value: T;
 }>;
 
+export type ProjectionWriteResult = boolean | "SUPPRESSED";
+
 export type ProjectionWriteInstrumentation = Readonly<{
   operation: string;
   endpoint: string;
@@ -36,12 +38,19 @@ export class ExerciseProjectionWriteCoordinator<T> {
 
   constructor(
     private readonly prepare: () => ExerciseProjectionCandidate<T> | undefined,
-    private readonly publish: (candidate: ExerciseProjectionCandidate<T>) => Promise<boolean>,
+    private readonly publish: (candidate: ExerciseProjectionCandidate<T>) => Promise<ProjectionWriteResult>,
     private readonly instrument: (metric: ProjectionWriteInstrumentation) => void,
     private readonly delayMs = EXERCISE_PROJECTION_COALESCE_INTERVAL_MS,
+    private readonly isSuppressed: (candidate?: ExerciseProjectionCandidate<T>) => boolean = () => false,
   ) {}
 
   schedule(immediate = false): void {
+    if (this.isSuppressed()) {
+      this.discardPending();
+      this.instrument({ operation: "PROJECTION_WRITE_COMPLETION_FENCE_SUPPRESSED", endpoint: "exercise_states.projection",
+        avoidedRequests: 1 });
+      return;
+    }
     if (immediate && this.activeWrite) {
       this.pendingAfterActive = true;
       this.pendingImmediateAfterActive = true;
@@ -66,6 +75,12 @@ export class ExerciseProjectionWriteCoordinator<T> {
 
   async flush(): Promise<void> {
     this.clearTimer();
+    if (this.isSuppressed()) {
+      this.discardPending();
+      this.instrument({ operation: "PROJECTION_WRITE_COMPLETION_FENCE_SUPPRESSED", endpoint: "exercise_states.projection",
+        avoidedRequests: 1 });
+      return;
+    }
     if (this.activeWrite) {
       this.pendingAfterActive = true;
       this.instrument({ operation: "PROJECTION_WRITE_COALESCED", endpoint: "exercise_states.projection", avoidedRequests: 1 });
@@ -73,15 +88,25 @@ export class ExerciseProjectionWriteCoordinator<T> {
     }
     const candidate = this.prepare();
     if (!candidate) return;
+    if (this.isSuppressed(candidate)) {
+      this.discardPending();
+      this.instrument({ operation: "PROJECTION_WRITE_COMPLETION_FENCE_SUPPRESSED", endpoint: "exercise_states.projection",
+        avoidedRequests: 1, estimatedBytesSaved: candidate.payloadBytes });
+      return;
+    }
     if (candidate.identity === this.lastSuccessfulIdentity) {
       this.instrument({ operation: "PROJECTION_WRITE_IDENTICAL_AVOIDED", endpoint: "exercise_states.projection",
         avoidedRequests: 1, estimatedBytesSaved: candidate.payloadBytes });
       return;
     }
-    const task = this.publish(candidate).then(success => {
-      if (success) this.lastSuccessfulIdentity = candidate.identity;
+    const task = this.publish(candidate).then(result => {
+      if (result === true) this.lastSuccessfulIdentity = candidate.identity;
     }).finally(() => {
       if (this.activeWrite === task) this.activeWrite = undefined;
+      if (this.isSuppressed(candidate)) {
+        this.discardPending();
+        return;
+      }
       if (this.pendingAfterActive) {
         const immediate = this.pendingImmediateAfterActive;
         this.pendingAfterActive = false;
@@ -99,6 +124,13 @@ export class ExerciseProjectionWriteCoordinator<T> {
     this.pendingAfterActive = false;
     this.pendingImmediateAfterActive = false;
     this.lastSuccessfulIdentity = undefined;
+  }
+
+  /** Drops debounce/retry work without changing the last durable identity. */
+  discardPending(): void {
+    this.clearTimer();
+    this.pendingAfterActive = false;
+    this.pendingImmediateAfterActive = false;
   }
 
   private clearTimer(): void {

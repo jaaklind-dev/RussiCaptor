@@ -35,6 +35,7 @@ import {
   ExerciseProjectionWriteCoordinator,
   exerciseProjectionIdentity,
   type ExerciseProjectionCandidate,
+  type ProjectionWriteResult,
 } from "@/services/exercise/ExerciseProjectionWriteCoordinator";
 import { getSharedWorkflowHead, observeSharedWorkflowHead, setSharedWorkflowConnectivity, setSharedWorkflowRealtimeLifecycle } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
 import { restoreAuthoritativePatientSharedWorkflowState, type PatientSharedWorkflowState } from "@/services/sharedWorkflow/PatientSharedWorkflowState";
@@ -45,7 +46,10 @@ import {
   projectionPackageAuthority,
   type ProjectionPackageAuthority,
 } from "@/services/exercise/ExerciseProjectionPackageAuthority";
-import { terminalProjectionOwnedByCheckpointProtocol } from "@/services/runtime/exercise/RuntimeCompletionService";
+import {
+  isRuntimeCompletionPublicationFenced,
+  subscribeToRuntimeCompletionPhase,
+} from "@/services/runtime/exercise/RuntimeCompletionService";
 
 export type CloudSyncStatus = {
   state: "disabled" | "connecting" | "synced" | "saving" | "offline" | "error";
@@ -117,6 +121,7 @@ let stopDiscoveryConnectivity: (() => void) | undefined;
 let stopDiscoveryAppState: (() => void) | undefined;
 let stopLocalSubscription: (() => void) | undefined;
 let stopSharedWorkflowRealtime: (() => void) | undefined;
+let stopCompletionFenceSubscription: (() => void) | undefined;
 const remoteVersions = new Map<string, Readonly<{ revision: number; updatedAt: string }>>();
 let applyingRemoteState = false;
 let latestRemoteExercise: Readonly<{ exerciseId: string; lifecycleState: string }> | undefined;
@@ -140,6 +145,11 @@ export function getConflictingRemoteExercises(): readonly CurrentExerciseCandida
 
 export function canPublishCloudProjection(selectionState: RemoteSelectionState): boolean {
   return selectionState === "RESOLVED";
+}
+
+/** Generic projection writes never cross the atomic completion fence. */
+export function shouldSuppressCloudProjectionWrite(exerciseId: string): boolean {
+  return isRuntimeCompletionPublicationFenced(exerciseId);
 }
 
 /**
@@ -490,6 +500,11 @@ type PreparedCloudProjection = Readonly<{
 function prepareCloudProjection(): ExerciseProjectionCandidate<PreparedCloudProjection> | undefined {
   if (!supabase || applyingRemoteState || !canPublishCloudProjection(remoteSelectionState)) return undefined;
   const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  if (shouldSuppressCloudProjectionWrite(exerciseId)) {
+    recordSupabaseTraffic({ operation: "PROJECTION_WRITE_COMPLETION_FENCE_SUPPRESSED", endpoint: "exercise_states.projection",
+      avoidedRequests: 1 });
+    return undefined;
+  }
   const baseProjection = compactActiveExerciseState(createSharedExerciseProjection());
   const savedSession = baseProjection.exerciseSession;
   const lifecycleState = "lifecycleState" in savedSession
@@ -506,7 +521,7 @@ function prepareCloudProjection(): ExerciseProjectionCandidate<PreparedCloudProj
   if (!scopedExerciseControl && !bootstrapCreate) return undefined;
   // Terminal checkpoint and discovery projection are committed by one fenced
   // RPC; a separate projection write could otherwise reintroduce split-brain.
-  if (lifecycleState === "COMPLETED" && terminalProjectionOwnedByCheckpointProtocol(exerciseId)) return undefined;
+  if (shouldSuppressCloudProjectionWrite(exerciseId)) return undefined;
   const sharedProjection = lifecycleState === "COMPLETED"
     ? withTerminalExerciseArchive(baseProjection, captureCompletedExerciseArchive())
     : baseProjection;
@@ -526,14 +541,27 @@ function prepareCloudProjection(): ExerciseProjectionCandidate<PreparedCloudProj
       savedSession, sharedProjection } };
 }
 
-async function publishCloudProjection(candidate: ExerciseProjectionCandidate<PreparedCloudProjection>): Promise<boolean> {
+async function publishCloudProjection(candidate: ExerciseProjectionCandidate<PreparedCloudProjection>): Promise<ProjectionWriteResult> {
   if (!supabase) return false;
+
+  const { exerciseId, lifecycleState, writeMethod, savedSession, sharedProjection } = candidate.value;
+  if (shouldSuppressCloudProjectionWrite(exerciseId)) {
+    recordSupabaseTraffic({ operation: "PROJECTION_WRITE_COMPLETION_FENCE_SUPPRESSED", endpoint: "exercise_states.projection",
+      avoidedRequests: 1, estimatedBytesSaved: candidate.payloadBytes });
+    return "SUPPRESSED";
+  }
 
   const { data: authData } = await supabase.auth.getUser();
   const user = authData.user;
   if (!user) return false;
 
-  const { exerciseId, lifecycleState, writeMethod, savedSession, sharedProjection } = candidate.value;
+  // Completion may become fenced while the asynchronous auth lookup is in
+  // flight. Re-check immediately before the first backend write.
+  if (shouldSuppressCloudProjectionWrite(exerciseId)) {
+    recordSupabaseTraffic({ operation: "PROJECTION_WRITE_COMPLETION_FENCE_SUPPRESSED", endpoint: "exercise_states.projection",
+      avoidedRequests: 1, estimatedBytesSaved: candidate.payloadBytes });
+    return "SUPPRESSED";
+  }
   const nextRevision = (remoteVersions.get(exerciseId)?.revision ?? 0) + 1;
   setStatus({ state: "saving", syncedAt: status.syncedAt });
   const projectionRow = {
@@ -585,6 +613,8 @@ const projectionWriteCoordinator = new ExerciseProjectionWriteCoordinator(
   prepareCloudProjection,
   publishCloudProjection,
   metric => recordSupabaseTraffic(metric),
+  EXERCISE_PROJECTION_COALESCE_INTERVAL_MS,
+  candidate => shouldSuppressCloudProjectionWrite(candidate?.value.exerciseId ?? getCanonicalExerciseSnapshot().exerciseId),
 );
 
 async function saveToCloud(): Promise<void> { await projectionWriteCoordinator.flush(); }
@@ -608,6 +638,11 @@ export async function migratePendingCompletedExerciseArchives(userId: string): P
     if (!isSharedExerciseState(row.state)) continue;
     const existing = archiveForExercise(row.state.completedExerciseArchives, archive.exerciseId);
     if (!existing) {
+      if (shouldSuppressCloudProjectionWrite(archive.exerciseId)) {
+        recordSupabaseTraffic({ operation: "PROJECTION_WRITE_COMPLETION_FENCE_SUPPRESSED",
+          endpoint: "exercise_states.terminal_archive", avoidedRequests: 1 });
+        continue;
+      }
       const terminalState = withTerminalExerciseArchive(row.state, archive);
       if (!terminalState.completedExerciseArchives) continue;
       const archiveWrite = {
@@ -646,6 +681,10 @@ export async function loadCompletedExerciseArchive(exerciseId: string): Promise<
 function scheduleCloudSave(): void {
   if (!canPublishCloudProjection(remoteSelectionState)) return;
   const snapshot = getCanonicalExerciseSnapshot();
+  if (shouldSuppressCloudProjectionWrite(snapshot.exerciseId)) {
+    projectionWriteCoordinator.discardPending();
+    return;
+  }
   const lifecycleBoundary = !latestRemoteExercise ||
     latestRemoteExercise.exerciseId !== snapshot.exerciseId ||
     latestRemoteExercise.lifecycleState !== snapshot.lifecycleState;
@@ -673,6 +712,7 @@ export async function startCloudSync(): Promise<() => void> {
   projectionWriteCoordinator.reset();
   stopLocalSubscription?.(); stopLocalSubscription = undefined;
   stopSharedWorkflowRealtime?.(); stopSharedWorkflowRealtime = undefined;
+  stopCompletionFenceSubscription?.(); stopCompletionFenceSubscription = undefined;
   if (remotePollTimer) { clearInterval(remotePollTimer); remotePollTimer = undefined; }
   stopDiscoveryConnectivity?.(); stopDiscoveryConnectivity = undefined;
   stopDiscoveryAppState?.(); stopDiscoveryAppState = undefined;
@@ -763,6 +803,14 @@ export async function startCloudSync(): Promise<() => void> {
     if (source === "local") scheduleCloudSave();
   });
 
+  // The completion coordinator is authoritative for both generic publishers.
+  // Discard queued RUNNING work as soon as PENDING/FINALIZING is observable;
+  // reads, discovery and Realtime subscriptions remain active.
+  stopCompletionFenceSubscription = subscribeToRuntimeCompletionPhase(() => {
+    const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+    if (shouldSuppressCloudProjectionWrite(exerciseId)) projectionWriteCoordinator.discardPending();
+  });
+
   return () => {
     projectionWriteCoordinator.reset();
     stopLocalSubscription?.();
@@ -771,6 +819,7 @@ export async function startCloudSync(): Promise<() => void> {
     remotePollTimer = undefined;
     stopDiscoveryConnectivity?.(); stopDiscoveryConnectivity = undefined;
     stopSharedWorkflowRealtime?.(); stopSharedWorkflowRealtime = undefined;
+    stopCompletionFenceSubscription?.(); stopCompletionFenceSubscription = undefined;
     stopDiscoveryAppState?.(); stopDiscoveryAppState = undefined;
   };
 }

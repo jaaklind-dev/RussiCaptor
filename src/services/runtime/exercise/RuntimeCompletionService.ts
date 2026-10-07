@@ -41,16 +41,35 @@ export class SupabaseRuntimeCompletionGateway implements RuntimeCompletionGatewa
 }
 
 export type RuntimeCompletionPhase = "IDLE" | "PENDING" | "FINALIZING" | "COMPLETED" | "FAILED";
+export type RuntimeCompletionPublicationFenceState = "OPEN" | "ACTIVE" | "TERMINAL";
 let phase: Readonly<{ exerciseId?: string; phase: RuntimeCompletionPhase; code?: string }> = Object.freeze({ phase: "IDLE" });
+let publicationFence: Readonly<{ exerciseId?: string; state: RuntimeCompletionPublicationFenceState }> =
+  Object.freeze({ state: "OPEN" });
 const listeners = new Set<() => void>();
 let gateway: RuntimeCompletionGateway | undefined = supabase ? new SupabaseRuntimeCompletionGateway(supabase) : undefined;
 
 export function setRuntimeCompletionGateway(value: RuntimeCompletionGateway | undefined): void { gateway = value; }
 export function getRuntimeCompletionGateway(): RuntimeCompletionGateway | undefined { return gateway; }
 export function setRuntimeCompletionPhase(exerciseId: string, next: RuntimeCompletionPhase, code?: string): void {
-  phase = Object.freeze({ exerciseId, phase: next, code }); listeners.forEach(listener => listener());
+  phase = Object.freeze({ exerciseId, phase: next, code });
+  if (next === "IDLE") publicationFence = Object.freeze({ state: "OPEN" });
+  else if (next === "PENDING" || next === "FINALIZING") {
+    publicationFence = Object.freeze({ exerciseId, state: "ACTIVE" });
+  } else if (next === "COMPLETED") {
+    publicationFence = Object.freeze({ exerciseId, state: "TERMINAL" });
+  } else if (publicationFence.exerciseId !== exerciseId) {
+    // A rejection before any completion request was accepted must not fence a
+    // different exercise. A failure after PENDING/FINALIZING deliberately
+    // preserves the existing ACTIVE fence until controlled recovery/abort.
+    publicationFence = Object.freeze({ state: "OPEN" });
+  }
+  listeners.forEach(listener => listener());
 }
 export function getRuntimeCompletionPhase(): typeof phase { return phase; }
+export function getRuntimeCompletionPublicationFence(): typeof publicationFence { return publicationFence; }
+export function isRuntimeCompletionPublicationFenced(exerciseId: string): boolean {
+  return Boolean(exerciseId) && publicationFence.exerciseId === exerciseId && publicationFence.state !== "OPEN";
+}
 export function subscribeToRuntimeCompletionPhase(listener: () => void): () => void { listeners.add(listener); return () => listeners.delete(listener); }
 export function getRuntimeCompletionPresentation(exerciseId: string, localLifecycle: ExerciseLifecycleState): Readonly<{
   awaitingAuthoritativeAck: boolean;
@@ -66,7 +85,7 @@ export function getRuntimeCompletionPresentation(exerciseId: string, localLifecy
   });
 }
 export function terminalProjectionOwnedByCheckpointProtocol(exerciseId: string): boolean {
-  return phase.exerciseId === exerciseId && ["PENDING", "FINALIZING", "COMPLETED"].includes(phase.phase);
+  return isRuntimeCompletionPublicationFenced(exerciseId);
 }
 
 function failure(command: ExerciseControlCommand, code: string, message: string): ExerciseControlResult {
