@@ -41,7 +41,7 @@ describe("WP-NARVA-06 Runtime terminal convergence integration", () => {
       const restore = pathSource.indexOf("acceptAuthoritativeRuntimeCheckpointAsync");
       const owner = pathSource.indexOf("establishExerciseRuntimeOwnerForCurrentWriter", restore);
       const coordinator = pathSource.indexOf("await resumeCompletionBeforeRoutinePublication", owner);
-      const completion = pathSource.indexOf("resumePendingCompletionForCurrentWriter", coordinator);
+      const completion = pathSource.indexOf("writerReadyGeneration.resumePendingCompletion", coordinator);
       const commandDrain = pathSource.indexOf("drainPatientCommandsForCurrentWriter", completion);
       const routine = pathSource.indexOf("wakeCheckpointPublicationForCurrentWriter", completion);
       expect(restore).toBeGreaterThan(-1);

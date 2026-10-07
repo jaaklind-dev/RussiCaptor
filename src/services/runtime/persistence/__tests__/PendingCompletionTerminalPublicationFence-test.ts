@@ -153,7 +153,7 @@ describe("LEGACY-PENDING-COMPLETION-TERMINAL-PUBLICATION-FENCE-01", () => {
       syncSource.indexOf("function setAndReturn"));
     for (const source of [takeover, recovery]) {
       expect(source).toContain("await resumeCompletionBeforeRoutinePublication(");
-      expect(source).not.toMatch(/resumePendingCompletionForCurrentWriter\?\.\(\);\s*wakeCheckpointPublicationForCurrentWriter\?\.\(\);/);
+      expect(source).not.toContain("resumePendingCompletionForCurrentWriter");
     }
   });
 
@@ -165,10 +165,11 @@ describe("LEGACY-PENDING-COMPLETION-TERMINAL-PUBLICATION-FENCE-01", () => {
   });
 
   test("pending discovery arms lifecycle priority and routine requestPublish fails closed", () => {
-    const processing = syncSource.slice(syncSource.indexOf("const processCompletionRequest="),
+    const completion = syncSource.slice(syncSource.indexOf("const finalizePendingCompletion="),
       syncSource.indexOf("const resumePendingCompletion="));
-    expect(processing).toContain('if(request.status!=="PENDING")return true;');
-    expect(processing).toContain("registerLifecycleCriticalIntent(true)");
+    expect(completion).toContain('if(request.status!=="PENDING")');
+    expect(completion).toContain("completionResumeCoordinator.observe(request)");
+    expect(completion).toContain("registerLifecycleCriticalIntent(true)");
     expect(syncSource).toContain('activeCompletion?.status==="PENDING"&&priority==="ROUTINE"');
   });
 

@@ -154,7 +154,11 @@ describe("WP-NARVA-10B27F shared workflow head initialization", () => {
     expect(source).toContain("await ensureWorkflowHeads()");
     const startup = source.slice(source.indexOf("async function startRuntimeCheckpointSyncForExercise"),
       source.indexOf("let publishInFlight=false"));
-    expect(startup.indexOf("await ensureWorkflowHeads()")).toBeLessThan(startup.indexOf("setRuntimeCommandAuthorityWriter(exerciseId)"));
+    const establishRuntimeOwner = startup.slice(startup.indexOf("const establishRuntimeOwner"),
+      startup.indexOf("const ensureWorkflowHeads"));
+    expect(startup.indexOf("await ensureWorkflowHeads()")).toBeLessThan(startup.lastIndexOf("establishRuntimeOwner()"));
+    expect(establishRuntimeOwner.indexOf("runtimeOwnerGeneration.establish()"))
+      .toBeLessThan(establishRuntimeOwner.indexOf("setRuntimeCommandAuthorityWriter(exerciseId)"));
     expect(source).toContain("WORKFLOW_HEAD_INITIALIZATION_FAILED");
   });
 });

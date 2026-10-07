@@ -630,7 +630,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const writer = takeover.indexOf('setStatus({state:"WRITER"');
     const restore = takeover.indexOf("acceptAuthoritativeRuntimeCheckpointAsync(prepared.checkpoint, true");
     const owner = takeover.indexOf("establishExerciseRuntimeOwnerForCurrentWriter", restore);
-    const resumeCompletion = takeover.indexOf("resumePendingCompletionForCurrentWriter", owner);
+    const resumeCompletion = takeover.indexOf("writerReadyGeneration.resumePendingCompletion", owner);
     const routinePublication = takeover.indexOf("wakeCheckpointPublicationForCurrentWriter", resumeCompletion);
     expect(lease).toBeGreaterThan(-1);
     expect(acquiring).toBeGreaterThan(lease);
@@ -660,7 +660,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(recovery.indexOf("establishExerciseRuntimeOwnerForCurrentWriter")).toBeGreaterThan(
       recovery.indexOf("acceptAuthoritativeRuntimeCheckpointAsync(recovered.checkpoint,true"),
     );
-    expect(recovery.indexOf("resumePendingCompletionForCurrentWriter")).toBeGreaterThan(
+    expect(recovery.indexOf("writerReadyGeneration.resumePendingCompletion")).toBeGreaterThan(
       recovery.indexOf("establishExerciseRuntimeOwnerForCurrentWriter"),
     );
     expect(recovery).toContain('loadRuntimeCheckpointWithCache(repository,exerciseId,checkpointForExercise(getLocalRuntimeCheckpoint(),exerciseId),"recovery")');
@@ -877,7 +877,8 @@ describe("WP-44B checkpoint startup coordination", () => {
       const authority = startup.slice(startup.indexOf("let resolved="), startup.indexOf("let publishInFlight=false"));
       expect(authority.match(/acquireRuntimeWriterTerminal\(/g)).toHaveLength(1);
       expect(authority).toContain('if ("lease" in acquired)');
-      expect(authority).toContain("setRuntimeCommandAuthorityWriter(exerciseId)");
+      expect(authority).toContain("establishRuntimeOwner()");
+      expect(startup).toContain("setRuntimeCommandAuthorityWriter(exerciseId)");
     });
 
     test("RB-A5 and RB-A6 bootstrap persistence is package and Imaging agnostic", () => {

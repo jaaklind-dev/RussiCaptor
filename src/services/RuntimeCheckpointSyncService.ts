@@ -46,6 +46,8 @@ import { getRuntimeCompletionGateway, setRuntimeCompletionPhase } from "@/servic
 import type { RuntimeCompletionRequest } from "@/models/RuntimeCompletion";
 import { handleExerciseControlCommand } from "@/services/runtime/exercise/ExerciseControlCommandHandler";
 import { RuntimeExerciseOwnerGeneration } from "@/services/runtime/exercise/RuntimeExerciseOwnerGeneration";
+import { RuntimeCompletionFinalizerResumeCoordinator } from
+  "@/services/runtime/exercise/RuntimeCompletionFinalizerResumeCoordinator";
 import {
   acceptRuntimeReaderCheckpoint,
   advertiseRuntimeReaderCheckpoint,
@@ -75,6 +77,10 @@ export const ROUTINE_CHECKPOINT_PUBLICATION_MS = 5_000;
 const STARTUP_TIMEOUT_MS = 8_000;
 type Status = Readonly<{ state: "DISABLED"|"CONNECTING"|"ACQUIRING"|"WRITER"|"READER"|"OFFLINE"|"CONFLICT"|"FAILED"; code?: string; revision?: number }>;
 type SyncIdentity = Readonly<{ exerciseId: string; activeLifecycle: boolean }>;
+type RuntimeWriterReadyGeneration = Readonly<{
+  generation: number;
+  resumePendingCompletion: () => Promise<boolean>;
+}>;
 export type RuntimeBootstrapRetrySignal = Readonly<{
   exerciseId: string;
   activeLifecycle: boolean;
@@ -99,10 +105,9 @@ let manualRenewLeaseForValidation: (() => Promise<boolean>) | undefined;
 let lastCheckpointPublicationAt: string | undefined;
 let lastRecoveryOutcome: Readonly<{ state: string; code?: string; occurredAt: string }> | undefined;
 let updateNativeHeartbeatTokenForCurrentWriter: ((accessToken: string) => void) | undefined;
-let establishExerciseRuntimeOwnerForCurrentWriter: (() => boolean) | undefined;
+let establishExerciseRuntimeOwnerForCurrentWriter: (() => RuntimeWriterReadyGeneration | undefined) | undefined;
 let ensureSharedWorkflowHeadsForCurrentWriter: (() => Promise<boolean>) | undefined;
 let drainPatientCommandsForCurrentWriter: (() => Promise<number>) | undefined;
-let resumePendingCompletionForCurrentWriter: (() => Promise<boolean>) | undefined;
 
 export async function resumeCompletionBeforeRoutinePublication(
   resumeCompletion: (() => Promise<boolean>) | undefined,
@@ -723,13 +728,13 @@ export async function takeOverRuntimeWriter(): Promise<Status> {
     await repository.releaseWriter(confirmed); lease=undefined; stopClockRunner();
     return setAndReturn({state:"READER",code:"WORKFLOW_HEAD_INITIALIZATION_FAILED",revision:remoteRevision});
   }
-  if (!establishExerciseRuntimeOwnerForCurrentWriter?.()) {
+  const writerReadyGeneration=establishExerciseRuntimeOwnerForCurrentWriter?.();
+  if (!writerReadyGeneration) {
     await repository.releaseWriter(confirmed); lease=undefined;
     return setAndReturn({state:"READER",code:"RUNTIME_OWNER_NOT_READY",revision:remoteRevision});
   }
-  setRuntimeCommandAuthorityWriter(exerciseId);
   await resumeCompletionBeforeRoutinePublication(
-    resumePendingCompletionForCurrentWriter,
+    writerReadyGeneration.resumePendingCompletion,
     async()=>{
       await drainPatientCommandsForCurrentWriter?.();
       wakeCheckpointPublicationForCurrentWriter?.();
@@ -795,13 +800,13 @@ async function reacquireRuntimeFromRemoteCheckpointForIntent(intentId: string): 
     await repository.releaseWriter(confirmed); lease=undefined; stopClockRunner();
     return setAndReturn({state:"READER",code:"WORKFLOW_HEAD_INITIALIZATION_FAILED",revision:remoteRevision});
   }
-  if (!establishExerciseRuntimeOwnerForCurrentWriter?.()) {
+  const writerReadyGeneration=establishExerciseRuntimeOwnerForCurrentWriter?.();
+  if (!writerReadyGeneration) {
     await repository.releaseWriter(confirmed); lease=undefined;
     return setAndReturn({state:"READER",code:"RUNTIME_OWNER_NOT_READY",revision:remoteRevision});
   }
-  setRuntimeCommandAuthorityWriter(exerciseId);
   await resumeCompletionBeforeRoutinePublication(
-    resumePendingCompletionForCurrentWriter,
+    writerReadyGeneration.resumePendingCompletion,
     async()=>{
       await drainPatientCommandsForCurrentWriter?.();
       wakeCheckpointPublicationForCurrentWriter?.();
@@ -833,14 +838,20 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   await publicationBarrier;
   const generationStopped = () => stopped || generation !== exerciseSyncGeneration;
   const runtimeOwnerGeneration = new RuntimeExerciseOwnerGeneration(exerciseId, () => !generationStopped());
-  const establishRuntimeOwner = (): boolean => {
-    if (isOperatorSignOutDraining() || generationStopped() || !lease || status.state !== "WRITER") return false;
+  let completionResumeCoordinator: RuntimeCompletionFinalizerResumeCoordinator | undefined;
+  const establishRuntimeOwner = (): RuntimeWriterReadyGeneration | undefined => {
+    if (isOperatorSignOutDraining() || generationStopped() || !lease || status.state !== "WRITER") return undefined;
     const established = runtimeOwnerGeneration.establish();
     traceRuntimeLeaseLifecycle(established ? "EXERCISE_RUNTIME_OWNER_REGISTERED" : "EXERCISE_RUNTIME_OWNER_NOT_READY", {
       generation: traceGeneration,
       detail: { exerciseId },
     });
-    return established;
+    if (!established) return undefined;
+    setRuntimeCommandAuthorityWriter(exerciseId);
+    void completionResumeCoordinator?.writerReady().catch(error=>setRuntimeCompletionPhase(
+      exerciseId,"FAILED",error instanceof Error?error.message:"COMPLETION_RESUME_FAILED",
+    ));
+    return Object.freeze({ generation, resumePendingCompletion: () => resumePendingCompletion() });
   };
   const ensureWorkflowHeads = async (): Promise<boolean> => {
     if (isOperatorSignOutDraining() || generationStopped() || !lease || status.state !== "WRITER") return false;
@@ -865,6 +876,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   const releaseRuntimeOwner = (reason: string): void => {
     const wasReady = runtimeOwnerGeneration.isReady();
     runtimeOwnerGeneration.release();
+    completionResumeCoordinator?.writerUnavailable();
     if (!wasReady) return;
     traceRuntimeLeaseLifecycle("EXERCISE_RUNTIME_OWNER_RELEASED", {
       generation: traceGeneration,
@@ -985,7 +997,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
           await repository.releaseWriter(acquired.lease); lease=undefined;
           setRuntimeWriterAuthorityState("READER");
           setStatus({state:"READER",code:"RUNTIME_OWNER_NOT_READY",revision:remoteRevision});
-        } else setRuntimeCommandAuthorityWriter(exerciseId);
+        }
       }
       else {
         // A discovery projection can clear the locally restored Runtime while
@@ -1089,14 +1101,10 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     }
   });
 
-  const processCompletionRequest=async(request:RuntimeCompletionRequest|undefined):Promise<boolean>=>{
-    if(!request||request.exerciseId!==exerciseId)return false;
-    activeCompletion=request;
-    setRuntimeCompletionPhase(exerciseId,request.status==="COMPLETED"?"COMPLETED":"PENDING");
-    if(request.status!=="PENDING")return true;
-    if(isOperatorSignOutDraining()||generationStopped()||!lease||status.state!=="WRITER"||!runtimeOwnerGeneration.isReady())return true;
+  const finalizePendingCompletion=async(request:RuntimeCompletionRequest):Promise<void>=>{
+    if(isOperatorSignOutDraining()||generationStopped()||!lease||status.state!=="WRITER"||!runtimeOwnerGeneration.isReady())return;
     registerLifecycleCriticalIntent(true);
-    if(completionProcessing){await completionProcessing;return true;}
+    if(completionProcessing){await completionProcessing;return;}
     const task=(async()=>{
       try {
         await drainPatientCommands(request.fenceCommandSequence);
@@ -1115,6 +1123,25 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     })().finally(()=>{if(completionProcessing===task)completionProcessing=undefined;});
     completionProcessing=task;
     await task;
+  };
+  completionResumeCoordinator=new RuntimeCompletionFinalizerResumeCoordinator({
+    exerciseId,
+    generation:traceGeneration,
+    isCurrent:()=>!generationStopped(),
+    isWriterReady:()=>!isOperatorSignOutDraining()&&!generationStopped()&&Boolean(lease)&&
+      status.state==="WRITER"&&runtimeOwnerGeneration.isReady(),
+    dispatch:finalizePendingCompletion,
+    trace:(event,detail)=>traceRuntimeLeaseLifecycle(event,{generation:traceGeneration,detail}),
+  });
+  const processCompletionRequest=async(request:RuntimeCompletionRequest|undefined):Promise<boolean>=>{
+    if(!request||request.exerciseId!==exerciseId)return false;
+    activeCompletion=request;
+    setRuntimeCompletionPhase(exerciseId,request.status==="COMPLETED"?"COMPLETED":"PENDING");
+    if(request.status!=="PENDING"){
+      completionResumeCoordinator?.completed(request.commandId);
+      return true;
+    }
+    await completionResumeCoordinator.observe(request);
     return true;
   };
   const resumePendingCompletion=async():Promise<boolean>=>{
@@ -1130,7 +1157,6 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
       return true;
     }
   };
-  resumePendingCompletionForCurrentWriter=resumePendingCompletion;
   const registerLifecycleCriticalIntent=(fromCommandIntent=false)=>{
     const snapshot=getCanonicalExerciseSnapshot();
     if(snapshot.exerciseId!==exerciseId||(!fromCommandIntent&&snapshot.lifecycleState!=="COMPLETED")||terminalIntentGeneration!==undefined)return;
@@ -1221,6 +1247,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
           if(priority==="LIFECYCLE_CRITICAL"){
             if(completionForCheckpoint){activeCompletion=Object.freeze({...completionForCheckpoint,status:"COMPLETED",
               terminalCheckpointRevision:result.checkpoint.checkpointRevision,terminalPayloadHash:result.checkpoint.payloadHash});
+              completionResumeCoordinator?.completed(completionForCheckpoint.commandId);
               setRuntimeCompletionPhase(exerciseId,"COMPLETED");terminalFinalized=true;terminalAuthorityFinalizer?.();}
             terminalIntentGeneration=undefined;
             resolveTerminalPublication?.();resolveTerminalPublication=undefined;
@@ -1529,7 +1556,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     return task;
   };
   const stopSignOutPreparation=registerOperatorRuntimeExitPreparation(prepareWriterSignOut);
-  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });rejectCanonicalCommandCommitWaiters("CANONICAL_COMMAND_GENERATION_STOPPED");releaseRuntimeOwner("GENERATION_CLEANUP");stopped=true;stopSignOutPreparation();appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();stopLifecyclePriority();stopCompletionIntent();stopDeferredPatientCommandDrain();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");terminalAuthorityFinalizer=undefined;if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;if(establishExerciseRuntimeOwnerForCurrentWriter===establishRuntimeOwner)establishExerciseRuntimeOwnerForCurrentWriter=undefined;if(ensureSharedWorkflowHeadsForCurrentWriter===ensureWorkflowHeads)ensureSharedWorkflowHeadsForCurrentWriter=undefined;if(drainPatientCommandsForCurrentWriter===drainPendingPatientCommands)drainPatientCommandsForCurrentWriter=undefined;if(resumePendingCompletionForCurrentWriter===resumePendingCompletion)resumePendingCompletionForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration){lease=undefined;resetRuntimeReaderConvergence(exerciseId);}};
+  return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED", { generation: traceGeneration, detail: { exerciseId, reason:"GENERATION_CLEANUP", authority:status.state } });rejectCanonicalCommandCommitWaiters("CANONICAL_COMMAND_GENERATION_STOPPED");releaseRuntimeOwner("GENERATION_CLEANUP");completionResumeCoordinator?.stop();stopped=true;stopSignOutPreparation();appStateSubscription.remove();if(routinePublishTimer)clearTimeout(routinePublishTimer);if(publicationRetryTimer)clearTimeout(publicationRetryTimer);stopPrepared();stopLifecyclePriority();stopCompletionIntent();stopDeferredPatientCommandDrain();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP");stopNativeHeartbeat("GENERATION_CLEANUP");terminalAuthorityFinalizer=undefined;if(manualRenewLeaseForValidation===manualRenew)manualRenewLeaseForValidation=undefined;if(ensureLeaseRenewalForCurrentWriter===ensureRenewal)ensureLeaseRenewalForCurrentWriter=undefined;if(wakeCheckpointPublicationForCurrentWriter===requestPublish)wakeCheckpointPublicationForCurrentWriter=undefined;if(establishExerciseRuntimeOwnerForCurrentWriter===establishRuntimeOwner)establishExerciseRuntimeOwnerForCurrentWriter=undefined;if(ensureSharedWorkflowHeadsForCurrentWriter===ensureWorkflowHeads)ensureSharedWorkflowHeadsForCurrentWriter=undefined;if(drainPatientCommandsForCurrentWriter===drainPendingPatientCommands)drainPatientCommandsForCurrentWriter=undefined;void client.removeChannel(channel);if(generation===exerciseSyncGeneration&&lease)void repository.releaseWriter(lease);if(generation===exerciseSyncGeneration){lease=undefined;resetRuntimeReaderConvergence(exerciseId);}};
 }
 
 async function startRuntimeCheckpointSyncOnce(): Promise<()=>void> {
