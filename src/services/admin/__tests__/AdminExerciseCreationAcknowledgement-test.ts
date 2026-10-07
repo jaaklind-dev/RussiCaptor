@@ -33,6 +33,8 @@ const durableAck = Object.freeze({
   packageVersion: identity.packageVersion,
   bootstrapAuthorizationId: "BOOT-ACK-1",
 });
+const bootstrap = Object.freeze({ id: "BOOT-ACK-1", user_id: "USER-1", status: "ACTIVE" as const,
+  consumed_exercise_id: null, expires_at: "2026-10-07T00:10:00Z" });
 
 function dependencies(overrides: Partial<AdminExerciseCreationDependencies> = {}): AdminExerciseCreationDependencies {
   const captureLocalState = jest.fn()
@@ -40,8 +42,8 @@ function dependencies(overrides: Partial<AdminExerciseCreationDependencies> = {}
     .mockReturnValueOnce(provisionalState);
   return {
     resolvePackage: () => AIRWAY_EXERCISE_PACKAGE,
-    grantBootstrap: jest.fn().mockResolvedValue(undefined),
-    refreshSession: jest.fn().mockResolvedValue(undefined),
+    grantBootstrap: jest.fn().mockResolvedValue(bootstrap),
+    revokeBootstrap: jest.fn().mockResolvedValue(undefined),
     prepare: jest.fn().mockReturnValue({ ok: true, exerciseId: "EX-ACK-1", exercisePackage: AIRWAY_EXERCISE_PACKAGE }),
     captureLocalState,
     restoreLocalState: jest.fn(),
@@ -134,7 +136,7 @@ describe("Admin exercise durable publication acknowledgement", () => {
     await createAdminExercise("USER-1", identity, "OP-10", deps).catch(() => undefined);
     await expect(createAdminExercise("USER-1", identity, "OP-10", deps)).resolves.toBe("EX-ACK-1");
     expect(deps.prepare).toHaveBeenCalledTimes(1);
-    expect(deps.grantBootstrap).toHaveBeenCalledTimes(1);
+    expect(deps.grantBootstrap).toHaveBeenCalledTimes(2);
     expect(acknowledge).toHaveBeenCalledTimes(2);
   });
 
@@ -178,5 +180,44 @@ describe("Admin exercise durable publication acknowledgement", () => {
     expect(source).toContain("resolvePackage(identity)");
     expect(source).toContain("selected.packageHash");
     expect(source).not.toContain("activateWithResult(\"russicaptor.narva-trauma\"");
+  });
+
+  test("ADMIN-DIRECT-PUB-16 failed provisional attempt revokes the exact unused bootstrap", async () => {
+    const deps = dependencies({ acknowledge: jest.fn().mockRejectedValue(new Error("ADMIN_EXERCISE_INITIAL_INSERT_FAILED")) });
+    await expect(createAdminExercise("USER-1", identity, "OP-16", deps)).rejects.toThrow("Õppuse loomine ei õnnestunud");
+    expect(deps.revokeBootstrap).toHaveBeenCalledWith("BOOT-ACK-1", "USER-1");
+  });
+
+  test("ADMIN-DIRECT-PUB-17 successful creation never revokes a consumed bootstrap", async () => {
+    const deps = dependencies();
+    await createAdminExercise("USER-1", identity, "OP-17", deps);
+    expect(deps.revokeBootstrap).not.toHaveBeenCalled();
+  });
+
+  test("ADMIN-DIRECT-PUB-18 uncertain consumed-grant cleanup keeps exact identity for retry", async () => {
+    const acknowledge = jest.fn().mockRejectedValueOnce(new Error("ADMIN_EXERCISE_DURABLE_ACK_TIMEOUT"))
+      .mockResolvedValueOnce(durableAck);
+    const deps = dependencies({ acknowledge, revokeBootstrap: jest.fn().mockRejectedValue(new Error("BOOTSTRAP_ALREADY_CONSUMED")) });
+    await createAdminExercise("USER-1", identity, "OP-18", deps).catch(() => undefined);
+    await expect(createAdminExercise("USER-1", identity, "OP-18", deps)).resolves.toBe("EX-ACK-1");
+    expect(deps.grantBootstrap).toHaveBeenCalledTimes(1);
+    expect(acknowledge).toHaveBeenCalledTimes(2);
+  });
+
+  test("ADMIN-DIRECT-PUB-19 retry after revoked unused grant obtains a fresh grant but reuses exercise identity", async () => {
+    const acknowledge = jest.fn().mockRejectedValueOnce(new Error("ADMIN_EXERCISE_INITIAL_INSERT_FAILED"))
+      .mockResolvedValueOnce(durableAck);
+    const deps = dependencies({ acknowledge });
+    await createAdminExercise("USER-1", identity, "OP-19", deps).catch(() => undefined);
+    await expect(createAdminExercise("USER-1", identity, "OP-19", deps)).resolves.toBe("EX-ACK-1");
+    expect(deps.prepare).toHaveBeenCalledTimes(1);
+    expect(deps.grantBootstrap).toHaveBeenCalledTimes(2);
+    expect(acknowledge.mock.calls.map(call => call[0].exerciseId)).toEqual(["EX-ACK-1", "EX-ACK-1"]);
+  });
+
+  test("ADMIN-DIRECT-PUB-20 create path never tears down Admin mode via session refresh", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/services/admin/PlatformAdminExerciseCreation.ts"), "utf8");
+    expect(source).not.toContain("refreshOperatorSession");
+    expect(source).not.toContain("refreshSession");
   });
 });

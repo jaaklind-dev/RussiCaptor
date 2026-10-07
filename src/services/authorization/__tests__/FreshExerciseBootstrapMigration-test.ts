@@ -21,6 +21,13 @@ const insertAuthorityFix = fs.readFileSync(
   path.resolve(__dirname, "../../../../supabase/migrations/20260916084800_fix_bootstrap_insert_authorization_helper.sql"),
   "utf8",
 );
+const consumedRevokeFence = fs.readFileSync(
+  path.resolve(__dirname, "../../../../supabase/migrations/20261007120000_refuse_consumed_bootstrap_revocation.sql"),
+  "utf8",
+);
+const adminExercisesEdge = fs.readFileSync(
+  path.resolve(__dirname, "../../../../supabase/functions/platform-admin-exercises/index.ts"), "utf8",
+);
 
 describe("fresh-exercise bootstrap authorization migration", () => {
   test("uses dedicated one-shot bootstrap authority rather than GLOBAL EXCON", () => {
@@ -110,5 +117,18 @@ describe("fresh-exercise bootstrap authorization migration", () => {
     expect(insertAuthorityFix).toMatch(/revoke all on function public\.has_exercise_bootstrap_insert_authorization\(text\)[\s\S]+?from public, anon/);
     expect(insertAuthorityFix).toMatch(/grant execute on function public\.has_exercise_bootstrap_insert_authorization\(text\)[\s\S]+?to authenticated/);
     expect(insertAuthorityFix).not.toMatch(/(?:insert into|update|delete from) public\.(?:runtime_[a-z_]+|shared_workflow_patient_states|exercise_completion_requests)/i);
+  });
+
+  test("ADMIN-DIRECT-PUB-14/15 exact unused bootstrap revoke is atomic, idempotent, and audited", () => {
+    expect(consumedRevokeFence).toContain("where bootstrap.id = p_bootstrap_id");
+    expect(consumedRevokeFence).toContain("for update");
+    expect(consumedRevokeFence.indexOf("BOOTSTRAP_ALREADY_CONSUMED"))
+      .toBeLessThan(consumedRevokeFence.indexOf("if v_authorization.status = 'REVOKED'"));
+    expect(consumedRevokeFence).toContain("if v_authorization.status = 'REVOKED' then");
+    expect(consumedRevokeFence).not.toMatch(/delete\s+from\s+public\.exercise_bootstrap_authorizations/i);
+    expect(adminExercisesEdge).toContain('operation === "revokeBootstrap"');
+    expect(adminExercisesEdge).toContain("trusted_admin_revoke_exercise_bootstrap");
+    expect(adminExercisesEdge).toContain('"EXERCISE_BOOTSTRAP_REVOKED"');
+    expect(adminExercisesEdge).not.toContain('exercise_bootstrap_authorizations").update');
   });
 });

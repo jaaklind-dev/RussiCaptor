@@ -6,6 +6,8 @@ const identity = Object.freeze({
   packageId: AIRWAY_EXERCISE_PACKAGE.packageId,
   packageVersion: AIRWAY_EXERCISE_PACKAGE.packageVersion,
 });
+const bootstrap = Object.freeze({ id: "BOOT-1", user_id: "USER-ADMIN", status: "ACTIVE" as const,
+  consumed_exercise_id: null, expires_at: "2026-10-07T00:10:00Z" });
 
 describe("platform-admin exercise creation", () => {
   const localState = {} as SharedExerciseState;
@@ -22,22 +24,22 @@ describe("platform-admin exercise creation", () => {
     const calls: string[] = [];
     const dependencies: AdminExerciseCreationDependencies = {
       resolvePackage: () => AIRWAY_EXERCISE_PACKAGE,
-      grantBootstrap: async userId => { calls.push(`bootstrap:${userId}`); },
-      refreshSession: async () => { calls.push("refresh"); },
+      grantBootstrap: async userId => { calls.push(`bootstrap:${userId}`); return bootstrap; },
+      revokeBootstrap: async () => undefined,
       prepare: selected => { calls.push(`prepare:${selected.packageId}@${selected.packageVersion}`); return { ok: true, exerciseId: "EX-ADMIN-1", exercisePackage: AIRWAY_EXERCISE_PACKAGE }; },
       ...localDependencies,
       acknowledge: async input => { calls.push(`ack:${input.exerciseId}`); return durability(input.exerciseId); },
     };
 
     await expect(createAdminExercise("USER-ADMIN", identity, "OP-1", dependencies)).resolves.toBe("EX-ADMIN-1");
-    expect(calls).toEqual(["bootstrap:USER-ADMIN", "refresh", `prepare:${identity.packageId}@${identity.packageVersion}`, "ack:EX-ADMIN-1"]);
+    expect(calls).toEqual(["bootstrap:USER-ADMIN", `prepare:${identity.packageId}@${identity.packageVersion}`, "ack:EX-ADMIN-1"]);
   });
 
   test("surfaces the canonical preparation refusal without manufacturing an exercise", async () => {
     const dependencies: AdminExerciseCreationDependencies = {
       resolvePackage: () => AIRWAY_EXERCISE_PACKAGE,
-      grantBootstrap: async () => undefined,
-      refreshSession: async () => undefined,
+      grantBootstrap: async () => bootstrap,
+      revokeBootstrap: async () => undefined,
       prepare: () => ({ ok: false, code: "ACTIVE_EXERCISE", message: "Aktiivne õppus tuleb enne lõpetada." }),
       ...localDependencies,
       acknowledge: async input => durability(input.exerciseId),
@@ -51,7 +53,7 @@ describe("platform-admin exercise creation", () => {
     const dependencies: AdminExerciseCreationDependencies = {
       resolvePackage: () => undefined,
       grantBootstrap,
-      refreshSession: async () => undefined,
+      revokeBootstrap: async () => undefined,
       prepare: () => ({ ok: false, message: "must not run" }),
       ...localDependencies,
       acknowledge: async input => durability(input.exerciseId),
@@ -63,8 +65,8 @@ describe("platform-admin exercise creation", () => {
   test("ADMIN-PKG-10 rejects a canonical result bound to a different package", async () => {
     const dependencies: AdminExerciseCreationDependencies = {
       resolvePackage: () => AIRWAY_EXERCISE_PACKAGE,
-      grantBootstrap: async () => undefined,
-      refreshSession: async () => undefined,
+      grantBootstrap: async () => bootstrap,
+      revokeBootstrap: async () => undefined,
       prepare: () => ({ ok: true, exerciseId: "EX-WRONG", exercisePackage: PELVIC_INJURY_EXERCISE_PACKAGE }),
       ...localDependencies,
       acknowledge: async input => durability(input.exerciseId),

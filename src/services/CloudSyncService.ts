@@ -430,7 +430,6 @@ async function performRemoteCurrentExerciseRefresh(_trigger: ExerciseDiscoveryRe
         conflictingRemoteExercises = [];
         explicitlySelectedExerciseId = undefined;
         remoteSelectionState = "RESOLVED";
-        await saveToCloud();
         return;
       }
       discoveryRows = [pendingRow];
@@ -671,7 +670,7 @@ export type InitialExercisePublicationAcknowledgement = Readonly<{
   bootstrapAuthorizationId: string;
 }>;
 
-type InitialExerciseReadback = Readonly<{
+export type InitialExerciseReadback = Readonly<{
   exercise_id: string;
   revision: number;
   exercise_session?: SharedExerciseState["exerciseSession"];
@@ -679,7 +678,7 @@ type InitialExerciseReadback = Readonly<{
   updated_at: string;
 }>;
 
-type BootstrapConsumptionReadback = Readonly<{
+export type BootstrapConsumptionReadback = Readonly<{
   id: string;
   status: string;
   consumed_exercise_id: string | null;
@@ -691,6 +690,54 @@ const INITIAL_EXERCISE_ACK_DELAYS_MS = Object.freeze([0, 150, 300, 600, 1_200, 2
 
 function delay(ms: number): Promise<void> {
   return ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve();
+}
+
+export type InitialExercisePublicationPort = Readonly<{
+  authenticatedUserId(): Promise<string | undefined>;
+  projection(): SharedExerciseState;
+  readExercise(exerciseId: string): Promise<InitialExerciseReadback | undefined>;
+  readBootstrap(bootstrapId: string, userId: string): Promise<BootstrapConsumptionReadback | undefined>;
+  insert(row: ExerciseStateRow): Promise<void>;
+  discover(exerciseId: string): Promise<boolean>;
+  wait(ms: number): Promise<void>;
+}>;
+
+function initialExercisePublicationPort(): InitialExercisePublicationPort {
+  if (!supabase) throw new Error("ADMIN_EXERCISE_DURABILITY_UNAVAILABLE");
+  const client = supabase;
+  return {
+    authenticatedUserId: async () => {
+      const { data, error } = await client.auth.getUser();
+      return error ? undefined : data.user?.id;
+    },
+    projection: () => compactActiveExerciseState(createSharedExerciseProjection()),
+    readExercise: async exerciseId => {
+      const { data, error } = await client.from("exercise_states")
+        .select(EXERCISE_DISCOVERY_COLUMNS).eq("exercise_id", exerciseId).maybeSingle();
+      recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.initial_create_ack", data });
+      if (error) throw new Error("ADMIN_EXERCISE_READBACK_FAILED");
+      return data as unknown as InitialExerciseReadback | undefined;
+    },
+    readBootstrap: async (bootstrapId, userId) => {
+      const { data, error } = await client.from("exercise_bootstrap_authorizations")
+        .select("id,status,consumed_exercise_id,consumed_at,expires_at")
+        .eq("id", bootstrapId).eq("user_id", userId).maybeSingle();
+      recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_bootstrap_authorizations.initial_create_ack", data });
+      if (error) throw new Error("ADMIN_EXERCISE_BOOTSTRAP_READBACK_FAILED");
+      return data as BootstrapConsumptionReadback | undefined;
+    },
+    insert: async row => {
+      const { error } = await client.from("exercise_states").insert(row);
+      recordSupabaseTraffic({ operation: "INSERT", endpoint: "exercise_states.admin_initial_create",
+        requestBytes: estimateSupabasePayloadBytes(row) });
+      if (error) throw new Error("ADMIN_EXERCISE_INITIAL_INSERT_FAILED");
+    },
+    discover: async exerciseId => {
+      await refreshRemoteCurrentExercise("manual");
+      return latestRemoteExercise?.exerciseId === exerciseId && remoteVersions.has(exerciseId);
+    },
+    wait: delay,
+  };
 }
 
 export function initialExerciseReadbackMatches(
@@ -730,42 +777,50 @@ export async function acknowledgeInitialExercisePublication(input: Readonly<{
   exerciseId: string;
   packageId: string;
   packageVersion: string;
-}>): Promise<InitialExercisePublicationAcknowledgement> {
-  if (!supabase) throw new Error("ADMIN_EXERCISE_DURABILITY_UNAVAILABLE");
+  bootstrapAuthorizationId: string;
+}>, port: InitialExercisePublicationPort = initialExercisePublicationPort()): Promise<InitialExercisePublicationAcknowledgement> {
   const pending = getPendingInitialExercisePublication();
   if (!pending || pending.operationId !== input.operationId || pending.exerciseId !== input.exerciseId) {
     throw new Error("ADMIN_EXERCISE_CREATE_IDENTITY_MISMATCH");
   }
 
-  // Explicit Admin creation owns this bounded first-write operation. Discovery
-  // remains readable but cannot replace the provisional identity while this
-  // fence is active.
-  remoteSelectionState = "RESOLVED";
-  await saveToCloud();
+  if (await port.authenticatedUserId() !== input.userId) throw new Error("ADMIN_EXERCISE_AUTH_MISMATCH");
+  const projection = port.projection();
+  if (!initialExerciseProjectionMatches(projection, input.exerciseId, input.packageId, input.packageVersion)) {
+    throw new Error("ADMIN_EXERCISE_PROJECTION_MISMATCH");
+  }
+
+  // A lost INSERT response may already have committed the one-shot bootstrap.
+  // Read the exact identity first; never issue a second INSERT for that case.
+  const prior = await port.readExercise(input.exerciseId);
+  if (prior && !initialExerciseReadbackMatches(prior,
+    input.exerciseId, input.packageId, input.packageVersion)) throw new Error("ADMIN_EXERCISE_CREATE_ACK_MISMATCH");
+  if (!prior) {
+    const bootstrap = await port.readBootstrap(input.bootstrapAuthorizationId, input.userId);
+    const expiresAtMs = Date.parse(bootstrap?.expires_at ?? "");
+    if (!bootstrap || bootstrap.status !== "ACTIVE" || bootstrap.consumed_exercise_id
+      || bootstrap.consumed_at || !Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+      throw new Error("ADMIN_EXERCISE_BOOTSTRAP_UNAVAILABLE");
+    }
+    const row = { exercise_id: input.exerciseId, revision: 1, state: projection,
+      updated_at: new Date().toISOString(), updated_by: input.userId };
+    await port.insert(row);
+  }
 
   for (const waitMs of INITIAL_EXERCISE_ACK_DELAYS_MS) {
-    await delay(waitMs);
-    const [{ data: exerciseData, error: exerciseError }, { data: bootstrapData, error: bootstrapError }] = await Promise.all([
-      supabase.from("exercise_states")
-        .select(EXERCISE_DISCOVERY_COLUMNS)
-        .eq("exercise_id", input.exerciseId)
-        .maybeSingle(),
-      supabase.from("exercise_bootstrap_authorizations")
-        .select("id,status,consumed_exercise_id,consumed_at,expires_at")
-        .eq("user_id", input.userId)
-        .eq("consumed_exercise_id", input.exerciseId)
-        .maybeSingle(),
-    ]);
-    recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.initial_create_ack", data: exerciseData });
-    recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_bootstrap_authorizations.initial_create_ack", data: bootstrapData });
-    if (exerciseError || bootstrapError) continue;
-    const exerciseRow = exerciseData as unknown as InitialExerciseReadback | undefined;
-    const bootstrapRow = bootstrapData as unknown as BootstrapConsumptionReadback | undefined;
+    await port.wait(waitMs);
+    let exerciseRow: InitialExerciseReadback | undefined;
+    let bootstrapRow: BootstrapConsumptionReadback | undefined;
+    try {
+      [exerciseRow, bootstrapRow] = await Promise.all([
+        port.readExercise(input.exerciseId), port.readBootstrap(input.bootstrapAuthorizationId, input.userId),
+      ]);
+    } catch { continue; }
     if (!initialExerciseReadbackMatches(exerciseRow, input.exerciseId, input.packageId, input.packageVersion)
-      || !bootstrapConsumptionMatches(bootstrapRow, input.exerciseId)) continue;
+      || !bootstrapConsumptionMatches(bootstrapRow, input.exerciseId)
+      || bootstrapRow.id !== input.bootstrapAuthorizationId) continue;
 
-    await refreshRemoteCurrentExercise("manual");
-    if (latestRemoteExercise?.exerciseId !== input.exerciseId || !remoteVersions.has(input.exerciseId)) continue;
+    if (!await port.discover(input.exerciseId)) continue;
     return Object.freeze({
       exerciseId: input.exerciseId,
       revision: exerciseRow.revision,
@@ -775,6 +830,17 @@ export async function acknowledgeInitialExercisePublication(input: Readonly<{
     });
   }
   throw new Error("ADMIN_EXERCISE_DURABLE_ACK_TIMEOUT");
+}
+
+export function initialExerciseProjectionMatches(state: SharedExerciseState,
+  exerciseId: string, packageId: string, packageVersion: string): boolean {
+  const session = state.exerciseSession;
+  return session.exerciseId === exerciseId
+    && "lifecycleState" in session && session.lifecycleState === "READY"
+    && session.simulationTimeSec === 0 && session.speed === 1
+    && typeof session.lastCommandId === "string" && session.lastCommandId.startsWith("PREPARE-")
+    && state.exercisePackageReference?.packageId === packageId
+    && state.exercisePackageReference.packageVersion === packageVersion;
 }
 
 /**

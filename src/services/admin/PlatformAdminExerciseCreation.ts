@@ -1,10 +1,10 @@
-import { refreshOperatorSession } from "@/services/authorization/OperatorSessionService";
 import { activeExercisePackageService } from "@/services/exercise/ActiveExercisePackageService";
 import { createExercisePreparationCommand, exercisePreparationService } from "@/services/exercise/ExercisePreparationService";
 import { exercisePackageRegistry } from "@/services/exercise/ExercisePackageService";
 import type { ExercisePackage } from "@/models/exercise/ExercisePackage";
 import type { AdminPackageIdentity } from "./AdminPackageSelectionService";
-import { grantExerciseBootstrap } from "./PlatformAdminService";
+import { grantExerciseBootstrap, revokeUnusedExerciseBootstrap,
+  type ExerciseBootstrapAuthorization } from "./PlatformAdminService";
 import {
   createSharedExerciseSnapshot,
   restoreSharedExerciseState,
@@ -24,21 +24,21 @@ type PreparationResult = Readonly<{ ok: true; exerciseId: string; exercisePackag
 
 export type AdminExerciseCreationDependencies = Readonly<{
   resolvePackage: (identity: AdminPackageIdentity) => ExercisePackage | undefined;
-  grantBootstrap: (userId: string) => Promise<unknown>;
-  refreshSession: () => Promise<unknown>;
+  grantBootstrap: (userId: string) => Promise<ExerciseBootstrapAuthorization>;
+  revokeBootstrap: (bootstrapId: string, userId: string) => Promise<void>;
   prepare: (identity: AdminPackageIdentity) => PreparationResult;
   captureLocalState: () => SharedExerciseState;
   restoreLocalState: (state: SharedExerciseState) => void;
   acknowledge: (input: Readonly<{
     operationId: string; userId: string; exerciseId: string;
-    packageId: string; packageVersion: string;
+    packageId: string; packageVersion: string; bootstrapAuthorizationId: string;
   }>) => Promise<InitialExercisePublicationAcknowledgement>;
 }>;
 
 const defaultDependencies: AdminExerciseCreationDependencies = Object.freeze({
   resolvePackage: identity => exercisePackageRegistry.get(identity.packageId, identity.packageVersion),
   grantBootstrap: grantExerciseBootstrap,
-  refreshSession: refreshOperatorSession,
+  revokeBootstrap: revokeUnusedExerciseBootstrap,
   prepare: identity => {
     const activation = activeExercisePackageService.activateWithResult(identity.packageId, identity.packageVersion);
     if (!activation.ok) return Object.freeze({ ok: false as const, message: activation.message });
@@ -61,6 +61,7 @@ type CreationAttempt = {
   beforeState?: SharedExerciseState;
   provisionalState?: SharedExerciseState;
   prepared?: Extract<PreparationResult, { ok: true }>;
+  bootstrap?: ExerciseBootstrapAuthorization;
   acknowledgement?: InitialExercisePublicationAcknowledgement;
 };
 
@@ -97,8 +98,7 @@ async function runCreationAttempt(
     if (!attempt.prepared) {
       attempt.beforeState = dependencies.captureLocalState();
       attempt.phase = "CREATING_BOOTSTRAP";
-      await dependencies.grantBootstrap(userId);
-      await dependencies.refreshSession();
+      attempt.bootstrap = await dependencies.grantBootstrap(userId);
       attempt.phase = "BOOTSTRAPPING_RUNTIME";
       const result = dependencies.prepare({ packageId: selected.packageId, packageVersion: selected.packageVersion });
       if (!result.ok) throw new Error(result.message);
@@ -118,6 +118,10 @@ async function runCreationAttempt(
 
     const prepared = attempt.prepared;
     if (!prepared) throw new Error("Õppuse loomine ei õnnestunud. Proovi uuesti.");
+    if (!attempt.bootstrap) {
+      attempt.phase = "CREATING_BOOTSTRAP";
+      attempt.bootstrap = await dependencies.grantBootstrap(userId);
+    }
     attempt.phase = "PUBLISHING_INITIAL_STATE";
     beginInitialExercisePublication({ operationId: attempt.operationId, exerciseId: prepared.exerciseId,
       packageIdentity: identity });
@@ -129,6 +133,7 @@ async function runCreationAttempt(
       exerciseId: prepared.exerciseId,
       packageId: selected.packageId,
       packageVersion: selected.packageVersion,
+      bootstrapAuthorizationId: attempt.bootstrap.id,
     });
     attempt.phase = "VERIFYING_DISCOVERY";
     if (acknowledgement.exerciseId !== prepared.exerciseId
@@ -144,6 +149,15 @@ async function runCreationAttempt(
   } catch (error) {
     if (fenceActive) finishInitialExercisePublication(attempt.operationId);
     if (attempt.beforeState && attempt.prepared) dependencies.restoreLocalState(attempt.beforeState);
+    if (attempt.bootstrap) {
+      try {
+        await dependencies.revokeBootstrap(attempt.bootstrap.id, userId);
+        attempt.bootstrap = undefined;
+      } catch {
+        // A lost acknowledgement may already have consumed this exact grant.
+        // Preserve it for the same-operation readback on retry; never revoke by guess.
+      }
+    }
     attempt.phase = "FAILED";
     const message = error instanceof Error ? error.message : "";
     if (message.startsWith("ADMIN_EXERCISE_")) {

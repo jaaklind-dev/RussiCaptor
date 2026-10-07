@@ -14,6 +14,9 @@ export type AdminExercise = Readonly<{
   lifecycleState: string; updatedAt: string; participantCount: number; cmCount: number;
   exconCount: number; activeWriterUserId?: string | null; assignments: readonly AdminAssignment[];
 }>;
+export type ExerciseBootstrapAuthorization = Readonly<{
+  id: string; user_id: string; status: "ACTIVE"; consumed_exercise_id: null; expires_at: string;
+}>;
 
 async function invoke<T>(functionName: string, body: Record<string, unknown>): Promise<T> {
   if (!supabase) throw new Error("Supabase pole seadistatud.");
@@ -38,8 +41,18 @@ export async function setAdminUserActive(userId: string, active: boolean): Promi
 export async function listAdminExercises(): Promise<readonly AdminExercise[]> {
   return (await invoke<{ ok: true; exercises: AdminExercise[] }>("platform-admin-exercises", { operation: "list" })).exercises;
 }
-export async function grantExerciseBootstrap(userId: string): Promise<void> {
-  await invoke("platform-admin-exercises", { operation: "grantBootstrap", userId });
+export async function grantExerciseBootstrap(userId: string): Promise<ExerciseBootstrapAuthorization> {
+  const result = await invoke<{ ok: true; authorization: ExerciseBootstrapAuthorization }>(
+    "platform-admin-exercises", { operation: "grantBootstrap", userId });
+  const authorization = result.authorization;
+  if (!authorization?.id || authorization.user_id !== userId || authorization.status !== "ACTIVE"
+    || authorization.consumed_exercise_id !== null || !authorization.expires_at) {
+    throw new Error("ADMIN_EXERCISE_BOOTSTRAP_INVALID");
+  }
+  return authorization;
+}
+export async function revokeUnusedExerciseBootstrap(bootstrapId: string, userId: string): Promise<void> {
+  await invoke("platform-admin-exercises", { operation: "revokeBootstrap", bootstrapId, userId });
 }
 export async function grantExerciseRole(userId: string, exerciseId: string, role: "CM" | "EXCON"): Promise<void> {
   await invoke("platform-admin-exercises", { operation: "grantRole", userId, exerciseId, role });

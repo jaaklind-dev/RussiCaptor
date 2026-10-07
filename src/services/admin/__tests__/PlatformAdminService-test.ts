@@ -1,6 +1,7 @@
 import {
   grantExerciseBootstrap, grantExerciseRole, inviteAdminUser, listAdminExercises,
-  listAdminUsers, requestAdminPasswordReset, revokeExerciseRole, setAdminUserActive,
+  listAdminUsers, requestAdminPasswordReset, revokeExerciseRole, revokeUnusedExerciseBootstrap,
+  setAdminUserActive,
 } from "../PlatformAdminService";
 
 const mockInvoke = jest.fn();
@@ -29,13 +30,16 @@ describe("platform administration client", () => {
   test("EX-ADMIN/ROLE: list, bootstrap, scoped grant and exact revoke use separate calls", async () => {
     mockInvoke.mockResolvedValueOnce({ data: { ok: true, exercises: [] }, error: null })
       .mockResolvedValueOnce({ data: { ok: true, users: [] }, error: null })
-      .mockResolvedValue({ data: { ok: true }, error: null });
+      .mockResolvedValue({ data: { ok: true, authorization: { id: "BOOT-1", user_id: "USER-1",
+        status: "ACTIVE", consumed_exercise_id: null, expires_at: "2026-10-07T00:10:00Z" } }, error: null });
     await listAdminExercises(); await listAdminUsers(); await grantExerciseBootstrap("USER-1");
+    await revokeUnusedExerciseBootstrap("BOOT-1", "USER-1");
     await grantExerciseRole("USER-2", "EX-1", "CM");
     await revokeExerciseRole({ id: "ROLE-1", user_id: "USER-2", role: "CM", scope_id: "EX-1", status: "ACTIVE", issued_at: "2026-10-04T00:00:00Z" });
     expect(mockInvoke.mock.calls.map(call => [call[0], call[1].body.operation])).toEqual([
       ["platform-admin-exercises", "list"], ["platform-admin-users", "list"],
-      ["platform-admin-exercises", "grantBootstrap"], ["platform-admin-exercises", "grantRole"],
+      ["platform-admin-exercises", "grantBootstrap"], ["platform-admin-exercises", "revokeBootstrap"],
+      ["platform-admin-exercises", "grantRole"],
       ["platform-admin-exercises", "revokeRole"],
     ]);
   });

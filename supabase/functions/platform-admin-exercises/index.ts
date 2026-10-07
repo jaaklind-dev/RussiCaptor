@@ -3,6 +3,7 @@ import { audit, corsHeaders, errorResponse, json, requirePlatformAdmin, type Adm
 type ExerciseOperation =
   | Readonly<{ operation: "list" }>
   | Readonly<{ operation: "grantBootstrap"; userId: string }>
+  | Readonly<{ operation: "revokeBootstrap"; userId: string; bootstrapId: string }>
   | Readonly<{ operation: "grantRole"; userId: string; exerciseId: string; role: "CM" | "EXCON" }>
   | Readonly<{ operation: "revokeRole"; assignmentId: string; exerciseId: string; userId: string; role: "CM" | "EXCON" }>;
 
@@ -15,6 +16,13 @@ function exerciseId(value: unknown): string {
 function userId(value: unknown): string {
   const id = typeof value === "string" ? value.trim() : "";
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("INVALID_USER_ID");
+  return id;
+}
+function bootstrapId(value: unknown): string {
+  const id = typeof value === "string" ? value.trim() : "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    throw new Error("INVALID_BOOTSTRAP_ID");
+  }
   return id;
 }
 
@@ -74,6 +82,26 @@ async function operate(context: AdminContext, body: ExerciseOperation): Promise<
     await audit(context, "EXERCISE_BOOTSTRAP_GRANTED", "SUCCESS", targetUserId);
     return json({ ok: true, authorization: data });
   }
+  if (body.operation === "revokeBootstrap") {
+    const id = bootstrapId(body.bootstrapId);
+    const { data: authorization, error: readError } = await context.service
+      .from("exercise_bootstrap_authorizations")
+      .select("id,user_id,status,consumed_exercise_id,consumed_at")
+      .eq("id", id).eq("user_id", targetUserId).maybeSingle();
+    if (readError || !authorization) throw new Error("BOOTSTRAP_NOT_FOUND");
+    if (authorization.consumed_exercise_id || authorization.consumed_at) {
+      throw new Error("BOOTSTRAP_ALREADY_CONSUMED");
+    }
+    if (authorization.status !== "REVOKED") {
+      const { error } = await context.service.rpc("trusted_admin_revoke_exercise_bootstrap", {
+        p_bootstrap_id: id, p_revoked_by: context.user.id,
+      });
+      if (error) throw new Error(error.message.includes("BOOTSTRAP_ALREADY_CONSUMED")
+        ? "BOOTSTRAP_ALREADY_CONSUMED" : "BOOTSTRAP_REVOKE_FAILED");
+    }
+    await audit(context, "EXERCISE_BOOTSTRAP_REVOKED", "SUCCESS", targetUserId);
+    return json({ ok: true, bootstrapId: id });
+  }
   const id = exerciseId(body.exerciseId);
   if (body.operation === "grantRole") {
     await assertExerciseMutable(context, id);
@@ -111,6 +139,7 @@ Deno.serve(async request => {
   } catch (error) {
     if (context && body && body.operation !== "list") {
       const action = body.operation === "grantBootstrap" ? "EXERCISE_BOOTSTRAP_GRANTED"
+        : body.operation === "revokeBootstrap" ? "EXERCISE_BOOTSTRAP_REVOKED"
         : body.role === "CM" ? (body.operation === "grantRole" ? "CM_GRANTED" : "CM_REVOKED")
           : (body.operation === "grantRole" ? "EXCON_GRANTED" : "EXCON_REVOKED");
       await audit(context, action, "FAILURE", body.userId, "exerciseId" in body ? body.exerciseId : undefined,
