@@ -32,6 +32,8 @@ import { NarvaIroScenarioControlsCard, narvaIroScenarioControlsAvailable } from
   "@/components/excon/NarvaIroScenarioControlsCard";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { hasActiveRole } from "@/services/authorization/OperatorSessionService";
+import { useExconRouteReadiness } from "@/hooks/useExconRouteReadiness";
+import { ExconRouteReadinessBoundary } from "@/components/excon/ExconRouteReadinessBoundary";
 
 const initialFilters: InstructorDashboardFilters = {
   location: "All", triage: "All", caseManager: "All", status: "All",
@@ -39,6 +41,13 @@ const initialFilters: InstructorDashboardFilters = {
 const unique = (values: string[]) => ["All", ...new Set(values.filter(Boolean).sort())];
 
 export default function ExerciseDashboardScreen() {
+  const readiness = useExconRouteReadiness();
+  return <ExconRouteReadinessBoundary readiness={readiness}>
+    <AuthorizedExerciseDashboardScreen />
+  </ExconRouteReadinessBoundary>;
+}
+
+function AuthorizedExerciseDashboardScreen() {
   const operator = useOperatorSession();
   useSyncExternalStore(subscribeToInstructorDashboard, getInstructorDashboardVersion, getInstructorDashboardVersion);
   useSyncExternalStore(subscribeToRuntimePersistenceFailure, getRuntimePersistenceFailureVersion, getRuntimePersistenceFailureVersion);

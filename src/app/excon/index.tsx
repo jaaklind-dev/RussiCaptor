@@ -14,10 +14,19 @@ import { router } from "expo-router";
 
 import { Alert, Pressable, ScrollView, StyleSheet, Text } from "react-native";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
-import { hasActiveRole, signOutOperator } from "@/services/authorization/OperatorSessionService";
+import { signOutOperator } from "@/services/authorization/OperatorSessionService";
 import RoleModeSwitcher from "@/components/RoleModeSwitcher";
+import { useExconRouteReadiness } from "@/hooks/useExconRouteReadiness";
+import { ExconRouteReadinessBoundary } from "@/components/excon/ExconRouteReadinessBoundary";
 
 export default function ExconScreen() {
+  const readiness = useExconRouteReadiness();
+  return <ExconRouteReadinessBoundary readiness={readiness}>
+    <AuthorizedExconScreen />
+  </ExconRouteReadinessBoundary>;
+}
+
+function AuthorizedExconScreen() {
   const operator = useOperatorSession();
   const signOut = () => void signOutOperator().then(() => router.replace("/"))
     .catch(() => Alert.alert("Väljalogimine ebaõnnestus", "Väljalogimine ei õnnestunud täielikult. Proovi uuesti."));
@@ -40,11 +49,6 @@ export default function ExconScreen() {
     });
 
   }, []);
-
-  useEffect(() => {
-    if (operator.state !== "LOADING" && !hasActiveRole(operator, "EXCON", snapshot.exerciseId)
-      && !hasActiveRole(operator, "EXERCISE_BOOTSTRAP")) router.replace("/");
-  }, [operator, snapshot.exerciseId]);
 
   return (
 

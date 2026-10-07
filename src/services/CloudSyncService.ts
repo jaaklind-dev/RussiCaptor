@@ -57,6 +57,12 @@ export type CloudSyncStatus = {
   message?: string;
 };
 
+export type CurrentExerciseDiscoveryReadiness =
+  | "PENDING"
+  | "RESOLVED"
+  | "CONFLICT"
+  | "UNAVAILABLE";
+
 type ExerciseStateRow = {
   exercise_id: string;
   revision: number;
@@ -247,6 +253,17 @@ function setStatus(next: CloudSyncStatus): void {
 
 export function getCloudSyncStatus(): CloudSyncStatus {
   return { ...status };
+}
+
+export function getCurrentExerciseDiscoveryReadiness(
+  currentStatus: CloudSyncStatus = status,
+): CurrentExerciseDiscoveryReadiness {
+  if (remoteSelectionState === "UNRESOLVED" || currentStatus.state === "connecting") return "PENDING";
+  if (remoteSelectionState === "CONFLICT") return "CONFLICT";
+  if (currentStatus.state === "error" || currentStatus.state === "offline" || currentStatus.state === "disabled") {
+    return "UNAVAILABLE";
+  }
+  return "RESOLVED";
 }
 
 export function getCloudSyncOperationalState(exerciseId = getCanonicalExerciseSnapshot().exerciseId) {

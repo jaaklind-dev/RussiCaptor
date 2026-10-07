@@ -19,11 +19,14 @@ import {
   subscribeOperatorMode,
 } from "@/services/ui/OperatorModeService";
 import { getSyncVersion, subscribeToSync } from "@/services/SyncService";
+import { useExconRouteReadiness } from "@/hooks/useExconRouteReadiness";
+import { exconRouteRedirect } from "@/services/ui/ExconRouteReadinessService";
 
 function ProductionRouteGate() {
   const segments = useSegments();
   const operator = useOperatorSession();
   const mode = useOperatorMode();
+  const exconReadiness = useExconRouteReadiness();
   const syncVersion = useSyncExternalStore(subscribeToSync, getSyncVersion, getSyncVersion);
   useEffect(() => { reconcileOperatorMode(operator); }, [operator]);
   useEffect(() => {
@@ -35,7 +38,6 @@ function ProductionRouteGate() {
     if (operator.state !== "AUTHENTICATED") { router.replace("/"); return; }
     if (root === "mode") return;
     const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
-    const bootstrap = hasActiveRole(operator, "EXERCISE_BOOTSTRAP");
     if (isDiagnostics) {
       if (!hasPlatformAdminAuthority(operator)) router.replace("/mode");
       else if (mode.selectedMode !== "ADMIN") router.replace("/mode");
@@ -43,9 +45,21 @@ function ProductionRouteGate() {
       if (!hasPlatformAdminAuthority(operator)) router.replace("/mode");
       else if (mode.selectedMode !== "ADMIN") router.replace("/mode");
     }
-    else if (root === "excon" && (mode.selectedMode !== "EXCON" || (!hasActiveRole(operator, "EXCON", exerciseId) && !bootstrap))) router.replace("/mode");
+    else if (root === "excon") {
+      const redirect = exconRouteRedirect(exconReadiness);
+      if (redirect === "/") router.replace("/");
+      else if (redirect === "/mode") router.replace({
+        pathname: "/mode",
+        params: {
+          target: "EXCON",
+          ...(exconReadiness.state === "DENIED" && exconReadiness.reason === "EXERCISE_UNAVAILABLE"
+            ? { reason: "exercise-unavailable" }
+            : {}),
+        },
+      });
+    }
     else if (root !== "excon" && root !== "admin" && (mode.selectedMode !== "CM" || !hasActiveRole(operator, "CM", exerciseId))) router.replace("/mode");
-  }, [mode, operator, segments, syncVersion]);
+  }, [exconReadiness, mode, operator, segments, syncVersion]);
   return null;
 }
 

@@ -25,7 +25,8 @@ describe("WP-NEXT-02 production release gate", () => {
     expect(read("app/dashboard.tsx")).not.toContain("Demo CM");
     expect(read("services/CurrentUserService.ts")).toContain("__DEV__ ? [jaak, demoTransferTarget] : []");
     expect(read("app/_layout.tsx")).toContain("ProductionRouteGate");
-    expect(read("app/_layout.tsx")).toContain('hasActiveRole(operator, "EXCON"');
+    expect(read("app/_layout.tsx")).toContain("exconRouteRedirect(exconReadiness)");
+    expect(read("services/ui/ExconRouteReadinessService.ts")).toContain('activeScopedExerciseIds(operator, "EXCON")');
     expect(read("app/_layout.tsx")).toContain('hasActiveRole(operator, "CM"');
   });
 

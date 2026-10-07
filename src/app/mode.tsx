@@ -20,7 +20,7 @@ import { resolveSelectedModeRoute } from "@/services/ui/OperatorRouteService";
 const modeLabels: Readonly<Record<OperatorMode, string>> = Object.freeze({ ADMIN: "Admin", CM: "CM", EXCON: "EXCON" });
 
 export default function ModeSelectionScreen() {
-  const { target } = useLocalSearchParams<{ target?: string }>();
+  const { target, reason } = useLocalSearchParams<{ target?: string; reason?: string }>();
   const operator = useOperatorSession();
   const mode = useOperatorMode();
   const syncVersion = useSyncExternalStore(subscribeToSync, getSyncVersion, getSyncVersion);
@@ -67,6 +67,9 @@ export default function ModeSelectionScreen() {
     <Text style={styles.subtitle}>Näed ainult neid režiime ja õppusi, mille jaoks sul on kehtiv õigus.</Text>
     <RoleModeSwitcher />
     {requested && mode.selectedMode !== requested && <Text style={styles.note}>Vali jätkamiseks {modeLabels[requested]}.</Text>}
+    {reason === "exercise-unavailable" && <Text accessibilityRole="alert" style={styles.error}>
+      Määratud õppust ei õnnestunud avada. Vali õppus uuesti või värskenda õigusi.
+    </Text>}
     {selected && selected.mode !== "ADMIN" && <View style={styles.panel}>
       <Text style={styles.panelTitle}>{modeLabels[selected.mode]} õppus</Text>
       {selected.exerciseIds.length === 1
