@@ -33,31 +33,35 @@ describe("WP-NARVA-06 Runtime terminal convergence integration", () => {
     expect(handler).not.toContain("audit.push({ commandId: command.commandId, exerciseId: command.exerciseId, commandType: command.commandType, replay");
   });
 
-  test("writer recovery establishes its owner before resuming a pending completion", () => {
+  test("writer recovery establishes its owner before completion owns publication", () => {
     const sync = fs.readFileSync(path.resolve(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     const takeover = sync.slice(sync.indexOf("export async function takeOverRuntimeWriter"), sync.indexOf("/** Explicit user recovery"));
     const recovery = sync.slice(sync.indexOf("async function reacquireRuntimeFromRemoteCheckpointForIntent"), sync.indexOf("function setAndReturn"));
     for (const pathSource of [takeover, recovery]) {
       const restore = pathSource.indexOf("acceptAuthoritativeRuntimeCheckpointAsync");
       const owner = pathSource.indexOf("establishExerciseRuntimeOwnerForCurrentWriter", restore);
-      const commandDrain = pathSource.indexOf("drainPatientCommandsForCurrentWriter", owner);
-      const completion = pathSource.indexOf("resumePendingCompletionForCurrentWriter", commandDrain);
+      const coordinator = pathSource.indexOf("await resumeCompletionBeforeRoutinePublication", owner);
+      const completion = pathSource.indexOf("resumePendingCompletionForCurrentWriter", coordinator);
+      const commandDrain = pathSource.indexOf("drainPatientCommandsForCurrentWriter", completion);
       const routine = pathSource.indexOf("wakeCheckpointPublicationForCurrentWriter", completion);
       expect(restore).toBeGreaterThan(-1);
       expect(owner).toBeGreaterThan(restore);
-      expect(commandDrain).toBeGreaterThan(owner);
-      expect(completion).toBeGreaterThan(commandDrain);
-      expect(routine).toBeGreaterThan(completion);
+      expect(coordinator).toBeGreaterThan(owner);
+      expect(completion).toBeGreaterThan(coordinator);
+      expect(commandDrain).toBeGreaterThan(completion);
+      expect(routine).toBeGreaterThan(commandDrain);
     }
   });
 
-  test("writer takeover drains commands accepted before the new lease", () => {
+  test("writer takeover drains commands before routine publication when no completion owns it", () => {
     const sync = fs.readFileSync(path.resolve(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     const takeover = sync.slice(sync.indexOf("export async function takeOverRuntimeWriter"), sync.indexOf("/** Explicit user recovery"));
     const owner = takeover.indexOf("establishExerciseRuntimeOwnerForCurrentWriter");
-    const commandDrain = takeover.indexOf("await drainPatientCommandsForCurrentWriter?.()", owner);
+    const coordinator = takeover.indexOf("await resumeCompletionBeforeRoutinePublication", owner);
+    const commandDrain = takeover.indexOf("await drainPatientCommandsForCurrentWriter?.()", coordinator);
     const publish = takeover.indexOf("wakeCheckpointPublicationForCurrentWriter", commandDrain);
-    expect(commandDrain).toBeGreaterThan(owner);
+    expect(coordinator).toBeGreaterThan(owner);
+    expect(commandDrain).toBeGreaterThan(coordinator);
     expect(publish).toBeGreaterThan(commandDrain);
   });
 

@@ -102,7 +102,20 @@ let updateNativeHeartbeatTokenForCurrentWriter: ((accessToken: string) => void) 
 let establishExerciseRuntimeOwnerForCurrentWriter: (() => boolean) | undefined;
 let ensureSharedWorkflowHeadsForCurrentWriter: (() => Promise<boolean>) | undefined;
 let drainPatientCommandsForCurrentWriter: (() => Promise<number>) | undefined;
-let resumePendingCompletionForCurrentWriter: (() => void) | undefined;
+let resumePendingCompletionForCurrentWriter: (() => Promise<boolean>) | undefined;
+
+export async function resumeCompletionBeforeRoutinePublication(
+  resumeCompletion: (() => Promise<boolean>) | undefined,
+  publishRoutine: (() => void | Promise<void>) | undefined,
+): Promise<"TERMINAL_RECOVERY" | "ROUTINE_PUBLICATION"> {
+  // A completion request owns the publication boundary once its backend fence
+  // is active.  Only the terminal checkpoint prepared by that request may then
+  // reach the atomic finalizer; ordinary checkpoint publication stays asleep.
+  const completionOwnsPublication = await (resumeCompletion?.() ?? Promise.resolve(false));
+  if (completionOwnsPublication) return "TERMINAL_RECOVERY";
+  await publishRoutine?.();
+  return "ROUTINE_PUBLICATION";
+}
 type RenewalDiagnosticEvent = Readonly<{
   event: "LEASE_ACQUIRED" | "RENEWAL_SCHEDULER_STARTED" | "RENEWAL_ATTEMPT" | "RENEWAL_SUCCESS" | "RENEWAL_FAILURE" | "RENEWAL_SCHEDULER_STOPPED" | "AUTHORITY_TRANSITION";
   occurredAt: string;
@@ -715,9 +728,13 @@ export async function takeOverRuntimeWriter(): Promise<Status> {
     return setAndReturn({state:"READER",code:"RUNTIME_OWNER_NOT_READY",revision:remoteRevision});
   }
   setRuntimeCommandAuthorityWriter(exerciseId);
-  await drainPatientCommandsForCurrentWriter?.();
-  resumePendingCompletionForCurrentWriter?.();
-  wakeCheckpointPublicationForCurrentWriter?.();
+  await resumeCompletionBeforeRoutinePublication(
+    resumePendingCompletionForCurrentWriter,
+    async()=>{
+      await drainPatientCommandsForCurrentWriter?.();
+      wakeCheckpointPublicationForCurrentWriter?.();
+    },
+  );
   lastRecoveryOutcome=Object.freeze({state:"SUCCEEDED",code:"TAKEOVER",occurredAt:new Date().toISOString()});
   return status;
 }
@@ -783,9 +800,13 @@ async function reacquireRuntimeFromRemoteCheckpointForIntent(intentId: string): 
     return setAndReturn({state:"READER",code:"RUNTIME_OWNER_NOT_READY",revision:remoteRevision});
   }
   setRuntimeCommandAuthorityWriter(exerciseId);
-  await drainPatientCommandsForCurrentWriter?.();
-  resumePendingCompletionForCurrentWriter?.();
-  wakeCheckpointPublicationForCurrentWriter?.();
+  await resumeCompletionBeforeRoutinePublication(
+    resumePendingCompletionForCurrentWriter,
+    async()=>{
+      await drainPatientCommandsForCurrentWriter?.();
+      wakeCheckpointPublicationForCurrentWriter?.();
+    },
+  );
   lastRecoveryOutcome=Object.freeze({state:"SUCCEEDED",code:"CHECKPOINT_RECOVERY",occurredAt:new Date().toISOString()});
   return status;
 }
@@ -1068,11 +1089,14 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     }
   });
 
-  const processCompletionRequest=(request:RuntimeCompletionRequest|undefined):void=>{
-    if(!request||request.exerciseId!==exerciseId)return;
+  const processCompletionRequest=async(request:RuntimeCompletionRequest|undefined):Promise<boolean>=>{
+    if(!request||request.exerciseId!==exerciseId)return false;
     activeCompletion=request;
     setRuntimeCompletionPhase(exerciseId,request.status==="COMPLETED"?"COMPLETED":"PENDING");
-    if(isOperatorSignOutDraining()||request.status!=="PENDING"||!lease||status.state!=="WRITER"||!runtimeOwnerGeneration.isReady()||completionProcessing)return;
+    if(request.status!=="PENDING")return true;
+    if(isOperatorSignOutDraining()||generationStopped()||!lease||status.state!=="WRITER"||!runtimeOwnerGeneration.isReady())return true;
+    registerLifecycleCriticalIntent(true);
+    if(completionProcessing){await completionProcessing;return true;}
     const task=(async()=>{
       try {
         await drainPatientCommands(request.fenceCommandSequence);
@@ -1090,12 +1114,21 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
       }
     })().finally(()=>{if(completionProcessing===task)completionProcessing=undefined;});
     completionProcessing=task;
+    await task;
+    return true;
   };
-  const resumePendingCompletion=()=>{
-    if(isOperatorSignOutDraining()||generationStopped()||!runtimeOwnerGeneration.isReady())return;
-    if(activeCompletion)processCompletionRequest(activeCompletion);
-    else if(completionGateway)void completionGateway.load(exerciseId).then(processCompletionRequest)
-      .catch(()=>setRuntimeCompletionPhase(exerciseId,"FAILED","COMPLETION_REQUEST_LOAD_FAILED"));
+  const resumePendingCompletion=async():Promise<boolean>=>{
+    if(isOperatorSignOutDraining()||generationStopped()||!runtimeOwnerGeneration.isReady())return true;
+    if(activeCompletion)return processCompletionRequest(activeCompletion);
+    if(!completionGateway)return false;
+    try {
+      return await processCompletionRequest(await completionGateway.load(exerciseId));
+    } catch {
+      // The request state is authoritative.  If it cannot be inspected, do not
+      // risk waking a generic publisher across a possibly active fence.
+      setRuntimeCompletionPhase(exerciseId,"FAILED","COMPLETION_REQUEST_LOAD_FAILED");
+      return true;
+    }
   };
   resumePendingCompletionForCurrentWriter=resumePendingCompletion;
   const registerLifecycleCriticalIntent=(fromCommandIntent=false)=>{
@@ -1124,6 +1157,10 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         const checkpoint=getLocalRuntimeCheckpoint(); if(!checkpoint||!lease||status.state!=="WRITER"||checkpoint.checkpointRevision<=remoteRevision||isIdenticalCheckpointPayload(lastPublishedCheckpoint,checkpoint)) return;
         publicationDirty=true;
         const priority=checkpointPublicationPriority(checkpoint);
+        if(activeCompletion?.status==="PENDING"&&priority==="ROUTINE"){
+          registerLifecycleCriticalIntent(true);
+          return;
+        }
         const intentGeneration=priority==="LIFECYCLE_CRITICAL"?(terminalIntentGeneration??++publicationIntentGeneration):publicationIntentGeneration;
         if(priority==="LIFECYCLE_CRITICAL")terminalIntentGeneration=intentGeneration;
         activePublicationPriority=priority;
@@ -1225,7 +1262,12 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     const checkpoint=getLocalRuntimeCheckpoint();
     if(!checkpoint||isIdenticalCheckpointPayload(lastPublishedCheckpoint,checkpoint))return;
     publicationDirty=true;
-    if(checkpointPublicationPriority(checkpoint)==="LIFECYCLE_CRITICAL"){
+    const priority=checkpointPublicationPriority(checkpoint);
+    if(activeCompletion?.status==="PENDING"&&priority==="ROUTINE"){
+      registerLifecycleCriticalIntent(true);
+      return;
+    }
+    if(priority==="LIFECYCLE_CRITICAL"){
       registerLifecycleCriticalIntent();
       publishQueued=true;
       if(publishInFlight)return;
@@ -1422,10 +1464,17 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
       realtimeSubscribed=true;
     }
     if(channelStatus==="SUBSCRIBED"&&!generationStopped()&&!isOperatorSignOutDraining()){
-      renewalLoop?.wake();requestPublish();
-      if(!isOperatorSignOutDraining()&&lease&&status.state==="WRITER")void drainPatientCommands().catch(()=>setStatus({state:"WRITER",code:"RUNTIME_COMMAND_MATERIALIZATION_FAILED",revision:remoteRevision}));
-      if(completionGateway)void completionGateway.load(exerciseId).then(processCompletionRequest)
-        .catch(()=>setRuntimeCompletionPhase(exerciseId,"FAILED","COMPLETION_REQUEST_LOAD_FAILED"));
+      renewalLoop?.wake();
+      if(lease&&status.state==="WRITER"){
+        void resumeCompletionBeforeRoutinePublication(
+          resumePendingCompletion,
+          async()=>{await drainPatientCommands();requestPublish();},
+        ).catch(()=>setRuntimeCompletionPhase(exerciseId,"FAILED","COMPLETION_REQUEST_LOAD_FAILED"));
+      } else {
+        requestPublish();
+        if(completionGateway)void completionGateway.load(exerciseId).then(processCompletionRequest)
+          .catch(()=>setRuntimeCompletionPhase(exerciseId,"FAILED","COMPLETION_REQUEST_LOAD_FAILED"));
+      }
     }
   });
   let signOutReleaseInFlight:Promise<void>|undefined;

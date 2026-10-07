@@ -377,7 +377,11 @@ describe("WP-44B checkpoint startup coordination", () => {
 
   test("reconnect and legitimate authority acquisition rearm the same publication scheduler", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
-    expect(source).toMatch(/if\(channelStatus==="SUBSCRIBED"&&!generationStopped\(\)&&!isOperatorSignOutDraining\(\)\)\{\s*renewalLoop\?\.wake\(\);requestPublish\(\);/);
+    const reconnect = source.slice(source.indexOf('if(channelStatus==="SUBSCRIBED"&&!generationStopped()'),
+      source.indexOf("let signOutReleaseInFlight"));
+    expect(reconnect).toContain("renewalLoop?.wake()");
+    expect(reconnect).toContain("resumeCompletionBeforeRoutinePublication(");
+    expect(reconnect.indexOf("resumeCompletionBeforeRoutinePublication")).toBeLessThan(reconnect.indexOf("requestPublish"));
     expect(source).toContain('table:"runtime_checkpoint_notifications"');
     expect(source).toContain('"runtime_checkpoint_notifications.reconnect_metadata"');
     expect(source).not.toContain('table:"runtime_checkpoints",filter:');
@@ -911,7 +915,8 @@ describe("WP-44B checkpoint startup coordination", () => {
   test("terminal lifecycle publication supersedes one active routine preparation before RPC", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     const publish = source.slice(source.indexOf("let publishInFlight=false"), source.indexOf("const stopPrepared="));
-    expect(publish).toContain('checkpointPublicationPriority(checkpoint)==="LIFECYCLE_CRITICAL"');
+    expect(publish).toContain("const priority=checkpointPublicationPriority(checkpoint)");
+    expect(publish).toContain('activeCompletion?.status==="PENDING"&&priority==="ROUTINE"');
     expect(publish).toContain("const registerLifecycleCriticalIntent=(fromCommandIntent=false)=>{");
     expect(publish).toContain("terminalIntentGeneration=++publicationIntentGeneration");
     expect(publish).toContain("subscribeToSync(()=>registerLifecycleCriticalIntent(false))");
