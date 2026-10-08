@@ -48,4 +48,23 @@ describe("platform administration client", () => {
     mockInvoke.mockResolvedValue({ data: null, error: { message: "FunctionsHttpError" } });
     await expect(listAdminUsers()).rejects.toThrow("FunctionsHttpError");
   });
+
+  test("ADMIN-LIST transient 503 is retried once for read-only exercise listing", async () => {
+    mockInvoke.mockResolvedValueOnce({ data: null, error: { message: "FunctionsHttpError", context: { status: 503 } } })
+      .mockResolvedValueOnce({ data: { ok: true, exercises: [{ exerciseId: "EX-1789553119340-1" }] }, error: null });
+    await expect(listAdminExercises()).resolves.toEqual([{ exerciseId: "EX-1789553119340-1" }]);
+    expect(mockInvoke).toHaveBeenCalledTimes(2);
+  });
+
+  test("ADMIN-LIST 403 is never retried", async () => {
+    mockInvoke.mockResolvedValue({ data: null, error: { message: "Forbidden", context: { status: 403 } } });
+    await expect(listAdminExercises()).rejects.toThrow("Forbidden");
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+  });
+
+  test("ADMIN-LIST mutations are never retried even on 503", async () => {
+    mockInvoke.mockResolvedValue({ data: null, error: { message: "Unavailable", context: { status: 503 } } });
+    await expect(grantExerciseRole("USER-1", "EX-1", "CM")).rejects.toThrow("Unavailable");
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+  });
 });

@@ -18,16 +18,28 @@ export type ExerciseBootstrapAuthorization = Readonly<{
   id: string; user_id: string; status: "ACTIVE"; consumed_exercise_id: null; expires_at: string;
 }>;
 
-async function invoke<T>(functionName: string, body: Record<string, unknown>): Promise<T> {
+async function invoke<T>(functionName: string, body: Record<string, unknown>, retryTransientRead = false): Promise<T> {
   if (!supabase) throw new Error("Supabase pole seadistatud.");
-  const { data, error } = await supabase.functions.invoke(functionName, { body });
-  if (error) throw new Error(error.message || "Administreerimise päring ebaõnnestus.");
-  if (!data?.ok) throw new Error(String(data?.error || "Administreerimise päring ebaõnnestus."));
-  return data as T;
+  for (let attempt = 0; attempt < (retryTransientRead ? 2 : 1); attempt += 1) {
+    const { data, error } = await supabase.functions.invoke(functionName, { body });
+    if (error) {
+      // A transient authority-read outage is retried only for read-only list operations.
+      // 401/403 and all mutations remain fail-closed; no response body is logged.
+      const status = (error as { context?: { status?: unknown } }).context?.status;
+      if (retryTransientRead && attempt === 0 && [429, 502, 503, 504].includes(Number(status))) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        continue;
+      }
+      throw new Error(error.message || "Administreerimise päring ebaõnnestus.");
+    }
+    if (!data?.ok) throw new Error(String(data?.error || "Administreerimise päring ebaõnnestus."));
+    return data as T;
+  }
+  throw new Error("Administreerimise päring ebaõnnestus.");
 }
 
 export async function listAdminUsers(): Promise<readonly AdminUser[]> {
-  return (await invoke<{ ok: true; users: AdminUser[] }>("platform-admin-users", { operation: "list" })).users;
+  return (await invoke<{ ok: true; users: AdminUser[] }>("platform-admin-users", { operation: "list" }, true)).users;
 }
 export async function inviteAdminUser(email: string, displayName: string): Promise<void> {
   await invoke("platform-admin-users", { operation: "invite", email, displayName });
@@ -39,7 +51,7 @@ export async function setAdminUserActive(userId: string, active: boolean): Promi
   await invoke("platform-admin-users", { operation: active ? "reactivate" : "deactivate", userId });
 }
 export async function listAdminExercises(): Promise<readonly AdminExercise[]> {
-  return (await invoke<{ ok: true; exercises: AdminExercise[] }>("platform-admin-exercises", { operation: "list" })).exercises;
+  return (await invoke<{ ok: true; exercises: AdminExercise[] }>("platform-admin-exercises", { operation: "list" }, true)).exercises;
 }
 export async function grantExerciseBootstrap(userId: string): Promise<ExerciseBootstrapAuthorization> {
   const result = await invoke<{ ok: true; authorization: ExerciseBootstrapAuthorization }>(

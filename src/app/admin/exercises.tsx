@@ -1,39 +1,63 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { grantExerciseRole, listAdminExercises, listAdminUsers, revokeExerciseRole, type AdminExercise, type AdminUser } from "@/services/admin/PlatformAdminService";
 import { refreshOperatorSession } from "@/services/authorization/OperatorSessionService";
+import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { assignmentStatusLabel, exerciseLifecycleLabel, exercisePackageIdLabel, publicErrorMessage } from "@/localization/et";
 
 export default function AdminExercisesScreen() {
   const { createdExerciseId } = useLocalSearchParams<{ createdExerciseId?: string }>();
-  const [exercises, setExercises] = useState<readonly AdminExercise[]>([]); const [users, setUsers] = useState<readonly AdminUser[]>([]);
+  const operator = useOperatorSession();
+  const adminReady = operator.state === "AUTHENTICATED" && operator.isPlatformAdmin === true;
+  const [exercises, setExercises] = useState<readonly AdminExercise[]>(); const [users, setUsers] = useState<readonly AdminUser[]>([]);
   const [selectedExercise, setSelectedExercise] = useState<string>(); const [selectedUser, setSelectedUser] = useState<string>(); const [busy, setBusy] = useState(false); const [message, setMessage] = useState<string>();
+  const [loading, setLoading] = useState(false); const [listError, setListError] = useState<string>(); const [usersError, setUsersError] = useState<string>();
   const [userSearch, setUserSearch] = useState("");
-  const load = useCallback(async () => { try { const [nextExercises, nextUsers] = await Promise.all([listAdminExercises(), listAdminUsers()]); setExercises(nextExercises); setUsers(nextUsers); } catch (error) { setMessage(publicErrorMessage(error, "Õppuste laadimine ebaõnnestus.")); } }, []);
+  const generation = useRef(0);
+  const load = useCallback(async () => {
+    if (!adminReady) return;
+    const request = ++generation.current;
+    setLoading(true);
+    setListError(undefined);
+    setUsersError(undefined);
+    // User enrichment is independent: its failure must not erase a valid exercise list.
+    const [exerciseResult, userResult] = await Promise.allSettled([listAdminExercises(), listAdminUsers()]);
+    if (request !== generation.current) return;
+    if (exerciseResult.status === "fulfilled") setExercises(exerciseResult.value);
+    else setListError(publicErrorMessage(exerciseResult.reason, "Õppuste laadimine ebaõnnestus."));
+    if (userResult.status === "fulfilled") setUsers(userResult.value);
+    else setUsersError("Kasutajate laadimine ebaõnnestus. Proovi uuesti.");
+    setLoading(false);
+  }, [adminReady]);
   useEffect(() => {
     let active = true;
-    void Promise.all([listAdminExercises(), listAdminUsers()]).then(([nextExercises, nextUsers]) => {
-      if (active) { setExercises(nextExercises); setUsers(nextUsers); }
-    }).catch(error => { if (active) setMessage(publicErrorMessage(error, "Õppuste laadimine ebaõnnestus.")); });
-    return () => { active = false; };
-  }, []);
-  const createdExercise = useMemo(() => createdExerciseId ? exercises.find(item => item.exerciseId === createdExerciseId) : undefined, [createdExerciseId, exercises]);
+    if (adminReady) void Promise.resolve().then(() => { if (active) return load(); });
+    return () => { active = false; generation.current += 1; };
+  }, [adminReady, load]);
+  const visibleExercises = useMemo(() => exercises ?? [], [exercises]);
+  const createdExercise = useMemo(() => createdExerciseId ? visibleExercises.find(item => item.exerciseId === createdExerciseId) : undefined, [createdExerciseId, visibleExercises]);
   const effectiveSelectedExercise = selectedExercise ?? createdExercise?.exerciseId;
-  const exercise = useMemo(() => exercises.find(item => item.exerciseId === effectiveSelectedExercise), [effectiveSelectedExercise, exercises]);
+  const exercise = useMemo(() => visibleExercises.find(item => item.exerciseId === effectiveSelectedExercise), [effectiveSelectedExercise, visibleExercises]);
   const eligibleUsers = useMemo(() => {
     const query = userSearch.trim().toLocaleLowerCase("et");
     if (query.length < 2) return [];
     return users.filter(user => user.status !== "DISABLED" &&
       `${user.displayName} ${user.email}`.toLocaleLowerCase("et").includes(query)).slice(0, 20);
   }, [userSearch, users]);
-  const perform = async (action: () => Promise<void>, success: string) => { setBusy(true); setMessage(undefined); try { await action(); setMessage(success); await Promise.all([load(), refreshOperatorSession()]); } catch (error) { setMessage(publicErrorMessage(error)); } finally { setBusy(false); } };
+  const perform = async (action: () => Promise<void>, success: string) => { setBusy(true); setMessage(undefined); try { await action(); setMessage(success); await refreshOperatorSession(); await load(); } catch (error) { setMessage(publicErrorMessage(error)); } finally { setBusy(false); } };
   const displayMessage = message ?? (createdExercise ? "Uus õppus on loodud." : undefined);
+  if (operator.state === "LOADING") return <View style={styles.page}><Text>Laadin kasutajaõigusi…</Text></View>;
+  if (!adminReady) return <View style={styles.page}><Text accessibilityRole="alert">Administraatori õigused pole saadaval.</Text></View>;
   return <ScrollView contentContainerStyle={styles.page}>
     <Pressable onPress={() => router.back()}><Text style={styles.back}>‹ Administratsioon</Text></Pressable><Text style={styles.title}>Õppused</Text>
     <Pressable style={styles.primary} onPress={() => router.push("/admin/package-selection")}><Text style={styles.primaryText}>Loo uus õppus</Text></Pressable>
     <Text style={styles.note}>Vali pakett ja kinnita selle põhjal uue õppuse loomine.</Text>
     {displayMessage && <Text accessibilityRole="alert" style={styles.message}>{displayMessage}</Text>}
+    {loading && <Text testID="admin-exercises-loading" style={styles.meta}>{exercises ? "Uuendan õppusi…" : "Laadin õppusi…"}</Text>}
+    {listError && <Text testID="admin-exercises-error" accessibilityRole="alert" style={styles.message}>{exercises ? "Õppuste värskendamine ebaõnnestus. Varasem nimekiri on endiselt nähtav." : listError}</Text>}
+    {usersError && <Text testID="admin-exercises-users-error" accessibilityRole="alert" style={styles.message}>{usersError}</Text>}
+    {(listError || usersError || exercises) && <Pressable testID="admin-exercises-retry" accessibilityRole="button" disabled={loading} onPress={() => void load()}><Text style={styles.back}>{loading ? "Uuendan…" : "Värskenda nimekirja"}</Text></Pressable>}
     {exercise && <View style={styles.panel}><Text style={styles.panelTitle}>Osalejad · {exercisePackageIdLabel(exercise.packageId)}</Text>
       {(exercise.lifecycleState === "COMPLETED" || exercise.lifecycleState === "TERMINATED") && <Text style={styles.warning}>Terminalne õppus on kirjutuskaitstud.</Text>}
       <Text style={styles.label}>Vali kasutaja</Text>
@@ -46,7 +70,7 @@ export default function AdminExercisesScreen() {
       {exercise.assignments.map(assignment => <View key={assignment.id} style={styles.assignment}><Text style={styles.meta}>{users.find(user => user.userId === assignment.user_id)?.displayName || "Tundmatu kasutaja"} · {assignment.role} · {assignmentStatusLabel(assignment.status)}</Text>
         {assignment.status === "ACTIVE" && <Pressable onPress={() => Alert.alert("Tühista roll", "Kui kasutaja juhib parajasti õppust, tuleb juhtimine enne turvaliselt üle anda. Jätkata?", [{ text: "Loobu", style: "cancel" }, { text: "Tühista", style: "destructive", onPress: () => void perform(() => revokeExerciseRole(assignment), "Roll tühistatud.") }])}><Text style={styles.remove}>Tühista</Text></Pressable>}</View>)}
     </View>}
-    {exercises.map(item => <Pressable key={item.exerciseId} style={[styles.panel, effectiveSelectedExercise === item.exerciseId && styles.selected]} onPress={() => { setSelectedExercise(item.exerciseId); setSelectedUser(undefined); setUserSearch(""); }}>
+    {visibleExercises.map(item => <Pressable key={item.exerciseId} testID={`admin-exercise-${item.exerciseId}`} style={[styles.panel, effectiveSelectedExercise === item.exerciseId && styles.selected]} onPress={() => { setSelectedExercise(item.exerciseId); setSelectedUser(undefined); setUserSearch(""); }}>
       <Text style={styles.panelTitle}>{exercisePackageIdLabel(item.packageId)}</Text><Text style={styles.meta}>{item.packageVersion ? `Versioon ${item.packageVersion} · ` : ""}{exerciseLifecycleLabel(item.lifecycleState)}</Text>
       <Text style={styles.meta}>{item.participantCount} osalejat · CM {item.cmCount} · EXCON {item.exconCount}</Text>
     </Pressable>)}
