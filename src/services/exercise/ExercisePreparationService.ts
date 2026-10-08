@@ -14,6 +14,7 @@ import { packagePatientDatasetRegistry } from "./CanonicalPatientDatasets";
 import { createPatientMaterializationPlan, installPatientMaterialization, PatientDatasetError } from "./PackagePatientMaterializationService";
 import { installPackageImagingDefinitions } from "./PackageImagingInstallationService";
 import { installPackageQuestions } from "./PackageQuestionInstallationService";
+import type { SharedExerciseState } from "@/models/SharedExerciseState";
 
 export type ExercisePreparationFailureCode = "ACTIVE_EXERCISE" | "NO_ACTIVE_PACKAGE" | "PACKAGE_NOT_FOUND" | "PACKAGE_INCOMPATIBLE" | "PACKAGE_BINDING_FAILED" | "PATIENT_DATASET_INVALID" | "PROTOCOL_INCOMPATIBLE" | "MODULE_COMPOSITION_FAILED" | "INVALID_EXERCISE_STATE" | "PERSISTENCE_FAILURE" | "RUNTIME_INITIALIZATION_FAILURE" | "VERSION_CONFLICT" | "UNAUTHORIZED";
 export type ExercisePreparationCommand = Readonly<{ commandId: string; currentExerciseId: string; newExerciseId: string; expectedVersion: number; issuedBy: "Exercise Controller" }>;
@@ -30,6 +31,50 @@ let sequence = 0;
 export function createExercisePreparationCommand(): ExercisePreparationCommand {
   const current = getCanonicalExerciseSnapshot(); sequence += 1; const intent = `${Date.now()}-${sequence}`;
   return Object.freeze({ commandId: `PREPARE-${intent}`, currentExerciseId: current.exerciseId, newExerciseId: `EX-${intent}`, expectedVersion: current.version, issuedBy: "Exercise Controller" });
+}
+/**
+ * Admin creation prepares a separate, unpublished READY projection. It must
+ * never reset the exercise currently hydrated in the process. The ordinary
+ * prepare() path below intentionally retains its READY non-demo guard.
+ */
+export function prepareProvisionalAdminExercise(
+  commandId: string,
+  exerciseId: string,
+  pkg: ExercisePackage,
+): SharedExerciseState {
+  if (!exerciseId.trim() || exerciseId === getCanonicalExerciseSnapshot().exerciseId) {
+    throw new Error("ADMIN_EXERCISE_CREATE_IDENTITY_MISMATCH");
+  }
+  exercisePackageValidator.assertValid(pkg);
+  if (exercisePackageValidator.compatibility(pkg) === "INCOMPATIBLE") {
+    throw new Error("ADMIN_EXERCISE_PACKAGE_INCOMPATIBLE");
+  }
+  const plan = createPatientMaterializationPlan(exerciseId, pkg, packagePatientDatasetRegistry);
+  const patientIds = new Set(plan.patients.map(item => item.patient.id));
+  const definitions = pkg.imagingConfiguration?.definitions ?? [];
+  const questions = (pkg.questionConfiguration?.definitions ?? [])
+    .filter(item => patientIds.has(item.patientId))
+    .map(item => ({ id: item.questionId, exerciseId, patientId: item.patientId,
+      category: item.category, prompt: item.prompt, answer: item.answer,
+      visibility: item.visibility, order: item.order, packageId: pkg.packageId,
+      packageVersion: pkg.packageVersion, sourcePatientId: item.sourcePatientId }))
+    .sort((left, right) => left.patientId.localeCompare(right.patientId) || left.order - right.order ||
+      left.id.localeCompare(right.id));
+  return {
+    exerciseSession: { exerciseId, lifecycleState: "READY", simulationTimeSec: 0,
+      speed: 1, version: 1, clockVersion: 2, clockInitializedAtSimulationTimeSec: 0,
+      lastCommandId: commandId },
+    patients: plan.patients.map(item => structuredClone(item.patient)),
+    assignments: [], transfers: [], questions, labs: [],
+    imagingStudies: definitions.map(item => ({ ...structuredClone(item.study), exerciseId })),
+    orders: definitions.map(item => ({ ...structuredClone(item.order), exerciseId,
+      patientId: item.study.patientId, category: "imaging" as const })),
+    notes: [], scenarioEvents: [], timelineEvents: [], interventions: [],
+    medicationAdministrations: [], vitalSigns: [], caseManagerZoneIds: {},
+    exerciseControlAudit: [], instructorCommandAudit: [], exerciseResetAudit: [],
+    exercisePackageReference: { packageId: pkg.packageId, packageVersion: pkg.packageVersion },
+    patientMaterialization: plan,
+  };
 }
 export function captureCompletedExerciseArchive() { const snapshot = getCanonicalExerciseSnapshot(); const assessment = getProtocolAssessmentReport(); return Object.freeze({ exerciseId: snapshot.exerciseId, snapshot, debrief: getDebriefReport(), analytics: getAnalyticsReport(), ...(assessment ? { protocolAssessment: assessment } : {}) }); }
 const message: Record<ExercisePreparationFailureCode, string> = { ACTIVE_EXERCISE: "Complete the current exercise before preparing another.", NO_ACTIVE_PACKAGE: "Select an Exercise Package before preparing a new exercise.", PACKAGE_NOT_FOUND: "The selected Exercise Package is no longer available.", PACKAGE_INCOMPATIBLE: "The selected Exercise Package is incompatible.", PACKAGE_BINDING_FAILED: "The Exercise Package could not be bound.", PATIENT_DATASET_INVALID: "The package patient dataset is missing or invalid.", PROTOCOL_INCOMPATIBLE: "The selected protocol is incompatible.", MODULE_COMPOSITION_FAILED: "Clinical Module composition failed.", INVALID_EXERCISE_STATE: "A new exercise can be prepared only after completion.", PERSISTENCE_FAILURE: "The new exercise could not be persisted.", RUNTIME_INITIALIZATION_FAILURE: "The exercise runtime could not be initialized.", VERSION_CONFLICT: "Exercise state changed. Try again.", UNAUTHORIZED: "Exercise Controller authorization is required." };

@@ -1,5 +1,5 @@
 import { activeExercisePackageService } from "@/services/exercise/ActiveExercisePackageService";
-import { createExercisePreparationCommand, exercisePreparationService } from "@/services/exercise/ExercisePreparationService";
+import { prepareProvisionalAdminExercise } from "@/services/exercise/ExercisePreparationService";
 import { exercisePackageRegistry } from "@/services/exercise/ExercisePackageService";
 import type { ExercisePackage } from "@/models/exercise/ExercisePackage";
 import type { AdminPackageIdentity } from "./AdminPackageSelectionService";
@@ -11,6 +11,7 @@ import {
   type SharedExerciseState,
 } from "@/services/StatePersistenceService";
 import { notifySync } from "@/services/SyncService";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import {
   acknowledgeInitialExercisePublication,
   type InitialExercisePublicationAcknowledgement,
@@ -20,18 +21,22 @@ import {
   finishInitialExercisePublication,
 } from "@/services/exercise/InitialExercisePublicationFence";
 
-type PreparationResult = Readonly<{ ok: true; exerciseId: string; exercisePackage: ExercisePackage }> | Readonly<{ ok: false; message: string }>;
+type PreparationResult = Readonly<{ ok: true; exerciseId: string; exercisePackage: ExercisePackage;
+  projection?: SharedExerciseState }> | Readonly<{ ok: false; message: string }>;
 
 export type AdminExerciseCreationDependencies = Readonly<{
   resolvePackage: (identity: AdminPackageIdentity) => ExercisePackage | undefined;
   grantBootstrap: (userId: string) => Promise<ExerciseBootstrapAuthorization>;
   revokeBootstrap: (bootstrapId: string, userId: string) => Promise<void>;
-  prepare: (identity: AdminPackageIdentity) => PreparationResult;
+  prepare: (identity: AdminPackageIdentity, operationId: string, exerciseId: string) => PreparationResult;
   captureLocalState: () => SharedExerciseState;
+  currentExerciseId?: () => string;
   restoreLocalState: (state: SharedExerciseState) => void;
+  commitPackageSelection?: (identity: AdminPackageIdentity) => void;
   acknowledge: (input: Readonly<{
     operationId: string; userId: string; exerciseId: string;
     packageId: string; packageVersion: string; bootstrapAuthorizationId: string;
+    projection?: SharedExerciseState;
   }>) => Promise<InitialExercisePublicationAcknowledgement>;
 }>;
 
@@ -39,17 +44,26 @@ const defaultDependencies: AdminExerciseCreationDependencies = Object.freeze({
   resolvePackage: identity => exercisePackageRegistry.get(identity.packageId, identity.packageVersion),
   grantBootstrap: grantExerciseBootstrap,
   revokeBootstrap: revokeUnusedExerciseBootstrap,
-  prepare: identity => {
-    const activation = activeExercisePackageService.activateWithResult(identity.packageId, identity.packageVersion);
-    if (!activation.ok) return Object.freeze({ ok: false as const, message: activation.message });
-    return exercisePreparationService.prepare(createExercisePreparationCommand());
+  prepare: (identity, operationId, exerciseId) => {
+    const pkg = exercisePackageRegistry.get(identity.packageId, identity.packageVersion);
+    if (!pkg) return Object.freeze({ ok: false as const, message: "Valitud õppusepaketti ei leitud." });
+    const projection = prepareProvisionalAdminExercise(`PREPARE-${operationId}`, exerciseId, pkg);
+    return Object.freeze({ ok: true as const, exerciseId,
+      exercisePackage: pkg, projection });
   },
   captureLocalState: createSharedExerciseSnapshot,
+  currentExerciseId: () => getCanonicalExerciseSnapshot().exerciseId,
   restoreLocalState: state => { restoreSharedExerciseState(state, false); notifySync("remote"); },
+  commitPackageSelection: identity => {
+    // The durable ACK already committed the exercise. An optional local
+    // selector persistence failure must not turn that success into a retry.
+    activeExercisePackageService.activateWithResult(identity.packageId, identity.packageVersion);
+  },
   acknowledge: acknowledgeInitialExercisePublication,
 });
 
 export type AdminExerciseCreationPhase = "IDLE" | "CREATING_BOOTSTRAP" | "BOOTSTRAPPING_RUNTIME"
+  | "PROVISIONAL_CREATED" | "PACKAGE_PREPARING" | "READY_FOR_INITIAL_PUBLICATION"
   | "PUBLISHING_INITIAL_STATE" | "WAITING_FOR_BACKEND_ACK" | "VERIFYING_DISCOVERY"
   | "SUCCEEDED" | "FAILED";
 
@@ -59,6 +73,7 @@ type CreationAttempt = {
   phase: AdminExerciseCreationPhase;
   inFlight?: Promise<string>;
   beforeState?: SharedExerciseState;
+  provisionalExerciseId?: string;
   provisionalState?: SharedExerciseState;
   prepared?: Extract<PreparationResult, { ok: true }>;
   bootstrap?: ExerciseBootstrapAuthorization;
@@ -82,6 +97,18 @@ export function resetAdminExerciseCreationAttemptsForTests(): void {
   operationSequence = 0;
 }
 
+export function discardAdminExerciseCreationOperation(operationId: string): boolean {
+  const attempt = attempts.get(operationId);
+  if (attempt?.inFlight) return false;
+  finishInitialExercisePublication(operationId);
+  attempts.delete(operationId);
+  return true;
+}
+
+function provisionalExerciseId(operationId: string): string {
+  return `EX-${operationId.replace(/^ADMIN-CREATE-/, "")}`;
+}
+
 function attemptKey(userId: string, identity: AdminPackageIdentity): string {
   return `${userId}\n${identity.packageId}\n${identity.packageVersion}`;
 }
@@ -97,19 +124,26 @@ async function runCreationAttempt(
   try {
     if (!attempt.prepared) {
       attempt.beforeState = dependencies.captureLocalState();
+      attempt.provisionalExerciseId = provisionalExerciseId(attempt.operationId);
+      attempt.phase = "PROVISIONAL_CREATED";
       attempt.phase = "CREATING_BOOTSTRAP";
       attempt.bootstrap = await dependencies.grantBootstrap(userId);
-      attempt.phase = "BOOTSTRAPPING_RUNTIME";
-      const result = dependencies.prepare({ packageId: selected.packageId, packageVersion: selected.packageVersion });
+      attempt.phase = "PACKAGE_PREPARING";
+      const result = dependencies.prepare({ packageId: selected.packageId, packageVersion: selected.packageVersion },
+        attempt.operationId, attempt.provisionalExerciseId);
       if (!result.ok) throw new Error(result.message);
+      if (result.projection && result.exerciseId !== attempt.provisionalExerciseId) {
+        throw new Error("ADMIN_EXERCISE_CREATE_IDENTITY_MISMATCH");
+      }
       if (result.exercisePackage.packageId !== selected.packageId
         || result.exercisePackage.packageVersion !== selected.packageVersion
         || result.exercisePackage.packageHash !== selected.packageHash) {
         throw new Error("Loodud õppuse paketisidumine ei vasta valitud paketile.");
       }
       attempt.prepared = result;
-      attempt.provisionalState = dependencies.captureLocalState();
-    } else if (attempt.provisionalState) {
+      attempt.provisionalState = result.projection ?? dependencies.captureLocalState();
+      attempt.phase = "READY_FOR_INITIAL_PUBLICATION";
+    } else if (attempt.provisionalState && !attempt.prepared.projection) {
       // A transient ACK failure rolls the visible store back, but a retry of
       // the same operation restores the exact provisional identity instead of
       // allocating a second exercise.
@@ -134,6 +168,7 @@ async function runCreationAttempt(
       packageId: selected.packageId,
       packageVersion: selected.packageVersion,
       bootstrapAuthorizationId: attempt.bootstrap.id,
+      ...(prepared.projection ? { projection: prepared.projection } : {}),
     });
     attempt.phase = "VERIFYING_DISCOVERY";
     if (acknowledgement.exerciseId !== prepared.exerciseId
@@ -144,12 +179,20 @@ async function runCreationAttempt(
     attempt.acknowledgement = acknowledgement;
     finishInitialExercisePublication(attempt.operationId);
     fenceActive = false;
+    if (prepared.projection) {
+      dependencies.restoreLocalState(prepared.projection);
+      dependencies.commitPackageSelection?.(identity);
+    }
     attempt.phase = "SUCCEEDED";
     return prepared.exerciseId;
   } catch (error) {
     if (fenceActive) finishInitialExercisePublication(attempt.operationId);
-    if (attempt.beforeState && attempt.prepared) dependencies.restoreLocalState(attempt.beforeState);
-    if (attempt.bootstrap) {
+    if (attempt.beforeState && attempt.prepared && !attempt.acknowledgement
+      && (!attempt.prepared.projection || !dependencies.currentExerciseId
+        || dependencies.currentExerciseId() !== attempt.beforeState.exerciseSession.exerciseId)) {
+      dependencies.restoreLocalState(attempt.beforeState);
+    }
+    if (attempt.bootstrap && !attempt.acknowledgement) {
       try {
         await dependencies.revokeBootstrap(attempt.bootstrap.id, userId);
         attempt.bootstrap = undefined;

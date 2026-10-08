@@ -778,6 +778,8 @@ export async function acknowledgeInitialExercisePublication(input: Readonly<{
   packageId: string;
   packageVersion: string;
   bootstrapAuthorizationId: string;
+  /** Detached Admin READY projection; ordinary callers still use the current store. */
+  projection?: SharedExerciseState;
 }>, port: InitialExercisePublicationPort = initialExercisePublicationPort()): Promise<InitialExercisePublicationAcknowledgement> {
   const pending = getPendingInitialExercisePublication();
   if (!pending || pending.operationId !== input.operationId || pending.exerciseId !== input.exerciseId) {
@@ -785,7 +787,7 @@ export async function acknowledgeInitialExercisePublication(input: Readonly<{
   }
 
   if (await port.authenticatedUserId() !== input.userId) throw new Error("ADMIN_EXERCISE_AUTH_MISMATCH");
-  const projection = port.projection();
+  const projection = input.projection ?? port.projection();
   if (!initialExerciseProjectionMatches(projection, input.exerciseId, input.packageId, input.packageVersion)) {
     throw new Error("ADMIN_EXERCISE_PROJECTION_MISMATCH");
   }

@@ -8,6 +8,7 @@ import { resolveAdminPackageSelection, type AdminPackageRouteInput } from "@/ser
 import {
   createAdminExercise,
   createAdminExerciseOperationId,
+  discardAdminExerciseCreationOperation,
 } from "@/services/admin/PlatformAdminExerciseCreation";
 import { exercisePackageRegistry } from "@/services/exercise/ExercisePackageService";
 
@@ -48,7 +49,7 @@ export default function AdminExerciseCreateScreen({ routeInput }: Readonly<{ rou
 
   const pkg = resolution.package;
   return <ScrollView contentContainerStyle={styles.page}>
-    <Pressable accessibilityRole="button" onPress={() => router.back()} testID="admin-package-create-back"><Text style={styles.back}>‹ Vali teine pakett</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={busy} onPress={() => { discardAdminExerciseCreationOperation(operationId); router.back(); }} testID="admin-package-create-back"><Text style={styles.back}>‹ Vali teine pakett</Text></Pressable>
     <Text style={styles.title}>Loo uus õppus</Text>
     <View style={styles.card} testID="admin-selected-package">
       <Text style={styles.label}>Valitud õppusepakett</Text>
@@ -61,7 +62,7 @@ export default function AdminExerciseCreateScreen({ routeInput }: Readonly<{ rou
     <Pressable accessibilityRole="button" disabled={busy} onPress={() => void create()} style={[styles.primary, busy && styles.disabled]} testID="admin-create-selected-package">
       <Text style={styles.primaryText}>{busy ? "Loon õppust…" : "Loo õppus"}</Text>
     </Pressable>
-    <Pressable accessibilityRole="button" disabled={busy} onPress={() => router.replace("/admin/exercises")} style={styles.cancel} testID="admin-package-create-cancel">
+    <Pressable accessibilityRole="button" disabled={busy} onPress={() => { discardAdminExerciseCreationOperation(operationId); router.replace("/admin/exercises"); }} style={styles.cancel} testID="admin-package-create-cancel">
       <Text style={styles.cancelText}>Loobu</Text>
     </Pressable>
   </ScrollView>;
