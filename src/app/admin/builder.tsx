@@ -156,7 +156,7 @@ export default function ExerciseBuilderScreen() {
       await FileSystem.copyAsync({ from: asset.uri, to: target });
       const studyId = context.studyId;
       const nextDraft = { ...context.draft, studies: context.draft.studies.map(item => item.id === studyId
-        ? { ...item, image: { localUri: target, fileName: asset.name, source: "", licenseId: "", contributor: "" } }
+        ? { ...item, image: { localUri: target, fileName: asset.name, source: "", licenseId: "" } }
         : item) };
       settleBuilderPickerReturn(userId, context.operationId, { status: "IMPORTED", draft: nextDraft,
         notice: "Pilt kopeeriti kohalikku mustandisse. Lisa allikas ja kasutusluba." });
@@ -292,7 +292,7 @@ export default function ExerciseBuilderScreen() {
         {study.image && <><Text style={styles.info}>Kohalik pilt: {study.image.fileName}</Text>
           <Field label="Pildi allikas" value={study.image.source} onChangeText={source => updateStudy({ image: { ...study.image!, source } })} />
           <Field label="Litsents / kasutusluba" value={study.image.licenseId} onChangeText={licenseId => updateStudy({ image: { ...study.image!, licenseId } })} />
-          <Field label="Autor / omanik" value={study.image.contributor} onChangeText={contributor => updateStudy({ image: { ...study.image!, contributor } })} />
+          <Field label="Autor / omanik (valikuline)" value={study.image.contributor ?? ""} onChangeText={contributor => updateStudy({ image: { ...study.image!, contributor } })} />
           <Field label="Omistus (valikuline)" value={study.image.attribution ?? ""} onChangeText={attribution => updateStudy({ image: { ...study.image!, attribution } })} />
         </>}
       </>}

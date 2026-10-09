@@ -57,6 +57,9 @@ export function validateBuilderDraft(draft: ExerciseBuilderDraft,
     if (study.image && /(?:access_token|refresh_token|id_token|[?&]code=)/i.test(study.image.source))
       add("ERROR", "IMAGE_SOURCE_SECRET", "Pildi allikas ei tohi sisaldada autentimistunnust.");
     if (study.image && !study.image.licenseId.trim()) add("ERROR", "IMAGE_LICENSE", "Pildi avaldamiseks on vaja loa või litsentsi märget.");
+    if (study.image && study.image.contributor != null &&
+      (typeof study.image.contributor !== "string" || study.image.contributor.includes("\0")))
+      add("ERROR", "IMAGE_CONTRIBUTOR", "Pildi autor / omanik peab olema tekst.");
   }
   for (const value of Object.values(draft.labResultDelaySeconds)) if (!Number.isInteger(value) || value < 0) add("ERROR", "LAB_DELAY", "Labori viivitus peab olema mittenegatiivne täisarv sekundites.");
   return issues;
@@ -135,9 +138,13 @@ export function serializeBuilderSourceBundle(bundle: BuilderSourceBundle): strin
   const ids = new Set(bundle.draft.studies.filter(item => item.image).map(item => item.id));
   if (bundle.schemaVersion !== 1 || bundle.images.length !== ids.size ||
     bundle.images.some(item => !ids.has(item.studyId) || !item.base64)) throw new Error("BUILDER_IMAGE_BUNDLE_MISMATCH");
-  const portableDraft = { ...bundle.draft, studies: bundle.draft.studies.map(study => ({ ...study,
-    ...(study.image ? { image: { ...study.image, localUri: "" } } : {}),
-  })) };
+  const portableDraft = { ...bundle.draft, studies: bundle.draft.studies.map(study => {
+    if (!study.image) return study;
+    const { contributor, ...image } = study.image;
+    const normalizedContributor = typeof contributor === "string" ? contributor.trim() : "";
+    return { ...study, image: { ...image, localUri: "",
+      ...(normalizedContributor ? { contributor: normalizedContributor } : {}) } };
+  }) };
   return stableJson({ schemaVersion: 1, draft: portableDraft,
     images: [...bundle.images].sort((a, b) => a.studyId.localeCompare(b.studyId)) });
 }

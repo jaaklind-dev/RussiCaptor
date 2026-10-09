@@ -70,11 +70,16 @@ function optionalText(value, field) {
   if (typeof value !== "string" || !value.trim() || value !== value.trim() || value.includes("\0")) fail(`INVALID_${field}`);
   return value;
 }
+function optionalContributor(value) {
+  if (value == null) return undefined;
+  if (typeof value !== "string" || value.includes("\0")) fail("INVALID_CONTRIBUTOR");
+  return value.trim() || undefined;
+}
 function buildProvenance(input) {
   const provenance = {
     sourceUrl: optionalText(input.sourceUrl, "SOURCE_URL"), attribution: optionalText(input.attribution, "ATTRIBUTION"),
     licenseId: optionalText(input.licenseId, "LICENSE_ID"), licenseUrl: optionalText(input.licenseUrl, "LICENSE_URL"),
-    contributor: optionalText(input.contributor, "CONTRIBUTOR"), modificationNote: optionalText(input.modificationNote, "MODIFICATION_NOTE"),
+    contributor: optionalContributor(input.contributor), modificationNote: optionalText(input.modificationNote, "MODIFICATION_NOTE"),
   };
   const defined = Object.fromEntries(Object.entries(provenance).filter(([, value]) => value !== undefined));
   return Object.keys(defined).length ? defined : undefined;

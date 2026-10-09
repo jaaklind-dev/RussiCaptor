@@ -23,6 +23,8 @@ On a trusted repository checkout, `npm run builder:compile -- /path/to/<package>
 
 The Android UI cannot alter a Metro `require` registry inside an already-installed APK. Accordingly, the UI must never call a source bundle a published package or show a provisional final hash. The final hash is available only after desktop compilation and build verification.
 
+Image `contributor` is optional in both the draft and the compiled provenance. Empty, whitespace-only, null, and absent values compile as an absent field; a non-empty value is trimmed. Image source and license remain required by Builder validation.
+
 ## V1 limits and revalidation
 
 Drafts are local to the device and not synchronized between administrators. Large source images enlarge the exported JSON; no cloud authoring service is introduced. Builder v1 does not author dynamic lab formulas, transport routes, new clinical processes, or exercise instances. A newly compiled package requires a new APK and the applicable package, laboratory, imaging, Runtime and physical regression before clinical use. Existing validated APK and Narva package hashes remain unchanged.

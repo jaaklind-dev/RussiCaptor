@@ -110,6 +110,25 @@ describe("IMAGING-ASSET-INGEST-CORE-01 / IMG-ASSET-G01..G16", () => {
       contributor: "Exercise author", modificationNote: "No modifications" });
   });
 
+  test("optional contributor canonicalizes blank, whitespace, null and absent values", () => {
+    const workspace = root(); const source = writeJpeg(workspace);
+    for (const contributor of [undefined, "", "   ", null]) {
+      const asset = core.planIngest(workspace, input(source, { sourceUrl: "Local test", licenseId: "TEST",
+        contributor })).asset;
+      expect(asset.provenance).toEqual({ sourceUrl: "Local test", licenseId: "TEST" });
+    }
+    expect(core.planIngest(workspace, input(source, { contributor: "  Exercise author  " })).asset.provenance)
+      .toEqual({ contributor: "Exercise author" });
+    expect(() => core.planIngest(workspace, input(source, { contributor: 42 }))).toThrow("INVALID_CONTRIBUTOR");
+    expect(() => core.planIngest(workspace, input(source, { contributor: "A\0B" }))).toThrow("INVALID_CONTRIBUTOR");
+  });
+
+  test("optional contributor does not weaken other provenance metadata validation", () => {
+    const workspace = root(); const source = writeJpeg(workspace);
+    expect(() => core.planIngest(workspace, input(source, { sourceUrl: "" }))).toThrow("INVALID_SOURCE_URL");
+    expect(() => core.planIngest(workspace, input(source, { licenseId: " " }))).toThrow("INVALID_LICENSE_ID");
+  });
+
   test("G15/G16 manifest and registry contain metadata/static require only, never image bytes", () => {
     const workspace = root(); const source = writeJpeg(workspace); core.ingest(workspace, input(source));
     const manifest = readFileSync(path.join(workspace, "assets/imaging/manifest.json"), "utf8");

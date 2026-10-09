@@ -20,7 +20,7 @@ export type BuilderImage = Readonly<{
   fileName: string;
   source: string;
   licenseId: string;
-  contributor: string;
+  contributor?: string | null;
   attribution?: string;
 }>;
 

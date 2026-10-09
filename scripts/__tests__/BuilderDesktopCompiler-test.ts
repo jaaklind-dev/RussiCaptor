@@ -53,4 +53,23 @@ describe("Builder desktop packaging bridge", () => {
     expect(readFileSync(path.join(root, "src/services/builder/BuilderCompiledPackages.generated.ts"), "utf8"))
       .toBe(compiled);
   }, 60_000);
+
+  test("blank contributor source compiles identically in two isolated checkouts", () => {
+    const packageId = "russicaptor.builder-optional-contributor-test";
+    const sourceBundle = serializeBuilderSourceBundle({ schemaVersion: 1,
+      draft: { ...draft(packageId, "jpg"), studies: [{ ...draft(packageId, "jpg").studies[0],
+        image: { ...draft(packageId, "jpg").studies[0].image!, contributor: "   " } }] },
+      images: [{ studyId: "IMG-001", fileName: "image.jpg", base64: jpeg().toString("base64") }] });
+    const outputs = [sandbox(), sandbox()].map(root => {
+      const source = path.join(root, "source.json"); writeFileSync(source, sourceBundle);
+      const result = compile(root, source);
+      expect(result.status).toBe(0);
+      const manifest = JSON.parse(readFileSync(path.join(root, "assets/imaging/manifest.json"), "utf8")) as {
+        assets: { provenance?: Record<string, unknown> }[] };
+      expect(manifest.assets.at(-1)?.provenance).toMatchObject({ sourceUrl: "LOCAL_TEST", licenseId: "TEST" });
+      expect(manifest.assets.at(-1)?.provenance).not.toHaveProperty("contributor");
+      return result.stdout.match(/packageHash=[0-9a-f]{64}|datasetHash=[0-9a-f]{64}/g);
+    });
+    expect(outputs[0]).toEqual(outputs[1]);
+  }, 120_000);
 });

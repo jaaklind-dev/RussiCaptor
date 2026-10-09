@@ -79,4 +79,20 @@ describe("Exercise Builder v1 package contract", () => {
         source: "Test", licenseId: "TEST", contributor: "Test" } }] }, images: [] }))
       .toThrow("BUILDER_IMAGE_BUNDLE_MISMATCH");
   });
+
+  test("optional image contributor is canonicalized in source export without weakening provenance requirements", () => {
+    const image = { localUri: "file:///image.png", fileName: "image.png", source: "Local test", licenseId: "TEST" };
+    const images = [{ studyId: "IMG-A", fileName: "image.png", base64: "test" }];
+    const withContributor = (contributor?: string | null) => ({ ...complete(), studies: [{ ...complete().studies[0],
+      image: { ...image, contributor } }] });
+    const exported = (contributor?: string | null) => JSON.parse(serializeBuilderSourceBundle({ schemaVersion: 1,
+      draft: withContributor(contributor), images })) as { draft: { studies: { image: Record<string, unknown> }[] } };
+    for (const contributor of [undefined, "", "  ", null]) {
+      expect(validateBuilderDraft(withContributor(contributor))).toEqual([]);
+      expect(exported(contributor).draft.studies[0].image).toEqual({ ...image, localUri: "" });
+    }
+    expect(exported("  Exercise author  ").draft.studies[0].image.contributor).toBe("Exercise author");
+    expect(validateBuilderDraft({ ...complete(), studies: [{ ...complete().studies[0],
+      image: { ...image, licenseId: "", contributor: "" } }] }).map(item => item.code)).toContain("IMAGE_LICENSE");
+  });
 });
