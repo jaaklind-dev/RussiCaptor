@@ -11,10 +11,12 @@ export class SupabaseAuthenticationAdapter {
   async currentIdentity(): Promise<AuthenticationResult> {
     try {
       const { data: sessionData, error: sessionError } = await this.client.auth.getSession();
-      if (sessionError) return Object.freeze({ state: "UNAVAILABLE" });
+      if (sessionError) return Object.freeze({ state: [401, 403].includes(Number(sessionError.status))
+        ? "UNAUTHENTICATED" : "UNAVAILABLE" });
       if (!sessionData.session) return Object.freeze({ state: "UNAUTHENTICATED" });
       const { data, error } = await this.client.auth.getUser();
-      if (error || !data.user) return Object.freeze({ state: error ? "UNAVAILABLE" : "UNAUTHENTICATED" });
+      if (error || !data.user) return Object.freeze({ state: error && ![401, 403].includes(Number(error.status))
+        ? "UNAVAILABLE" : "UNAUTHENTICATED" });
       if (data.user.is_anonymous) return Object.freeze({ state: "UNAUTHENTICATED" });
       return Object.freeze({ state: "AUTHENTICATED", identity: Object.freeze({ userId: data.user.id, email: data.user.email, isAnonymous: false, sessionExpiresAt: sessionData.session.expires_at ? new Date(sessionData.session.expires_at * 1000).toISOString() : undefined }) });
     } catch { return Object.freeze({ state: "UNAVAILABLE" }); }

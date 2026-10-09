@@ -9,7 +9,7 @@ import { newBuilderDraft, serializeBuilderSourceBundle, validateBuilderDraft } f
 import { builderDraftStore, builderDraftKey, requireBuilderAdminUserId } from "@/services/builder/ExerciseBuilderDraftStore";
 import { exercisePackageRegistry } from "@/services/exercise/ExercisePackageService";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
-import { hasPlatformAdminAuthority } from "@/services/authorization/OperatorSessionService";
+import { hasPlatformAdminAuthority, refreshOperatorSession } from "@/services/authorization/OperatorSessionService";
 import { beginBuilderPickerReturn, clearBuilderPickerReturn, readBuilderPickerReturn,
   settleBuilderPickerReturn, subscribeBuilderPickerReturn } from "@/services/builder/BuilderPickerReturnService";
 import type { BuilderPickerReturn, BuilderSection } from "@/services/builder/BuilderPickerReturnService";
@@ -189,8 +189,11 @@ export default function ExerciseBuilderScreen() {
       setNotice(`Autorlussisend eksporditud: ${fileName}. Lõplik muutumatu pakett ja pildiregister tekivad töölaual käsuga builder:compile.`);
     } catch { setNotice("Eksport ei õnnestunud. Ühtki paketti ei avaldatud."); }
   };
-  if (operator.state === "LOADING" || operator.state === "UNAVAILABLE") return <View style={styles.page}>
+  if (operator.state === "LOADING") return <View style={styles.page}>
     <Text>Kontrollin administraatori õigusi. Mustand jääb alles.</Text></View>;
+  if (operator.state === "UNAVAILABLE") return <View style={styles.page}>
+    <Text accessibilityRole="alert">Administraatori õigusi ei saanud kontrollida. Mustand jääb alles.</Text>
+    <Action label="Proovi õiguste kontrolli uuesti" onPress={() => void refreshOperatorSession()} /></View>;
   if (!authorized) return <View style={styles.page}><Text>Exercise Builder on ainult platvormi administraatorile.</Text></View>;
   const patient = draft.patients[patientIndex];
   const study = draft.studies[studyIndex];
@@ -199,6 +202,11 @@ export default function ExerciseBuilderScreen() {
     <Text style={styles.kicker}>Administratsioon · Autoritöö</Text>
     <Text style={styles.title}>Exercise Builder</Text>
     <Text style={styles.info}>Siin lood õppusepaketi sisu. Käimasolevaid õppusi hallatakse eraldi „Õppused” vaates.</Text>
+    {operator.state === "AUTHENTICATED" && operator.authorityRefresh === "REFRESHING" &&
+      <Text style={styles.info}>Uuendan õiguste kinnitust…</Text>}
+    {operator.state === "AUTHENTICATED" && operator.authorityRefresh === "TRANSIENT_ERROR" &&
+      <View><Text accessibilityRole="alert" style={styles.notice}>Õiguste värskendamine ei õnnestunud. Viimane kinnitatud õigus kehtib selles seansis.</Text>
+        <Action label="Proovi õiguste kontrolli uuesti" onPress={() => void refreshOperatorSession()} secondary /></View>}
     <Action label="Tagasi administratsiooni" onPress={leave} secondary />
     <View style={styles.row}>{sections.map(item => <Pressable key={item} accessibilityRole="tab"
       accessibilityState={{ selected: section === item }} onPress={() => setSection(item)}

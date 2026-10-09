@@ -10,6 +10,10 @@ describe("Supabase authorization adapters", () => {
     const unavailable = { auth: { getSession: async () => ({ data: { session: undefined }, error: new Error("offline") }) } };
     await expect(new SupabaseAuthenticationAdapter(unavailable as never).currentIdentity()).resolves.toEqual({ state: "UNAVAILABLE" });
   });
+  it("treats a definitive Auth 403 as signed out, not a transient refresh", async () => {
+    const denied = { auth: { getSession: async () => ({ data: { session: undefined }, error: { status: 403 } }) } };
+    await expect(new SupabaseAuthenticationAdapter(denied as never).currentIdentity()).resolves.toEqual({ state: "UNAUTHENTICATED" });
+  });
   it("maps only authoritative rows bound to the requested user and canonical order", async () => {
     const rows = [{ id: "B", user_id: "AUTH-USER", role: "EXCON", scope_type: "GLOBAL", scope_id: null, status: "ACTIVE", issued_at: "2026-08-12T00:00:00Z", expires_at: null, issued_by: "ADMIN" }, { id: "A", user_id: "AUTH-USER", role: "EXCON", scope_type: "EXERCISE", scope_id: "EX-1", status: "ACTIVE", issued_at: "2026-08-12T00:00:00Z", expires_at: null, issued_by: "ADMIN" }];
     const query = { select: () => query, eq: async () => ({ data: rows, error: null }) };
@@ -22,6 +26,12 @@ describe("Supabase authorization adapters", () => {
     const query = { select: () => query, eq: async () => ({ data: [{ id: "A", user_id: "OTHER", role: "EXCON", scope_type: "GLOBAL", scope_id: null, status: "ACTIVE", issued_at: "x", expires_at: null, issued_by: "ADMIN" }], error: null }) };
     const bootstrapQuery = { select: () => bootstrapQuery, eq: async () => ({ data: [], error: null }) };
     await expect(new SupabaseRoleAuthority({ from: (table: string) => table === "authorization_role_assignments" ? query : bootstrapQuery } as never).assignmentsFor("AUTH-USER")).resolves.toEqual({ state: "UNAVAILABLE" });
+  });
+  it("distinguishes definitive role-query denial from transient unavailability", async () => {
+    const denied = { select: () => denied, eq: async () => ({ data: null, error: { message: "forbidden" }, status: 403 }) };
+    const available = { select: () => available, eq: async () => ({ data: [], error: null, status: 200 }) };
+    await expect(new SupabaseRoleAuthority({ from: (table: string) => table === "authorization_role_assignments" ? denied : available } as never)
+      .assignmentsFor("AUTH-USER")).resolves.toEqual({ state: "DENIED" });
   });
 
   it("maps a short-lived bootstrap authorization to only the bootstrap role", async () => {
