@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "candidateName": "RussiCaptor Android 1.2.0 release candidate",
+  "status": "CANDIDATE_VALIDATED_NOT_PUBLISHED",
+  "validatedAt": "2026-10-09",
+  "sourceIdentity": {
+    "startingMainCommit": "3880c3d528b4d043a9382fb00d80c0c0105da52a",
+    "apkSourceCommit": "32d1f3a7c2c8e68bbacd22985cd667d8ac901acc",
+    "branch": "release/android-v1.2.0",
+    "evidenceFilesBundledInApk": false,
+    "previousValidatedTag": "android-v1.1.0-validated",
+    "previousValidatedTagTarget": "6e6e879374b4c342397ae272de86aeef9c669ee0"
+  },
+  "versionDecision": {
+    "previousCanonicalVersionName": "1.1.0",
+    "previousCanonicalVersionCode": 134,
+    "highestKnownValidationVersionCode": 150,
+    "easAppVersionSource": "remote",
+    "easRemoteAndroidVersionCodeBeforeCandidate": 1,
+    "easProductionAutoIncrement": true,
+    "selectedVersionCode": 151,
+    "candidateBuildPath": "local canonical field-release",
+    "easCloudBuildNote": "The EAS remote counter remains 1. Align it with the canonical release version before any future EAS cloud build; this candidate was built by the local signed field-release path."
+  },
+  "androidArtifact": {
+    "filename": "RussiCaptor-Android-1.2.0-v151.apk",
+    "packageId": "com.jaaklind.RussiCaptor",
+    "versionName": "1.2.0",
+    "versionCode": 151,
+    "sha256": "5df9009768eafb6238b0ca1d9965053b7b9252e15b686114e5c62c05febce40c",
+    "sizeBytes": 137201051,
+    "signingCertificateSha256": "b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d30198980e59fcde96b",
+    "debuggable": false,
+    "distributable": true
+  },
+  "automatedValidation": {
+    "targeted": { "suites": 19, "tests": 202, "status": "PASS" },
+    "runtimeGuardrails": "PASS",
+    "multiDeviceGuardrails": { "suites": 16, "tests": 182, "status": "PASS" },
+    "fullSuite": { "suites": 298, "tests": 2433, "status": "PASS" },
+    "typescript": "PASS",
+    "eslint": "PASS",
+    "gitDiffCheck": "PASS",
+    "releaseConfiguration": "PASS"
+  },
+  "physicalValidation": {
+    "device": { "serial": "R5GL236L6ZJ", "model": "SM-X306B", "android": "16" },
+    "priorInstalledVersion": { "versionName": "1.1.0", "versionCode": 150 },
+    "inPlaceUpgradeWithoutDataClear": "PASS",
+    "startupAndSessionPreservation": "PASS",
+    "visibleVersion": "Versioon 1.2.0 · järk 151",
+    "administrationUsers": "PASS",
+    "administrationExercisesRepeatedOpen": "PASS",
+    "packageSelectionBackCancelAndFreshState": "PASS",
+    "adminCmAdminExconModeSwitchWithoutLogout": "PASS",
+    "writerLeaseRelease": "NOT_REQUIRED_NO_WRITER_ACQUIRED",
+    "tokenFreeAuthCallbackFailsClosed": "PASS",
+    "testExercise": {
+      "exerciseId": "EX-1791521001952-1",
+      "package": "russicaptor.narva-trauma@1.0.5",
+      "initialDurableAckRevision": 1,
+      "coldRestartDiscovery": "PASS",
+      "finalLifecycle": "COMPLETED",
+      "finalProjectionRevision": 4,
+      "clinicalCommandCount": 0
+    }
+  },
+  "cleanup": {
+    "temporaryScopedRolesGranted": 2,
+    "temporaryScopedRolesRevoked": 2,
+    "activeScopedAssignmentsForTestExercise": 0,
+    "activeGlobalAssignments": 0,
+    "activeWriterLeases": 0,
+    "activeUnusedBootstrapAuthorizations": 0,
+    "stalePatientOwnersForTestExercise": 0,
+    "status": "PASS"
+  },
+  "publication": {
+    "validatedReleaseTagCreated": false,
+    "githubReleaseCreated": false,
+    "finalReleasePublished": false
+  }
+}
