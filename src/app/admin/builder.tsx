@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
@@ -10,8 +10,11 @@ import { builderDraftStore, builderDraftKey, requireBuilderAdminUserId } from "@
 import { exercisePackageRegistry } from "@/services/exercise/ExercisePackageService";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { hasPlatformAdminAuthority } from "@/services/authorization/OperatorSessionService";
+import { beginBuilderPickerReturn, clearBuilderPickerReturn, readBuilderPickerReturn,
+  settleBuilderPickerReturn, subscribeBuilderPickerReturn } from "@/services/builder/BuilderPickerReturnService";
+import type { BuilderPickerReturn, BuilderSection } from "@/services/builder/BuilderPickerReturnService";
 
-type Section = "Üldandmed" | "Patsiendid" | "Näitajad" | "Labor" | "Pildiuuringud" | "Ülevaade";
+type Section = BuilderSection;
 const sections: Section[] = ["Üldandmed", "Patsiendid", "Näitajad", "Labor", "Pildiuuringud", "Ülevaade"];
 const staticLabs = NARVA_LAB_ANALYTES.filter(item => item.reportable !== false &&
   ["STATIC_BASELINE", "DEMOGRAPHIC_CONDITIONAL"].includes(item.implementationClass));
@@ -45,19 +48,48 @@ export default function ExerciseBuilderScreen() {
   const [studyIndex, setStudyIndex] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [notice, setNotice] = useState("");
+  const appliedPickerState = useRef("");
+  const pickerInFlight = useRef(false);
+  useEffect(() => {
+    if (operator.state !== "AUTHENTICATED" || !authorized) return;
+    const userId = operator.principal.userId;
+    const restore = (initial = false) => {
+      const context = readBuilderPickerReturn(userId);
+      if (!context) return;
+      if (!initial && context.status === "PENDING") return;
+      const identity = `${context.operationId}:${context.status}`;
+      if (appliedPickerState.current === identity) return;
+      appliedPickerState.current = identity;
+      setDraft(context.draft);
+      setSection(context.section);
+      setPatientIndex(Math.max(0, context.draft.patients.findIndex(item => item.id === context.patientId)));
+      setStudyIndex(Math.max(0, context.draft.studies.findIndex(item => item.id === context.studyId)));
+      setDirty(context.dirty);
+      if (context.status === "PENDING") setNotice("Pildi valimine katkestati. Mustand taastati; vali pilt uuesti.");
+      else if (context.notice) setNotice(context.notice);
+    };
+    restore(true);
+    return subscribeBuilderPickerReturn(() => restore());
+  }, [authorized, operator]);
   const savedDrafts = authorized && operator.state === "AUTHENTICATED"
     ? builderDraftStore.list(operator.principal.userId) : [];
   const leave = () => {
-    if (!dirty) { router.back(); return; }
+    const exit = () => { if (operator.state === "AUTHENTICATED") clearBuilderPickerReturn(operator.principal.userId); router.back(); };
+    if (!dirty) { exit(); return; }
     Alert.alert("Salvestamata muudatused", "Kas lahkud mustandit salvestamata?", [
-      { text: "Jää siia", style: "cancel" }, { text: "Lahku", style: "destructive", onPress: () => router.back() },
+      { text: "Jää siia", style: "cancel" }, { text: "Lahku", style: "destructive", onPress: exit },
     ]);
   };
   useEffect(() => {
     const listener = BackHandler.addEventListener("hardwareBackPress", () => { leave(); return true; });
     return () => listener.remove();
   });
-  const update = (change: Partial<ExerciseBuilderDraft>) => { setDraft(value => ({ ...value, ...change })); setDirty(true); setNotice(""); };
+  const update = (change: Partial<ExerciseBuilderDraft>) => {
+    if (operator.state === "AUTHENTICATED" && readBuilderPickerReturn(operator.principal.userId)?.status !== "PENDING") {
+      clearBuilderPickerReturn(operator.principal.userId);
+    }
+    setDraft(value => ({ ...value, ...change })); setDirty(true); setNotice("");
+  };
   const updatePatient = (change: Partial<BuilderPatient>) => {
     update({ patients: draft.patients.map((patient, index) => index === patientIndex ? { ...patient, ...change } : patient) });
   };
@@ -76,40 +108,65 @@ export default function ExerciseBuilderScreen() {
   };
   const save = () => {
     try { builderDraftStore.save(requireBuilderAdminUserId(), draft);
+      if (operator.state === "AUTHENTICATED") clearBuilderPickerReturn(operator.principal.userId);
       setSavedVersion(value => value + 1); setDirty(false);
       setNotice("Mustand salvestatud selles seadmes."); }
     catch { setNotice("Mustandit ei saanud salvestada. Kontrolli paketi ID-d ja versiooni."); }
   };
   const selectDraft = (next: ExerciseBuilderDraft) => {
-    const open = () => { setDraft(next); setDirty(false); setPatientIndex(0); setStudyIndex(0); setNotice(""); };
+    const open = () => { if (operator.state === "AUTHENTICATED") clearBuilderPickerReturn(operator.principal.userId);
+      setDraft(next); setDirty(false); setPatientIndex(0); setStudyIndex(0); setNotice(""); };
     if (dirty) Alert.alert("Salvestamata muudatused", "Ava teine mustand ja loobu praegustest muudatustest?", [
       { text: "Tühista", style: "cancel" }, { text: "Ava", onPress: open },
     ]); else open();
   };
   const createNewDraft = () => {
-    const open = () => { setDraft(newBuilderDraft()); setDirty(false); setPatientIndex(0); setStudyIndex(0);
+    const open = () => { if (operator.state === "AUTHENTICATED") clearBuilderPickerReturn(operator.principal.userId);
+      setDraft(newBuilderDraft()); setDirty(false); setPatientIndex(0); setStudyIndex(0);
       setSection("Üldandmed"); setNotice(""); };
     if (dirty) Alert.alert("Salvestamata muudatused", "Alusta uut mustandit ja loobu praegustest muudatustest?", [
       { text: "Tühista", style: "cancel" }, { text: "Alusta uut", onPress: open },
     ]); else open();
   };
   const pickImage = async () => {
+    if (operator.state !== "AUTHENTICATED" || !authorized || pickerInFlight.current) return;
+    const study = draft.studies[studyIndex];
+    if (!study) return;
+    const userId = operator.principal.userId;
+    let context: BuilderPickerReturn | undefined;
+    pickerInFlight.current = true;
     try {
+      context = beginBuilderPickerReturn({ userId, draft, section, patientId: draft.patients[patientIndex]?.id,
+        studyId: study.id, dirty });
       const result = await DocumentPicker.getDocumentAsync({ type: ["image/jpeg", "image/png"],
         copyToCacheDirectory: true, multiple: false });
-      if (result.canceled || !draft.studies[studyIndex]) return;
+      if (result.canceled) {
+        settleBuilderPickerReturn(userId, context.operationId, { status: "CANCELLED", draft: context.draft,
+          notice: "Pildi valimine tühistati." });
+        return;
+      }
       const asset = result.assets[0];
-      if (!/\.(png|jpe?g)$/i.test(asset.name)) { setNotice("Vali JPEG või PNG pilt."); return; }
-      if (!FileSystem.documentDirectory) { setNotice("Selle seadme kohalik salvestusruum pole saadaval."); return; }
+      if (!asset || !/\.(png|jpe?g)$/i.test(asset.name)) throw new Error("BUILDER_PICKER_INVALID_FILE");
+      if (!FileSystem.documentDirectory) throw new Error("BUILDER_PICKER_STORAGE_UNAVAILABLE");
       const directory = `${FileSystem.documentDirectory}russicaptor-builder-assets/`;
       await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
       const safeName = asset.name.replace(/[^A-Za-z0-9.-]/g, "-");
-      const target = `${directory}${Date.now()}-${safeName}`;
+      const target = `${directory}${context.operationId}-${safeName}`;
+      if (readBuilderPickerReturn(userId)?.operationId !== context.operationId) return;
       await FileSystem.copyAsync({ from: asset.uri, to: target });
-      updateStudy({ image: { localUri: target, fileName: asset.name, source: "", licenseId: "",
-        contributor: "" } });
-      setNotice("Pilt kopeeriti kohalikku mustandisse. Lisa allikas ja kasutusluba.");
-    } catch { setNotice("Pildi import ei õnnestunud."); }
+      const studyId = context.studyId;
+      const nextDraft = { ...context.draft, studies: context.draft.studies.map(item => item.id === studyId
+        ? { ...item, image: { localUri: target, fileName: asset.name, source: "", licenseId: "", contributor: "" } }
+        : item) };
+      settleBuilderPickerReturn(userId, context.operationId, { status: "IMPORTED", draft: nextDraft,
+        notice: "Pilt kopeeriti kohalikku mustandisse. Lisa allikas ja kasutusluba." });
+    } catch {
+      if (context) settleBuilderPickerReturn(userId, context.operationId, { status: "ERROR", draft: context.draft,
+        notice: "Pildi import ei õnnestunud. Mustand säilis; proovi uuesti." });
+      else setNotice("Pildi valimist ei saanud alustada. Mustand säilis.");
+    } finally {
+      pickerInFlight.current = false;
+    }
   };
   const exportSource = async () => {
     if (!authorized) return;
@@ -132,6 +189,8 @@ export default function ExerciseBuilderScreen() {
       setNotice(`Autorlussisend eksporditud: ${fileName}. Lõplik muutumatu pakett ja pildiregister tekivad töölaual käsuga builder:compile.`);
     } catch { setNotice("Eksport ei õnnestunud. Ühtki paketti ei avaldatud."); }
   };
+  if (operator.state === "LOADING" || operator.state === "UNAVAILABLE") return <View style={styles.page}>
+    <Text>Kontrollin administraatori õigusi. Mustand jääb alles.</Text></View>;
   if (!authorized) return <View style={styles.page}><Text>Exercise Builder on ainult platvormi administraatorile.</Text></View>;
   const patient = draft.patients[patientIndex];
   const study = draft.studies[studyIndex];

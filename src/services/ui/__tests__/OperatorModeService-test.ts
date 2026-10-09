@@ -97,6 +97,15 @@ describe("ROLE-MODE-SWITCHER-01 authority and preference", () => {
     expect(storage.has("russicaptor.ui.last-selected-mode.USER-1")).toBe(false);
   });
 
+  test("BUILDER-PICKER-03/04 transient auth hydration retains Admin preference without granting authority", () => {
+    const state = authenticated([], true);
+    selectOperatorMode(state, "ADMIN");
+    expect(reconcileOperatorMode({ state: "LOADING" }).selectedMode).toBe("ADMIN");
+    expect(reconcileOperatorMode({ state: "UNAVAILABLE", message: "Retry" }).selectedMode).toBe("ADMIN");
+    expect(resolveAvailableUserModes({ state: "LOADING" })).toEqual([]);
+    expect(reconcileOperatorMode({ state: "UNAUTHENTICATED" }).selectedMode).toBeUndefined();
+  });
+
   test("MODE-WRITER-01/02/03 reuses runtime exit without signing out Auth", async () => {
     const state = authenticated([assignment("CM", "EX-A"), assignment("EXCON", "EX-A")], true);
     selectOperatorMode(state, "EXCON");

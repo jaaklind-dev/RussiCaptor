@@ -21,6 +21,8 @@ import {
 import { getSyncVersion, subscribeToSync } from "@/services/SyncService";
 import { useExconRouteReadiness } from "@/hooks/useExconRouteReadiness";
 import { exconRouteRedirect } from "@/services/ui/ExconRouteReadinessService";
+import { getBuilderPickerReturnVersion, readBuilderPickerReturn, shouldRestoreBuilderRoute,
+  subscribeBuilderPickerReturn } from "@/services/builder/BuilderPickerReturnService";
 
 function ProductionRouteGate() {
   const segments = useSegments();
@@ -28,15 +30,25 @@ function ProductionRouteGate() {
   const mode = useOperatorMode();
   const exconReadiness = useExconRouteReadiness();
   const syncVersion = useSyncExternalStore(subscribeToSync, getSyncVersion, getSyncVersion);
+  const pickerVersion = useSyncExternalStore(subscribeBuilderPickerReturn,
+    getBuilderPickerReturnVersion, getBuilderPickerReturnVersion);
   useEffect(() => { reconcileOperatorMode(operator); }, [operator]);
   useEffect(() => {
     if (operator.state === "LOADING") return;
+    // Keep only Builder's external-picker return route while authority is
+    // temporarily unavailable. Its own screen renders no draft in this state.
+    if (operator.state === "UNAVAILABLE" && segments.join("/") === "admin/builder") return;
     const root = segments[0];
     const isDiagnostics = segments.join("/") === "excon/diagnostics";
     if (!root || root === "_sitemap") return;
     if (root === "auth") return;
     if (operator.state !== "AUTHENTICATED") { router.replace("/"); return; }
     if (root === "mode") return;
+    if (shouldRestoreBuilderRoute(segments.join("/"), hasPlatformAdminAuthority(operator) &&
+      mode.selectedMode === "ADMIN", readBuilderPickerReturn(operator.principal.userId))) {
+      router.replace("/admin/builder");
+      return;
+    }
     const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
     if (isDiagnostics) {
       if (!hasPlatformAdminAuthority(operator)) router.replace("/mode");
@@ -59,7 +71,7 @@ function ProductionRouteGate() {
       });
     }
     else if (root !== "excon" && root !== "admin" && (mode.selectedMode !== "CM" || !hasActiveRole(operator, "CM", exerciseId))) router.replace("/mode");
-  }, [exconReadiness, mode, operator, segments, syncVersion]);
+  }, [exconReadiness, mode, operator, segments, syncVersion, pickerVersion]);
   return null;
 }
 

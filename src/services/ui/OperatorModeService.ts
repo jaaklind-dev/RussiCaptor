@@ -73,6 +73,9 @@ export function subscribeOperatorMode(listener: () => void): () => void {
 }
 
 export function reconcileOperatorMode(operator: OperatorSessionState): OperatorModeSnapshot {
+  // A foreground token/role refresh is not a sign-out. Keep the selection while
+  // authority is unresolved; route rendering remains fail-closed until resolved.
+  if (operator.state === "LOADING" || operator.state === "UNAVAILABLE") return snapshot;
   if (operator.state !== "AUTHENTICATED") return publish({});
   const available = resolveAvailableUserModes(operator);
   const allowed = new Set(available.map(item => item.mode));
