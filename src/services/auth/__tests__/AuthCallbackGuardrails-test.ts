@@ -5,6 +5,8 @@ const root = path.resolve(__dirname, "../../../..");
 const layout = fs.readFileSync(path.join(root, "src/app/_layout.tsx"), "utf8");
 const callback = fs.readFileSync(path.join(root, "src/services/auth/AuthCallbackService.ts"), "utf8");
 const passwordScreen = fs.readFileSync(path.join(root, "src/app/auth/set-password.tsx"), "utf8");
+const loginScreen = fs.readFileSync(path.join(root, "src/app/index.tsx"), "utf8");
+const operatorSession = fs.readFileSync(path.join(root, "src/services/authorization/OperatorSessionService.ts"), "utf8");
 const usersFunction = fs.readFileSync(path.join(root, "supabase/functions/platform-admin-users/index.ts"), "utf8");
 
 describe("Auth callback and password security guardrails", () => {
@@ -31,5 +33,11 @@ describe("Auth callback and password security guardrails", () => {
   test("ADMIN-REDIRECT-03: missing or stale callback config fails closed", () => {
     expect(usersFunction).toContain('throw new Error("AUTH_REDIRECT_NOT_CONFIGURED")');
     expect(usersFunction).not.toContain("allowedRedirect ?");
+  });
+
+  test("AUTH-LOGIN-ROLE-01: a successful Auth login without a role is not reported as a wrong password", () => {
+    expect(operatorSession).toContain('message: "Operaatorile pole aktiivset rolli määratud."');
+    expect(loginScreen).toContain('if (result.state === "UNAUTHORIZED") setError(result.message);');
+    expect(loginScreen).not.toContain('setError("E-posti aadress või parool ei ole õige.")');
   });
 });

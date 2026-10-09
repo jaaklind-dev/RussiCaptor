@@ -36,7 +36,7 @@ export default function LoginScreen() {
     setSubmitting(true); setError(undefined);
     try {
       const result = await signInOperator(email, password);
-      if (result.state === "UNAUTHORIZED") setError("E-posti aadress või parool ei ole õige.");
+      if (result.state === "UNAUTHORIZED") setError(result.message);
       else if (result.state === "UNAVAILABLE") setError("Sisselogimisteenus pole praegu saadaval. Proovi hiljem uuesti.");
     } catch (cause) { setError(publicErrorMessage(cause, "Sisselogimine ebaõnnestus.")); }
     finally { setSubmitting(false); }
