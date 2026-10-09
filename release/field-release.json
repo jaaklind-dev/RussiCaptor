@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "applicationVersion": "1.1.0",
-  "versionCode": 134,
-  "minimumVersionCodeExclusive": 133,
+  "applicationVersion": "1.2.0",
+  "versionCode": 151,
+  "minimumVersionCodeExclusive": 150,
   "environment": "production",
   "releaseChannel": "field",
   "packageId": "com.jaaklind.RussiCaptor",
-  "artifactFilename": "RussiCaptor-Android-1.1.0-v134.apk",
+  "artifactFilename": "RussiCaptor-Android-1.2.0-v151.apk",
   "signingCertificateSha256": "b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d30198980e59fcde96b",
   "versionPolicy": {
     "versionName": "semantic product version; signing-only work does not change it",
