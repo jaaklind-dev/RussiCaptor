@@ -30,6 +30,22 @@ describe("WP-28 Exercise Package Framework", () => {
     expect(a.packageHash).toBe(reordered.packageHash); expect(a.manifest.packageHash).toBe(a.packageHash); expect(calculateExercisePackageHash(a)).toBe(a.packageHash);
   });
 
+  test("builder laboratory content participates in the immutable package hash and rejects unsupported analytes", () => {
+    const source = makePackage("builder-lab");
+    const authored = createExercisePackage({ ...structuredClone(source), laboratoryConfiguration: {
+      schemaVersion: 1, catalogPackageId: "NARVA_POLYTRAUMA",
+      patients: [{ patientId: "PT-001", initialResults: { LAB_CRP: 38 } }],
+      resultDelaySeconds: { CLINICAL_CHEMISTRY: 420 },
+    } });
+    expect(validator.validate(authored)).toEqual([]);
+    expect(authored.packageHash).not.toBe(source.packageHash);
+    const invalid = createExercisePackage({ ...structuredClone(source), laboratoryConfiguration: {
+      schemaVersion: 1, catalogPackageId: "NARVA_POLYTRAUMA",
+      patients: [{ patientId: "PT-001", initialResults: { LAB_ASTRUP_HB_FR: 100 } }],
+    } });
+    expect(validator.validate(invalid).map(item => item.code)).toContain("INVALID_LABORATORY_CONFIGURATION");
+  });
+
   test("preserves the historical Botulism v1 hash while publishing deterministic v2 identity", () => {
     expect(HISTORICAL_BOTULISM_EXERCISE_PACKAGE_V1.packageHash).toBe("c6ff142e1cfbdcb37757f159fbbd95128f9ee4a961972d22264c44317b6e803d");
     expect(HISTORICAL_BOTULISM_EXERCISE_PACKAGE_V1.manifest.definitionHash).toBe("b488182cd19a1e09dbb0dcd23de1db0c922782ceb0ae4e6903b45d533409a81b");

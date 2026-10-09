@@ -21,6 +21,16 @@ const collect = (runtime: LaboratoryWorkflowRuntime, overrides: Partial<Paramete
       authoredResults: { antibodyScreen: "NEGATIVE" } }, ...overrides });
 
 describe("LaboratoryWorkflowRuntime LAB-G01..LAB-G22", () => {
+  test("custom package may use only its explicit catalog binding; Narva defaults stay unchanged", () => {
+    expect(() => assertLabPackageAllowed("russicaptor.builder-test", "NARVA_POLYTRAUMA"))
+      .toThrow("LAB_PACKAGE_SCOPE_DENIED");
+    expect(() => assertLabPackageAllowed("russicaptor.builder-test", "NARVA_POLYTRAUMA", "NARVA_POLYTRAUMA"))
+      .not.toThrow();
+    expect(() => assertLabPackageAllowed("russicaptor.builder-test", "NARVA_IRO_ASTRUP", "NARVA_POLYTRAUMA"))
+      .toThrow("LAB_PACKAGE_SCOPE_DENIED");
+    expect(() => assertLabPackageAllowed("russicaptor.narva-trauma", "NARVA_POLYTRAUMA"))
+      .not.toThrow();
+  });
   test("captures one immutable sample and remains uncontaminated by later physiology (G01/G02/G03/G13)", () => {
     const runtime = new LaboratoryWorkflowRuntime(generator); order(runtime);
     const source = { displayedVitals: { hr: 92 }, targetVitals: { hr: 90 }, runtimeFields: { lactate: 3.2 },
@@ -49,6 +59,17 @@ describe("LaboratoryWorkflowRuntime LAB-G01..LAB-G22", () => {
     expect(runtime.advanceTo(2800).map(item => item.type)).toEqual(["HEMATOLOGY", "AB0"]);
     expect(runtime.advanceTo(3400).map(item => item.type)).toEqual(["CLINICAL_CHEMISTRY", "COAGULATION"]);
     expect(runtime.snapshot().orders[0].status).toBe("RESULTED");
+  });
+
+  test("builder-authored group delay uses simulation seconds without changing default Narva timing", () => {
+    const runtime = new LaboratoryWorkflowRuntime(generator); order(runtime);
+    collect(runtime, { resultDelaySeconds: { CLINICAL_CHEMISTRY: 420 } });
+    expect(runtime.snapshot().resultGroups.find(item => item.type === "CLINICAL_CHEMISTRY")
+      ?.availableAtSimulationTimeSec).toBe(1420);
+    expect(runtime.snapshot().resultGroups.find(item => item.type === "ASTRUP")
+      ?.availableAtSimulationTimeSec).toBe(2500);
+    const restored = new LaboratoryWorkflowRuntime(generator); restored.restore(runtime.snapshot());
+    expect(restored.snapshot()).toEqual(runtime.snapshot());
   });
 
   test.each([

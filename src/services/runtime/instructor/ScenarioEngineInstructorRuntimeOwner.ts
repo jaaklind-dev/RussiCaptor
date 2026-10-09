@@ -165,8 +165,10 @@ export function createScenarioEngineInstructorRuntimeOwner(
       try {
         if (input.commandType === "LAB_ORDER") {
           if (!input.labPackageId) return { ok: false, reason: "INVALID_COMMAND_PAYLOAD" };
+          const pkg = getExercisePackage(exerciseId);
           const order = engine.orderLaboratory({ orderId: `LAB-ORDER:${input.commandId}`, exerciseId,
-            patientId, exercisePackageId: getExercisePackage(exerciseId).packageId,
+            patientId, exercisePackageId: pkg.packageId,
+            authoredCatalogPackageId: pkg.laboratoryConfiguration?.catalogPackageId,
             labPackageId: input.labPackageId, orderedBy: input.actorUserId,
             orderedAtSimulationTimeSec: input.simulationTimeSec });
           notifySync("local");
@@ -174,9 +176,13 @@ export function createScenarioEngineInstructorRuntimeOwner(
         }
         if (!input.orderId) return { ok: false, reason: "INVALID_COMMAND_PAYLOAD" };
         const collectionTime = engine.getSimulationTimeSec();
+        const authoredLab = getExercisePackage(exerciseId).laboratoryConfiguration;
         const sample = engine.collectLaboratorySample({ sampleId: `LAB-SAMPLE:${input.commandId}`,
           orderId: input.orderId, sampledAtSimulationTimeSec: collectionTime,
           sourcePatientRevision: input.patientRevision,
+          ...(authoredLab?.resultDelaySeconds ? { resultDelaySeconds: authoredLab.resultDelaySeconds } : {}),
+          ...(authoredLab?.patients.find(item => item.patientId === patientId)?.initialResults
+            ? { authoredInitialResults: authoredLab.patients.find(item => item.patientId === patientId)!.initialResults } : {}),
           ...(input.patientBloodIdentity ? { patientBloodIdentity: input.patientBloodIdentity } : {}) });
         notifySync("local");
         return { ok: true, runtimeEventId: sample.sampleId };

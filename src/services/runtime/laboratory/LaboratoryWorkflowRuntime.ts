@@ -1,4 +1,4 @@
-import type { LabPatientBloodIdentity, LaboratoryOrder, LaboratoryResultGenerator,
+import type { LabPatientBloodIdentity, LabResultGroupType, LaboratoryOrder, LaboratoryResultGenerator,
   LaboratoryResultGroup, LaboratorySample, LaboratoryWorkflowSnapshot,
   LabSamplePhysiologySnapshot, NarvaLabPackageId } from "@/models/LaboratoryWorkflow";
 import { LABORATORY_WORKFLOW_SCHEMA_VERSION, LAB_SAMPLE_SNAPSHOT_SCHEMA_VERSION } from "@/models/LaboratoryWorkflow";
@@ -42,6 +42,7 @@ export class LaboratoryWorkflowRuntime {
 
   collect(input: Readonly<{ sampleId: string; orderId: string; sampledAtSimulationTimeSec: number;
     sourcePatientRevision: number; sourceRuntimeStateVersion: number; snapshot: Omit<LabSamplePhysiologySnapshot, "schemaVersion">;
+    resultDelaySeconds?: Partial<Readonly<Record<LabResultGroupType, number>>>;
   }>): LaboratorySample {
     this.assertMutable(); validTime(input.sampledAtSimulationTimeSec, "SAMPLE_TIME");
     const order = this.state.orders.find(item => item.orderId === input.orderId);
@@ -73,11 +74,13 @@ export class LaboratoryWorkflowRuntime {
       patientId: order.patientId, sampledAtSimulationTimeSec: input.sampledAtSimulationTimeSec,
       sourcePatientRevision: input.sourcePatientRevision, sourceRuntimeStateVersion: input.sourceRuntimeStateVersion,
       snapshot: { ...structuredClone(input.snapshot), schemaVersion: LAB_SAMPLE_SNAPSHOT_SCHEMA_VERSION,
+        ...(input.resultDelaySeconds ? { resultDelaySeconds: structuredClone(input.resultDelaySeconds) } : {}),
         ...(patientBloodIdentity ? { patientBloodIdentity } : {}),
         ...(authoredResults ? { authoredResults } : {}) } });
     const groups = resultGroupsForNarvaLabPackage(order.packageId).map(type => deepFreeze({
       resultGroupId: `${input.sampleId}:${type}`, sampleId: input.sampleId, type,
-      availableAtSimulationTimeSec: input.sampledAtSimulationTimeSec + NARVA_LAB_RESULT_TIMING_SECONDS_FROM_SAMPLE[type],
+      availableAtSimulationTimeSec: input.sampledAtSimulationTimeSec +
+        (sample.snapshot.resultDelaySeconds?.[type] ?? NARVA_LAB_RESULT_TIMING_SECONDS_FROM_SAMPLE[type]),
       status: "PROCESSING" as const,
     }));
     this.replace({ ...this.state, orders: this.state.orders.map(item => item.orderId === order.orderId
@@ -201,6 +204,10 @@ export class LaboratoryWorkflowRuntime {
         throw new Error("LAB_INVALID_PHYSIOLOGY_SNAPSHOT");
       }
       validTime(sample.sampledAtSimulationTimeSec, "SAMPLE_TIME");
+      for (const [group, seconds] of Object.entries(sample.snapshot.resultDelaySeconds ?? {})) {
+        if (!Object.hasOwn(NARVA_LAB_RESULT_TIMING_SECONDS_FROM_SAMPLE, group) ||
+          !Number.isInteger(seconds) || seconds < 0) throw new Error("LAB_INVALID_RESULT_DELAY");
+      }
       sampleIds.add(sample.sampleId); sampledOrderIds.add(sample.orderId);
     }
     for (const group of value.resultGroups) {
@@ -209,7 +216,8 @@ export class LaboratoryWorkflowRuntime {
         !["PROCESSING", "PARTIALLY_RESULTED", "RESULTED"].includes(group.status) ||
         groupIds.has(group.resultGroupId) || !sample || group.resultGroupId !== `${group.sampleId}:${group.type}` ||
         group.availableAtSimulationTimeSec !==
-        sample.sampledAtSimulationTimeSec + NARVA_LAB_RESULT_TIMING_SECONDS_FROM_SAMPLE[group.type] ||
+        sample.sampledAtSimulationTimeSec +
+          (sample.snapshot.resultDelaySeconds?.[group.type] ?? NARVA_LAB_RESULT_TIMING_SECONDS_FROM_SAMPLE[group.type]) ||
         (group.status !== "PROCESSING") !== Boolean(group.resultPayload && group.generationVersion) ||
         (group.status === "PROCESSING" && (group.resultPayload !== undefined || group.generationVersion !== undefined ||
           group.generatedAtSimulationTimeSec !== undefined)) ||
@@ -258,8 +266,9 @@ export class LaboratoryWorkflowRuntime {
   }
 }
 
-export function assertLabPackageAllowed(exercisePackageId: string, requested: NarvaLabPackageId): void {
-  const allowed = exercisePackageId === "russicaptor.narva-trauma" ? "NARVA_POLYTRAUMA"
-    : exercisePackageId === "russicaptor.narva-iro-evacuation" ? "NARVA_IRO_ASTRUP" : undefined;
+export function assertLabPackageAllowed(exercisePackageId: string, requested: NarvaLabPackageId,
+  authoredCatalogPackageId?: NarvaLabPackageId): void {
+  const allowed = authoredCatalogPackageId ?? (exercisePackageId === "russicaptor.narva-trauma" ? "NARVA_POLYTRAUMA"
+    : exercisePackageId === "russicaptor.narva-iro-evacuation" ? "NARVA_IRO_ASTRUP" : undefined);
   if (requested !== allowed) throw new Error("LAB_PACKAGE_SCOPE_DENIED");
 }

@@ -103,7 +103,7 @@ import {
 import type { NarvaIroCorrectionIntentDecision, NarvaIroScenarioProjection,
   NarvaIroVentilationFault } from "@/models/NarvaIroScenario";
 import { NarvaIroScenarioRuntime } from "@/services/runtime/NarvaIroScenarioRuntime";
-import type { LabPatientBloodIdentity, LaboratoryOrder, LaboratoryResultGenerator,
+import type { LabPatientBloodIdentity, LabResultGroupType, LaboratoryOrder, LaboratoryResultGenerator,
   LaboratorySample, LaboratoryWorkflowSnapshot, NarvaLabPackageId } from "@/models/LaboratoryWorkflow";
 import { LaboratoryWorkflowRuntime, assertLabPackageAllowed } from
   "@/services/runtime/laboratory/LaboratoryWorkflowRuntime";
@@ -787,8 +787,9 @@ export class ClinicalScenarioEngine {
 
   orderLaboratory(input: Readonly<{ orderId: string; exerciseId: string; patientId: string;
     exercisePackageId: string; labPackageId: NarvaLabPackageId; orderedBy: string;
+    authoredCatalogPackageId?: NarvaLabPackageId;
     orderedAtSimulationTimeSec: number }>): LaboratoryOrder {
-    assertLabPackageAllowed(input.exercisePackageId, input.labPackageId);
+    assertLabPackageAllowed(input.exercisePackageId, input.labPackageId, input.authoredCatalogPackageId);
     if (input.patientId !== this.requireRuntimeState().encounterId) throw new Error("LAB_PATIENT_IDENTITY_MISMATCH");
     return this.laboratory.order({ orderId: input.orderId, exerciseId: input.exerciseId,
       patientId: input.patientId, packageId: input.labPackageId,
@@ -797,6 +798,8 @@ export class ClinicalScenarioEngine {
 
   collectLaboratorySample(input: Readonly<{ sampleId: string; orderId: string;
     sampledAtSimulationTimeSec: number; sourcePatientRevision: number;
+    authoredInitialResults?: Readonly<Record<string, number | string>>;
+    resultDelaySeconds?: Partial<Readonly<Record<LabResultGroupType, number>>>;
     patientBloodIdentity?: LabPatientBloodIdentity }>): LaboratorySample {
     const runtime = this.getRuntimeState();
     const support = this.getMechanicalVentilationState(runtime.encounterId)
@@ -817,7 +820,12 @@ export class ClinicalScenarioEngine {
     return this.laboratory.collect({ ...input, sourceRuntimeStateVersion: runtime.stateVersion,
       snapshot: { displayedVitals: structuredClone(runtime.displayedVitals) as Record<string, number | string | boolean | null>,
         targetVitals: structuredClone(runtime.targetVitals) as Record<string, number | string | boolean | null>,
-        runtimeFields: structuredClone(runtime.runtimeFields),
+        runtimeFields: { ...structuredClone(runtime.runtimeFields),
+          ...(input.authoredInitialResults ? { laboratoryAnalyteOverrides: {
+            ...((runtime.runtimeFields.laboratoryAnalyteOverrides ?? {}) as Record<string, unknown>),
+            ...input.authoredInitialResults,
+          } } : {}),
+        },
         clinicalProcessInputs: this.orderedLifecycleLeaves("SERIALIZATION").map(process => ({
           processId: process.processId, processType: process.processType,
           runtimeContributions: structuredClone(process.outputs.runtimeContributions ?? {}),

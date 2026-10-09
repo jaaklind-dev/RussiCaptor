@@ -6,9 +6,11 @@ import { calculateExercisePackageHash } from "./ExercisePackageHash";
 import { hashExerciseDefinition } from "./ExerciseDefinitionRegistry";
 import { ExerciseDefinitionValidator } from "./ExerciseDefinitionValidator";
 import { isClinicalTreatmentId } from "@/services/clinical/ClinicalTreatmentCatalog";
+import { NARVA_LAB_ANALYTES, NARVA_LAB_PACKAGE_ANALYTE_IDS } from "@/config/NarvaLaboratoryCatalog";
+import type { LabResultGroupType } from "@/models/LaboratoryWorkflow";
 
 export const CURRENT_PACKAGE_COMPATIBILITY_VERSION = 1;
-export type ExercisePackageValidationCode = "INVALID_PACKAGE_ID" | "INVALID_PACKAGE_VERSION" | "INVALID_MANIFEST" | "INVALID_HASH" | "INVALID_DEFINITION" | "UNKNOWN_PATIENT_PROCESS" | "UNKNOWN_ANALYTICS_PROVIDER" | "UNKNOWN_METRIC_PROVIDER" | "INCONSISTENT_SELECTION" | "DUPLICATE_VALUE" | "INCOMPATIBLE_PACKAGE" | "INVALID_MODULE_DEPENDENCY" | "INVALID_EVALUATION_PROFILE_REFERENCE" | "INVALID_TRANSPORT_CONFIGURATION" | "INVALID_CLINICAL_TREATMENT" | "INVALID_IMAGING_CONFIGURATION" | "INVALID_INTERVENTION_AVAILABILITY" | "INVALID_QUESTION_CONFIGURATION";
+export type ExercisePackageValidationCode = "INVALID_PACKAGE_ID" | "INVALID_PACKAGE_VERSION" | "INVALID_MANIFEST" | "INVALID_HASH" | "INVALID_DEFINITION" | "UNKNOWN_PATIENT_PROCESS" | "UNKNOWN_ANALYTICS_PROVIDER" | "UNKNOWN_METRIC_PROVIDER" | "INCONSISTENT_SELECTION" | "DUPLICATE_VALUE" | "INCOMPATIBLE_PACKAGE" | "INVALID_MODULE_DEPENDENCY" | "INVALID_EVALUATION_PROFILE_REFERENCE" | "INVALID_TRANSPORT_CONFIGURATION" | "INVALID_CLINICAL_TREATMENT" | "INVALID_IMAGING_CONFIGURATION" | "INVALID_LABORATORY_CONFIGURATION" | "INVALID_INTERVENTION_AVAILABILITY" | "INVALID_QUESTION_CONFIGURATION";
 export type ExercisePackageDiagnostic = Readonly<{ code: ExercisePackageValidationCode; path: string; message: string }>;
 const duplicates = (values: readonly string[]) => values.filter((value, index) => values.indexOf(value) !== index);
 
@@ -100,6 +102,28 @@ export class ExercisePackageValidator {
         if (!item.order.id?.trim() || !item.order.title?.trim()) add("INVALID_IMAGING_CONFIGURATION", `${path}.order`, "Imaging order identity and title are required");
         if (item.order.workflow.resultAction !== "imaging.available" || item.order.workflow.resultTargetId !== item.study.id || !Number.isFinite(item.order.workflow.delayMinutes) || item.order.workflow.delayMinutes < 0) add("INVALID_IMAGING_CONFIGURATION", `${path}.order.workflow`, "Imaging order must target its study with a non-negative delay");
       });
+    }
+    const laboratory = pkg.laboratoryConfiguration;
+    if (laboratory) {
+      const eligible = NARVA_LAB_PACKAGE_ANALYTE_IDS[laboratory.catalogPackageId];
+      if (laboratory.schemaVersion !== 1 || !eligible) add("INVALID_LABORATORY_CONFIGURATION", "laboratoryConfiguration", "Unsupported laboratory catalog binding");
+      const patientIds = laboratory.patients.map(item => item.patientId);
+      if (duplicates(patientIds).length) add("DUPLICATE_VALUE", "laboratoryConfiguration.patients", "Duplicate patient laboratory configuration");
+      for (const [index, patient] of laboratory.patients.entries()) {
+        if (!patient.patientId.trim()) add("INVALID_LABORATORY_CONFIGURATION", `laboratoryConfiguration.patients[${index}].patientId`, "Patient ID is required");
+        for (const [analyteId, value] of Object.entries(patient.initialResults)) {
+          const analyte = NARVA_LAB_ANALYTES.find(item => item.id === analyteId);
+          if (!eligible?.includes(analyteId) || !analyte || analyte.reportable === false ||
+            !["STATIC_BASELINE", "DEMOGRAPHIC_CONDITIONAL"].includes(analyte.implementationClass) ||
+            !(typeof value === "number" && Number.isFinite(value) || typeof value === "string" && value.trim().length > 0)) {
+            add("INVALID_LABORATORY_CONFIGURATION", `laboratoryConfiguration.patients[${index}].initialResults.${analyteId}`, "Only finite static catalog values may be authored");
+          }
+        }
+      }
+      const groups = new Set<LabResultGroupType>(["ASTRUP", "HEMATOLOGY", "AB0", "CLINICAL_CHEMISTRY", "COAGULATION"]);
+      for (const [group, seconds] of Object.entries(laboratory.resultDelaySeconds ?? {})) {
+        if (!groups.has(group as LabResultGroupType) || !Number.isInteger(seconds) || seconds < 0) add("INVALID_LABORATORY_CONFIGURATION", `laboratoryConfiguration.resultDelaySeconds.${group}`, "Delay must be a non-negative number of simulation seconds");
+      }
     }
     const questions = pkg.questionConfiguration;
     if (questions) {

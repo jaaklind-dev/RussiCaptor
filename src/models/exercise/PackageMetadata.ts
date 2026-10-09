@@ -6,4 +6,7 @@ export type PackageMetadata = Readonly<{
   createdVersion: string;
   exerciseType: string;
   tags: readonly string[];
+  language?: string;
+  /** Authoring attribution only; runtime never fetches this URL. */
+  sourceReference?: string;
 }>;

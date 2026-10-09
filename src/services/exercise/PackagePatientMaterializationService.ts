@@ -50,6 +50,11 @@ export function createPatientMaterializationPlan(exerciseId: string, pkg: Exerci
       `Imaging study ${definition.study.id} references patient ${definition.study.patientId} outside ${dataset.datasetId}.`,
     );
   }
+  for (const configured of pkg.laboratoryConfiguration?.patients ?? []) {
+    if (!ids.has(configured.patientId)) throw new PatientDatasetError(
+      "MALFORMED_PATIENT", `Laboratory configuration references patient ${configured.patientId} outside ${dataset.datasetId}.`,
+    );
+  }
   const patients = deepFreeze(ordered.map(record => ({ patient: clonePatient(record.patient), ...(record.runtimeFixture ? { runtimeFixture: structuredClone(record.runtimeFixture) } : {}) }))) as readonly PackagePatientRecord[];
   const canonical = { exerciseId, packageId: pkg.packageId, packageVersion: pkg.packageVersion, packageHash: pkg.packageHash, datasetId: dataset.datasetId, datasetVersion: dataset.version, patients };
   return deepFreeze({ ...canonical, materializationHash: sha256Text(stableJson(canonical)) }) as MaterializedPatientDataset;

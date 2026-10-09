@@ -17,6 +17,8 @@ export type Patient = {
   id: string;
   isikukood: string;
   name: string;
+  ageYears?: number;
+  sex?: "F" | "M" | "OTHER" | "UNKNOWN";
   triage: TriageCategory;
   status: PatientStatus;
   location: string;

@@ -16,6 +16,9 @@ export default function AdministrationScreen() {
     <Pressable accessibilityRole="button" style={styles.card} onPress={() => router.push("/admin/exercises")}>
       <Text style={styles.cardTitle}>Õppused</Text><Text style={styles.cardText}>Loo õppusi ning määra või tühista õppusepõhiseid rolle.</Text>
     </Pressable>
+    <Pressable accessibilityRole="button" style={styles.card} onPress={() => router.push("/admin/builder")}>
+      <Text style={styles.cardTitle}>Exercise Builder</Text><Text style={styles.cardText}>Koosta uue õppusepaketi autorlussisu ja ekspordi see valideerimiseks.</Text>
+    </Pressable>
     <Pressable accessibilityRole="button" style={styles.diagnostics} onPress={() => router.push("/excon/diagnostics" as never)}>
       <Text style={styles.diagnosticsTitle}>Tehnilised üksikasjad</Text><Text style={styles.cardText}>Tugiteave ja toetatud taastamistoimingud.</Text>
     </Pressable>

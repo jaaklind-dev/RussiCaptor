@@ -44,6 +44,8 @@ export type LabSamplePhysiologySnapshot = Readonly<{
   patientBloodIdentity?: LabPatientBloodIdentity;
   /** Authored scenario truth copied into this sample; it is not permanent blood-group identity. */
   authoredResults?: LabAuthoredSampleResults;
+  /** Optional package-authored delays frozen with the collected sample. */
+  resultDelaySeconds?: Partial<Readonly<Record<LabResultGroupType, number>>>;
 }>;
 
 export type LaboratoryOrder = Readonly<{

@@ -41,6 +41,7 @@ export class ExercisePackageLoader {
       evaluationProfile: pkg.evaluationProfile,
       transportConfiguration: pkg.transportConfiguration,
       imagingConfiguration: pkg.imagingConfiguration,
+      laboratoryConfiguration: pkg.laboratoryConfiguration,
       interventionAvailability: pkg.interventionAvailability,
       questionConfiguration: pkg.questionConfiguration,
       internalTransferConfiguration: pkg.internalTransferConfiguration,

@@ -14,7 +14,8 @@ export type LaboratoryWorkflowCommandOutcome = Readonly<{
 }>;
 
 export function laboratoryPackageForActiveExercise(exerciseId: string): NarvaLabPackageId | undefined {
-  return narvaLabPackageForExercisePackage(getExercisePackage(exerciseId).packageId);
+  const pkg = getExercisePackage(exerciseId);
+  return pkg.laboratoryConfiguration?.catalogPackageId ?? narvaLabPackageForExercisePackage(pkg.packageId);
 }
 
 export function createLaboratoryOrderCommandId(

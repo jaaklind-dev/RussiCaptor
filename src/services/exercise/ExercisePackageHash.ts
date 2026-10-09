@@ -30,6 +30,9 @@ export function packageHashInput(input: Omit<ExercisePackage, "packageHash" | "m
     ...(input.imagingConfiguration ? {
       imagingConfiguration: structuredClone(input.imagingConfiguration),
     } : {}),
+    ...(input.laboratoryConfiguration ? {
+      laboratoryConfiguration: structuredClone(input.laboratoryConfiguration),
+    } : {}),
     ...(input.interventionAvailability ? {
       interventionAvailability: normalizedInterventionAvailability(input.interventionAvailability),
     } : {}),

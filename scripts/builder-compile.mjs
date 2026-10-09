@@ -1,0 +1,85 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const ingest = require("./lib/imaging-asset-ingest-core.cjs");
+const rootDir = path.resolve(import.meta.dirname, "..");
+const sourcePath = process.argv[2] && path.resolve(process.argv[2]);
+if (!sourcePath || process.argv.length !== 3) throw new Error("Usage: npm run builder:compile -- <exported-source.json>");
+const bundle = JSON.parse(fs.readFileSync(sourcePath, "utf8"));
+if (bundle.schemaVersion !== 1 || bundle.draft?.schemaVersion !== 1 || !Array.isArray(bundle.images)) throw new Error("BUILDER_BUNDLE_VERSION");
+const draft = bundle.draft;
+const packageId = draft.packageId;
+const packageVersion = draft.packageVersion;
+const identity = `${packageId}@${packageVersion}`;
+const manifestPath = path.join(rootDir, "assets/builder/compiled-packages.json");
+const generatedPath = path.join(rootDir, "src/services/builder/BuilderCompiledPackages.generated.ts");
+const assetManifestPath = path.join(rootDir, ingest.MANIFEST_RELATIVE_PATH);
+const assetRegistryPath = path.join(rootDir, ingest.REGISTRY_RELATIVE_PATH);
+const manifest = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, "utf8")) : { schemaVersion: 1, packages: [] };
+if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.packages)) throw new Error("BUILDER_MANIFEST_INVALID");
+if (manifest.packages.some(item => `${item.exercisePackage.packageId}@${item.exercisePackage.packageVersion}` === identity)) throw new Error("BUILDER_IMMUTABLE_VERSION_EXISTS");
+const { install } = require("./lib/load-russicaptor-typescript.cjs");
+install(rootDir);
+const { validateBuilderDraft } = require(path.join(rootDir, "src/services/builder/ExerciseBuilderService.ts"));
+const { exercisePackageRegistry } = require(path.join(rootDir, "src/services/exercise/ExercisePackageService.ts"));
+const issues = validateBuilderDraft(draft, (id, version) => Boolean(exercisePackageRegistry.get(id, version)));
+if (issues.some(item => item.level === "ERROR")) throw new Error(`BUILDER_INVALID:${issues.map(item => item.code).join(",")}`);
+const expectedIds = draft.studies.filter(study => study.image).map(study => study.id);
+if (new Set(expectedIds).size !== expectedIds.length || bundle.images.length !== expectedIds.length ||
+  bundle.images.some(item => !expectedIds.includes(item.studyId) || !item.base64)) throw new Error("BUILDER_IMAGE_BUNDLE_MISMATCH");
+const snapshot = filePath => fs.existsSync(filePath) ? fs.readFileSync(filePath) : undefined;
+const restore = (filePath, bytes) => {
+  if (bytes === undefined) { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); }
+  else { fs.mkdirSync(path.dirname(filePath), { recursive: true }); fs.writeFileSync(filePath, bytes); }
+};
+const snapshots = new Map([manifestPath, generatedPath, assetManifestPath, assetRegistryPath].map(item => [item, snapshot(item)]));
+const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "russicaptor-builder-"));
+const newlyCreated = [];
+try {
+  for (const study of [...draft.studies].sort((a, b) => a.id.localeCompare(b.id)).filter(item => item.image)) {
+    const image = bundle.images.find(item => item.studyId === study.id);
+    if (!image || image.fileName !== study.image.fileName || !/\.(png|jpe?g)$/i.test(image.fileName)) throw new Error("BUILDER_IMAGE_NAME_MISMATCH");
+    const bytes = Buffer.from(image.base64, "base64");
+    if (!bytes.length || bytes.toString("base64") !== image.base64) throw new Error("BUILDER_IMAGE_BASE64_INVALID");
+    const source = path.join(temporary, `${study.id.replace(/[^A-Za-z0-9.-]/g, "-")}${path.extname(image.fileName)}`);
+    fs.writeFileSync(source, bytes);
+    const input = { sourcePath: source, packageId, packageVersion, patientId: study.patientId,
+      definitionId: study.id, logicalName: study.id, role: "PRIMARY_DIAGNOSTIC_IMAGE",
+      sourceUrl: study.image.source, contributor: study.image.contributor,
+      licenseId: study.image.licenseId, attribution: study.image.attribution };
+    const plan = ingest.planIngest(rootDir, input);
+    if (plan.status === "PLANNED") newlyCreated.push(plan.destinationPath);
+    ingest.ingest(rootDir, input);
+  }
+  const checked = spawnSync(process.execPath, [path.join(rootDir, "scripts/builder-validate.mjs"), sourcePath],
+    { cwd: rootDir, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+  if (checked.status !== 0) throw new Error(`BUILDER_FINAL_VALIDATION_FAILED:${checked.stderr.trim().slice(0, 300)}`);
+  const compiled = JSON.parse(checked.stdout);
+  const packages = [...manifest.packages, compiled].sort((a, b) =>
+    a.exercisePackage.packageId.localeCompare(b.exercisePackage.packageId) ||
+    a.exercisePackage.packageVersion.localeCompare(b.exercisePackage.packageVersion));
+  const nextManifest = { schemaVersion: 1, packages };
+  const source = ["/* Generated by scripts/builder-compile.mjs. Do not edit by hand. */",
+    'import type { ExercisePackage } from "@/models/exercise/ExercisePackage";',
+    'import type { PackagePatientDataset } from "@/models/exercise/PackagePatientDataset";',
+    `export const GENERATED_BUILDER_PACKAGES = ${JSON.stringify(packages.map(item => item.exercisePackage))} as unknown as readonly ExercisePackage[];`,
+    `export const GENERATED_BUILDER_DATASETS = ${JSON.stringify(packages.map(item => item.patientDataset))} as unknown as readonly PackagePatientDataset[];`, ""].join("\n");
+  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+  fs.writeFileSync(manifestPath, `${JSON.stringify(nextManifest, null, 2)}\n`);
+  fs.writeFileSync(generatedPath, source);
+  ingest.verifyManifest(rootDir);
+  const roundtrip = spawnSync(process.execPath, [path.join(rootDir, "scripts/builder-verify-generated.mjs"), packageId, packageVersion],
+    { cwd: rootDir, encoding: "utf8" });
+  if (roundtrip.status !== 0) throw new Error(`BUILDER_ROUNDTRIP_FAILED:${roundtrip.stderr.trim().slice(0, 300)}`);
+  process.stdout.write(`${identity} packageHash=${compiled.exercisePackage.packageHash} datasetHash=${compiled.datasetHash} assets=${expectedIds.length}\n`);
+} catch (error) {
+  for (const [filePath, bytes] of snapshots) restore(filePath, bytes);
+  for (const filePath of newlyCreated) if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  throw error;
+} finally {
+  fs.rmSync(temporary, { recursive: true, force: true });
+}

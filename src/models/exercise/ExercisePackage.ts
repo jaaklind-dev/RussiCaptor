@@ -10,6 +10,7 @@ import type { PackageImagingConfiguration } from "./PackageImagingConfiguration"
 import type { PackageInterventionAvailability } from "./PackageInterventionAvailability";
 import type { PackageQuestionConfiguration } from "./PackageQuestionConfiguration";
 import type { PackageInternalTransferConfiguration } from "./PackageInternalTransferConfiguration";
+import type { PackageLaboratoryConfiguration } from "./PackageLaboratoryConfiguration";
 
 export type ExercisePackage = Readonly<{
   packageId: string;
@@ -30,6 +31,8 @@ export type ExercisePackage = Readonly<{
   availableClinicalTreatments?: readonly ClinicalTreatmentId[];
   /** Predefined Imaging content owned by this exact package version. */
   imagingConfiguration?: PackageImagingConfiguration;
+  /** Existing catalog, optional authored static values and simulation-time result delays. */
+  laboratoryConfiguration?: PackageLaboratoryConfiguration;
   /** Package-owned clinical procedure availability, distinct from physical resource inventory. */
   interventionAvailability?: PackageInterventionAvailability;
   /** Immutable patient questions authored by this exact package version. */
