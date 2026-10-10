@@ -11,7 +11,7 @@ export class PrincipalService {
     const auth = await this.authentication.currentIdentity();
     if (auth.state !== "AUTHENTICATED") { if (auth.state === "UNAUTHENTICATED") await this.cache?.clear(); return Object.freeze({ state: auth.state }); }
     const result = await this.roles.assignmentsFor(auth.identity.userId);
-    if (result.state === "DENIED") { await this.cache?.clear(); return Object.freeze({ state: "UNAUTHENTICATED" }); }
+    if (result.state === "DENIED") { await this.cache?.clear(); return Object.freeze({ state: "UNAUTHENTICATED", userId: auth.identity.userId, roleReadStatus: result.status }); }
     if (result.state === "VERIFIED") {
       const currentAssignments = result.assignments.filter(item => !item.expiresAt || item.expiresAt > result.verifiedAt);
       const principal: Principal = deepFreeze({ userId: auth.identity.userId, authenticationState: "AUTHENTICATED", roleAssignments: result.assignments, permissions: resolvePrincipalPermissions(currentAssignments), authorizationFreshness: "VERIFIED_ONLINE", authorizationProvenance: { authority: "SUPABASE_ROLE_ASSIGNMENTS", verifiedAt: result.verifiedAt, expiresAt: result.expiresAt } });

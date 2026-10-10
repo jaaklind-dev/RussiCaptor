@@ -13,7 +13,7 @@ type BootstrapRow = {
 };
 export type RoleAuthorityResult =
   | Readonly<{ state: "VERIFIED"; assignments: readonly RoleAssignment[]; verifiedAt: string; expiresAt: string }>
-  | Readonly<{ state: "DENIED" }>
+  | Readonly<{ state: "DENIED"; status: 401 | 403 }>
   | Readonly<{ state: "UNAVAILABLE" }>;
 
 export class SupabaseRoleAuthority {
@@ -28,7 +28,7 @@ export class SupabaseRoleAuthority {
       recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_bootstrap_authorizations", data: bootstrapData });
       if ((error && (status === 401 || status === 403)) ||
         (bootstrapError && (bootstrapStatus === 401 || bootstrapStatus === 403))) {
-        return Object.freeze({ state: "DENIED" });
+        return Object.freeze({ state: "DENIED", status: status === 403 || bootstrapStatus === 403 ? 403 : 401 });
       }
       if (error || bootstrapError) return Object.freeze({ state: "UNAVAILABLE" });
       const rows = (data ?? []) as AssignmentRow[];

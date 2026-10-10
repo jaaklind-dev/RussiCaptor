@@ -23,6 +23,9 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>();
   const [submitting, setSubmitting] = useState(false);
+  const authorityError = operator.state === "UNAUTHORIZED" ? operator.message
+    : operator.state === "UNAVAILABLE" ? "Sisselogimisteenus pole praegu saadaval. Proovi hiljem uuesti."
+      : undefined;
 
   useEffect(() => {
     if (operator.state !== "AUTHENTICATED") return;
@@ -38,6 +41,7 @@ export default function LoginScreen() {
       const result = await signInOperator(email, password);
       if (result.state === "UNAUTHORIZED") setError(result.message);
       else if (result.state === "UNAVAILABLE") setError("Sisselogimisteenus pole praegu saadaval. Proovi hiljem uuesti.");
+      else if (result.state === "UNAUTHENTICATED") setError("Sisselogimise sessiooni ei saanud kinnitada. Proovi uuesti.");
     } catch (cause) { setError(publicErrorMessage(cause, "Sisselogimine ebaõnnestus.")); }
     finally { setSubmitting(false); }
   }
@@ -58,7 +62,7 @@ export default function LoginScreen() {
       <TextInput accessibilityLabel="E-posti aadress" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder="E-post" style={styles.input} />
       <TextInput accessibilityLabel="Parool" autoCapitalize="none" autoComplete="current-password" secureTextEntry value={password} onChangeText={setPassword} placeholder="Parool" style={styles.input} />
       {operator.state === "LOADING" && <ActivityIndicator />}
-      {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+      {(error ?? authorityError) && <Text accessibilityRole="alert" style={styles.error}>{error ?? authorityError}</Text>}
       <Pressable accessibilityRole="button" disabled={Boolean(releaseConfigurationError) || submitting || !email.trim() || !password} style={[styles.button, (releaseConfigurationError || submitting || !email.trim() || !password) && styles.buttonDisabled]} onPress={() => void submit()}>
         <Text style={styles.buttonText}>{submitting ? "Kontrollin…" : "Logi sisse"}</Text>
       </Pressable>

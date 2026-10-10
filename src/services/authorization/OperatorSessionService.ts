@@ -22,7 +22,9 @@ const listeners = new Set<() => void>();
 let stopAuth: (() => void) | undefined;
 let signOutInFlight: Promise<void> | undefined;
 let refreshGeneration = 0;
-let refreshInFlight: { expectedUserId?: string; promise: Promise<OperatorSessionState> } | undefined;
+let authSessionGeneration = 0;
+let refreshInFlight: { expectedUserId?: string; postLogin: boolean; sessionGeneration: number;
+  promise: Promise<OperatorSessionState> } | undefined;
 let authRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 const authorityRefreshTimeoutMs = 8_000;
 
@@ -73,12 +75,21 @@ async function resolvePlatformAdmin(): Promise<AdminResult> {
   return typeof data === "boolean" ? { state: "VERIFIED", value: data } : { state: "UNAVAILABLE" };
 }
 
-async function resolveOperatorSession(): Promise<OperatorSessionState> {
+type OperatorResolution = OperatorSessionState | Readonly<{ state: "POST_LOGIN_ROLE_401" }>;
+async function resolveOperatorSession(postLoginUserId?: string): Promise<OperatorResolution> {
   if (!supabase) return { state: "UNAVAILABLE", message: "Supabase pole seadistatud." };
   const principalState = await new PrincipalService(
     new SupabaseAuthenticationAdapter(supabase), new SupabaseRoleAuthority(supabase),
   ).resolve();
-  if (principalState.state === "UNAUTHENTICATED") return { state: "UNAUTHENTICATED" };
+  if (principalState.state === "UNAUTHENTICATED") {
+    if (postLoginUserId && principalState.userId === postLoginUserId && principalState.roleReadStatus === 401) {
+      return { state: "POST_LOGIN_ROLE_401" };
+    }
+    if (postLoginUserId && principalState.userId === postLoginUserId && principalState.roleReadStatus === 403) {
+      return { state: "UNAUTHORIZED", userId: postLoginUserId, message: "Operaatori õigusi ei saanud kinnitada." };
+    }
+    return { state: "UNAUTHENTICATED" };
+  }
   if (principalState.state === "UNAVAILABLE") return { state: "UNAVAILABLE", message: "Operaatori õigusi ei saanud kontrollida." };
   const userId = principalState.principal.userId;
   const admin = await resolvePlatformAdmin();
@@ -101,15 +112,31 @@ function boundedAuthorityRead<T>(work: Promise<T>): Promise<T> {
   });
 }
 
-async function resolveWithTransientRetry(): Promise<OperatorSessionState> {
-  const first = await resolveOperatorSession();
+async function resolveWithTransientRetry(postLoginUserId?: string): Promise<OperatorSessionState> {
+  const first = await resolveOperatorSession(postLoginUserId);
   // Read-only authority checks may fail briefly on reconnect. Retry once,
-  // inside the same overall deadline; definitive denial never retries.
-  return first.state === "UNAVAILABLE" && supabase ? resolveOperatorSession() : first;
+  // inside the same overall deadline. Only a role 401 for the just-verified
+  // login is eligible; a role 403 or repeated 401 remains fail-closed.
+  if (first.state === "POST_LOGIN_ROLE_401") {
+    const second = await resolveOperatorSession(postLoginUserId);
+    return second.state === "POST_LOGIN_ROLE_401"
+      ? { state: "UNAUTHORIZED", userId: postLoginUserId!, message: "Operaatori õigusi ei saanud kinnitada." }
+      : second;
+  }
+  if (first.state === "UNAVAILABLE" && supabase) {
+    const second = await resolveOperatorSession(postLoginUserId);
+    return second.state === "POST_LOGIN_ROLE_401"
+      ? { state: "UNAUTHORIZED", userId: postLoginUserId!, message: "Operaatori õigusi ei saanud kinnitada." }
+      : second;
+  }
+  return first;
 }
 
-export function refreshOperatorSession(expectedUserId?: string): Promise<OperatorSessionState> {
-  if (refreshInFlight && refreshInFlight.expectedUserId === expectedUserId) return refreshInFlight.promise;
+export function refreshOperatorSession(expectedUserId?: string, postLogin = false): Promise<OperatorSessionState> {
+  const sessionGeneration = authSessionGeneration;
+  if (refreshInFlight && refreshInFlight.expectedUserId === expectedUserId &&
+    refreshInFlight.sessionGeneration === sessionGeneration &&
+    (!postLogin || refreshInFlight.postLogin)) return refreshInFlight.promise;
   const generation = ++refreshGeneration;
   const confirmed = snapshot.state === "AUTHENTICATED" &&
     (!expectedUserId || snapshot.profile.userId === expectedUserId) ? snapshot : undefined;
@@ -117,9 +144,9 @@ export function refreshOperatorSession(expectedUserId?: string): Promise<Operato
   else publish({ state: "LOADING" });
   const task = (async (): Promise<OperatorSessionState> => {
     let result: OperatorSessionState;
-    try { result = await boundedAuthorityRead(resolveWithTransientRetry()); }
+    try { result = await boundedAuthorityRead(resolveWithTransientRetry(postLogin ? expectedUserId : undefined)); }
     catch { result = { state: "UNAVAILABLE", message: "Operaatori õiguste kontroll aegus. Proovi uuesti." }; }
-    if (generation !== refreshGeneration) return snapshot;
+    if (generation !== refreshGeneration || sessionGeneration !== authSessionGeneration) return snapshot;
     if (expectedUserId && result.state === "AUTHENTICATED" && result.profile.userId !== expectedUserId) {
       publish({ state: "UNAUTHENTICATED" });
       return snapshot;
@@ -134,15 +161,16 @@ export function refreshOperatorSession(expectedUserId?: string): Promise<Operato
   const inFlight = task.finally(() => {
     if (refreshInFlight?.promise === inFlight) refreshInFlight = undefined;
   });
-  refreshInFlight = { expectedUserId, promise: inFlight };
+  refreshInFlight = { expectedUserId, postLogin, sessionGeneration, promise: inFlight };
   return inFlight;
 }
 
 export async function signInOperator(email: string, password: string): Promise<OperatorSessionState> {
   if (!supabase) { publish({ state: "UNAVAILABLE", message: "Supabase pole seadistatud." }); return snapshot; }
-  const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
   if (error) { publish({ state: "UNAUTHENTICATED" }); throw new Error("Sisselogimine ebaõnnestus. Kontrolli kasutajatunnust ja parooli."); }
-  return refreshOperatorSession();
+  if (!data.user?.id) { publish({ state: "UNAVAILABLE", message: "Sisselogimise sessiooni ei saanud kinnitada." }); return snapshot; }
+  return refreshOperatorSession(data.user.id, true);
 }
 
 export function signOutOperator(): Promise<void> {
@@ -157,6 +185,7 @@ export function signOutOperator(): Promise<void> {
         if (error) throw error;
       }
       completeOperatorSignOutDrain();
+      authSessionGeneration += 1;
       refreshGeneration += 1;
       refreshInFlight = undefined;
       publish({ state: "UNAUTHENTICATED" });
@@ -177,12 +206,15 @@ export function startOperatorSession(): () => void {
   const { data } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
     if (event === "SIGNED_OUT" || !session || session.user.is_anonymous) {
       if (authRefreshTimer) clearTimeout(authRefreshTimer);
+      authSessionGeneration += 1;
       refreshGeneration += 1;
       refreshInFlight = undefined;
       completeOperatorSignOutDrain();
       publish({ state: "UNAUTHENTICATED" });
     }
-    else if (event === "TOKEN_REFRESHED" || event === "SIGNED_IN" || event === "USER_UPDATED") {
+    else if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED" || event === "SIGNED_IN" || event === "USER_UPDATED") {
+      authSessionGeneration += 1;
+      const sessionGeneration = authSessionGeneration;
       const userId = session.user.id;
       if (snapshot.state === "AUTHENTICATED" && snapshot.profile.userId !== userId) {
         refreshGeneration += 1;
@@ -192,7 +224,11 @@ export function startOperatorSession(): () => void {
       // Supabase auth callbacks must not call the same client asynchronously
       // before its internal auth lock has been released.
       if (authRefreshTimer) clearTimeout(authRefreshTimer);
-      authRefreshTimer = setTimeout(() => { authRefreshTimer = undefined; void refreshOperatorSession(userId); }, 0);
+      const postLogin = event === "SIGNED_IN";
+      authRefreshTimer = setTimeout(() => {
+        authRefreshTimer = undefined;
+        if (sessionGeneration === authSessionGeneration) void refreshOperatorSession(userId, postLogin);
+      }, 0);
     }
   });
   stopAuth = () => { if (authRefreshTimer) clearTimeout(authRefreshTimer); authRefreshTimer = undefined;
@@ -219,6 +255,7 @@ export function resetOperatorSessionForTests(): void {
   stopAuth?.(); stopAuth = undefined;
   if (authRefreshTimer) clearTimeout(authRefreshTimer);
   authRefreshTimer = undefined;
+  authSessionGeneration += 1;
   refreshGeneration += 1;
   refreshInFlight = undefined;
   signOutInFlight = undefined;

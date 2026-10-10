@@ -44,7 +44,7 @@ export type Principal = Readonly<{
 }>;
 export type PrincipalState =
   | Readonly<{ state: "AUTHENTICATED"; principal: Principal }>
-  | Readonly<{ state: "UNAUTHENTICATED" }>
+  | Readonly<{ state: "UNAUTHENTICATED"; userId?: string; roleReadStatus?: 401 | 403 }>
   | Readonly<{ state: "UNAVAILABLE"; userId?: string }>;
 
 export type AuthorizationContext = Readonly<{ exerciseId?: string }>;

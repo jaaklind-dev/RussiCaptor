@@ -31,7 +31,7 @@ describe("Supabase authorization adapters", () => {
     const denied = { select: () => denied, eq: async () => ({ data: null, error: { message: "forbidden" }, status: 403 }) };
     const available = { select: () => available, eq: async () => ({ data: [], error: null, status: 200 }) };
     await expect(new SupabaseRoleAuthority({ from: (table: string) => table === "authorization_role_assignments" ? denied : available } as never)
-      .assignmentsFor("AUTH-USER")).resolves.toEqual({ state: "DENIED" });
+      .assignmentsFor("AUTH-USER")).resolves.toEqual({ state: "DENIED", status: 403 });
   });
 
   it("maps a short-lived bootstrap authorization to only the bootstrap role", async () => {
