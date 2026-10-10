@@ -8,7 +8,8 @@ import {
 import { isSupabaseConfigured, supabase, synchronizeRealtimeAuthorization } from "@/services/SupabaseService";
 import { getSyncVersion, notifySync, subscribeToSync } from "@/services/SyncService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
-import { getRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
+import { getRuntimeWriterAuthorityState, getRuntimeWriterPublicationGeneration,
+  getRuntimeWriterPublicationLeaseId, getRuntimePublicationGeneration } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { getRuntimeReaderConvergenceState, getRuntimeReaderConvergenceVersion } from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
 import { exerciseLifecycle, resolveCurrentExercise, resolveScopedOperatorExercise } from "@/services/exercise/CurrentExerciseSelectionService";
 import type { CurrentExerciseCandidate } from "@/services/exercise/CurrentExerciseSelectionService";
@@ -52,11 +53,16 @@ import {
 } from "@/services/exercise/ExerciseProjectionPackageAuthority";
 import {
   captureProjectionPublicationStamp,
+  projectionPublicationRejectionReason,
   projectionPublicationStampIsCurrent,
   sameProjectionPublicationGeneration,
+  sendCurrentProjectionPublication,
   type ProjectionPublicationContext,
   type ProjectionPublicationStamp,
 } from "@/services/exercise/ExerciseProjectionPublicationGuard";
+import { createProjectionPublicationIntent, recordProjectionPublicationDiagnostic,
+  type ProjectionPublicationIntent, type ProjectionPublicationOrigin,
+  type ProjectionPublicationWake } from "@/services/exercise/ExerciseProjectionPublicationDiagnostics";
 import {
   isRuntimeCompletionPublicationFenced,
   subscribeToRuntimeCompletionPhase,
@@ -154,7 +160,8 @@ let conflictingRemoteExercises: CurrentExerciseCandidate[] = [];
 let explicitlySelectedExerciseId: string | undefined;
 let localProjectionMutationGeneration = 0;
 let publishedProjectionMutationGeneration = 0;
-let localProjectionMutationOrigin: ProjectionPublicationStamp | undefined;
+let localProjectionMutationIntent: ProjectionPublicationIntent | undefined;
+let localProjectionSendAttempts = 0;
 export const CLOUD_PROJECTION_INTERVAL_MS = EXERCISE_PROJECTION_COALESCE_INTERVAL_MS;
 export { EXERCISE_DISCOVERY_SAFETY_INTERVAL_MS };
 
@@ -680,7 +687,10 @@ export async function publishExplicitlySelectedTerminalExercise(): Promise<boole
   if (snapshot.lifecycleState !== "COMPLETED" || snapshot.exerciseId !== explicitlySelectedExerciseId) return false;
   // Explicit terminal reconciliation is a mutation intent; selecting or
   // hydrating an exercise is not.
-  recordLocalProjectionMutation();
+  recordLocalProjectionMutation("EXPLICIT_TERMINAL_RECONCILIATION");
+  if (localProjectionMutationIntent) recordProjectionPublicationDiagnostic(localProjectionMutationIntent, "WAKE", {
+    wake: "EXPLICIT_TERMINAL_RECONCILIATION",
+  });
   await saveToCloud();
   return true;
 }
@@ -692,6 +702,7 @@ type PreparedCloudProjection = Readonly<{
   savedSession: SharedExerciseState["exerciseSession"];
   sharedProjection: SharedExerciseState;
   publicationStamp: ProjectionPublicationStamp;
+  intent: ProjectionPublicationIntent;
 }>;
 
 function currentProjectionPublicationContext(): ProjectionPublicationContext {
@@ -703,6 +714,9 @@ function currentProjectionPublicationContext(): ProjectionPublicationContext {
     writerAuthority: getRuntimeWriterAuthorityState(),
     reader: getRuntimeReaderConvergenceState(),
     readerGeneration: getRuntimeReaderConvergenceVersion(),
+    runtimeGeneration: getRuntimePublicationGeneration(),
+    writerGeneration: getRuntimeWriterPublicationGeneration(),
+    writerLeaseId: getRuntimeWriterPublicationLeaseId(),
     authGeneration: getOperatorAuthSessionGeneration(),
     cloudGeneration: cloudSyncSessionGeneration,
     syncVersion: getSyncVersion(),
@@ -711,22 +725,24 @@ function currentProjectionPublicationContext(): ProjectionPublicationContext {
   };
 }
 
-function recordLocalProjectionMutation(): void {
+function recordLocalProjectionMutation(origin: ProjectionPublicationOrigin): void {
   // A notification emitted while a checkpoint is still being restored is not
   // allowed to become publishable merely because writer readiness arrives
   // later. Capture its authority generation at the time of the notification.
   const nextGeneration = localProjectionMutationGeneration + 1;
-  const origin = captureProjectionPublicationStamp({
+  const stamp = captureProjectionPublicationStamp({
     ...currentProjectionPublicationContext(), mutationGeneration: nextGeneration,
   });
-  if (!origin) return;
+  if (!stamp) return;
   localProjectionMutationGeneration = nextGeneration;
-  localProjectionMutationOrigin = origin;
+  localProjectionMutationIntent = createProjectionPublicationIntent(stamp, origin);
+  localProjectionSendAttempts = 0;
+  recordProjectionPublicationDiagnostic(localProjectionMutationIntent, "QUEUED");
 }
 
 function prepareCloudProjection(): ExerciseProjectionCandidate<PreparedCloudProjection> | undefined {
   if (!supabase || applyingRemoteState || !canPublishCloudProjection(remoteSelectionState)) return undefined;
-  if (!localProjectionMutationOrigin ||
+  if (!localProjectionMutationIntent ||
     localProjectionMutationGeneration <= publishedProjectionMutationGeneration) return undefined;
   const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
   if (shouldSuppressCloudProjectionWrite(exerciseId)) {
@@ -742,7 +758,12 @@ function prepareCloudProjection(): ExerciseProjectionCandidate<PreparedCloudProj
   const publicationStamp = captureProjectionPublicationStamp(currentProjectionPublicationContext());
   if (!publicationStamp || publicationStamp.exerciseId !== exerciseId ||
     publicationStamp.lifecycleState !== lifecycleState ||
-    !sameProjectionPublicationGeneration(localProjectionMutationOrigin, publicationStamp)) {
+    !sameProjectionPublicationGeneration(localProjectionMutationIntent.stamp, publicationStamp)) {
+    recordProjectionPublicationDiagnostic(localProjectionMutationIntent, "REJECTED", {
+      reason: publicationStamp
+        ? projectionPublicationRejectionReason(localProjectionMutationIntent.stamp, currentProjectionPublicationContext()) ?? "CANONICAL_REBASE_INVALIDATED"
+        : "WRITER_NOT_READY",
+    });
     recordSupabaseTraffic({ operation: "PROJECTION_WRITE_AUTHORITY_PENDING", endpoint: "exercise_states.projection",
       avoidedRequests: 1 });
     return undefined;
@@ -775,21 +796,28 @@ function prepareCloudProjection(): ExerciseProjectionCandidate<PreparedCloudProj
   return { identity, payloadBytes,
     value: { exerciseId, lifecycleState,
       writeMethod: cloudProjectionWriteMethod(scopedExerciseControl, bootstrapCreate),
-      savedSession, sharedProjection, publicationStamp } };
+      savedSession, sharedProjection, publicationStamp, intent: localProjectionMutationIntent } };
 }
 
 async function publishCloudProjection(candidate: ExerciseProjectionCandidate<PreparedCloudProjection>): Promise<ProjectionWriteResult> {
-  if (!supabase) return false;
+  const client = supabase;
+  if (!client) return false;
+  localProjectionSendAttempts += 1;
+  const sendAttempt = localProjectionSendAttempts;
 
   if (shouldSuppressCloudProjectionWrite(candidate.value.exerciseId)) {
+    recordProjectionPublicationDiagnostic(candidate.value.intent, "REJECTED", { sendAttempt, reason: "PUBLICATION_FENCED" });
     recordSupabaseTraffic({ operation: "PROJECTION_WRITE_COMPLETION_FENCE_SUPPRESSED", endpoint: "exercise_states.projection",
       avoidedRequests: 1, estimatedBytesSaved: candidate.payloadBytes });
     return "SUPPRESSED";
   }
 
-  const { data: authData } = await supabase.auth.getUser();
+  const { data: authData } = await client.auth.getUser();
   const user = authData.user;
-  if (!user) return false;
+  if (!user) {
+    recordProjectionPublicationDiagnostic(candidate.value.intent, "REJECTED", { sendAttempt, reason: "AUTH_USER_MISMATCH" });
+    return false;
+  }
   const operator = getOperatorSession();
 
   // A clock tick or a real lifecycle command may advance the local projection
@@ -799,6 +827,10 @@ async function publishCloudProjection(candidate: ExerciseProjectionCandidate<Pre
   if (!latest || !sameProjectionPublicationGeneration(
     candidate.value.publicationStamp, latest.value.publicationStamp,
   )) {
+    recordProjectionPublicationDiagnostic(candidate.value.intent, "REJECTED", {
+      sendAttempt, reason: projectionPublicationRejectionReason(candidate.value.publicationStamp,
+        currentProjectionPublicationContext()) ?? "CANONICAL_REBASE_INVALIDATED",
+    });
     recordSupabaseTraffic({ operation: "PROJECTION_WRITE_STALE_DISCARDED", endpoint: "exercise_states.projection",
       avoidedRequests: 1, estimatedBytesSaved: candidate.payloadBytes });
     return "SUPPRESSED";
@@ -810,6 +842,11 @@ async function publishCloudProjection(candidate: ExerciseProjectionCandidate<Pre
   // the first network write; the lease-acquisition state alone is not ready.
   if (!projectionPublicationStampIsCurrent(publicationStamp, currentProjectionPublicationContext()) ||
     operator.state !== "AUTHENTICATED" || operator.profile.userId !== user.id) {
+    recordProjectionPublicationDiagnostic(latest.value.intent, "REJECTED", {
+      sendAttempt, reason: operator.state !== "AUTHENTICATED" || operator.profile.userId !== user.id
+        ? "AUTH_USER_MISMATCH"
+        : projectionPublicationRejectionReason(publicationStamp, currentProjectionPublicationContext()) ?? "WRITER_NOT_READY",
+    });
     recordSupabaseTraffic({ operation: "PROJECTION_WRITE_STALE_DISCARDED", endpoint: "exercise_states.projection",
       avoidedRequests: 1, estimatedBytesSaved: latest.payloadBytes });
     return "SUPPRESSED";
@@ -818,6 +855,7 @@ async function publishCloudProjection(candidate: ExerciseProjectionCandidate<Pre
   // Completion may become fenced while the asynchronous auth lookup is in
   // flight. Re-check immediately before the first backend write.
   if (shouldSuppressCloudProjectionWrite(exerciseId)) {
+    recordProjectionPublicationDiagnostic(latest.value.intent, "REJECTED", { sendAttempt, reason: "PUBLICATION_FENCED" });
     recordSupabaseTraffic({ operation: "PROJECTION_WRITE_COMPLETION_FENCE_SUPPRESSED", endpoint: "exercise_states.projection",
       avoidedRequests: 1, estimatedBytesSaved: latest.payloadBytes });
     return "SUPPRESSED";
@@ -833,10 +871,16 @@ async function publishCloudProjection(candidate: ExerciseProjectionCandidate<Pre
   };
   let row: Pick<ExerciseStateRow, "exercise_id" | "revision" | "updated_at">;
   if (cloudProjectionReturnsServerRow(writeMethod)) {
-    const { data, error } = await supabase.from("exercise_states")
-      .upsert(projectionRow, { onConflict: "exercise_id" })
-      .select("exercise_id,revision,updated_at")
-      .single();
+    const dispatch = sendCurrentProjectionPublication(publicationStamp, currentProjectionPublicationContext(), () =>
+      client.from("exercise_states").upsert(projectionRow, { onConflict: "exercise_id" })
+        .select("exercise_id,revision,updated_at").single().then(result => result));
+    if (dispatch.outcome === "REJECTED") {
+      recordProjectionPublicationDiagnostic(latest.value.intent, "REJECTED", { sendAttempt, reason: dispatch.reason });
+      return "SUPPRESSED";
+    }
+    recordProjectionPublicationDiagnostic(latest.value.intent, "SENT", { sendAttempt });
+    const { data, error, status: httpStatus } = await dispatch.result;
+    recordProjectionPublicationDiagnostic(latest.value.intent, error ? "FAILED" : "ACK", { sendAttempt, httpStatus });
     recordSupabaseTraffic({ operation: writeMethod, endpoint: "exercise_states.projection", data,
       requestBytes: latest.payloadBytes });
     if (error) {
@@ -845,7 +889,15 @@ async function publishCloudProjection(candidate: ExerciseProjectionCandidate<Pre
     }
     row = data as Pick<ExerciseStateRow, "exercise_id" | "revision" | "updated_at">;
   } else {
-    const { error } = await supabase.from("exercise_states").insert(projectionRow);
+    const dispatch = sendCurrentProjectionPublication(publicationStamp, currentProjectionPublicationContext(), () =>
+      client.from("exercise_states").insert(projectionRow).then(result => result));
+    if (dispatch.outcome === "REJECTED") {
+      recordProjectionPublicationDiagnostic(latest.value.intent, "REJECTED", { sendAttempt, reason: dispatch.reason });
+      return "SUPPRESSED";
+    }
+    recordProjectionPublicationDiagnostic(latest.value.intent, "SENT", { sendAttempt });
+    const { error, status: httpStatus } = await dispatch.result;
+    recordProjectionPublicationDiagnostic(latest.value.intent, error ? "FAILED" : "ACK", { sendAttempt, httpStatus });
     recordSupabaseTraffic({ operation: writeMethod, endpoint: "exercise_states.projection",
       data: error ? undefined : { exercise_id: exerciseId, revision: nextRevision, updated_at: projectionRow.updated_at },
       requestBytes: latest.payloadBytes });
@@ -859,7 +911,7 @@ async function publishCloudProjection(candidate: ExerciseProjectionCandidate<Pre
   remoteVersions.set(row.exercise_id, { revision: row.revision, updatedAt: row.updated_at });
   publishedProjectionMutationGeneration = Math.max(publishedProjectionMutationGeneration,
     publicationStamp.mutationGeneration);
-  if (publishedProjectionMutationGeneration >= localProjectionMutationGeneration) localProjectionMutationOrigin = undefined;
+  if (publishedProjectionMutationGeneration >= localProjectionMutationGeneration) localProjectionMutationIntent = undefined;
   if (lifecycleState === "COMPLETED") markCompletedExerciseArchiveDurable(exerciseId);
   latestRemoteExercise = {
     exerciseId: savedSession.exerciseId,
@@ -1124,8 +1176,9 @@ export async function loadCompletedExerciseArchive(exerciseId: string): Promise<
   return archiveForExercise(row.completed_exercise_archives, exerciseId);
 }
 
-function scheduleCloudSave(): void {
+function scheduleCloudSave(wake: ProjectionPublicationWake): void {
   if (!canPublishCloudProjection(remoteSelectionState)) return;
+  if (localProjectionMutationIntent) recordProjectionPublicationDiagnostic(localProjectionMutationIntent, "WAKE", { wake });
   const snapshot = getCanonicalExerciseSnapshot();
   if (shouldSuppressCloudProjectionWrite(snapshot.exerciseId)) {
     projectionWriteCoordinator.discardPending();
@@ -1162,7 +1215,8 @@ export async function startCloudSync(): Promise<() => void> {
   projectionWriteCoordinator.reset();
   localProjectionMutationGeneration = 0;
   publishedProjectionMutationGeneration = 0;
-  localProjectionMutationOrigin = undefined;
+  localProjectionMutationIntent = undefined;
+  localProjectionSendAttempts = 0;
   stopLocalSubscription?.(); stopLocalSubscription = undefined;
   stopSharedWorkflowRealtime?.(); stopSharedWorkflowRealtime = undefined;
   stopCompletionFenceSubscription?.(); stopCompletionFenceSubscription = undefined;
@@ -1205,7 +1259,7 @@ export async function startCloudSync(): Promise<() => void> {
       if (subscribedOnce && reconnectPending) {
         recordSupabaseTraffic({ operation: "DISCOVERY_REALTIME_INVALIDATION", endpoint: "exercise_states.discovery_reconnect", reconnect: true });
         void refreshRemoteCurrentExercise("reconnect");
-        scheduleCloudSave();
+        scheduleCloudSave("REALTIME_RECONNECT");
       }
       subscribedOnce = true;
       reconnectPending = false;
@@ -1256,8 +1310,9 @@ export async function startCloudSync(): Promise<() => void> {
         refreshSharedWorkflowPatients(cloudClient, sessionGeneration).then(result=>{
           if (sessionGeneration === cloudSyncSessionGeneration) setSharedWorkflowConnectivity(result === "READY");
         }));
-      scheduleCloudSave();
+      scheduleCloudSave("APPSTATE_RESUME");
     } else if (nextState !== "active") {
+      if (localProjectionMutationIntent) recordProjectionPublicationDiagnostic(localProjectionMutationIntent, "WAKE", { wake: "BACKGROUND_FLUSH" });
       void projectionWriteCoordinator.flush();
     }
   });
@@ -1266,8 +1321,8 @@ export async function startCloudSync(): Promise<() => void> {
 
   stopLocalSubscription = subscribeToSync((source) => {
     if (source === "local") {
-      recordLocalProjectionMutation();
-      scheduleCloudSave();
+      recordLocalProjectionMutation("LOCAL_STATE_CHANGE");
+      scheduleCloudSave("LOCAL_STATE_CHANGE");
     }
   });
 

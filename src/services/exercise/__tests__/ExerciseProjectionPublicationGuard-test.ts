@@ -14,7 +14,7 @@ function context(overrides: Partial<ProjectionPublicationContext> = {}): Project
   return {
     exerciseId: "EX-1", lifecycleState: "RUNNING", selectedMode: "EXCON",
     writerAuthority: "WRITER", reader: { exerciseId: "EX-1", phase: "WRITER" },
-    readerGeneration: 7, authGeneration: 3, cloudGeneration: 2,
+    readerGeneration: 7, runtimeGeneration: 9, writerGeneration: 5, writerLeaseId: "lease-A", authGeneration: 3, cloudGeneration: 2,
     syncVersion: 11, mutationGeneration: 1, publishedMutationGeneration: 0,
     ...overrides,
   };
@@ -58,8 +58,8 @@ describe("exercise projection publication authority", () => {
 
   test("EXSTATE-PUB-07 foreground event does not create a mutation intent", () => {
     expect(captureProjectionPublicationStamp(context({ mutationGeneration: 0 }))).toBeUndefined();
-    expect(source).toMatch(/returnedToForeground[\s\S]*?scheduleCloudSave\(\)/);
-    expect(source).toMatch(/if \(source === "local"\) \{\s*recordLocalProjectionMutation\(\)/);
+    expect(source).toMatch(/returnedToForeground[\s\S]*?scheduleCloudSave\("APPSTATE_RESUME"\)/);
+    expect(source).toMatch(/if \(source === "local"\) \{\s*recordLocalProjectionMutation\("LOCAL_STATE_CHANGE"\)/);
   });
 
   test("EXSTATE-PUB-08 cold-start hydration remains read-only", () => {
@@ -73,8 +73,8 @@ describe("exercise projection publication authority", () => {
     const oldOrigin = captureProjectionPublicationStamp(context())!;
     const newWriter = captureProjectionPublicationStamp(context({ readerGeneration: 8, mutationGeneration: 2 }))!;
     expect(sameProjectionPublicationGeneration(oldOrigin, newWriter)).toBe(false);
-    expect(source).toContain("localProjectionMutationOrigin = origin;");
-    expect(source).toContain("!sameProjectionPublicationGeneration(localProjectionMutationOrigin, publicationStamp)");
+    expect(source).toContain("localProjectionMutationIntent = createProjectionPublicationIntent(stamp, origin);");
+    expect(source).toContain("!sameProjectionPublicationGeneration(localProjectionMutationIntent.stamp, publicationStamp)");
   });
 
   test("EXSTATE-PUB-09 supported PAUSE mutation remains publishable by current writer", () => {
@@ -92,7 +92,7 @@ describe("exercise projection publication authority", () => {
   test("EXSTATE-PUB-12 explicit terminal reconciliation remains available", () => {
     expect(captureProjectionPublicationStamp(context({ lifecycleState: "COMPLETED",
       writerAuthority: "READER", reader: { phase: "UNTRACKED" } }))).toBeDefined();
-    expect(source).toMatch(/publishExplicitlySelectedTerminalExercise[\s\S]*?recordLocalProjectionMutation\(\)/);
+    expect(source).toMatch(/publishExplicitlySelectedTerminalExercise[\s\S]*?recordLocalProjectionMutation\("EXPLICIT_TERMINAL_RECONCILIATION"\)/);
   });
 
   test("EXSTATE-PUB-13 canonical rebase invalidates old candidate and permits a new one", () => {

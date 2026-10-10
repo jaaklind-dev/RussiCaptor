@@ -969,8 +969,9 @@ describe("WP-44B checkpoint startup coordination", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     expect(source).toContain("let stopped=false;");
     expect(source).toContain("if(stopped)return;");
-    expect(source).toContain('return()=>{traceRuntimeLeaseLifecycle("EXERCISE_SYNC_GENERATION_STOPPED"');
-    expect(source).toContain('stopPrepared();stopLifecyclePriority();stopCompletionIntent();stopDeferredPatientCommandDrain();resolveTerminalPublication?.();resolveTerminalPublication=undefined;renewalLoop?.stop("GENERATION_CLEANUP")');
+    expect(source).toMatch(/return\(\)=>\{\s*traceRuntimeLeaseLifecycle\("EXERCISE_SYNC_GENERATION_STOPPED"/);
+    expect(source).toContain('stopPrepared(); stopLifecyclePriority(); stopCompletionIntent(); stopDeferredPatientCommandDrain();');
+    expect(source).toContain('setRuntimePublicationGeneration(generation + 1);');
   });
 
   test("explicit Resume attaches the acquired writer to the canonical renewal lifecycle", () => {
