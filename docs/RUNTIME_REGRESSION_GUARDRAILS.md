@@ -419,7 +419,7 @@ The durable laboratory lifecycle, the versioned Narva trauma/Astrup physiology-v
 | LAB-G08 | No early release | No result group becomes `RESULTED` before its configured availability time. |
 | LAB-G09 | Independent result groups | Releasing one group cannot release another early or modify any group's sample snapshot. |
 | LAB-G10 | Terminal fencing | Established terminal semantics prevent new laboratory progression, new results, prohibited pending release, and workflow resurrection. |
-| LAB-G11 | Package scope | Laboratory exposure remains within the frozen EMO trauma and IRO scopes below. |
+| LAB-G11 | Package scope | Narva EMO trauma and IRO retain their frozen scopes below. A custom compiled package may reuse one of those catalogs only when a reviewed immutable package ID/version/hash-to-catalog binding is registered server-side and matches the active exercise's frozen package identity. A client-supplied catalog name alone never grants scope. |
 | LAB-G12 | AB0 identity stability | Patient AB0/RhD identity cannot change through repeated sampling, restart, or takeover. |
 | LAB-G13 | Dynamic physiology source of truth | Astrup, lactate, iCa, glucose, Hb/Hct, platelets, INR/APTT/fibrinogen, and Na/K derive from authoritative physiology/state, not UI-local calculations. |
 | LAB-G14 | MTP/iCa coherence | Dynamic iCa and the MTP calcium recommendation are separate mechanisms: neither the fourth-RBC protocol trigger nor low iCa may substitute for the other state variable. |
@@ -464,6 +464,7 @@ Availability is measured from sample collection time: Astrup 25 minutes; Hematol
 
 - EMO/trauma includes the POLÜTRAUMA laboratory package and excludes SARS-CoV-2, influenza, all urine analyses, and U-Narco.
 - IRO exposes Astrup only.
+- Builder packages do not widen either catalog. The 2026-10-10 Builder architecture amendment adds an explicit, immutable server registration for each compiled custom package's exact ID/version/hash and one existing catalog. Runtime lab-order acceptance compares that registration with the exercise's frozen package identity; unregistered, hash-mismatched, wrong-catalog, and cross-exercise requests remain denied. This amendment is intentional and does not alter Narva values or timings.
 
 ### Mandatory statement for every future laboratory WP
 

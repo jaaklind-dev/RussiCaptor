@@ -27,6 +27,7 @@ export interface RuntimePatientCommandGateway {
 function errorStatus(message: string): RuntimePatientCommandSubmissionResult["status"] {
   if (message.includes("COMPLETION_FENCED")) return "COMPLETION_FENCED";
   if (message.includes("EXERCISE_NOT_ACTIVE")) return "EXERCISE_NOT_ACTIVE";
+  if (message.includes("LAB_PACKAGE_SCOPE_DENIED")) return "LAB_PACKAGE_SCOPE_DENIED";
   if (message.includes("AUTHORIZATION_DENIED") || message.includes("AUTHENTICATION_REQUIRED")) return "AUTHORIZATION_DENIED";
   return "UNAVAILABLE";
 }

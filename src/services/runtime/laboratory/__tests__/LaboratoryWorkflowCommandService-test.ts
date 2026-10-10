@@ -56,4 +56,16 @@ describe("minimal supported laboratory command surface", () => {
     expect((await submitLaboratoryCollection("PT-1", "ORDER-1")).ok).toBe(false);
     expect(submit).not.toHaveBeenCalled();
   });
+
+  test("classifies a missing server-side package binding without exposing its raw code", async () => {
+    exercisePackageLoader.bind("EX-LAB-UI", NARVA_TRAUMA_EXERCISE_PACKAGE);
+    replaceCanonicalExerciseSnapshot({ exerciseId: "EX-LAB-UI", lifecycleState: "RUNNING",
+      simulationTimeSec: 123, speed: 1, version: 3 });
+    submit.mockResolvedValue({ status: "LAB_PACKAGE_SCOPE_DENIED", patientRevision: 0 });
+    const result = await submitLaboratoryOrder("PT-1", emptyWorkflow);
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("LAB_PACKAGE_SCOPE_DENIED");
+    expect(result.message).toContain("laboripakett ei ole serveris lubatud");
+    expect(result.message).not.toContain("LAB_PACKAGE_SCOPE_DENIED");
+  });
 });

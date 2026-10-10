@@ -36,6 +36,8 @@ function outcome(commandId: string, result: RuntimePatientCommandSubmissionResul
   const ok = result.status === "APPLIED" || result.status === "IDEMPOTENT";
   const failure = result.status === "RECONNECT_REQUIRED"
     ? "Oota patsiendi andmete sünkroonimist ja proovi uuesti."
+    : result.status === "LAB_PACKAGE_SCOPE_DENIED"
+      ? "Selle õppuse laboripakett ei ole serveris lubatud. Pöördu administraatori poole."
     : result.status === "COMPLETION_FENCED" || result.status === "EXERCISE_NOT_ACTIVE"
       ? "Õppus lõpetatakse või on lõpetatud."
       : result.status === "NOT_OWNER" || result.status === "STALE_VERSION"

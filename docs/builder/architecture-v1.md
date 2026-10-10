@@ -13,7 +13,9 @@ This is a new authoring cycle after the immutable `android-v1.2.0-validated` rel
 
 ## Narrow additive laboratory contract
 
-An optional `laboratoryConfiguration` binds an otherwise custom package to the existing `NARVA_POLYTRAUMA` or `NARVA_IRO_ASTRUP` catalog. It may supply per-patient static initial results and per-result-group simulation-second delays. It is part of the immutable package hash. At collection, the writer freezes authored values and delays into the canonical sample; restart/takeover reads those frozen inputs. Absence of this optional contract preserves all historical Narva package behavior. No Supabase schema, RLS, RPC or migration changes are needed.
+An optional `laboratoryConfiguration` binds an otherwise custom package to the existing `NARVA_POLYTRAUMA` or `NARVA_IRO_ASTRUP` catalog. It may supply per-patient static initial results and per-result-group simulation-second delays. It is part of the immutable package hash. At collection, the writer freezes authored values and delays into the canonical sample; restart/takeover reads those frozen inputs. Absence of this optional contract preserves all historical Narva package behavior.
+
+Runtime ordering also requires an exact server-side registration of the compiled package ID, version, hash, and chosen catalog. A reviewed deployment migration may register a frozen package, or an authenticated PLATFORM_ADMIN may invoke `register_exercise_package_lab_catalog` after checking the compiled artifact. CM/EXCON cannot register a package; neither a client-supplied catalog name nor an arbitrary package namespace grants laboratory scope. Registration is immutable per package ID/version, and active exercise publication freezes the package hash. This 2026-10-10 architecture amendment corrects the earlier assumption that Builder laboratory support required no Supabase migration.
 
 ## Draft → source export → compiled package
 

@@ -40,7 +40,7 @@ export type AcceptedRuntimePatientCommand = RuntimePatientCommandSubmission & Re
 export type RuntimePatientCommandSubmissionResult = Readonly<{
   status: "APPLIED" | "IDEMPOTENT" | "STALE_VERSION" | "NOT_OWNER" |
     "COMPLETION_FENCED" | "EXERCISE_NOT_ACTIVE" | "AUTHORIZATION_DENIED" |
-    "RECONNECT_REQUIRED" | "UNAVAILABLE";
+    "RECONNECT_REQUIRED" | "LAB_PACKAGE_SCOPE_DENIED" | "UNAVAILABLE";
   commandSequence?: number;
   intentSimulationTimeSec?: number;
   patientRevision: number;
