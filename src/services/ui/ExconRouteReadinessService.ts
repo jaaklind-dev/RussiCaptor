@@ -80,13 +80,6 @@ export function resolveExconRouteReadiness(input: Readonly<{
   if (!exerciseIds.length) {
     return Object.freeze({ state: "DENIED", reason: "ROLE_MISSING" });
   }
-  if (exerciseIds.includes(currentExerciseId)) {
-    return Object.freeze({
-      state: "AUTHORIZED",
-      exerciseId: currentExerciseId,
-      intendedExerciseId: currentExerciseId,
-    });
-  }
   if (discovery === "PENDING") {
     return Object.freeze({
       state: "PENDING",
@@ -101,6 +94,13 @@ export function resolveExconRouteReadiness(input: Readonly<{
       ...(intendedExerciseId ? { intendedExerciseId } : {}),
     });
   }
+  if (discovery === "RESOLVED" && exerciseIds.includes(currentExerciseId)) {
+    return Object.freeze({
+      state: "AUTHORIZED",
+      exerciseId: currentExerciseId,
+      intendedExerciseId: currentExerciseId,
+    });
+  }
   return Object.freeze({
     state: "DENIED",
     reason: "EXERCISE_UNAVAILABLE",
@@ -110,7 +110,8 @@ export function resolveExconRouteReadiness(input: Readonly<{
 
 export function exconRouteRedirect(
   readiness: ExconRouteReadiness,
-): "/" | "/mode" | undefined {
+): "/" | "/mode" | "/excon/active-exercise-conflict" | undefined {
   if (readiness.state !== "DENIED") return undefined;
+  if (readiness.reason === "EXERCISE_SELECTION_REQUIRED") return "/excon/active-exercise-conflict";
   return readiness.reason === "NOT_AUTHENTICATED" ? "/" : "/mode";
 }

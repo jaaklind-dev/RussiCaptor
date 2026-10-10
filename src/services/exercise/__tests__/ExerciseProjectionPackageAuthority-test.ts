@@ -2,7 +2,7 @@ import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { createRuntimeCheckpoint } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 import { sha256Text } from "@/utils/sha256";
 import { stableJson } from "@/utils/stableJson";
-import { canPublishProjectionWithPackageAuthority, projectionPackageAuthority } from "../ExerciseProjectionPackageAuthority";
+import { canPublishProjectionWithPackageAuthority, projectionPackageAuthority, referencedPackageAvailable } from "../ExerciseProjectionPackageAuthority";
 
 function state(packageId = "PACKAGE-A", lifecycleState = "RUNNING"): SharedExerciseState {
   const exerciseId = "EX-1";
@@ -34,5 +34,11 @@ describe("active projection package authority", () => {
     const candidate = state("russicaptor.clinical-sanity-reference");
     expect(canPublishProjectionWithPackageAuthority(candidate, projectionPackageAuthority(candidate), createRuntimeCheckpoint(candidate, 18))).toBe(true);
     expect(canPublishProjectionWithPackageAuthority(state("PACKAGE-NEW", "READY"), undefined, undefined)).toBe(true);
+  });
+
+  test("EXCON-SEL-04 missing Builder package cannot silently bind to the demo fallback", () => {
+    const reference = { packageId: "russicaptor.builder-picker-test153", packageVersion: "1.0.0" };
+    expect(referencedPackageAvailable(reference, () => undefined)).toBe(false);
+    expect(referencedPackageAvailable(reference, (id, version) => id === reference.packageId && version === reference.packageVersion ? { packageHash: "expected" } : undefined)).toBe(true);
   });
 });

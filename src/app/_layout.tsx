@@ -60,6 +60,8 @@ function ProductionRouteGate() {
     else if (root === "excon") {
       const redirect = exconRouteRedirect(exconReadiness);
       if (redirect === "/") router.replace("/");
+      else if (redirect === "/excon/active-exercise-conflict" &&
+        segments.join("/") !== "excon/active-exercise-conflict") router.replace(redirect);
       else if (redirect === "/mode") router.replace({
         pathname: "/mode",
         params: {

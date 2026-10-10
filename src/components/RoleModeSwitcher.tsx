@@ -6,6 +6,7 @@ import { useOperatorMode } from "@/hooks/useOperatorMode";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { refreshOperatorSession } from "@/services/authorization/OperatorSessionService";
+import { refreshRemoteCurrentExercise } from "@/services/CloudSyncService";
 import {
   resolveAvailableUserModes,
   switchOperatorMode,
@@ -40,6 +41,7 @@ export default function RoleModeSwitcher() {
     setPending(next); setError(undefined);
     try {
       await switchOperatorMode(operator, next);
+      if (next === "EXCON") await refreshRemoteCurrentExercise("manual");
       const target = resolveSelectedModeRoute(operator, next, getCanonicalExerciseSnapshot().exerciseId);
       router.replace(target === "/mode" ? { pathname: "/mode", params: { target: next } } : target);
     } catch {

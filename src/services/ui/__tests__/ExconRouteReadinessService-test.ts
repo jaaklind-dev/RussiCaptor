@@ -177,9 +177,21 @@ describe("EXCON workbench route readiness", () => {
     expect(exconRouteRedirect(resolve())).toBeUndefined();
   });
 
+  test("EXCON-SEL-07/09 matching stale local ID cannot authorize before discovery or after a package error", () => {
+    expect(resolve({ discovery: "PENDING" })).toMatchObject({ state: "PENDING", reason: "CURRENT_EXERCISE" });
+    expect(resolve({ discovery: "UNAVAILABLE" })).toMatchObject({ state: "DENIED", reason: "EXERCISE_UNAVAILABLE" });
+  });
+
+  test("EXCON-SEL-08 unresolved multiple assigned instances open the explicit selector", () => {
+    const result = resolve({ operator: authenticated([assignment(), assignment("EX-OTHER")]), discovery: "CONFLICT" });
+    expect(result).toMatchObject({ state: "DENIED", reason: "EXERCISE_SELECTION_REQUIRED" });
+    expect(exconRouteRedirect(result)).toBe("/excon/active-exercise-conflict");
+  });
+
   test("route tree wires the shared readiness policy before mounting EXCON workbench actions", () => {
     const read = (relative: string) => fs.readFileSync(path.join(process.cwd(), "src", relative), "utf8");
     expect(read("app/_layout.tsx")).toContain("exconRouteRedirect(exconReadiness)");
+    expect(read("app/_layout.tsx")).toContain('segments.join("/") !== "excon/active-exercise-conflict"');
     expect(read("app/excon/dashboard.tsx")).toContain("<ExconRouteReadinessBoundary readiness={readiness}>");
     expect(read("app/excon/index.tsx")).toContain("<ExconRouteReadinessBoundary readiness={readiness}>");
   });

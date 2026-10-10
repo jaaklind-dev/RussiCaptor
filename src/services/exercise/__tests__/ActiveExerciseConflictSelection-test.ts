@@ -16,4 +16,15 @@ describe("explicit active exercise conflict selection",()=>{
   test("does not acquire writer before explicit selection",()=>expect(mockStartRuntime).not.toHaveBeenCalled());
   test("only the explicitly selected exercise reaches Runtime authority startup and terminal reconciliation",async()=>{await expect(continueSelectedActiveExercise("REMOTE-B")).resolves.toEqual({ok:true});expect(mockSelectExercise).toHaveBeenCalledWith("REMOTE-B");expect(mockStartRuntime).toHaveBeenCalledTimes(1);expect(mockPublishTerminal).toHaveBeenCalledTimes(1);expect(mockCanonicalExerciseId).toBe("REMOTE-B");});
   test("failed selection never starts Runtime",async()=>{mockSelectExercise.mockImplementationOnce(()=>false);await expect(continueSelectedActiveExercise("NOT-LISTED")).resolves.toEqual({ok:false,code:"EXERCISE_NOT_IN_CURRENT_CONFLICT"});expect(mockStartRuntime).not.toHaveBeenCalled();});
+  test("EXCON-SEL-10 waits for the selected READY row before starting Runtime",async()=>{
+    let release: (()=>void)|undefined;
+    mockSelectExercise.mockImplementationOnce((id:string)=>new Promise<boolean>(resolve=>{
+      release=()=>{mockCanonicalExerciseId=id;resolve(true);};
+    }) as never);
+    const pending=continueSelectedActiveExercise("REMOTE-B");
+    expect(mockStartRuntime).not.toHaveBeenCalled();
+    release?.();
+    await expect(pending).resolves.toEqual({ok:true});
+    expect(mockStartRuntime).toHaveBeenCalledTimes(1);
+  });
 });

@@ -8,6 +8,14 @@ export type ProjectionPackageAuthority = Readonly<{
   packageVersion?: string;
 }>;
 
+/** An authored reference may never silently become the demo package. */
+export function referencedPackageAvailable(
+  reference: SharedExerciseState["exercisePackageReference"],
+  lookup: (packageId: string, packageVersion: string) => unknown,
+): boolean {
+  return !reference || Boolean(lookup(reference.packageId, reference.packageVersion));
+}
+
 function lifecycleOf(state: SharedExerciseState): string {
   const session = state.exerciseSession;
   return "lifecycleState" in session ? session.lifecycleState

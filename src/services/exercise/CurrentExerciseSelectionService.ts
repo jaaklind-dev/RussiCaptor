@@ -55,3 +55,24 @@ export function resolveCurrentExercise(candidates: readonly CurrentExerciseCandi
     ? Object.freeze({ status: "SELECTED", candidate: terminal })
     : Object.freeze({ status: "NONE" });
 }
+
+/** Scope the EXCON choice to exercise instances, never to a package or recency. */
+export function resolveScopedExconExercise(
+  candidates: readonly CurrentExerciseCandidate[],
+  assignedExerciseIds: readonly string[],
+  explicitlySelectedExerciseId?: string,
+): CurrentExerciseSelection {
+  const authorized = new Set(assignedExerciseIds);
+  const scoped = candidates.filter(candidate => authorized.has(candidate.exerciseId) &&
+    candidate.state.exerciseSession.exerciseId === candidate.exerciseId);
+  if (!scoped.length) return Object.freeze({ status: "NONE" });
+  if (authorized.size === 1) return resolveCurrentExercise(scoped);
+  const selected = explicitlySelectedExerciseId && scoped.find(candidate =>
+    candidate.exerciseId === explicitlySelectedExerciseId);
+  if (selected) return Object.freeze({ status: "SELECTED", candidate: selected });
+  const ordered = [...scoped].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) ||
+    b.exerciseId.localeCompare(a.exerciseId));
+  return Object.freeze({ status: "CONFLICT", code: "MULTIPLE_ACTIVE_EXERCISES",
+    exerciseIds: Object.freeze(ordered.map(candidate => candidate.exerciseId)),
+    candidates: Object.freeze(ordered) });
+}

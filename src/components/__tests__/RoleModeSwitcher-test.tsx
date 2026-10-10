@@ -6,6 +6,7 @@ import RoleModeSwitcher from "../RoleModeSwitcher";
 
 const mockReplace = jest.fn();
 const mockSwitchMode = jest.fn();
+const mockRefreshExercise = jest.fn(async () => undefined);
 let mockOperator: OperatorSessionState;
 let mockSelectedMode: "ADMIN" | "CM" | "EXCON" | undefined;
 
@@ -20,6 +21,7 @@ jest.mock("@/services/authorization/OperatorSessionService", () => ({
       .map(item => item.scope.scopeType === "EXERCISE" ? item.scope.scopeId : "") : [],
   hasPlatformAdminAuthority: (state: OperatorSessionState) => state.state === "AUTHENTICATED" && state.isPlatformAdmin === true,
 }));
+jest.mock("@/services/CloudSyncService", () => ({ refreshRemoteCurrentExercise: () => mockRefreshExercise() }));
 jest.mock("@/services/ui/OperatorModeService", () => {
   const actual = jest.requireActual("@/services/ui/OperatorModeService");
   return { ...actual, switchOperatorMode: (...args: unknown[]) => mockSwitchMode(...args) };
@@ -38,7 +40,7 @@ function state(): OperatorSessionState {
 }
 
 describe("role mode switcher production UI", () => {
-  beforeEach(() => { mockOperator = state(); mockSelectedMode = "ADMIN"; mockReplace.mockReset(); mockSwitchMode.mockReset(); mockSwitchMode.mockResolvedValue({ selectedMode: "CM" }); });
+  beforeEach(() => { mockOperator = state(); mockSelectedMode = "ADMIN"; mockReplace.mockReset(); mockSwitchMode.mockReset(); mockRefreshExercise.mockClear(); mockSwitchMode.mockResolvedValue({ selectedMode: "CM" }); });
 
   async function render() {
     let renderer!: TestRenderer.ReactTestRenderer;
@@ -74,6 +76,14 @@ describe("role mode switcher production UI", () => {
     await act(async () => buttons(renderer, "mode-cm")[0].props.onPress());
     expect(mockSwitchMode).toHaveBeenCalledWith(mockOperator, "CM");
     expect(mockReplace).toHaveBeenCalledWith("/dashboard");
+  });
+
+  test("EXCON-SEL-05 mode switch refreshes scoped exercise before entering EXCON", async () => {
+    const renderer = await render();
+    await act(async () => buttons(renderer, "mode-excon")[0].props.onPress());
+    expect(mockRefreshExercise).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith("/excon");
+    expect(mockRefreshExercise.mock.invocationCallOrder[0]).toBeLessThan(mockReplace.mock.invocationCallOrder[0]);
   });
 
   test("MODE-WRITER-04 renders only the bounded fail-closed error", async () => {

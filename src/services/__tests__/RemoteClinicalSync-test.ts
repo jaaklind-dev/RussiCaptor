@@ -73,6 +73,18 @@ describe("remote clinical state sync", () => {
     expect(shouldClearRuntimeForRemoteIdentity("WRITER", false)).toBe(false);
   });
 
+  test("EXCON-SEL-04 a missing authored package fails closed instead of showing Botulism", () => {
+    const projection = {
+      ...createSharedExerciseSnapshot(),
+      exercisePackageReference: {
+        packageId: "russicaptor.builder-picker-test153",
+        packageVersion: "1.0.0",
+      },
+    };
+    expect(() => restoreRemoteExerciseIdentity(projection)).toThrow("EXERCISE_PACKAGE_UNAVAILABLE");
+    expect(getExercisePackage(getCanonicalExerciseSnapshot().exerciseId).packageId).toBe(DEFAULT_EXERCISE_PACKAGE.packageId);
+  });
+
   test("a stale same-exercise discovery echo cannot replace a read-ready checkpoint identity", () => {
     expect(shouldPreserveValidatedReaderIdentity("READER", true)).toBe(true);
     expect(shouldPreserveValidatedReaderIdentity("READER", false)).toBe(false);

@@ -26,6 +26,8 @@ describe("WP-NEXT-05 rugged-tablet interaction safety", () => {
   test("pending completion and cloud errors never expose raw backend codes", () => {
     expect(operatorSafeIssueMessage("COMPLETION_FENCED")).toBe("Õppuse lõpetamist ei saanud praegu lõpule viia.");
     expect(cloudSyncSafeIssueMessage("COMPLETION_FENCED")).not.toContain("COMPLETION_FENCED");
+    expect(cloudSyncSafeIssueMessage("ASSIGNED_EXERCISE_PACKAGE_UNAVAILABLE")).toContain("Uuenda rakendust");
+    expect(cloudSyncSafeIssueMessage("ASSIGNED_EXERCISE_UNAVAILABLE")).not.toContain("ASSIGNED_EXERCISE_UNAVAILABLE");
     expect(cloudSyncSafeIssueMessage("MULTIPLE_ACTIVE_EXERCISES:EX-1,EX-2")).not.toContain("EX-1");
     expect(cloudSyncSafeIssueMessage("postgres raw failure")).not.toContain("postgres");
   });

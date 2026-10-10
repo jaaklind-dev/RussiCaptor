@@ -10,7 +10,7 @@ import { notifySync, subscribeToSync } from "@/services/SyncService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { getRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { getRuntimeReaderConvergenceState } from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
-import { exerciseLifecycle, resolveCurrentExercise } from "@/services/exercise/CurrentExerciseSelectionService";
+import { exerciseLifecycle, resolveCurrentExercise, resolveScopedExconExercise } from "@/services/exercise/CurrentExerciseSelectionService";
 import type { CurrentExerciseCandidate } from "@/services/exercise/CurrentExerciseSelectionService";
 import { captureCompletedExerciseArchive } from "@/services/exercise/ExercisePreparationService";
 import {
@@ -40,10 +40,13 @@ import {
 import { getSharedWorkflowHead, observeSharedWorkflowHead, setSharedWorkflowConnectivity, setSharedWorkflowRealtimeLifecycle } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
 import { restoreAuthoritativePatientSharedWorkflowState, type PatientSharedWorkflowState } from "@/services/sharedWorkflow/PatientSharedWorkflowState";
 import { beginCmOwnershipProjectionHydration, completeCmOwnershipProjectionHydration } from "@/services/AssignmentRepository";
-import { getOperatorSession, hasActiveRole, type OperatorSessionState } from "@/services/authorization/OperatorSessionService";
+import { activeScopedExerciseIds, getOperatorSession, hasActiveRole, type OperatorSessionState } from "@/services/authorization/OperatorSessionService";
+import { getSelectedOperatorMode } from "@/services/ui/OperatorModeService";
+import { exercisePackageLoader, exercisePackageRegistry } from "@/services/exercise/ExercisePackageService";
 import {
   canPublishProjectionWithPackageAuthority,
   projectionPackageAuthority,
+  referencedPackageAvailable,
   type ProjectionPackageAuthority,
 } from "@/services/exercise/ExerciseProjectionPackageAuthority";
 import {
@@ -262,11 +265,11 @@ export function getCloudSyncStatus(): CloudSyncStatus {
 export function getCurrentExerciseDiscoveryReadiness(
   currentStatus: CloudSyncStatus = status,
 ): CurrentExerciseDiscoveryReadiness {
-  if (remoteSelectionState === "UNRESOLVED" || currentStatus.state === "connecting") return "PENDING";
-  if (remoteSelectionState === "CONFLICT") return "CONFLICT";
+  if (remoteSelectionState === "CONFLICT" && currentStatus.message?.startsWith("MULTIPLE_ACTIVE_EXERCISES:")) return "CONFLICT";
   if (currentStatus.state === "error" || currentStatus.state === "offline" || currentStatus.state === "disabled") {
     return "UNAVAILABLE";
   }
+  if (remoteSelectionState === "UNRESOLVED" || currentStatus.state === "connecting") return "PENDING";
   return "RESOLVED";
 }
 
@@ -304,6 +307,12 @@ function isSharedExerciseState(value: unknown): value is SharedExerciseState {
 
 function applyRemoteRow(row: ExerciseStateRow): void {
   const localExercise = getCanonicalExerciseSnapshot();
+  if (!isSharedExerciseState(row.state)) return;
+  const reference = row.state.exercisePackageReference;
+  if (!referencedPackageAvailable(reference, (id, version) => exercisePackageRegistry.get(id, version))) {
+    setStatus({ state: "error", message: "ASSIGNED_EXERCISE_PACKAGE_UNAVAILABLE" });
+    return;
+  }
   if (shouldPreservePendingInitialExercise(localExercise.exerciseId, row.exercise_id)) {
     recordSupabaseTraffic({
       operation: "INITIAL_EXERCISE_DISCOVERY_DEFERRED",
@@ -317,7 +326,11 @@ function applyRemoteRow(row: ExerciseStateRow): void {
   const isSameOrOlderTimestamp =
     Boolean(known && row.revision === known.revision && row.updated_at <= known.updatedAt);
 
-  if (!isSharedExerciseState(row.state) || isOlder || isSameOrOlderTimestamp) {
+  const boundPackage = exercisePackageLoader.getBound(row.exercise_id);
+  const bindingMatches = !reference || Boolean(boundPackage &&
+    boundPackage.packageId === reference.packageId && boundPackage.packageVersion === reference.packageVersion);
+  if (isOlder ||
+    (isSameOrOlderTimestamp && localExercise.exerciseId === row.exercise_id && bindingMatches)) {
     return;
   }
 
@@ -440,7 +453,17 @@ async function performRemoteCurrentExerciseRefresh(_trigger: ExerciseDiscoveryRe
       state: discoveryState(row),
       updatedAt: row.updated_at,
     }));
-    const selection = resolveCurrentExercise(candidates);
+    const operator = getOperatorSession();
+    const exconScope = getSelectedOperatorMode() === "EXCON" && operator.state === "AUTHENTICATED"
+      ? activeScopedExerciseIds(operator, "EXCON") : [];
+    const selection = exconScope.length
+      ? resolveScopedExconExercise(candidates, exconScope, explicitlySelectedExerciseId)
+      : resolveCurrentExercise(candidates);
+    if (exconScope.length && selection.status === "NONE") {
+      remoteSelectionState = "UNRESOLVED";
+      setStatus({ state: "error", message: "ASSIGNED_EXERCISE_UNAVAILABLE" });
+      return;
+    }
     if (selection.status === "CONFLICT") {
       conflictingRemoteExercises = selection.candidates.map(candidate => ({ ...candidate }));
       const explicit = explicitlySelectedExerciseId
@@ -459,13 +482,22 @@ async function performRemoteCurrentExerciseRefresh(_trigger: ExerciseDiscoveryRe
       remoteSelectionState = "RESOLVED";
       const discoveryRow = discoveryRows.find(item => item.exercise_id === selection.candidate.exerciseId);
       if (discoveryRow) {
+        const reference = selection.candidate.state.exercisePackageReference;
+        if (!referencedPackageAvailable(reference, (id, version) => exercisePackageRegistry.get(id, version))) {
+          setStatus({ state: "error", message: "ASSIGNED_EXERCISE_PACKAGE_UNAVAILABLE" });
+          return;
+        }
         const lifecycle = exerciseLifecycle(selection.candidate.state);
         if (lifecycle === "RUNNING" || lifecycle === "PAUSED") {
           applyRemoteRow({ exercise_id: discoveryRow.exercise_id, revision: discoveryRow.revision,
             state: selection.candidate.state, updated_at: discoveryRow.updated_at, updated_by: discoveryRow.updated_by });
         } else {
           const known = remoteVersions.get(discoveryRow.exercise_id);
-          if (!shouldFetchTerminalDiscoveryState(discoveryRow, known)) {
+          const bound = exercisePackageLoader.getBound(discoveryRow.exercise_id);
+          const bindingMatches = !reference || Boolean(bound &&
+            bound.packageId === reference.packageId && bound.packageVersion === reference.packageVersion);
+          if (!shouldFetchTerminalDiscoveryState(discoveryRow, known) &&
+            getCanonicalExerciseSnapshot().exerciseId === discoveryRow.exercise_id && bindingMatches) {
             latestRemoteExercise = {
               exerciseId: discoveryRow.exercise_id,
               lifecycleState: lifecycle,
@@ -498,25 +530,38 @@ export function refreshRemoteCurrentExercise(trigger: ExerciseDiscoveryRefreshTr
 }
 
 /** Explicitly resolves a previously discovered authoritative conflict. */
-export function selectConflictingRemoteExercise(exerciseId: string): boolean {
+export async function selectConflictingRemoteExercise(exerciseId: string): Promise<boolean> {
   if (remoteSelectionState !== "CONFLICT") return false;
   const selected = conflictingRemoteExercises.find(candidate => candidate.exerciseId === exerciseId);
   if (!selected) return false;
-  remoteSelectionState = "RESOLVED";
-  explicitlySelectedExerciseId = exerciseId;
-  conflictingRemoteExercises = [];
   const lifecycle = exerciseLifecycle(selected.state);
   if (lifecycle === "RUNNING" || lifecycle === "PAUSED") {
     applyRemoteRow({ exercise_id: selected.exerciseId, revision: selected.revision,
       state: selected.state, updated_at: selected.updatedAt, updated_by: "remote-conflict-selection" });
   } else {
-    void supabase?.from("exercise_states").select("exercise_id,revision,state,updated_at,updated_by")
-      .eq("exercise_id", selected.exerciseId).single().then(({data,error})=>{
-        recordSupabaseTraffic({operation:"SELECT",endpoint:"exercise_states.conflict_selected_full_state",data,fullSnapshot:true});
-        if(error){setStatus({state:"error",message:error.message});return;}
-        applyRemoteRow(data as ExerciseStateRow);
-      });
+    if (!supabase) return false;
+    const { data, error } = await supabase.from("exercise_states")
+      .select("exercise_id,revision,state,updated_at,updated_by")
+      .eq("exercise_id", selected.exerciseId).single();
+    recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.conflict_selected_full_state", data, fullSnapshot: true });
+    if (error || !data || data.exercise_id !== exerciseId) {
+      setStatus({ state: "error", message: "ASSIGNED_EXERCISE_UNAVAILABLE" });
+      return false;
+    }
+    applyRemoteRow(data as ExerciseStateRow);
   }
+  if (status.state === "error" && status.message?.startsWith("MULTIPLE_ACTIVE_EXERCISES:") &&
+    getCanonicalExerciseSnapshot().exerciseId === exerciseId) {
+    const reference = selected.state.exercisePackageReference;
+    const bound = exercisePackageLoader.getBound(exerciseId);
+    if (reference && bound?.packageId === reference.packageId && bound.packageVersion === reference.packageVersion) {
+      setStatus({ state: "synced", syncedAt: selected.updatedAt });
+    }
+  }
+  if (status.state === "error" || getCanonicalExerciseSnapshot().exerciseId !== exerciseId) return false;
+  remoteSelectionState = "RESOLVED";
+  explicitlySelectedExerciseId = exerciseId;
+  conflictingRemoteExercises = [];
   return true;
 }
 

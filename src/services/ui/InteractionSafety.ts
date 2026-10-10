@@ -38,6 +38,12 @@ export function operatorSafeIssueMessage(code?: string): string {
 }
 
 export function cloudSyncSafeIssueMessage(message?: string): string {
+  if (message === "ASSIGNED_EXERCISE_PACKAGE_UNAVAILABLE" || message === "EXERCISE_PACKAGE_UNAVAILABLE") {
+    return "Määratud õppuse pakett pole selles rakenduse versioonis saadaval. Uuenda rakendust.";
+  }
+  if (message === "ASSIGNED_EXERCISE_UNAVAILABLE") {
+    return "Määratud õppust ei leitud. Värskenda õppuste loendit või võta ühendust administraatoriga.";
+  }
   if (message?.startsWith("MULTIPLE_ACTIVE_EXERCISES:")) {
     return "Mitme aktiivse õppuse konflikt vajab lahendamist.";
   }

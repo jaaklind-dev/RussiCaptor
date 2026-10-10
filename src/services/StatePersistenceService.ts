@@ -220,6 +220,7 @@ function restoreExerciseIdentity(restored: SharedExerciseState, restoreArchives 
   const session = restored.exerciseSession; const exerciseId = session.exerciseId;
   const reference = restored.exercisePackageReference;
   const pkg = reference ? exercisePackageRegistry.get(reference.packageId, reference.packageVersion) : undefined;
+  if (reference && !pkg) throw new Error("EXERCISE_PACKAGE_UNAVAILABLE");
   installCurrentExercise(exerciseId, pkg?.metadata.name ?? exerciseId, pkg);
   restoreExerciseSession(session);
   if (restoreArchives) restoreCompletedExerciseArchives(restored.completedExerciseArchives ?? []);

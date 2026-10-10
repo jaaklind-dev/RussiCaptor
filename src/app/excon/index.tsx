@@ -66,7 +66,7 @@ function AuthorizedExconScreen() {
       </Pressable>
 
       <Pressable style={styles.catalogButton} onPress={() => router.push("/excon/catalog")}>
-        <Text style={styles.instructorButtonText}>Ava õppuste kataloog</Text>
+        <Text style={styles.instructorButtonText}>Uue õppuse pakettide kataloog</Text>
       </Pressable>
 
       <ExerciseStatusCard snapshot={snapshot} />

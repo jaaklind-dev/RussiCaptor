@@ -2,6 +2,18 @@ import type { ExerciseControlCommand } from "@/models/exercise/ExerciseControlCo
 import { prepareExerciseControlSubmission } from "../ExerciseControlSubmission";
 
 describe("WP-45C1 Complete terminal convergence", () => {
+  test("EXCON-SEL-10 Start command carries the exact selected exercise instance", () => {
+    const create = jest.fn(input => ({ commandId: "START-ONE", exerciseId: input.exerciseId,
+      commandType: input.commandType, expectedVersion: input.expectedVersion } as ExerciseControlCommand));
+    const handle = jest.fn(() => ({ ok: true as const } as never));
+    const submit = prepareExerciseControlSubmission("START_EXERCISE", undefined, {
+      snapshot: () => ({ exerciseId: "EX-BUILDER", lifecycleState: "READY", simulationTimeSec: 0,
+        speed: 1, version: 1 }), create, handle,
+    });
+    submit();
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ exerciseId: "EX-BUILDER", commandType: "START_EXERCISE" }));
+    expect(handle).toHaveBeenCalledWith(expect.objectContaining({ exerciseId: "EX-BUILDER" }));
+  });
   test("one confirmed Complete intent reuses one commandId across duplicate callback delivery", () => {
     const created: ExerciseControlCommand = {
       commandId: "COMPLETE-ONE",

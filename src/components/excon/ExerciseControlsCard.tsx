@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { SingleFlightActionGate } from "@/services/ui/InteractionSafety";
 import { traceRuntimeCompletionAuthority } from "@/services/RuntimeCheckpointSyncService";
 import { traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { getCurrentExerciseDiscoveryReadiness } from "@/services/CloudSyncService";
 
 const SPEEDS: readonly CanonicalExerciseSpeed[] = [1, 2, 4];
 export function getExerciseControlAvailability(state: CanonicalExerciseSnapshot["lifecycleState"]) {
@@ -34,7 +36,14 @@ export default function ExerciseControlsCard({ snapshot, onApplied, awaitingTerm
     else onApplied?.();
     }).finally(() => setPending(false));
   };
-  const issue = (commandType: ExerciseControlCommandType, speed?: CanonicalExerciseSpeed) => apply(prepareExerciseControlSubmission(commandType, speed));
+  const issue = (commandType: ExerciseControlCommandType, speed?: CanonicalExerciseSpeed) => {
+    if (getCurrentExerciseDiscoveryReadiness() !== "RESOLVED" ||
+      getCanonicalExerciseSnapshot().exerciseId !== snapshot.exerciseId) {
+      Alert.alert("Õppus pole valmis", "Valitud õppuse andmeid tuleb enne toimingut uuendada.");
+      return;
+    }
+    apply(prepareExerciseControlSubmission(commandType, speed));
+  };
   const confirmComplete = () => {
     traceRuntimeLeaseLifecycle("COMPLETE_TOUCH_RECEIVED", { detail: {} });
     void traceRuntimeCompletionAuthority("TOUCH_RECEIVED");
@@ -51,7 +60,7 @@ export default function ExerciseControlsCard({ snapshot, onApplied, awaitingTerm
   return <View style={styles.card}>
     <Text style={styles.title}>Õppuse juhtimine</Text>
     <View style={styles.row}>
-      <Pressable accessibilityState={{ busy: controlsPending }} disabled={controlsPending || !action.enabled} style={[styles.button, (controlsPending || !action.enabled) && styles.disabled]} onPress={() => issue(action.type)}><Text style={styles.buttonText}>{awaitingTerminalAck ? "Lõpetamine…" : pending ? "Töötlen…" : action.label}</Text></Pressable>
+      <Pressable testID={`exercise-control-${action.type}-${snapshot.exerciseId}`} accessibilityLabel={`${action.label} · ${snapshot.exerciseId}`} accessibilityState={{ busy: controlsPending }} disabled={controlsPending || !action.enabled} style={[styles.button, (controlsPending || !action.enabled) && styles.disabled]} onPress={() => issue(action.type)}><Text style={styles.buttonText}>{awaitingTerminalAck ? "Lõpetamine…" : pending ? "Töötlen…" : action.label}</Text></Pressable>
       <Pressable disabled={controlsPending || !enabled.complete} style={[styles.complete, (controlsPending || !enabled.complete) && styles.disabled]} onPress={confirmComplete}><Text style={styles.buttonText}>✓ Lõpeta õppus</Text></Pressable>
     </View>
     <Text style={styles.label}>Simulatsiooni kiirus</Text>
