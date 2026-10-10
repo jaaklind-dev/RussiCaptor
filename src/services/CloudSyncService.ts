@@ -39,7 +39,8 @@ import {
 } from "@/services/exercise/ExerciseProjectionWriteCoordinator";
 import { getSharedWorkflowHead, observeSharedWorkflowHead, setSharedWorkflowConnectivity, setSharedWorkflowRealtimeLifecycle } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
 import { restoreAuthoritativePatientSharedWorkflowState, type PatientSharedWorkflowState } from "@/services/sharedWorkflow/PatientSharedWorkflowState";
-import { beginCmOwnershipProjectionHydration, completeCmOwnershipProjectionHydration } from "@/services/AssignmentRepository";
+import { beginCmOwnershipProjectionHydration, completeCmOwnershipProjectionHydration,
+  setCmOwnershipProjectionRefresh, type CmOwnershipRefreshResult } from "@/services/AssignmentRepository";
 import { activeScopedExerciseIds, getOperatorAuthSessionGeneration, getOperatorSession, hasActiveRole, type OperatorSessionState } from "@/services/authorization/OperatorSessionService";
 import { getSelectedOperatorMode } from "@/services/ui/OperatorModeService";
 import { exercisePackageLoader, exercisePackageRegistry } from "@/services/exercise/ExercisePackageService";
@@ -378,27 +379,57 @@ function applyRemoteRow(row: ExerciseStateRow): void {
   setStatus({ state: "synced", syncedAt: row.updated_at });
 }
 
-async function refreshSharedWorkflowPatients(cloudClient: NonNullable<typeof supabase>): Promise<boolean> {
-  if (remoteSelectionState !== "RESOLVED") return false;
-  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
-  beginCmOwnershipProjectionHydration(exerciseId);
-  const { data, error } = await cloudClient.from("shared_workflow_patient_states")
-    .select("exercise_id,patient_id,revision,owner_user_id,state")
-    .eq("exercise_id", exerciseId);
-  recordSupabaseTraffic({ operation: "SELECT", endpoint: "shared_workflow.patient_heads", data });
-  if (error || !data) return false;
-  for (const candidate of data) {
-    const authoritative = candidate as {exercise_id:string;patient_id:string;revision:number;owner_user_id?:string;state:PatientSharedWorkflowState};
-    const known = getSharedWorkflowHead(authoritative.exercise_id, authoritative.patient_id);
-    if (authoritative.revision < known.revision) continue;
-    if (!restoreAuthoritativePatientSharedWorkflowState({exerciseId:authoritative.exercise_id,patientId:authoritative.patient_id,
-      revision:authoritative.revision,ownerUserId:authoritative.owner_user_id,state:authoritative.state,
-      preserveCanonicalRuntime:sharedWorkflowHydrationMustPreserveCanonicalRuntime(authoritative.exercise_id)})) return false;
-    observeSharedWorkflowHead(authoritative.exercise_id,authoritative.patient_id,authoritative.revision,authoritative.owner_user_id);
+let cloudSyncSessionGeneration = 0;
+let ownershipRefreshFlight: Promise<CmOwnershipRefreshResult> | undefined;
+let ownershipRefreshExerciseId: string | undefined;
+
+function refreshSharedWorkflowPatients(
+  cloudClient: NonNullable<typeof supabase>, sessionGeneration: number,
+): Promise<CmOwnershipRefreshResult> {
+  if (remoteSelectionState !== "RESOLVED" || sessionGeneration !== cloudSyncSessionGeneration) {
+    return Promise.resolve("UNAVAILABLE");
   }
-  completeCmOwnershipProjectionHydration(exerciseId);
-  notifySync("remote");
-  return true;
+  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  if (ownershipRefreshFlight && ownershipRefreshExerciseId === exerciseId) return ownershipRefreshFlight;
+  const current = async (): Promise<CmOwnershipRefreshResult> => {
+    beginCmOwnershipProjectionHydration(exerciseId);
+    try {
+      const { data, error, status } = await cloudClient.from("shared_workflow_patient_states")
+        .select("exercise_id,patient_id,revision,owner_user_id,state")
+        .eq("exercise_id", exerciseId);
+      if (sessionGeneration !== cloudSyncSessionGeneration || getCanonicalExerciseSnapshot().exerciseId !== exerciseId) {
+        return "UNAVAILABLE";
+      }
+      recordSupabaseTraffic({ operation: "SELECT", endpoint: "shared_workflow.patient_heads", data });
+      if (error || !data) {
+        if (status === 401 || status === 403) return "AUTHORIZATION_DENIED";
+        return status === 0 ? "NETWORK_UNAVAILABLE" : "UNAVAILABLE";
+      }
+      for (const candidate of data) {
+        const authoritative = candidate as {exercise_id:string;patient_id:string;revision:number;owner_user_id?:string;state:PatientSharedWorkflowState};
+        if (authoritative.exercise_id !== exerciseId) return "UNAVAILABLE";
+        const known = getSharedWorkflowHead(authoritative.exercise_id, authoritative.patient_id);
+        if (authoritative.revision < known.revision) continue;
+        if (!restoreAuthoritativePatientSharedWorkflowState({exerciseId:authoritative.exercise_id,patientId:authoritative.patient_id,
+          revision:authoritative.revision,ownerUserId:authoritative.owner_user_id,state:authoritative.state,
+          preserveCanonicalRuntime:sharedWorkflowHydrationMustPreserveCanonicalRuntime(authoritative.exercise_id)})) return "UNAVAILABLE";
+        observeSharedWorkflowHead(authoritative.exercise_id,authoritative.patient_id,authoritative.revision,authoritative.owner_user_id);
+      }
+      if (!completeCmOwnershipProjectionHydration(exerciseId)) return "UNAVAILABLE";
+      notifySync("remote");
+      return "READY";
+    } catch {
+      return "UNAVAILABLE";
+    }
+  };
+  const flight = current();
+  ownershipRefreshFlight = flight;
+  ownershipRefreshExerciseId = exerciseId;
+  void flight.finally(() => { if (ownershipRefreshFlight === flight) {
+    ownershipRefreshFlight = undefined;
+    ownershipRefreshExerciseId = undefined;
+  } });
+  return flight;
 }
 
 export function sharedWorkflowHydrationMustPreserveCanonicalRuntime(exerciseId: string): boolean {
@@ -1036,6 +1067,10 @@ export async function startCloudSync(): Promise<() => void> {
     return () => {};
   }
   const cloudClient = supabase;
+  const sessionGeneration = ++cloudSyncSessionGeneration;
+  ownershipRefreshFlight = undefined;
+  ownershipRefreshExerciseId = undefined;
+  setCmOwnershipProjectionRefresh(undefined);
 
   setStatus({ state: "connecting" });
   setSharedWorkflowConnectivity(false);
@@ -1066,6 +1101,14 @@ export async function startCloudSync(): Promise<() => void> {
   if (authData.user) await migratePendingCompletedExerciseArchives(authData.user.id);
 
   await refreshRemoteCurrentExercise("startup");
+  if (sessionGeneration !== cloudSyncSessionGeneration) return () => {};
+  setCmOwnershipProjectionRefresh(async exerciseId => {
+    if (sessionGeneration !== cloudSyncSessionGeneration ||
+      exerciseId !== getCanonicalExerciseSnapshot().exerciseId) return "UNAVAILABLE";
+    const result = await refreshSharedWorkflowPatients(cloudClient, sessionGeneration);
+    if (sessionGeneration === cloudSyncSessionGeneration) setSharedWorkflowConnectivity(result === "READY");
+    return result;
+  });
 
   // Never subscribe to exercise_states: Postgres Changes would transfer its
   // complete state JSON. This payload-free channel is connectivity-only; a
@@ -1110,7 +1153,9 @@ export async function startCloudSync(): Promise<() => void> {
       if(channelStatus!=="SUBSCRIBED"){setSharedWorkflowConnectivity(false);return;}
       // Subscribe first, then hydrate. This ordering closes the startup window:
       // an update racing with hydration is either in the result or notified.
-      void refreshSharedWorkflowPatients(cloudClient).then(hydrated=>setSharedWorkflowConnectivity(hydrated));
+      void refreshSharedWorkflowPatients(cloudClient, sessionGeneration).then(result=>{
+        if (sessionGeneration === cloudSyncSessionGeneration) setSharedWorkflowConnectivity(result === "READY");
+      });
     });
   stopSharedWorkflowRealtime=()=>{setSharedWorkflowRealtimeLifecycle("CLOSED");setSharedWorkflowConnectivity(false);void cloudClient.removeChannel(workflowChannel);};
 
@@ -1125,7 +1170,9 @@ export async function startCloudSync(): Promise<() => void> {
     if (returnedToForeground) {
       recordSupabaseTraffic({ operation: "DISCOVERY_FOREGROUND_INVALIDATION", endpoint: "exercise_states.discovery_foreground" });
       void refreshRemoteCurrentExercise("foreground").then(() =>
-        refreshSharedWorkflowPatients(cloudClient).then(hydrated=>setSharedWorkflowConnectivity(hydrated)));
+        refreshSharedWorkflowPatients(cloudClient, sessionGeneration).then(result=>{
+          if (sessionGeneration === cloudSyncSessionGeneration) setSharedWorkflowConnectivity(result === "READY");
+        }));
       scheduleCloudSave();
     } else if (nextState !== "active") {
       void projectionWriteCoordinator.flush();
@@ -1147,6 +1194,12 @@ export async function startCloudSync(): Promise<() => void> {
   });
 
   return () => {
+    if (sessionGeneration === cloudSyncSessionGeneration) {
+      cloudSyncSessionGeneration += 1;
+      setCmOwnershipProjectionRefresh(undefined);
+      ownershipRefreshFlight = undefined;
+      ownershipRefreshExerciseId = undefined;
+    }
     projectionWriteCoordinator.reset();
     stopLocalSubscription?.();
     stopLocalSubscription = undefined;

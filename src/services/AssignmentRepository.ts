@@ -33,6 +33,15 @@ const authoritativeOwnership = new Map<string, AuthoritativeOwnershipProjection>
 let managedOwnershipExerciseId: string | undefined;
 let ownershipProjectionReady = true;
 
+export type CmOwnershipRefreshResult = "READY" | "NETWORK_UNAVAILABLE" | "AUTHORIZATION_DENIED" | "UNAVAILABLE";
+let refreshCmOwnershipProjection: ((exerciseId: string) => Promise<CmOwnershipRefreshResult>) | undefined;
+
+export function setCmOwnershipProjectionRefresh(
+  refresh: ((exerciseId: string) => Promise<CmOwnershipRefreshResult>) | undefined,
+): void {
+  refreshCmOwnershipProjection = refresh;
+}
+
 const ownershipKey = (exerciseId: string, patientId: string): string => `${exerciseId}\u0000${patientId}`;
 
 function isPatientAssignment(value: unknown, patientId: string): value is PatientAssignment {
@@ -178,17 +187,35 @@ export function assignPatientToMe(patientId: string): AssignmentResult {
   return assignPatient(patientId, getCurrentCaseManager());
 }
 
-export function assignPatientToMeConflictSafe(patientId:string){
+export async function assignPatientToMeConflictSafe(patientId:string){
   const operator=getCurrentCaseManager();
-  const existing=getPatientAssignment(patientId);
+  let existing=getPatientAssignment(patientId);
   const exerciseId=getCanonicalExerciseSnapshot().exerciseId;
-  const head=getSharedWorkflowHead(exerciseId,patientId);
-  const ownership=classifyCurrentCmPatientOwnership(patientId);
-  if(ownership==="UNRESOLVED")return Promise.resolve(Object.freeze({
+  let head=getSharedWorkflowHead(exerciseId,patientId);
+  let ownership=classifyCurrentCmPatientOwnership(patientId);
+  let refreshResult: CmOwnershipRefreshResult = "UNAVAILABLE";
+  if(ownership==="UNRESOLVED" && refreshCmOwnershipProjection){
+    // One read-only canonical refresh; never infer ownership from local state.
+    refreshResult=await refreshCmOwnershipProjection(exerciseId);
+    if(getCanonicalExerciseSnapshot().exerciseId!==exerciseId || getCurrentCaseManager().id!==operator.id){
+      return Object.freeze({result:Object.freeze({status:"RECONNECT_REQUIRED" as const,revision:head.revision,
+        ownerUserId:head.ownerUserId}),value:undefined,message:"Patsiendi vastutuse seanss muutus. Ava õppus uuesti."});
+    }
+    if(refreshResult==="AUTHORIZATION_DENIED")return Object.freeze({
+      result:Object.freeze({status:"AUTHORIZATION_DENIED" as const,revision:head.revision,
+        ownerUserId:head.ownerUserId}),value:undefined,
+      message:"Sul puudub selle õppuse patsiendi määramise õigus.",
+    });
+    existing=getPatientAssignment(patientId);
+    head=getSharedWorkflowHead(exerciseId,patientId);
+    ownership=classifyCurrentCmPatientOwnership(patientId);
+  }
+  if(ownership==="UNRESOLVED")return Object.freeze({
     result:Object.freeze({status:"RECONNECT_REQUIRED" as const,revision:head.revision,ownerUserId:head.ownerUserId}),
     value:undefined,
-    message:"Patsiendi vastutuse kinnitamiseks taasta võrguühendus.",
-  }));
+    message:refreshResult==="NETWORK_UNAVAILABLE"?"Patsiendi vastutuse kinnitamiseks taasta võrguühendus.":
+      "Patsiendi vastutuse andmed ei ole veel valmis. Värskenda vaade ja proovi uuesti.",
+  });
   if(ownership==="SELF"){
     if(!existing||existing.endedAt||existing.caseManagerId!==operator.id)return Promise.resolve(Object.freeze({
       result:Object.freeze({status:"RECONNECT_REQUIRED" as const,revision:head.revision,ownerUserId:head.ownerUserId}),
