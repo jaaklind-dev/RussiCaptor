@@ -5,11 +5,12 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import RoleModeSwitcher from "@/components/RoleModeSwitcher";
 import { useOperatorMode } from "@/hooks/useOperatorMode";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
-import { exercisePackageIdLabel, publicErrorMessage } from "@/localization/et";
+import { exercisePackageIdLabel } from "@/localization/et";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { refreshOperatorSession } from "@/services/authorization/OperatorSessionService";
 import {
-  continueSelectedActiveExercise,
+  continueAssignedActiveExercise,
+  assignedExerciseSelectionMessage,
   refreshActiveExerciseConflict,
   type ActiveExerciseConflictDetail,
 } from "@/services/exercise/ActiveExerciseConflictResolutionService";
@@ -50,13 +51,11 @@ export default function ModeSelectionScreen() {
     if (!selected || selected.mode === "ADMIN" || pending) return;
     setPending(exerciseId); setError(undefined);
     try {
-      if (current.exerciseId !== exerciseId) {
-        const result = await continueSelectedActiveExercise(exerciseId);
-        if (!result.ok) throw new Error(result.code ?? "EXERCISE_SELECTION_FAILED");
-      }
+      const result = await continueAssignedActiveExercise(exerciseId, selected.mode);
+      if (!result.ok) throw new Error(result.code ?? "EXERCISE_SELECTION_FAILED");
       router.replace(selected.mode === "CM" ? "/dashboard" : "/excon");
     } catch (cause) {
-      setError(publicErrorMessage(cause, "Õppuse valimine ei õnnestunud. Värskenda õigusi ja proovi uuesti."));
+      setError(assignedExerciseSelectionMessage(cause instanceof Error ? cause.message : undefined));
     } finally { setPending(undefined); }
   };
 

@@ -37,6 +37,12 @@ describe("WP-EGRESS-05 CloudSync discovery integration", () => {
     expect(source).toContain("shouldFetchTerminalDiscoveryState");
   });
 
+  test("CM-SEL-01 restored CM discovery is assignment-aware like EXCON", () => {
+    expect(source).toContain('selectedMode === "CM" || selectedMode === "EXCON"');
+    expect(source).toContain("activeScopedExerciseIds(operator, operationalMode)");
+    expect(source).toContain("resolveScopedOperatorExercise(candidates, assignedScope, explicitlySelectedExerciseId)");
+  });
+
   test("restart tears down the previous timer, connectivity channel and AppState listener", () => {
     const start = source.slice(source.indexOf("export async function startCloudSync"));
     expect(start.indexOf("clearInterval(remotePollTimer)")).toBeLessThan(start.indexOf("remotePollTimer = setInterval"));

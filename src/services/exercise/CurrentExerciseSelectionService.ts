@@ -56,8 +56,8 @@ export function resolveCurrentExercise(candidates: readonly CurrentExerciseCandi
     : Object.freeze({ status: "NONE" });
 }
 
-/** Scope the EXCON choice to exercise instances, never to a package or recency. */
-export function resolveScopedExconExercise(
+/** Scope a CM/EXCON choice to assigned exercise instances, never package recency. */
+export function resolveScopedOperatorExercise(
   candidates: readonly CurrentExerciseCandidate[],
   assignedExerciseIds: readonly string[],
   explicitlySelectedExerciseId?: string,
@@ -76,3 +76,5 @@ export function resolveScopedExconExercise(
     exerciseIds: Object.freeze(ordered.map(candidate => candidate.exerciseId)),
     candidates: Object.freeze(ordered) });
 }
+
+export const resolveScopedExconExercise = resolveScopedOperatorExercise;

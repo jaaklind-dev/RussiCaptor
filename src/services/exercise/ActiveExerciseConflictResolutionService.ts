@@ -1,6 +1,6 @@
 import type { CurrentExerciseCandidate } from "./CurrentExerciseSelectionService";
 import { exerciseLifecycle } from "./CurrentExerciseSelectionService";
-import { getConflictingRemoteExercises, publishExplicitlySelectedTerminalExercise, refreshRemoteCurrentExercise, selectConflictingRemoteExercise } from "@/services/CloudSyncService";
+import { getConflictingRemoteExercises, publishExplicitlySelectedTerminalExercise, refreshRemoteCurrentExercise, selectAssignedRemoteExercise, selectConflictingRemoteExercise } from "@/services/CloudSyncService";
 import { terminateExerciseWithMissingRuntime } from "@/services/ExerciseRuntimeRecoveryFoundationService";
 import { startRuntimeCheckpointSync } from "@/services/RuntimeCheckpointSyncService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
@@ -44,6 +44,37 @@ export async function continueSelectedActiveExercise(exerciseId:string):Promise<
     await publishExplicitlySelectedTerminalExercise();
     return Object.freeze({ok:true});
   }catch(error){return Object.freeze({ok:false,code:error instanceof Error?error.message:"AUTHORITY_START_FAILED"});}
+}
+
+/** Mode selection always re-reads the exact authorized exercise, even without a discovery conflict. */
+export async function continueAssignedActiveExercise(exerciseId: string, role: "CM" | "EXCON"):
+Promise<Readonly<{ ok: boolean; code?: string }>> {
+  const selected = await selectAssignedRemoteExercise(exerciseId, role);
+  if (!selected.ok) return selected;
+  if (getCanonicalExerciseSnapshot().exerciseId !== exerciseId) {
+    return { ok: false, code: "EXERCISE_IDENTITY_MISMATCH" };
+  }
+  try {
+    await startRuntimeCheckpointSync();
+    if (getCanonicalExerciseSnapshot().exerciseId !== exerciseId) {
+      return { ok: false, code: "EXERCISE_IDENTITY_MISMATCH" };
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, code: error instanceof Error ? error.message : "AUTHORITY_START_FAILED" };
+  }
+}
+
+export function assignedExerciseSelectionMessage(code?: string): string {
+  switch (code) {
+    case "ASSIGNMENT_MISSING": return "Selle õppuse aktiivne roll puudub. Värskenda õigusi.";
+    case "EXERCISE_UNAVAILABLE": return "Määratud õppust ei leitud või sellele puudub ligipääs.";
+    case "EXERCISE_SELECTION_UNAVAILABLE": return "Õppuse laadimine ebaõnnestus. Kontrolli ühendust ja proovi uuesti.";
+    case "EXERCISE_IDENTITY_MISMATCH": return "Õppuse identiteeti ei saanud kinnitada.";
+    case "EXERCISE_PACKAGE_UNAVAILABLE": return "Õppuse pakett pole selles seadmes saadaval.";
+    case "EXERCISE_TERMINAL": return "See õppus on juba lõpetatud.";
+    default: return "Õppuse valimine ei õnnestunud. Värskenda õigusi ja proovi uuesti.";
+  }
 }
 
 export async function recoverSelectedBrokenExercise(exerciseId:string,expectedVersion:number){const result=await terminateExerciseWithMissingRuntime(exerciseId,expectedVersion);await refreshRemoteCurrentExercise();return result;}

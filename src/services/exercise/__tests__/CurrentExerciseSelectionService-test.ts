@@ -1,4 +1,4 @@
-import { resolveCurrentExercise, resolveScopedExconExercise, type CurrentExerciseCandidate } from "../CurrentExerciseSelectionService";
+import { resolveCurrentExercise, resolveScopedExconExercise, resolveScopedOperatorExercise, type CurrentExerciseCandidate } from "../CurrentExerciseSelectionService";
 
 function candidate(exerciseId: string, lifecycleState: "READY" | "RUNNING" | "PAUSED" | "COMPLETED", updatedAt: string): CurrentExerciseCandidate {
   return {
@@ -66,4 +66,11 @@ describe("assignment-scoped EXCON exercise selection", () => {
   test("missing assigned instance fails closed instead of choosing a demo or unrelated READY row", () => {
     expect(resolveScopedExconExercise([other], [builder.exerciseId])).toEqual({ status: "NONE" });
   });
+});
+
+test("CM-SEL-01 discovery uses the assigned instance despite another newer active exercise", () => {
+  const assigned = candidate("EX-CM", "PAUSED", "2026-10-09T16:36:19Z");
+  const unrelated = candidate("EX-DEMO", "READY", "2026-10-10T10:00:00Z");
+  expect(resolveScopedOperatorExercise([unrelated, assigned], [assigned.exerciseId]))
+    .toMatchObject({ status: "SELECTED", candidate: { exerciseId: assigned.exerciseId } });
 });

@@ -1,18 +1,19 @@
 let mockCanonicalExerciseId="STALE-LOCAL";
 const mockSelectExercise=jest.fn((exerciseId:string)=>{mockCanonicalExerciseId=exerciseId;return true;});
+const mockSelectAssigned=jest.fn(async(exerciseId:string,_role:string):Promise<{ok:boolean;code?:string}>=>{mockCanonicalExerciseId=exerciseId;return {ok:true};});
 const mockStartRuntime=jest.fn(async()=>()=>{});
 const mockPublishTerminal=jest.fn(async()=>false);
-jest.mock("@/services/CloudSyncService",()=>({getConflictingRemoteExercises:()=>[],publishExplicitlySelectedTerminalExercise:()=>mockPublishTerminal(),refreshRemoteCurrentExercise:jest.fn(),selectConflictingRemoteExercise:(id:string)=>mockSelectExercise(id)}));
+jest.mock("@/services/CloudSyncService",()=>({getConflictingRemoteExercises:()=>[],publishExplicitlySelectedTerminalExercise:()=>mockPublishTerminal(),refreshRemoteCurrentExercise:jest.fn(),selectConflictingRemoteExercise:(id:string)=>mockSelectExercise(id),selectAssignedRemoteExercise:(id:string,role:string)=>mockSelectAssigned(id,role)}));
 jest.mock("@/services/ExerciseRuntimeRecoveryFoundationService",()=>({terminateExerciseWithMissingRuntime:jest.fn()}));
 jest.mock("@/services/RuntimeCheckpointSyncService",()=>({startRuntimeCheckpointSync:()=>mockStartRuntime()}));
 jest.mock("@/repositories/ExerciseSessionRepository",()=>({getCanonicalExerciseSnapshot:()=>({exerciseId:mockCanonicalExerciseId})}));
 jest.mock("@/services/SupabaseService",()=>({supabase:undefined}));
 
 // eslint-disable-next-line import/first
-import { continueSelectedActiveExercise } from "../ActiveExerciseConflictResolutionService";
+import { assignedExerciseSelectionMessage, continueAssignedActiveExercise, continueSelectedActiveExercise } from "../ActiveExerciseConflictResolutionService";
 
 describe("explicit active exercise conflict selection",()=>{
-  beforeEach(()=>{mockCanonicalExerciseId="STALE-LOCAL";mockSelectExercise.mockClear();mockStartRuntime.mockClear();mockPublishTerminal.mockClear();});
+  beforeEach(()=>{mockCanonicalExerciseId="STALE-LOCAL";mockSelectExercise.mockClear();mockSelectAssigned.mockReset().mockImplementation(async(id:string)=>{mockCanonicalExerciseId=id;return {ok:true};});mockStartRuntime.mockClear();mockPublishTerminal.mockClear();});
   test("does not acquire writer before explicit selection",()=>expect(mockStartRuntime).not.toHaveBeenCalled());
   test("only the explicitly selected exercise reaches Runtime authority startup and terminal reconciliation",async()=>{await expect(continueSelectedActiveExercise("REMOTE-B")).resolves.toEqual({ok:true});expect(mockSelectExercise).toHaveBeenCalledWith("REMOTE-B");expect(mockStartRuntime).toHaveBeenCalledTimes(1);expect(mockPublishTerminal).toHaveBeenCalledTimes(1);expect(mockCanonicalExerciseId).toBe("REMOTE-B");});
   test("failed selection never starts Runtime",async()=>{mockSelectExercise.mockImplementationOnce(()=>false);await expect(continueSelectedActiveExercise("NOT-LISTED")).resolves.toEqual({ok:false,code:"EXERCISE_NOT_IN_CURRENT_CONFLICT"});expect(mockStartRuntime).not.toHaveBeenCalled();});
@@ -26,5 +27,21 @@ describe("explicit active exercise conflict selection",()=>{
     release?.();
     await expect(pending).resolves.toEqual({ok:true});
     expect(mockStartRuntime).toHaveBeenCalledTimes(1);
+  });
+  test("CM-SEL-01 restored assignment selects the exact instance before reader startup", async()=>{
+    await expect(continueAssignedActiveExercise("REMOTE-B","CM")).resolves.toEqual({ok:true});
+    expect(mockSelectAssigned).toHaveBeenCalledWith("REMOTE-B","CM");
+    expect(mockStartRuntime).toHaveBeenCalledTimes(1);
+    expect(mockPublishTerminal).not.toHaveBeenCalled();
+  });
+  test("CM-SEL-05 assignment denial never starts Runtime", async()=>{
+    mockSelectAssigned.mockResolvedValueOnce({ok:false,code:"ASSIGNMENT_MISSING"});
+    await expect(continueAssignedActiveExercise("REMOTE-B","CM"))
+      .resolves.toEqual({ok:false,code:"ASSIGNMENT_MISSING"});
+    expect(mockStartRuntime).not.toHaveBeenCalled();
+  });
+  test("CM-SEL-06/07 bounded messages distinguish absence from retryable read failure",()=>{
+    expect(assignedExerciseSelectionMessage("EXERCISE_UNAVAILABLE")).toContain("ei leitud");
+    expect(assignedExerciseSelectionMessage("EXERCISE_SELECTION_UNAVAILABLE")).toContain("proovi uuesti");
   });
 });

@@ -39,6 +39,8 @@ export function subscribeOperatorSession(listener: () => void): () => void {
 }
 
 export function getOperatorSession(): OperatorSessionState { return snapshot; }
+/** Non-secret generation used to reject a selection result from an obsolete auth session. */
+export function getOperatorAuthSessionGeneration(): number { return authSessionGeneration; }
 
 export function activeAssignments(assignments: readonly RoleAssignment[], now = new Date().toISOString()): readonly RoleAssignment[] {
   return assignments.filter(item => item.status === "ACTIVE" && (!item.expiresAt || item.expiresAt > now));
