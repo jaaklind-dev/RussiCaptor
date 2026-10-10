@@ -1,5 +1,7 @@
 import { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
 import { packagePatientDatasetRegistry } from "@/services/exercise/CanonicalPatientDatasets";
+import { getRegisteredImagingAsset } from "@/services/imaging/ImagingAssetRegistry";
+import { createCanonicalBaselineRuntimeFixture } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
 
 const setup = () => {
   const record = packagePatientDatasetRegistry.resolve("patients.narva-iro-evacuation.v2").patients[0];
@@ -12,6 +14,30 @@ const definition = (patientId: string) => ({ definitionId: "CXR", patientId, tit
   packageId: "package", packageVersion: "1", packageHash: "hash" });
 
 describe("I2 Imaging canonical Runtime checkpoint persistence", () => {
+  test("JSONB-reordered published asset provenance restores the full resulted reader Runtime", async () => {
+    const patientId = "PT-001";
+    const asset = getRegisteredImagingAsset("russicaptor.builder-picker-test153.img-001.img-001.v1")!;
+    const source = new ClinicalScenarioEngine(undefined, undefined, () => true);
+    source.reset(structuredClone(createCanonicalBaselineRuntimeFixture(patientId)));
+    source.orderImaging({ commandId: "CMD-BUILDER-RESULT", exerciseId: "EX-BUILDER", patientId,
+      orderedBy: "CM", orderedAtSimulationTimeSec: 0,
+      definition: { ...definition(patientId), packageId: asset.packageId,
+        packageVersion: asset.packageVersion!, packageHash: "builder-hash", delaySeconds: 0, asset } });
+    source.advanceTo(60);
+    const payload = structuredClone(source.captureRuntimePayload());
+    const imaging = payload.imaging!;
+    const reorderedAsset = { ...asset, provenance: { licenseId: "TEST_ONLY", sourceUrl: "RussiCaptorTestAsset" } };
+    const reordered = { ...payload, imaging: { ...imaging, instances: imaging.instances.map(item => ({ ...item,
+      authoredSource: { ...item.authoredSource, asset: reorderedAsset },
+      result: item.result && { ...item.result, asset: reorderedAsset },
+    })) } };
+    const reader = new ClinicalScenarioEngine();
+    await reader.rehydrateRuntimePayloadAsync(reordered, async () => Promise.resolve());
+    expect(reader.getSimulationTimeSec()).toBe(60);
+    expect(reader.getImagingWorkflow().instances).toEqual([expect.objectContaining({ status: "RESULTED",
+      result: expect.objectContaining({ reportText: "Immutable report", asset: expect.objectContaining({ assetId: asset.assetId }) }) })]);
+  });
+
   test("full payload roundtrip preserves pending instance and writer reconciliation releases once", () => {
     const { engine: source, patientId } = setup();
     source.orderImaging({ commandId: "CMD-1", exerciseId: "EX-I2", patientId, orderedBy: "CM",

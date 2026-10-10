@@ -1,18 +1,19 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { ImagingAssetReference } from "@/models/ImagingAsset";
 import type { ImagingOrderDefinitionSnapshot } from "@/models/ImagingWorkflow";
 import { NARVA_TRAUMA_EXERCISE_PACKAGE } from "@/services/exercise/NarvaExercisePackages";
 import { NARVA_TRAUMA_P02_IMAGING_SOURCE } from "@/services/exercise/NarvaTraumaImagingDefinitions";
 import { exercisePackageValidator } from "@/services/exercise/ExercisePackageService";
 import {
   DEMO_HEAD_CT_ASSET, classifyLegacyImagingAttachment, resolveImagingAsset,
-  validateImagingAssetReference,
+  getRegisteredImagingAsset, validateImagingAssetReference,
 } from "@/services/imaging/ImagingAssetRegistry";
 import { sha256Text } from "@/utils/sha256";
 import { ImagingWorkflowRuntime } from "../ImagingWorkflowRuntime";
 
-const definition = (asset = DEMO_HEAD_CT_ASSET): ImagingOrderDefinitionSnapshot => ({
+const definition = (asset: ImagingAssetReference = DEMO_HEAD_CT_ASSET): ImagingOrderDefinitionSnapshot => ({
   definitionId: "IMG-001", patientId: "PT-001", title: "KT pea", modality: "CT",
   reportSource: "Ägeda intrakraniaalse verejooksu tunnuseid ei ole.", asset, delaySeconds: 60,
   packageId: "russicaptor.demo", packageVersion: "1.0.0", packageHash: "demo-hash",
@@ -53,6 +54,30 @@ describe("I4 immutable Imaging report/asset contract / IMG-G35..IMG-G45", () => 
       .toThrow("IMAGING_ASSET_INTEGRITY_MISMATCH");
     expect(resolveImagingAsset({ ...DEMO_HEAD_CT_ASSET, assetId: "missing" }))
       .toEqual({ status: "MISSING_REGISTRY_KEY", detail: "missing" });
+  });
+
+  test("jsonb key reordering preserves a published resulted image across reader restore", () => {
+    const asset = getRegisteredImagingAsset("russicaptor.builder-picker-test153.img-001.img-001.v1")!;
+    const reordered = { ...asset, provenance: { licenseId: "TEST_ONLY", sourceUrl: "RussiCaptorTestAsset" } };
+    expect(JSON.stringify(reordered.provenance)).not.toBe(JSON.stringify(asset.provenance));
+    expect(() => validateImagingAssetReference(reordered)).not.toThrow();
+    const writer = new ImagingWorkflowRuntime();
+    writer.order({ commandId: "CMD-BUILDER", exerciseId: "EX-BUILDER", patientId: "PT-001",
+      orderedBy: "CM", orderedAtSimulationTimeSec: 0,
+      definition: { ...definition(asset), packageId: asset.packageId,
+        packageVersion: asset.packageVersion!, packageHash: "builder-hash" } });
+    writer.advanceTo(60);
+    const snapshot = writer.snapshot();
+    const reader = new ImagingWorkflowRuntime(() => false);
+    reader.restore({ ...snapshot, instances: snapshot.instances.map(item => ({ ...item,
+      authoredSource: { ...item.authoredSource, asset: reordered },
+      result: item.result && { ...item.result, asset: reordered },
+    })) });
+    expect(reader.snapshot().instances[0]).toMatchObject({ status: "RESULTED",
+      result: { asset: { assetId: asset.assetId } } });
+    expect(resolveImagingAsset(reordered).status).toBe("RESOLVED");
+    expect(() => validateImagingAssetReference({ ...reordered,
+      provenance: { ...reordered.provenance, licenseId: "DIFFERENT" } })).toThrow("IMAGING_ASSET_INTEGRITY_MISMATCH");
   });
 
   test("I4-A5/A6 hides result before release and freezes authored report and asset at order time", () => {

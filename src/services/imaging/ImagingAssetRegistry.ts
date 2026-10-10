@@ -2,6 +2,7 @@ import type { ImageSourcePropType } from "react-native";
 import type { ImagingAssetReference, ImagingAssetResolution } from "@/models/ImagingAsset";
 import { GENERATED_BUNDLED_IMAGING_ASSETS, GENERATED_BUNDLED_IMAGING_SOURCES } from
   "./ImagingBundledAssetRegistry.generated";
+import { stableJson } from "@/utils/stableJson";
 
 export const DEMO_HEAD_CT_ASSET = GENERATED_BUNDLED_IMAGING_ASSETS.find(item =>
   item.assetId === "demo.head-ct.image01.v1")!;
@@ -34,7 +35,9 @@ export function validateImagingAssetReference(asset: ImagingAssetReference): voi
     for (const key of keys) {
       if (asset[key] !== expected[key]) throw new Error("IMAGING_ASSET_INTEGRITY_MISMATCH");
     }
-    if (JSON.stringify(asset.provenance) !== JSON.stringify(expected.provenance)) {
+    // Postgres jsonb may reorder object keys in a validated checkpoint.
+    // Provenance identity is structural, not insertion-order dependent.
+    if (stableJson(asset.provenance) !== stableJson(expected.provenance)) {
       throw new Error("IMAGING_ASSET_INTEGRITY_MISMATCH");
     }
   }
