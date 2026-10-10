@@ -1,3 +1,5 @@
+import type { ImagingInstanceStatus } from "@/models/ImagingWorkflow";
+
 /** Estonian presentation vocabulary. Canonical values must never be mutated through this module. */
 export const et = Object.freeze({
   back: "Tagasi", close: "Sulge", cancel: "Tühista", confirm: "Kinnita", save: "Salvesta",
@@ -42,6 +44,12 @@ export const processStatusLabel = (value: string): string => safe(value, {
   ACTIVE: "Aktiivne", RUNNING: "Käimas", COMPLETED: "Lõpetatud", CANCELLED: "Tühistatud", FAILED: "Ebaõnnestunud",
   Active: "Aktiivne", Resolved: "Lahenenud", Pending: "Ootel",
 });
+const imagingStatusLabels = {
+  ORDERED: "Tellitud",
+  PROCESSING: "Töötlemisel",
+  RESULTED: "Tulemus olemas",
+} satisfies Record<ImagingInstanceStatus, string>;
+export const imagingStatusLabel = (value: string): string => safe(value, imagingStatusLabels);
 export const accountStatusLabel = (value: string): string => safe(value, {
   ACTIVE: "Aktiivne", INVITED: "Kutse saadetud", DISABLED: "Deaktiveeritud",
 });

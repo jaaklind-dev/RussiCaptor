@@ -27,6 +27,7 @@ describe("I2 durable Imaging presentation", () => {
       workflow={workflow("PROCESSING")} onOpenImage={jest.fn()} onOpenReport={jest.fn()} />); });
     const text = renderer.root.findAllByType("Text" as never).map(node => node.props.children).join(" ");
     expect(text).not.toContain("PREAUTHORED SECRET"); expect(text).toContain("Raport ei ole veel avaldatud");
+    expect(text).toContain("Töötlemisel"); expect(text).not.toContain("Tundmatu olek");
   });
 
   test("shows only the immutable instance result after RESULTED", async () => {
@@ -35,5 +36,6 @@ describe("I2 durable Imaging presentation", () => {
       workflow={workflow("RESULTED")} onOpenImage={jest.fn()} onOpenReport={jest.fn()} />); });
     const text = renderer.root.findAllByType("Text" as never).map(node => node.props.children).join(" ");
     expect(text).toContain("RELEASED REPORT"); expect(text).not.toContain("PREAUTHORED SECRET");
+    expect(text).toContain("Tulemus olemas"); expect(text).not.toContain("Tundmatu olek");
   });
 });

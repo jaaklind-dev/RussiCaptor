@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   assessmentStatusLabel, authorityStateLabel, compatibilityLabel, exerciseLifecycleLabel,
-  et, exercisePackageNameLabel, exercisePackageTagLabel, exerciseProfileLabel, instructorFilterOptionLabel,
+  et, exercisePackageNameLabel, exercisePackageTagLabel, exerciseProfileLabel, imagingStatusLabel,
+  instructorFilterOptionLabel,
   judgementLabel, patientStatusLabel,
 } from "@/localization/et";
 
@@ -20,6 +21,16 @@ describe("WP-46 Estonian presentation foundation", () => {
 
   test("unknown future values fail visibly and safely", () => {
     expect(exerciseLifecycleLabel("FUTURE_STATE")).toBe("Tundmatu olek");
+  });
+
+  test("maps every canonical imaging workflow state without changing it", () => {
+    const states = ["ORDERED", "PROCESSING", "RESULTED"] as const;
+    expect(states.map(imagingStatusLabel)).toEqual(["Tellitud", "Töötlemisel", "Tulemus olemas"]);
+    expect(states).toEqual(["ORDERED", "PROCESSING", "RESULTED"]);
+  });
+
+  test("unknown imaging workflow state retains the safe fallback", () => {
+    expect(imagingStatusLabel("FUTURE_STATE")).toBe("Tundmatu olek");
   });
 
   test("uses the user-approved general terminology without changing dictionary keys", () => {
