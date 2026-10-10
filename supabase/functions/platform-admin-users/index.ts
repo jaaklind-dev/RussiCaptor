@@ -1,4 +1,5 @@
 import { audit, corsHeaders, errorResponse, json, requirePlatformAdmin, type AdminContext } from "../_shared/platformAdmin.ts";
+import { isActiveRuntimeWriterLease } from "../_shared/runtimeLease.ts";
 
 type UserOperation =
   | Readonly<{ operation: "list" }>
@@ -47,13 +48,17 @@ async function listUsers(context: AdminContext): Promise<Response> {
 }
 
 async function ensureDeactivationSafe(context: AdminContext, userId: string): Promise<void> {
-  const [{ data: assignments }, { data: bootstraps }, { data: leases }, { data: owners }] = await Promise.all([
+  const [{ data: assignments, error: assignmentError }, { data: bootstraps, error: bootstrapError },
+    { data: leases, error: leaseError }, { data: owners, error: ownerError }] = await Promise.all([
     context.service.from("authorization_role_assignments").select("id,scope_id,role").eq("user_id", userId).eq("status", "ACTIVE"),
     context.service.from("exercise_bootstrap_authorizations").select("id").eq("user_id", userId).eq("status", "ACTIVE"),
-    context.service.from("runtime_writer_leases").select("exercise_id").eq("writer_user_id", userId).is("released_at", null),
+    context.service.from("runtime_writer_leases").select("exercise_id,expires_at,released_at").eq("writer_user_id", userId),
     context.service.from("shared_workflow_patient_states").select("exercise_id,patient_id").eq("owner_user_id", userId),
   ]);
-  if ((leases?.length ?? 0) || (owners?.length ?? 0)) throw new Error("ACTIVE_RUNTIME_OWNERSHIP_CONFLICT");
+  if (assignmentError || bootstrapError || leaseError || ownerError) throw new Error("RUNTIME_OWNERSHIP_CHECK_FAILED");
+  if ((leases ?? []).some(lease => isActiveRuntimeWriterLease(lease)) || (owners?.length ?? 0)) {
+    throw new Error("ACTIVE_RUNTIME_OWNERSHIP_CONFLICT");
+  }
   if ((assignments ?? []).some(assignment => !assignment.scope_id)) throw new Error("GLOBAL_ASSIGNMENT_REQUIRES_TRUSTED_RECOVERY");
   for (const assignment of assignments ?? []) {
     const { error } = await context.service.rpc("trusted_admin_revoke_exercise_role", {

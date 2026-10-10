@@ -1,4 +1,5 @@
 import { audit, corsHeaders, errorResponse, json, requirePlatformAdmin, type AdminContext } from "../_shared/platformAdmin.ts";
+import { isActiveRuntimeWriterLease } from "../_shared/runtimeLease.ts";
 
 type ExerciseOperation =
   | Readonly<{ operation: "list" }>
@@ -44,7 +45,8 @@ async function listExercises(context: AdminContext): Promise<Response> {
       ? row.exercise_package_reference as Record<string, unknown> : {};
     const scoped = (assignments ?? []).filter(item => item.scope_id === row.exercise_id);
     const active = scoped.filter(item => item.status === "ACTIVE");
-    const lease = (leases ?? []).find(item => item.exercise_id === row.exercise_id && !item.released_at);
+    const lease = (leases ?? []).find(item => item.exercise_id === row.exercise_id &&
+      isActiveRuntimeWriterLease(item));
     return {
       exerciseId: row.exercise_id,
       revision: row.revision,
@@ -115,9 +117,12 @@ async function operate(context: AdminContext, body: ExerciseOperation): Promise<
     return json({ ok: true, assignment: data }, 201);
   }
   if (body.role !== "CM" && body.role !== "EXCON") throw new Error("INVALID_ROLE");
-  const { data: lease } = await context.service.from("runtime_writer_leases").select("writer_user_id,released_at").eq("exercise_id", id).eq("writer_user_id", targetUserId).is("released_at", null).maybeSingle();
-  const { data: owners } = await context.service.from("shared_workflow_patient_states").select("patient_id").eq("exercise_id", id).eq("owner_user_id", targetUserId).limit(1);
-  if (lease || owners?.length) throw new Error("ACTIVE_RUNTIME_OWNERSHIP_CONFLICT");
+  const { data: lease, error: leaseError } = await context.service.from("runtime_writer_leases")
+    .select("writer_user_id,expires_at,released_at").eq("exercise_id", id).eq("writer_user_id", targetUserId).maybeSingle();
+  const { data: owners, error: ownerError } = await context.service.from("shared_workflow_patient_states")
+    .select("patient_id").eq("exercise_id", id).eq("owner_user_id", targetUserId).limit(1);
+  if (leaseError || ownerError) throw new Error("RUNTIME_OWNERSHIP_CHECK_FAILED");
+  if ((lease && isActiveRuntimeWriterLease(lease)) || owners?.length) throw new Error("ACTIVE_RUNTIME_OWNERSHIP_CONFLICT");
   const { data, error } = await context.service.rpc("trusted_admin_revoke_exercise_role", {
     p_assignment_id: body.assignmentId, p_exercise_id: id, p_revoked_by: context.user.id,
   });
