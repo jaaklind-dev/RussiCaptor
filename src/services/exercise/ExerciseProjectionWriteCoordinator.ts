@@ -10,7 +10,7 @@ export type ExerciseProjectionCandidate<T> = Readonly<{
   value: T;
 }>;
 
-export type ProjectionWriteResult = boolean | "SUPPRESSED";
+export type ProjectionWriteResult = boolean | "SUPPRESSED" | Readonly<{ publishedIdentity: string }>;
 
 export type ProjectionWriteInstrumentation = Readonly<{
   operation: string;
@@ -101,6 +101,7 @@ export class ExerciseProjectionWriteCoordinator<T> {
     }
     const task = this.publish(candidate).then(result => {
       if (result === true) this.lastSuccessfulIdentity = candidate.identity;
+      else if (typeof result === "object") this.lastSuccessfulIdentity = result.publishedIdentity;
     }).finally(() => {
       if (this.activeWrite === task) this.activeWrite = undefined;
       if (this.isSuppressed(candidate)) {

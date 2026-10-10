@@ -91,6 +91,20 @@ describe("WP-EGRESS-06 projection write coordinator", () => {
     expect(publish).toHaveBeenCalledTimes(2);
   });
 
+  test("a revalidated latest publication records the identity actually sent", async () => {
+    let identity = "QUEUED";
+    const publish = jest.fn(async () => {
+      identity = "LATEST";
+      return { publishedIdentity: "LATEST" };
+    });
+    const coordinator = new ExerciseProjectionWriteCoordinator(
+      () => ({ identity, payloadBytes: 100, value: identity }), publish, jest.fn(),
+    );
+    await coordinator.flush();
+    await coordinator.flush();
+    expect(publish).toHaveBeenCalledTimes(1);
+  });
+
   test("reset cancels a pending startup write", async () => {
     const publish = jest.fn(async () => true);
     const coordinator = new ExerciseProjectionWriteCoordinator(
