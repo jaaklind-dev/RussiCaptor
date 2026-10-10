@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createExercisePackage } from "@/services/exercise/ExercisePackageHash";
@@ -44,6 +44,7 @@ function workspace(): string {
   mkdirSync(path.join(root, "assets/imaging"), { recursive: true });
   mkdirSync(path.join(root, "src/services/imaging"), { recursive: true });
   copyFileSync(path.join(projectRoot, "assets/imaging/image01.jpg"), path.join(root, "assets/imaging/image01.jpg"));
+  cpSync(path.join(projectRoot, "assets/imaging/packages"), path.join(root, "assets/imaging/packages"), { recursive: true });
   for (const relative of ["assets/imaging/manifest.json", "assets/imaging/package-authoring-manifest.json",
     "src/services/imaging/ImagingBundledAssetRegistry.generated.ts",
     "src/services/imaging/ImagingAuthoredPackageVersions.generated.ts"]) {

@@ -77,7 +77,7 @@ describe("remote clinical state sync", () => {
     const projection = {
       ...createSharedExerciseSnapshot(),
       exercisePackageReference: {
-        packageId: "russicaptor.builder-picker-test153",
+        packageId: "russicaptor.builder-not-installed-fixture",
         packageVersion: "1.0.0",
       },
     };

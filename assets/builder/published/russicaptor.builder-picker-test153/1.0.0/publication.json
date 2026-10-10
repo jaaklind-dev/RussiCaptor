@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "publicationTool": "builder-publish-v1",
+  "validation": "PASS",
+  "packageId": "russicaptor.builder-picker-test153",
+  "packageVersion": "1.0.0",
+  "packageHash": "993ec01c571c158afc9f8715520887dd83dacaac535efd5d3f7cde0f7488129c",
+  "datasetHash": "b4252d701bae8526228a6f0a5e24b0f65c6268a64247a17b566b0a3dde21346d",
+  "sourceSha256": "a9369468e83ff3a75ebf480368a5e11a067384476ba0aa5740d10c33d457a77c",
+  "assets": [
+    {
+      "assetId": "russicaptor.builder-picker-test153.img-001.img-001.v1",
+      "resolverKey": "packages/russicaptor.builder-picker-test153/1.0.0/img-001/img-001.v1.png",
+      "sha256": "a4e030697a7571b3e95d31860e4da55d2f98e5e861e2b55e414f45a8556828ba"
+    }
+  ]
+}

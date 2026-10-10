@@ -35,6 +35,7 @@ function loadLocalPublicEnvironment() {
 loadLocalPublicEnvironment();
 process.env.RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS ||= "1";
 run(process.execPath, ["scripts/verify-field-release-config.mjs"]);
+run(process.execPath, ["scripts/builder-verify-published.mjs"]);
 const status = run("git", ["status", "--porcelain", "--untracked-files=no"], { capture: true }).trim();
 const sourceDirty = Boolean(status);
 if (sourceDirty && process.env.RUSSICAPTOR_ALLOW_DIRTY_BUILD !== "1") throw new Error("Field release requires a clean tracked working tree.");

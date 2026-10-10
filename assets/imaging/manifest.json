@@ -15,6 +15,25 @@
       "packageVersion": "1.0.0",
       "patientId": "PT-001",
       "definitionId": "IMG-001"
+    },
+    {
+      "assetId": "russicaptor.builder-picker-test153.img-001.img-001.v1",
+      "sourceKind": "BUNDLED_LOCAL",
+      "resolverKey": "packages/russicaptor.builder-picker-test153/1.0.0/img-001/img-001.v1.png",
+      "sha256": "a4e030697a7571b3e95d31860e4da55d2f98e5e861e2b55e414f45a8556828ba",
+      "mediaType": "image/png",
+      "byteLength": 1129,
+      "width": 48,
+      "height": 48,
+      "role": "PRIMARY_DIAGNOSTIC_IMAGE",
+      "packageId": "russicaptor.builder-picker-test153",
+      "packageVersion": "1.0.0",
+      "patientId": "PT-001",
+      "definitionId": "IMG-001",
+      "provenance": {
+        "sourceUrl": "RussiCaptorTestAsset",
+        "licenseId": "TEST_ONLY"
+      }
     }
   ]
 }

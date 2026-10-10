@@ -65,9 +65,10 @@ describe("Builder desktop packaging bridge", () => {
       const result = compile(root, source);
       expect(result.status).toBe(0);
       const manifest = JSON.parse(readFileSync(path.join(root, "assets/imaging/manifest.json"), "utf8")) as {
-        assets: { provenance?: Record<string, unknown> }[] };
-      expect(manifest.assets.at(-1)?.provenance).toMatchObject({ sourceUrl: "LOCAL_TEST", licenseId: "TEST" });
-      expect(manifest.assets.at(-1)?.provenance).not.toHaveProperty("contributor");
+        assets: { assetId: string; provenance?: Record<string, unknown> }[] };
+      const asset = manifest.assets.find(item => item.assetId.startsWith(`${packageId}.`));
+      expect(asset?.provenance).toMatchObject({ sourceUrl: "LOCAL_TEST", licenseId: "TEST" });
+      expect(asset?.provenance).not.toHaveProperty("contributor");
       return result.stdout.match(/packageHash=[0-9a-f]{64}|datasetHash=[0-9a-f]{64}/g);
     });
     expect(outputs[0]).toEqual(outputs[1]);

@@ -186,7 +186,7 @@ export default function ExerciseBuilderScreen() {
         fileName, "application/json");
       await FileSystem.writeAsStringAsync(destination, serialized);
       save();
-      setNotice(`Autorlussisend eksporditud: ${fileName}. Lõplik muutumatu pakett ja pildiregister tekivad töölaual käsuga builder:compile.`);
+      setNotice(`Autorlussisend eksporditud: ${fileName}. Lõplik muutumatu pakett ja pildiregister avaldatakse töölaual eraldi käsuga builder:publish.`);
     } catch { setNotice("Eksport ei õnnestunud. Ühtki paketti ei avaldatud."); }
   };
   if (operator.state === "LOADING") return <View style={styles.page}>

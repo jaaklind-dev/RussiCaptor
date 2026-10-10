@@ -138,6 +138,6 @@ describe("IMAGING-ASSET-INGEST-CORE-01 / IMG-ASSET-G01..G16", () => {
   });
 
   test("repository manifest remains exact and generated registry is current", () => {
-    expect(core.verifyManifest(process.cwd())).toEqual({ assetCount: 1 });
+    expect(core.verifyManifest(process.cwd())).toEqual({ assetCount: 2 });
   });
 });

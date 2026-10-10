@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "packageId": "russicaptor.builder-picker-test153",
+      "packageVersion": "1.0.0",
+      "packageHash": "993ec01c571c158afc9f8715520887dd83dacaac535efd5d3f7cde0f7488129c",
+      "sourceSha256": "a9369468e83ff3a75ebf480368a5e11a067384476ba0aa5740d10c33d457a77c"
+    }
+  ]
+}

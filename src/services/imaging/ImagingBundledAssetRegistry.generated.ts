@@ -19,8 +19,25 @@ export const GENERATED_BUNDLED_IMAGING_ASSETS = deepFreeze([
     patientId: "PT-001",
     definitionId: "IMG-001",
   },
+  {
+    assetId: "russicaptor.builder-picker-test153.img-001.img-001.v1",
+    sourceKind: "BUNDLED_LOCAL" as const,
+    resolverKey: "packages/russicaptor.builder-picker-test153/1.0.0/img-001/img-001.v1.png",
+    sha256: "a4e030697a7571b3e95d31860e4da55d2f98e5e861e2b55e414f45a8556828ba",
+    mediaType: "image/png",
+    byteLength: 1129,
+    width: 48,
+    height: 48,
+    role: "PRIMARY_DIAGNOSTIC_IMAGE" as const,
+    packageId: "russicaptor.builder-picker-test153",
+    packageVersion: "1.0.0",
+    patientId: "PT-001",
+    definitionId: "IMG-001",
+    provenance: {"sourceUrl":"RussiCaptorTestAsset","licenseId":"TEST_ONLY"},
+  },
 ] satisfies readonly ImagingAssetReference[]);
 
 export const GENERATED_BUNDLED_IMAGING_SOURCES: Readonly<Record<string, ImageSourcePropType>> = Object.freeze({
   "image01.jpg": require("../../../assets/imaging/image01.jpg"),
+  "packages/russicaptor.builder-picker-test153/1.0.0/img-001/img-001.v1.png": require("../../../assets/imaging/packages/russicaptor.builder-picker-test153/1.0.0/img-001/img-001.v1.png"),
 });

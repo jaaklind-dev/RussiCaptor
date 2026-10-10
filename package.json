@@ -70,6 +70,8 @@
     "imaging:asset-verify": "node scripts/imaging-asset-ingest.mjs --verify",
     "imaging:author": "node scripts/imaging-author.mjs",
     "builder:compile": "node scripts/builder-compile.mjs",
+    "builder:publish": "node scripts/builder-publish.mjs",
+    "builder:verify-published": "node scripts/builder-verify-published.mjs",
     "imaging:preview": "node scripts/imaging-preview.mjs",
     "test:imaging-physical-prep": "jest --runInBand scripts/__tests__/NarvaImagingPhysicalAcceptanceHarness-test.ts",
     "imaging:physical-prep": "node scripts/narva-imaging-physical-acceptance.mjs --mode prepare",
