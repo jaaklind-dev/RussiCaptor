@@ -4,7 +4,7 @@ export type PatientAssignment = {
   caseManagerName: string;
   assignedAt: string;
   endedAt?: string;
-  endReason?: "completed" | "transferred";
+  endReason?: "completed" | "transferred" | "released";
   transferredToCaseManagerId?: string;
   transferredToCaseManagerName?: string;
 };

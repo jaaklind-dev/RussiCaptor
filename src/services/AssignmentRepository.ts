@@ -299,9 +299,27 @@ export function unassignPatient(
   }
 }
 
-export function releasePatientConflictSafe(patientId:string,endReason:PatientAssignment["endReason"]="completed"){
-  return executeAuthoritativePatientMutation({patientId,commandId:createId("SW-RELEASE"),kind:"RELEASE",expectedOwnerUserId:getPatientAssignment(patientId)?.caseManagerId,nextOwnerUserId:undefined,
-    mutate:()=>unassignPatient(patientId,endReason)});
+export function releasePatientConflictSafe(patientId: string) {
+  const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+  const head = getSharedWorkflowHead(exerciseId, patientId);
+  const readiness = getCmOwnershipProjectionReadiness(exerciseId);
+  if (readiness.managed && !readiness.ready) return Promise.resolve(Object.freeze({
+    result: Object.freeze({ status: "RECONNECT_REQUIRED" as const, revision: head.revision,
+      ownerUserId: head.ownerUserId }), value: undefined,
+    message: "Patsiendi vastutuse andmed sünkroniseeruvad. Proovi uuesti.",
+  }));
+  const scopedAssignment = readiness.managed
+    ? getAuthoritativePatientOwnershipProjection(exerciseId, patientId)?.assignments.at(-1)
+    : getPatientAssignment(patientId);
+  if (head.revision > 0 && head.ownerUserId === undefined && scopedAssignment?.endedAt &&
+    scopedAssignment.endReason === "released") return Promise.resolve(Object.freeze({
+    result: Object.freeze({ status: "IDEMPOTENT" as const, revision: head.revision,
+      ownerUserId: undefined }), value: undefined,
+    message: "Patsient on juba vastutusest vabastatud.",
+  }));
+  return executeAuthoritativePatientMutation({ patientId, commandId: createId("SW-RELEASE"),
+    kind: "RELEASE", expectedOwnerUserId: scopedAssignment?.caseManagerId,
+    nextOwnerUserId: undefined, mutate: () => unassignPatient(patientId, "released") });
 }
 
 export function requestPatientTakeover(

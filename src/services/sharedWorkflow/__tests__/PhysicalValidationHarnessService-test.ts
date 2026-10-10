@@ -1,7 +1,7 @@
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { setCurrentCaseManager } from "@/services/CurrentUserService";
 import { assignPatient, clearAssignments, getPatientAssignment, releasePatientConflictSafe } from "@/services/AssignmentRepository";
-import { resetPatients } from "@/repositories/PatientRepository";
+import { findPatientById, resetPatients } from "@/repositories/PatientRepository";
 import { getSharedWorkflowOperationalState, observeSharedWorkflowHead, resetSharedWorkflowConflictMetrics, setSharedWorkflowConnectivity, setSharedWorkflowGateway, setSharedWorkflowRealtimeLifecycle } from "../SharedWorkflowMutationService";
 import { InMemorySharedWorkflowGateway } from "../InMemorySharedWorkflowGateway";
 import { prepareSameBaseMutableMutation, submitPreparedPhysicalValidationMutation } from "../PhysicalValidationHarnessService";
@@ -31,6 +31,8 @@ describe("physical shared-workflow validation harness", () => {
 
     expect(outcome.result).toMatchObject({ status: "APPLIED", revision: 2, ownerUserId: undefined });
     expect(getPatientAssignment("PT-001")?.endedAt).toBeDefined();
+    expect(getPatientAssignment("PT-001")?.endReason).toBe("released");
+    expect(findPatientById("PT-001")?.status).toBe("Active");
     expect(prepareSameBaseMutableMutation("PT-001")).toBeUndefined();
   });
 

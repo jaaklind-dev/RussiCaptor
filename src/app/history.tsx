@@ -34,6 +34,9 @@ export default function HistoryScreen() {
   const transferredEntries = entries.filter(
     ({ assignment }) => assignment.endReason === "transferred"
   );
+  const releasedEntries = entries.filter(
+    ({ assignment }) => assignment.endReason === "released"
+  );
 
   return (
     <View style={styles.container}>
@@ -46,7 +49,7 @@ export default function HistoryScreen() {
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>Ajalugu on tühi.</Text>
           <Text style={styles.emptyText}>
-            Lõpetatud ja teisele juhtumikorraldajale üle antud patsiendid ilmuvad siia.
+            Lõpetatud, üle antud ja vastutusest vabastatud patsiendid ilmuvad siia.
           </Text>
         </View>
       ) : (
@@ -56,6 +59,9 @@ export default function HistoryScreen() {
           )}
           {transferredEntries.length > 0 && (
             <HistorySection title="Üle antud" entries={transferredEntries} />
+          )}
+          {releasedEntries.length > 0 && (
+            <HistorySection title="Vastutusest vabastatud" entries={releasedEntries} />
           )}
         </ScrollView>
       )}
@@ -73,6 +79,7 @@ function HistorySection({ title, entries }: { title: string; entries: HistoryEnt
       <Text style={styles.sectionTitle}>{title}</Text>
       {entries.map(({ assignment, patient }) => {
         const isTransferred = assignment.endReason === "transferred";
+        const isReleased = assignment.endReason === "released";
 
         return (
           <Pressable
@@ -85,10 +92,10 @@ function HistorySection({ title, entries }: { title: string; entries: HistoryEnt
               <Text
                 style={[
                   styles.badge,
-                  isTransferred ? styles.transferredBadge : styles.completedBadge,
+                  isTransferred ? styles.transferredBadge : isReleased ? styles.releasedBadge : styles.completedBadge,
                 ]}
               >
-                {isTransferred ? "Üle antud" : "Lõpetatud"}
+                {isTransferred ? "Üle antud" : isReleased ? "Vabastatud" : "Lõpetatud"}
               </Text>
             </View>
             <Text style={styles.patientMeta}>{patient.triage} · {patient.location}</Text>
@@ -135,6 +142,7 @@ const styles = StyleSheet.create({
   badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, fontWeight: "bold" },
   completedBadge: { color: "#166534", backgroundColor: "#dcfce7" },
   transferredBadge: { color: "#1e40af", backgroundColor: "#dbeafe" },
+  releasedBadge: { color: "#5b21b6", backgroundColor: "#ede9fe" },
   patientName: { fontSize: 24, fontWeight: "bold", marginTop: 10 },
   patientMeta: { color: "#555", fontSize: 16, marginTop: 6 },
   transferMeta: { color: "#1e40af", fontWeight: "600", marginTop: 8 },

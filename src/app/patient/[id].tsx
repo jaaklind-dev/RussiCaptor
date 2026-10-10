@@ -41,6 +41,7 @@ import {
   acceptPatientTransferConflictSafe,
   getPatientAssignment,
   getPendingPatientTransfer,
+  releasePatientConflictSafe,
   rejectPatientTransferConflictSafe,
 } from "@/services/AssignmentRepository";
 import { getCurrentCaseManager } from "@/services/CurrentUserService";
@@ -177,7 +178,7 @@ useEffect(() => {
         </Text>
 
         <Text style={styles.cmLine}>
-          Praegune juhtumikorraldaja: {assignment?.caseManagerName ?? "Määramata"}
+          Praegune juhtumikorraldaja: {assignment && !assignment.endedAt ? assignment.caseManagerName : "Määramata"}
         </Text>
         {workflowMessage&&<Text accessibilityRole="alert" style={workflowPending?styles.pendingNotice:styles.workflowNotice}>{workflowMessage}</Text>}
 
@@ -189,8 +190,30 @@ useEffect(() => {
 
         {!isCompleted && isReadOnly && (
           <Text style={styles.readOnlyNotice}>
-            Määratud CM-ile {assignment?.caseManagerName ?? "–"} · vaatamisrežiim
+            {assignment && !assignment.endedAt
+              ? `Määratud CM-ile ${assignment.caseManagerName}` : "Patsient ei ole CM-ile määratud"} · vaatamisrežiim
           </Text>
+        )}
+
+        {!isReadOnly && !pendingTransfer && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Vabasta patsient oma vastutusest"
+            testID="patient-release-action"
+            disabled={workflowPending}
+            style={[styles.secondaryButton, workflowPending && styles.disabledButton]}
+            onPress={() => Alert.alert(
+              "Vabasta patsient vastutusest?",
+              "Patsiendi käsitlus jääb aktiivseks ja teda saab uuesti määrata.",
+              [
+                { text: "Katkesta", style: "cancel" },
+                { text: "Vabasta", onPress: () => void runWorkflow(() =>
+                  releasePatientConflictSafe(patient.id).then(result => ({ message: result.message }))) },
+              ],
+            )}
+          >
+            <Text style={styles.secondaryButtonText}>Vabasta patsient</Text>
+          </Pressable>
         )}
 
         {!isReadOnly && pendingTransfer && (
@@ -737,5 +760,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
 
   },
+
+  disabledButton: { opacity: 0.5 },
 
 });
