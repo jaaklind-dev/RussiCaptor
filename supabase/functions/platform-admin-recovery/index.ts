@@ -1,7 +1,8 @@
 // Trusted-operator break-glass endpoint. Never import this into the mobile app.
-// The existing server-side service-role credential authenticates the operator;
+// A verified privileged server credential authenticates the operator;
 // a separate random, short-lived authorization is required for each mutation.
 import { serviceClient } from "../_shared/platformAdmin.ts";
+import { verifyRecoveryOperator } from "./operatorAuth.ts";
 
 type Operation = "GRANT" | "REVOKE";
 type RecoveryRequest =
@@ -37,20 +38,10 @@ function validOperation(value: unknown): Operation {
   return value;
 }
 
-function sameSecret(provided: string, expected: string): boolean {
-  const a = new TextEncoder().encode(provided);
-  const b = new TextEncoder().encode(expected);
-  let difference = a.length ^ b.length;
-  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
-    difference |= (a[index] ?? 0) ^ (b[index] ?? 0);
+async function requireTrustedOperator(request: Request): Promise<void> {
+  if (!await verifyRecoveryOperator(request, Deno.env.get("SUPABASE_URL"))) {
+    throw new Error("RECOVERY_OPERATOR_REQUIRED");
   }
-  return difference === 0;
-}
-
-function requireTrustedOperator(request: Request): void {
-  const expected = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
-  const bearer = request.headers.get("Authorization")?.match(/^Bearer (.+)$/)?.[1] ?? "";
-  if (!expected || !sameSecret(bearer, expected)) throw new Error("RECOVERY_OPERATOR_REQUIRED");
 }
 
 async function tokenSha256(token: string): Promise<string> {
@@ -118,7 +109,7 @@ async function operate(body: RecoveryRequest): Promise<Response> {
 Deno.serve(async request => {
   if (request.method !== "POST") return response({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
   try {
-    requireTrustedOperator(request);
+    await requireTrustedOperator(request);
     const body = await request.json() as RecoveryRequest;
     if (!body || !["prepare", "apply", "cancel", "status"].includes(body.action)) {
       return response({ ok: false, error: "INVALID_RECOVERY_REQUEST" }, 400);

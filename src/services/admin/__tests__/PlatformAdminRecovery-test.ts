@@ -83,7 +83,8 @@ describe("PLATFORM_ADMIN break-glass recovery boundary", () => {
   test("ADMIN-RECOVERY-19 credential is absent from mobile Admin gateway", () => {
     expect(mobile).not.toContain("platform-admin-recovery");
     expect(mobile).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
-    expect(edge).toContain('Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")');
+    expect(edge).toContain('Deno.env.get("SUPABASE_URL")');
+    expect(edge).toContain("verifyRecoveryOperator(request");
     expect(operator).toContain('"find-generic-password", "-w"');
     expect(operator).not.toContain("console.log(prepared)");
   });

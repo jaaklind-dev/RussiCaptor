@@ -8,9 +8,12 @@ operational scope, writer authority, or patient ownership. It is not a mobile UI
 
 - The narrow `20261010051206_platform_admin_break_glass_recovery` migration and
   `platform-admin-recovery` Edge Function must be deployed to the same project.
-- The function must retain JWT verification. It additionally compares the
-  operator's bearer credential to the server-side `SUPABASE_SERVICE_ROLE_KEY`.
-- A trusted operator must have the existing service-role credential in their
+- Deploy this one function with gateway JWT verification disabled: modern
+  `sb_secret_` server keys are opaque, not JWTs. The function itself verifies
+  every request with a bounded, read-only Auth Admin capability probe before
+  parsing any recovery action. A failed probe denies access. Legacy service-role
+  keys remain supported; publishable/anon keys and user JWTs do not authorize recovery.
+- A trusted operator must have an existing privileged server credential in their
   local macOS Keychain entry `RussiCaptor-Supabase-ServiceRole-fimcsrivizpliiuoqopv`.
   Never place it in source, the app, a shell argument, or a report.
 - Independently verify the exact target Auth user ID and email, current account
@@ -52,7 +55,7 @@ user. The existing unaudited grant/revoke RPCs are no longer executable by
 Only trusted operator tooling receives the one-time authorization. Ordinary
 authenticated users, the mobile app and exercise EXCON have no recovery-table
 or recovery-RPC access. The Edge Function is POST-only, non-CORS and requires the
-server credential even when the gateway accepts a JWT. No password, token,
+server credential even though gateway JWT verification is disabled. No password, token,
 credential or full request URL belongs in audit details or logs.
 
 After a temporary grant, verify normal sign-in and Admin UI. Revoke promptly,
