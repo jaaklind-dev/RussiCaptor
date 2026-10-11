@@ -68,6 +68,45 @@ describe("exercise_states server mutation boundary", () => {
     expect(archive).toContain("russicaptor.terminal_finalize_command");
   });
 
+  test("ARCHIVE-01/07 an empty terminal archive list is not a conflict", () => {
+    const archive = body("append_completed_exercise_archive");
+    expect(archive).toMatch(/v_existing is not null and v_existing <> '\[\]'::jsonb\s+and v_existing <> pg_catalog\.jsonb_build_array\(p_archive\)/);
+  });
+
+  test("ARCHIVE-02 first archive is persisted with one archive and one operation receipt", () => {
+    const archive = body("append_completed_exercise_archive");
+    expect(archive).toContain("state=pg_catalog.jsonb_set(v_state.state,'{completedExerciseArchives}',pg_catalog.jsonb_build_array(p_archive),true)");
+    expect(archive).toContain("values(p_exercise_id,p_operation_id,'ARCHIVE',v_hash,v_actor,v_state.revision+1,v_now)");
+  });
+
+  test("ARCHIVE-03 exact operation retry returns its original durable result", () => {
+    const archive = body("append_completed_exercise_archive");
+    expect(archive).toContain("return query select p_exercise_id,v_op.result_revision,v_op.result_updated_at");
+    expect(archive.indexOf("return query select p_exercise_id,v_op.result_revision")).toBeLessThan(
+      archive.indexOf("update public.exercise_states as es"));
+  });
+
+  test("ARCHIVE-04 reused identity with different content remains a conflict", () => {
+    const archive = body("append_completed_exercise_archive");
+    expect(archive).toContain("v_op.request_hash <> v_hash");
+    expect(archive).toContain("OPERATION_ID_CONFLICT");
+    expect(archive).toMatch(/v_existing <> pg_catalog\.jsonb_build_array\(p_archive\) then\s+raise exception 'ARCHIVE_CONFLICT'/);
+  });
+
+  test("ARCHIVE-05/06 requires terminal lifecycle and exact source revision", () => {
+    const archive = body("append_completed_exercise_archive");
+    expect(archive).toContain("v_state.revision <> p_expected_revision");
+    expect(archive).toContain("exercise_lifecycle_from_state(v_state.state)<>'COMPLETED'");
+    expect(archive).toContain("TERMINAL_STATE_REQUIRED");
+  });
+
+  test("ARCHIVE-08 one terminal row owns only its own immutable archive", () => {
+    const archive = body("append_completed_exercise_archive");
+    expect(archive).toContain("p_archive->>'exerciseId' is distinct from p_exercise_id");
+    expect(archive).toContain("v_existing = pg_catalog.jsonb_build_array(p_archive)");
+    expect(archive).not.toContain("v_existing ||");
+  });
+
   test("EXSTATE-SEC-01/02 authenticated direct INSERT and UPDATE are revoked", () => {
     expect(migration).toContain("revoke insert, update, delete on public.exercise_states from public, anon, authenticated;");
     expect(migration).toContain('drop policy if exists "excon creates exercise state"');

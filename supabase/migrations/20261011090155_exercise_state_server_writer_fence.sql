@@ -336,7 +336,8 @@ begin
     raise exception 'TERMINAL_STATE_REQUIRED' using errcode = '55000';
   end if;
   v_existing := v_state.state->'completedExerciseArchives';
-  if v_existing is not null and v_existing <> pg_catalog.jsonb_build_array(p_archive) then
+  if v_existing is not null and v_existing <> '[]'::jsonb
+    and v_existing <> pg_catalog.jsonb_build_array(p_archive) then
     raise exception 'ARCHIVE_CONFLICT' using errcode = '23505';
   end if;
   if v_existing = pg_catalog.jsonb_build_array(p_archive) then
