@@ -374,3 +374,78 @@ drop policy if exists "scoped operators update exercise state" on public.exercis
 drop policy if exists "authenticated users can create exercise state" on public.exercise_states;
 drop policy if exists "authenticated users can update exercise state" on public.exercise_states;
 revoke insert, update, delete on public.exercise_states from public, anon, authenticated;
+
+-- The historical service-only recovery fixture predates one-shot READY
+-- bootstrap. Replace only that test helper: it now creates READY through the
+-- production RPC, transitions through a real writer, then releases the lease.
+-- No application caller receives EXECUTE on this helper.
+drop function public.create_runtime_recovery_acceptance_fixture();
+create function public.create_runtime_recovery_acceptance_fixture(p_fixture_key text default 'DEFAULT')
+returns text language plpgsql security definer set search_path = '' as $$
+declare
+  v_actor uuid := (select auth.uid());
+  v_exercise_id text;
+  v_latest_lifecycle text;
+  v_bootstrap public.exercise_bootstrap_authorizations%rowtype;
+  v_lease_id uuid;
+  v_writer_instance_id text;
+  v_ready jsonb;
+  v_running jsonb;
+  v_now timestamptz := clock_timestamp();
+begin
+  if v_actor is null or p_fixture_key is null or length(p_fixture_key) not between 1 and 80 then
+    raise exception 'INVALID_RECOVERY_FIXTURE_REQUEST' using errcode = '22023';
+  end if;
+  v_exercise_id := 'RUNTIME-RECOVERY-ACCEPTANCE-' ||
+    pg_catalog.md5(v_actor::text || E'\n' || p_fixture_key);
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('RUNTIME_RECOVERY_FIXTURE' || E'\n' || v_exercise_id,0));
+  if exists(select 1 from public.runtime_recovery_acceptance_fixture_audit
+    where exercise_id=v_exercise_id) then
+    if not exists(select 1 from public.exercise_states where exercise_id=v_exercise_id) then
+      raise exception 'FIXTURE_STATE_MISSING' using errcode = '55000';
+    end if;
+    return v_exercise_id;
+  end if;
+  if exists(select 1 from public.exercise_states where exercise_id=v_exercise_id) then
+    raise exception 'FIXTURE_STATE_CONFLICT' using errcode = '23505';
+  end if;
+  select coalesce(state->'exerciseSession'->>'lifecycleState',
+    case state->'exerciseSession'->>'state' when 'running' then 'RUNNING'
+      when 'paused' then 'PAUSED' else 'READY' end)
+    into v_latest_lifecycle from public.exercise_states order by updated_at desc limit 1;
+  if v_latest_lifecycle in ('RUNNING','PAUSED') then
+    raise exception 'ACTIVE_EXERCISE_PRESENT' using errcode = '55000';
+  end if;
+  v_bootstrap := public.trusted_admin_grant_exercise_bootstrap(
+    v_actor,v_actor,v_now+interval '14 minutes','RUNTIME_RECOVERY_ACCEPTANCE_FIXTURE');
+  v_ready := pg_catalog.jsonb_build_object(
+    'exerciseSession',pg_catalog.jsonb_build_object(
+      'exerciseId',v_exercise_id,'lifecycleState','READY','simulationTimeSec',0,
+      'speed',1,'version',1,'lastCommandId','PREPARE-'||v_exercise_id),
+    'exercisePackageReference',pg_catalog.jsonb_build_object(
+      'packageId','russicaptor.narva-trauma','packageVersion','1.0.5'),
+    'patients','[]'::jsonb,'assignments','[]'::jsonb,
+    'completedExerciseArchives','[]'::jsonb);
+  perform public.create_initial_exercise_state(
+    v_exercise_id,'RECOVERY-FIXTURE-READY-'||p_fixture_key,v_bootstrap.id,
+    'russicaptor.narva-trauma','1.0.5',v_ready);
+  perform public.trusted_admin_grant_exercise_role(
+    v_actor,v_exercise_id,'EXCON',v_actor,null);
+  v_writer_instance_id := 'RECOVERY-FIXTURE-' || pg_catalog.md5(v_exercise_id);
+  select writer.lease_id into v_lease_id from public.acquire_runtime_writer(
+    v_exercise_id,v_writer_instance_id,0,60) as writer;
+  v_running := pg_catalog.jsonb_set(v_ready,'{exerciseSession,lifecycleState}',
+    '"RUNNING"'::jsonb,true);
+  perform public.publish_exercise_state_current_writer(
+    v_exercise_id,'RECOVERY-FIXTURE-START-'||p_fixture_key,v_lease_id,
+    v_writer_instance_id,1,v_running);
+  perform public.release_runtime_writer(v_lease_id,v_writer_instance_id);
+  insert into public.runtime_recovery_acceptance_fixture_audit(exercise_id,created_by)
+    values(v_exercise_id,current_user);
+  return v_exercise_id;
+end;
+$$;
+revoke all on function public.create_runtime_recovery_acceptance_fixture(text)
+  from public, anon, authenticated;
+grant execute on function public.create_runtime_recovery_acceptance_fixture(text) to service_role;
