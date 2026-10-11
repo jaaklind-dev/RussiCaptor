@@ -1,6 +1,6 @@
 const TARGET_MIGRATION = Object.freeze({
-  version: "20260925120000",
-  file: "20260925120000_add_imaging_runtime_patient_command.sql",
+  version: "20260928043420",
+  file: "20260928043420_add_imaging_runtime_patient_command.sql",
 });
 
 const EXPECTED_NARVA_IMAGING = Object.freeze({

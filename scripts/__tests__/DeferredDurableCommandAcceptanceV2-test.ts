@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 const core = require("../lib/deferred-durable-command-acceptance-core.cjs");
 
 const root = resolve(__dirname, "../..");
-const localFiles = ["20260918123000_large_canonical_checkpoint_publication_timeout.sql",
+const localFiles = ["20260918145252_large_canonical_checkpoint_publication_timeout.sql",
   ...core.DEFERRED_MIGRATIONS.map((item: { file: string }) => item.file)];
 const baseline = [{ version: "REMOTE", name: core.BASELINE_MIGRATION }];
 const transfer = { packageVersion: "1.0.5", patientId: "PT-PELVIC-001",
@@ -19,10 +19,10 @@ describe("RELEASE-PREP-02 / RP2-A1..A10", () => {
   test("RP2-A1/A2 inventory and hash exactly four deferred migrations", () => {
     expect(core.DEFERRED_MIGRATIONS.map((item: { file: string; commandType: string }) =>
       [item.file, item.commandType])).toEqual([
-      ["20260925120000_add_imaging_runtime_patient_command.sql", "IMAGING_ORDER"],
-      ["20260926120000_add_endotracheal_intubation_runtime_patient_command.sql", "ENDOTRACHEAL_INTUBATION"],
-      ["20260926143000_add_patient_complete_runtime_patient_command.sql", "PATIENT_COMPLETE"],
-      ["20260927120000_add_patient_location_transfer_runtime_patient_command.sql", "PATIENT_LOCATION_TRANSFER"],
+      ["20260928043420_add_imaging_runtime_patient_command.sql", "IMAGING_ORDER"],
+      ["20260928043446_add_endotracheal_intubation_runtime_patient_command.sql", "ENDOTRACHEAL_INTUBATION"],
+      ["20260928043507_add_patient_complete_runtime_patient_command.sql", "PATIENT_COMPLETE"],
+      ["20260928043528_add_patient_location_transfer_runtime_patient_command.sql", "PATIENT_LOCATION_TRANSFER"],
     ]);
     const artifacts = core.validateMigrationArtifacts(root);
     expect(artifacts).toHaveLength(4);
@@ -32,7 +32,7 @@ describe("RELEASE-PREP-02 / RP2-A1..A10", () => {
 
   test("RP2-A3/A4 enforce cumulative order and stop on unrelated pending migration", () => {
     expect(core.DEFERRED_MIGRATIONS.map((item: { version: string }) => item.version))
-      .toEqual(["20260925120000", "20260926120000", "20260926143000", "20260927120000"]);
+      .toEqual(["20260928043420", "20260928043446", "20260928043507", "20260928043528"]);
     expect(core.analyzeLedger({ remoteMigrations: baseline,
       localMigrationFiles: [...localFiles, "20260927090000_unrelated.sql"].sort() }))
       .toMatchObject({ status: "BLOCKED", reason: "UNRELATED_PENDING_MIGRATIONS", dbPushAllowed: false });

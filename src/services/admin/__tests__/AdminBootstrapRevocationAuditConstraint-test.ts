@@ -2,9 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 const original = fs.readFileSync(path.join(process.cwd(),
-  "supabase/migrations/20261004120000_user_exercise_admin_v1.sql"), "utf8");
+  "supabase/migrations/20261004111720_user_exercise_admin_v1.sql"), "utf8");
 const correction = fs.readFileSync(path.join(process.cwd(),
-  "supabase/migrations/20261007123000_allow_bootstrap_revocation_audit.sql"), "utf8");
+  "supabase/migrations/20261007191214_allow_bootstrap_revocation_audit.sql"), "utf8");
 const edge = fs.readFileSync(path.join(process.cwd(),
   "supabase/functions/platform-admin-exercises/index.ts"), "utf8");
 

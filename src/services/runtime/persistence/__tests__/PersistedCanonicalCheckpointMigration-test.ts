@@ -3,11 +3,11 @@ import path from "node:path";
 
 describe("WP-NARVA-10B14 forward-only canonical checkpoint migration", () => {
   const migration = fs.readFileSync(path.join(process.cwd(),
-    "supabase/migrations/20260913124047_persisted_canonical_checkpoint.sql"), "utf8");
+    "supabase/migrations/20260913125501_persisted_canonical_checkpoint.sql"), "utf8");
   const derivation = fs.readFileSync(path.join(process.cwd(),
-    "supabase/migrations/20260913125630_legacy_canonical_checkpoint_derivation.sql"), "utf8");
+    "supabase/migrations/20260913125805_legacy_canonical_checkpoint_derivation.sql"), "utf8");
   const numericCompatibility = fs.readFileSync(path.join(process.cwd(),
-    "supabase/migrations/20260913130142_preserve_json_numeric_lexemes_in_legacy_derivation.sql"), "utf8");
+    "supabase/migrations/20260913130247_preserve_json_numeric_lexemes_in_legacy_derivation.sql"), "utf8");
 
   test("is additive and leaves original checkpoint payload/hash untouched", () => {
     expect(migration).toContain("create table public.runtime_checkpoint_canonical_artifacts");

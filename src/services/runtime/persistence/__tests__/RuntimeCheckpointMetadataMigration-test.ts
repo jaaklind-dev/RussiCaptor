@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const migration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20260826185115_runtime_checkpoint_metadata_realtime.sql"), "utf8");
+const migration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20260826190508_runtime_checkpoint_metadata_realtime.sql"), "utf8");
 
 describe("WP-EGRESS-01 metadata-only Realtime migration", () => {
   test("publishes only the small notification table", () => {

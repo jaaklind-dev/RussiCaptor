@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 const migration = readFileSync(resolve(process.cwd(),
   "supabase/migrations/20261010110021_builder_lab_package_binding.sql"), "utf8");
 const priorRpc = readFileSync(resolve(process.cwd(),
-  "supabase/migrations/20260926143000_add_patient_complete_runtime_patient_command.sql"), "utf8");
+  "supabase/migrations/20260928043507_add_patient_complete_runtime_patient_command.sql"), "utf8");
 
 describe("compiled Builder laboratory package authority", () => {
   it("registers only an exact immutable ID/version/hash/catalog identity", () => {

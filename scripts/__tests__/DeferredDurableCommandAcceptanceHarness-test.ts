@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 const core = require("../lib/deferred-durable-command-acceptance-core.cjs");
 
 const root = resolve(__dirname, "../..");
-const localFiles = ["20260918123000_large_canonical_checkpoint_publication_timeout.sql",
+const localFiles = ["20260918145252_large_canonical_checkpoint_publication_timeout.sql",
   ...core.DEFERRED_MIGRATIONS.map((item: { file: string }) => item.file)];
 const baseline = [{ version: "REMOTE-DIFFERENT-VERSION", name: core.BASELINE_MIGRATION }];
 

@@ -49,7 +49,7 @@ const syncSource = fs.readFileSync(path.resolve(process.cwd(), "src/services/Run
 const repositorySource = fs.readFileSync(path.resolve(process.cwd(),
   "src/services/runtime/persistence/RuntimeCheckpointRepository.ts"), "utf8");
 const fenceMigration = fs.readFileSync(path.resolve(process.cwd(),
-  "supabase/migrations/20260907153105_narva_multicm_terminal_convergence.sql"), "utf8");
+  "supabase/migrations/20260907162401_narva_multicm_terminal_convergence.sql"), "utf8");
 
 describe("LEGACY-PENDING-COMPLETION-TERMINAL-PUBLICATION-FENCE-01", () => {
   test("TERM-FENCE-01 recovered PENDING completion does not generic-publish before finalize", async () => {

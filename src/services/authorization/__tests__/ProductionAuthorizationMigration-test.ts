@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
 
-const sql = fs.readFileSync(path.resolve(__dirname, "../../../../supabase/migrations/20260829111354_production_operator_identity_authorization.sql"), "utf8");
-const hardening = fs.readFileSync(path.resolve(__dirname, "../../../../supabase/migrations/20260829124726_production_operator_identity_authorization_hardening.sql"), "utf8");
+const sql = fs.readFileSync(path.resolve(__dirname, "../../../../supabase/migrations/20260829124632_production_operator_identity_authorization.sql"), "utf8");
+const hardening = fs.readFileSync(path.resolve(__dirname, "../../../../supabase/migrations/20260829124829_production_operator_identity_authorization_hardening.sql"), "utf8");
 
 describe("WP-NEXT-02 production authorization migration", () => {
   test("uses trusted profiles and CM/EXCON assignments without client provisioning", () => {

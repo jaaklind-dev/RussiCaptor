@@ -6,18 +6,18 @@ const imaging = require("./narva-imaging-physical-acceptance-core.cjs");
 const PROJECT_REF = "fimcsrivizpliiuoqopv";
 const BASELINE_MIGRATION = "large_canonical_checkpoint_publication_timeout";
 const DEFERRED_MIGRATIONS = Object.freeze([
-  Object.freeze({ version: "20260925120000", name: "add_imaging_runtime_patient_command",
-    file: "20260925120000_add_imaging_runtime_patient_command.sql", commandType: "IMAGING_ORDER",
+  Object.freeze({ version: "20260928043420", name: "add_imaging_runtime_patient_command",
+    file: "20260928043420_add_imaging_runtime_patient_command.sql", commandType: "IMAGING_ORDER",
     sha256: "53998d103eff56f36b6826fe3ede9a40298dd2c81def8dd07de299aa585a7bfd" }),
-  Object.freeze({ version: "20260926120000", name: "add_endotracheal_intubation_runtime_patient_command",
-    file: "20260926120000_add_endotracheal_intubation_runtime_patient_command.sql",
+  Object.freeze({ version: "20260928043446", name: "add_endotracheal_intubation_runtime_patient_command",
+    file: "20260928043446_add_endotracheal_intubation_runtime_patient_command.sql",
     commandType: "ENDOTRACHEAL_INTUBATION",
     sha256: "b1b411031e5bd3903ad3e5bbc71cdaf14b776cef5236bb02320395d609acdf39" }),
-  Object.freeze({ version: "20260926143000", name: "add_patient_complete_runtime_patient_command",
-    file: "20260926143000_add_patient_complete_runtime_patient_command.sql", commandType: "PATIENT_COMPLETE",
+  Object.freeze({ version: "20260928043507", name: "add_patient_complete_runtime_patient_command",
+    file: "20260928043507_add_patient_complete_runtime_patient_command.sql", commandType: "PATIENT_COMPLETE",
     sha256: "48553387691c2a3884375b29a7345ab20e8c66baa0d55fbb74b77780f416c371" }),
-  Object.freeze({ version: "20260927120000", name: "add_patient_location_transfer_runtime_patient_command",
-    file: "20260927120000_add_patient_location_transfer_runtime_patient_command.sql",
+  Object.freeze({ version: "20260928043528", name: "add_patient_location_transfer_runtime_patient_command",
+    file: "20260928043528_add_patient_location_transfer_runtime_patient_command.sql",
     commandType: "PATIENT_LOCATION_TRANSFER",
     sha256: "5bfc19e82927c8208cc2d9d21fb662acfb933ca260d9c3f00d3c6fb494a260a4" }),
 ]);

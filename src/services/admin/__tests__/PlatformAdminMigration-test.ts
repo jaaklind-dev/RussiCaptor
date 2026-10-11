@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(__dirname, "../../../..");
-const migration = fs.readFileSync(path.join(root, "supabase/migrations/20261004120000_user_exercise_admin_v1.sql"), "utf8");
-const hardening = fs.readFileSync(path.join(root, "supabase/migrations/20261004123000_user_exercise_admin_v1_hardening.sql"), "utf8");
+const migration = fs.readFileSync(path.join(root, "supabase/migrations/20261004111720_user_exercise_admin_v1.sql"), "utf8");
+const hardening = fs.readFileSync(path.join(root, "supabase/migrations/20261004111830_user_exercise_admin_v1_hardening.sql"), "utf8");
 const usersFunction = fs.readFileSync(path.join(root, "supabase/functions/platform-admin-users/index.ts"), "utf8");
 const exercisesFunction = fs.readFileSync(path.join(root, "supabase/functions/platform-admin-exercises/index.ts"), "utf8");
 const sharedFunction = fs.readFileSync(path.join(root, "supabase/functions/_shared/platformAdmin.ts"), "utf8");

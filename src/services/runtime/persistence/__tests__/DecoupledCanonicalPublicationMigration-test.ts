@@ -3,7 +3,7 @@ import path from "node:path";
 
 describe("WP-NARVA-10B15 canonical-primary writer publication migration", () => {
   const migration = fs.readFileSync(path.join(process.cwd(),
-    "supabase/migrations/20260913133730_decouple_canonical_checkpoint_publication.sql"), "utf8");
+    "supabase/migrations/20260913135054_decouple_canonical_checkpoint_publication.sql"), "utf8");
 
   test("accepts canonical text as the only full semantic request representation", () => {
     expect(migration).toContain("publish_runtime_checkpoint_canonical_payload(");

@@ -20,7 +20,7 @@
     },
     {
       "remoteVersion": "20260826190508",
-      "localFile": "20260826185115_runtime_checkpoint_metadata_realtime.sql"
+      "localFile": "20260826190508_runtime_checkpoint_metadata_realtime.sql"
     },
     {
       "remoteVersion": "20260828083146",
@@ -28,19 +28,19 @@
     },
     {
       "remoteVersion": "20260828113258",
-      "localFile": "20260828111809_runtime_checkpoint_delta_byte_budget.sql"
+      "localFile": "20260828113258_runtime_checkpoint_delta_byte_budget.sql"
     },
     {
       "remoteVersion": "20260829124632",
-      "localFile": "20260829111354_production_operator_identity_authorization.sql"
+      "localFile": "20260829124632_production_operator_identity_authorization.sql"
     },
     {
       "remoteVersion": "20260829124829",
-      "localFile": "20260829124726_production_operator_identity_authorization_hardening.sql"
+      "localFile": "20260829124829_production_operator_identity_authorization_hardening.sql"
     },
     {
       "remoteVersion": "20260829135717",
-      "localFile": "20260829131400_conflict_safe_multi_cm_shared_workflow.sql"
+      "localFile": "20260829135717_conflict_safe_multi_cm_shared_workflow.sql"
     }
   ],
   "minimumCompatibleBackendState": "WP-EGRESS-01/03/04 + WP-NEXT-02/03 deployed",

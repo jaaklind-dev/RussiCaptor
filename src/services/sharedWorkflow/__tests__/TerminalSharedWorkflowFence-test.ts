@@ -14,7 +14,7 @@ import {
 } from "../SharedWorkflowMutationService";
 
 const migration = fs.readFileSync(path.resolve(process.cwd(),
-  "supabase/migrations/20260909055656_fence_shared_workflow_mutations_after_completion.sql"), "utf8");
+  "supabase/migrations/20260909060818_fence_shared_workflow_mutations_after_completion.sql"), "utf8");
 const baselineState = Object.freeze({ notes: [], timelineEvents: [], interventions: [],
   medicationAdministrations: [], vitalSigns: [] });
 const actor = Object.freeze({ userId: "CM-A", role: "CM" as const, exerciseIds: ["EX-A"] });

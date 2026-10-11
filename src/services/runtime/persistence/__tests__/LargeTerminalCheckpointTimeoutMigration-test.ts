@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 
 const migration = fs.readFileSync(path.resolve(process.cwd(),
-  "supabase/migrations/20260910090104_large_terminal_checkpoint_timeout.sql"), "utf8");
+  "supabase/migrations/20260910090650_large_terminal_checkpoint_timeout.sql"), "utf8");
 
 describe("WP-NARVA-10A1 large terminal checkpoint timeout", () => {
   test("extends only the atomic terminal finalizer to the bounded API maximum", () => {

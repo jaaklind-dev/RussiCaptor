@@ -1,5 +1,5 @@
 import fs from "fs";import path from "path";
-const migration=fs.readFileSync(path.resolve(process.cwd(),"supabase/migrations/20260829131400_conflict_safe_multi_cm_shared_workflow.sql"),"utf8");
+const migration=fs.readFileSync(path.resolve(process.cwd(),"supabase/migrations/20260829135717_conflict_safe_multi_cm_shared_workflow.sql"),"utf8");
 describe("WP-NEXT-03 migration",()=>{
   it("creates patient-scoped heads, idempotency ledger and metadata notification",()=>{
     expect(migration).toMatch(/create table public\.shared_workflow_patient_states/);

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const sql = fs.readFileSync(
-  path.join(process.cwd(), "supabase/migrations/20260906055258_package_projection_divergence_recovery.sql"),
+  path.join(process.cwd(), "supabase/migrations/20260906063421_package_projection_divergence_recovery.sql"),
   "utf8",
 );
 

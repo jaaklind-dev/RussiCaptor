@@ -4,7 +4,7 @@ import path from "path";
 const migration = fs.readFileSync(
   path.resolve(
     __dirname,
-    "../../../../supabase/migrations/20260915101756_trusted_admin_exercise_role_provisioning.sql",
+    "../../../../supabase/migrations/20260915102524_trusted_admin_exercise_role_provisioning.sql",
   ),
   "utf8",
 );

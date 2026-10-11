@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const sql = readFileSync(resolve(process.cwd(),
-  "supabase/migrations/20260926120000_add_endotracheal_intubation_runtime_patient_command.sql"), "utf8");
+  "supabase/migrations/20260928043446_add_endotracheal_intubation_runtime_patient_command.sql"), "utf8");
 
 describe("durable endotracheal-intubation command migration", () => {
   test("adds one narrow authenticated command envelope without new operational tables", () => {

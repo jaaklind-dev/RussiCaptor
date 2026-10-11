@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const migration = readFileSync(resolve(process.cwd(),
-  "supabase/migrations/20260915170000_narva_laboratory_runtime_commands.sql"), "utf8");
+  "supabase/migrations/20260915165109_narva_laboratory_runtime_commands.sql"), "utf8");
 
 describe("laboratory durable command migration", () => {
   test("adds only lab order/collection to the existing command inbox", () => {

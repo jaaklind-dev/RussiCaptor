@@ -244,7 +244,7 @@ describe("WP-NARVA-10B1 durable IRO scenario controls", () => {
 
 describe("WP-NARVA-10B1 forward-only authorization migration", () => {
   const sql = fs.readFileSync(path.resolve(__dirname,
-    "../../../../../supabase/migrations/20260912083420_narva_iro_scenario_controls.sql"), "utf8");
+    "../../../../../supabase/migrations/20260912085404_narva_iro_scenario_controls.sql"), "utf8");
 
   test("adds only the six canonical IRO command types to the existing inbox", () => {
     for (const type of ["IRO_VASOPRESSOR_FAULT_START", "IRO_VASOPRESSOR_FAULT_CORRECT",

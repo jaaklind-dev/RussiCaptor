@@ -2,27 +2,27 @@ import fs from "fs";
 import path from "path";
 
 const migration = fs.readFileSync(
-  path.resolve(__dirname, "../../../../supabase/migrations/20260916053734_fresh_exercise_bootstrap_authorization.sql"),
+  path.resolve(__dirname, "../../../../supabase/migrations/20260916054932_fresh_exercise_bootstrap_authorization.sql"),
   "utf8",
 );
 const hardening = fs.readFileSync(
-  path.resolve(__dirname, "../../../../supabase/migrations/20260916055045_harden_fresh_exercise_bootstrap_authorization.sql"),
+  path.resolve(__dirname, "../../../../supabase/migrations/20260916055132_harden_fresh_exercise_bootstrap_authorization.sql"),
   "utf8",
 );
 const insertClaim = fs.readFileSync(
-  path.resolve(__dirname, "../../../../supabase/migrations/20260916080600_allow_bootstrap_insert_claim.sql"),
+  path.resolve(__dirname, "../../../../supabase/migrations/20260916080629_allow_bootstrap_insert_claim.sql"),
   "utf8",
 );
 const separatedAuthority = fs.readFileSync(
-  path.resolve(__dirname, "../../../../supabase/migrations/20260916081500_separate_bootstrap_insert_authority.sql"),
+  path.resolve(__dirname, "../../../../supabase/migrations/20260916080939_separate_bootstrap_insert_authority.sql"),
   "utf8",
 );
 const insertAuthorityFix = fs.readFileSync(
-  path.resolve(__dirname, "../../../../supabase/migrations/20260916084800_fix_bootstrap_insert_authorization_helper.sql"),
+  path.resolve(__dirname, "../../../../supabase/migrations/20260916084829_fix_bootstrap_insert_authorization_helper.sql"),
   "utf8",
 );
 const consumedRevokeFence = fs.readFileSync(
-  path.resolve(__dirname, "../../../../supabase/migrations/20261007120000_refuse_consumed_bootstrap_revocation.sql"),
+  path.resolve(__dirname, "../../../../supabase/migrations/20261007174526_refuse_consumed_bootstrap_revocation.sql"),
   "utf8",
 );
 const adminExercisesEdge = fs.readFileSync(

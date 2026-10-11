@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 
 const migration = fs.readFileSync(path.resolve(process.cwd(),
-  "supabase/migrations/20260918123000_large_canonical_checkpoint_publication_timeout.sql"), "utf8");
+  "supabase/migrations/20260918145252_large_canonical_checkpoint_publication_timeout.sql"), "utf8");
 
 describe("WP-NARVA-10B30Q large canonical checkpoint publication timeout", () => {
   test.each([

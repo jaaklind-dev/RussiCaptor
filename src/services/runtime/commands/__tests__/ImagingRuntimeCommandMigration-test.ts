@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const sql = readFileSync(resolve(process.cwd(),
-  "supabase/migrations/20260925120000_add_imaging_runtime_patient_command.sql"), "utf8");
+  "supabase/migrations/20260928043420_add_imaging_runtime_patient_command.sql"), "utf8");
 
 describe("I2 durable Imaging command migration", () => {
   test("adds only a validated Imaging order payload to the existing command RPC", () => {

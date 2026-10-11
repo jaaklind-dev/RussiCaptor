@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const sql=fs.readFileSync(path.join(process.cwd(),"supabase/migrations/202609010002_stale_checkpoint_payload_envelope_fix.sql"),"utf8");
+const sql=fs.readFileSync(path.join(process.cwd(),"supabase/migrations/20260901071552_stale_checkpoint_payload_envelope_fix.sql"),"utf8");
 
 describe("stale checkpoint expired-lease terminal recovery",()=>{
   test("is scoped, locked, and fails closed before it changes lifecycle",()=>{

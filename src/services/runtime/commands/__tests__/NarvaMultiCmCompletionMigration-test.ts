@@ -2,11 +2,11 @@ import fs from "fs";
 import path from "path";
 
 const migration = fs.readFileSync(path.resolve(process.cwd(),
-  "supabase/migrations/20260907153105_narva_multicm_terminal_convergence.sql"), "utf8");
+  "supabase/migrations/20260907162401_narva_multicm_terminal_convergence.sql"), "utf8");
 const terminalSqlFix = fs.readFileSync(path.resolve(process.cwd(),
-  "supabase/migrations/20260908041458_qualify_terminal_completion_sql.sql"), "utf8");
+  "supabase/migrations/20260908042246_qualify_terminal_completion_sql.sql"), "utf8");
 const patientCommandSqlFix = fs.readFileSync(path.resolve(process.cwd(),
-  "supabase/migrations/20260908091625_qualify_runtime_patient_command_sql.sql"), "utf8");
+  "supabase/migrations/20260908091942_qualify_runtime_patient_command_sql.sql"), "utf8");
 const patientCommandSqlRegression = fs.readFileSync(path.resolve(process.cwd(),
   "supabase/tests/narva_runtime_patient_command_test.sql"), "utf8");
 

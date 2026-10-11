@@ -3,7 +3,7 @@ import path from "path";
 
 describe("WP-NARVA-09 transport patient-command migration", () => {
   const migration = fs.readFileSync(path.join(process.cwd(),
-    "supabase/migrations/20260909123250_add_transport_runtime_patient_command.sql"), "utf8");
+    "supabase/migrations/20260909123746_add_transport_runtime_patient_command.sql"), "utf8");
 
   test("adds transport without weakening the existing authenticated ownership, CAS or completion fence", () => {
     expect(migration).toContain("'TRANSPORT_START'");

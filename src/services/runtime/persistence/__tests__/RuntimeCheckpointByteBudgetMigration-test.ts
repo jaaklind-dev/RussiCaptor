@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 describe("WP-EGRESS-04 byte-budget migration", () => {
-  const sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20260828111809_runtime_checkpoint_delta_byte_budget.sql"), "utf8");
+  const sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20260828113258_runtime_checkpoint_delta_byte_budget.sql"), "utf8");
 
   test("adds and backfills lightweight byte metadata without changing payload authority", () => {
     expect(sql).toContain("alter table public.runtime_checkpoints add column payload_bytes bigint");

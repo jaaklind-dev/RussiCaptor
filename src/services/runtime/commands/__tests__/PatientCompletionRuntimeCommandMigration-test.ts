@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const sql=readFileSync(resolve(process.cwd(),
-  "supabase/migrations/20260926143000_add_patient_complete_runtime_patient_command.sql"),"utf8");
+  "supabase/migrations/20260928043507_add_patient_complete_runtime_patient_command.sql"),"utf8");
 
 describe("PATIENT_COMPLETE additive command migration",()=>{
   test("adds only the empty-payload command to the existing authenticated durable RPC",()=>{
@@ -16,7 +16,7 @@ describe("PATIENT_COMPLETE additive command migration",()=>{
 
   test("orders after the current durable ETT whitelist migration without deployment side effects",()=>{
     expect(existsSync(resolve(process.cwd(),
-      "supabase/migrations/20260926120000_add_endotracheal_intubation_runtime_patient_command.sql"))).toBe(true);
+      "supabase/migrations/20260928043446_add_endotracheal_intubation_runtime_patient_command.sql"))).toBe(true);
     expect(sql).toContain("'ENDOTRACHEAL_INTUBATION','PATIENT_COMPLETE'");
     expect(sql).toContain("revoke all on function public.submit_runtime_patient_command");
     expect(sql).toContain("grant execute on function public.submit_runtime_patient_command");

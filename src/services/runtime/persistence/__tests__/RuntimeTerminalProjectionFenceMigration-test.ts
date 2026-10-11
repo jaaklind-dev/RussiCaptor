@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 
 const migration = fs.readFileSync(path.resolve(process.cwd(),
-  "supabase/migrations/20260907163357_narva_terminal_projection_fence.sql"), "utf8");
+  "supabase/migrations/20260907163503_narva_terminal_projection_fence.sql"), "utf8");
 
 describe("WP-NARVA-06 terminal projection fence hardening", () => {
   test("blocks stale projection writes from the moment completion is fenced", () => {

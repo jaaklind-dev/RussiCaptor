@@ -11,7 +11,7 @@ import {
 } from "../SharedWorkflowHeadInitializationService";
 
 const migrationPath = path.resolve(process.cwd(),
-  "supabase/migrations/20261006120000_recover_pending_completion_takeover.sql");
+  "supabase/migrations/20261006103300_recover_pending_completion_takeover.sql");
 const migration = fs.readFileSync(migrationPath, "utf8");
 
 class InMemoryGateway implements SharedWorkflowHeadInitializationGateway {
