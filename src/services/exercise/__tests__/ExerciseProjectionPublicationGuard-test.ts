@@ -36,7 +36,7 @@ describe("exercise projection publication authority", () => {
     const stamp = captureProjectionPublicationStamp(context())!;
     expect(projectionPublicationStampIsCurrent(stamp, context({ syncVersion: 12 }))).toBe(false);
     expect(source.indexOf("projectionPublicationStampIsCurrent(publicationStamp")).toBeLessThan(
-      source.indexOf('.upsert(projectionRow, { onConflict: "exercise_id" })'));
+      source.indexOf('client.rpc("publish_exercise_state_current_writer"'));
   });
 
   test("EXSTATE-PUB-04 stale runtime generation cannot publish", () => {

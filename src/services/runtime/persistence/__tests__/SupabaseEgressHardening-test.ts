@@ -30,7 +30,10 @@ describe("WP-47A Supabase egress hardening",()=>{
   test("exercise discovery and write acknowledgement never request full rows",()=>{
     const source=fs.readFileSync(path.join(process.cwd(),"src/services/CloudSyncService.ts"),"utf8");
     expect(source).toContain("exercise_session:state->exerciseSession");
-    expect(source).toContain('.select("exercise_id,revision,updated_at")');
+    expect(source).toContain('client.rpc("publish_exercise_state_current_writer"');
+    const migration=fs.readFileSync(path.join(process.cwd(),
+      "supabase/migrations/20261011090155_exercise_state_server_writer_fence.sql"),"utf8");
+    expect(migration).toContain("returns table(exercise_id text, revision bigint, updated_at timestamptz)");
     expect(source).not.toMatch(/from\("exercise_states"\)\s*\n\s*\.select\(\)/);
     expect(source).not.toContain('table: "exercise_states"');
     expect(source).toContain(".or(EXERCISE_DISCOVERY_ACTIVE_FILTER)");

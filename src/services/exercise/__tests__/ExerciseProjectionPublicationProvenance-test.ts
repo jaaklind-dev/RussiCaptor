@@ -71,7 +71,7 @@ describe("writer handoff at the final network send boundary", () => {
     expect(await flush).toEqual({ outcome: "REJECTED", reason: "STALE_WRITER_GENERATION" });
     expect(post).not.toHaveBeenCalled();
     expect(cloudSource.indexOf("sendCurrentProjectionPublication(publicationStamp")).toBeLessThan(
-      cloudSource.indexOf('.upsert(projectionRow, { onConflict: "exercise_id" })'));
+      cloudSource.indexOf('client.rpc("publish_exercise_state_current_writer"'));
   });
 
   test("EXSTATE-HANDOFF-03/04 B can publish but A cannot overwrite B", () => {

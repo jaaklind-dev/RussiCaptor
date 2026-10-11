@@ -122,8 +122,8 @@ describe("Admin direct initial publication", () => {
     const h = harness();
     let release!: () => void;
     const originalInsert = h.port.insert;
-    const port = { ...h.port, insert: (row: Parameters<typeof originalInsert>[0]) =>
-      new Promise<void>(resolve => { release = () => { void originalInsert(row).then(resolve); }; }) };
+    const port = { ...h.port, insert: (row: Parameters<typeof originalInsert>[0], identity: Parameters<typeof originalInsert>[1]) =>
+      new Promise<void>(resolve => { release = () => { void originalInsert(row, identity).then(resolve); }; }) };
     const create = acknowledgeInitialExercisePublication(input, port);
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
     expect(h.events).not.toContain("discover");

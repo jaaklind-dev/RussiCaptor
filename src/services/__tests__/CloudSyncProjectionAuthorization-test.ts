@@ -1,5 +1,10 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import type { OperatorSessionState } from "@/services/authorization/OperatorSessionService";
-import { canOperatorBootstrapCloudProjection, canOperatorPublishCloudProjection, cloudProjectionReturnsServerRow, cloudProjectionWriteMethod } from "@/services/CloudSyncService";
+import { canOperatorPublishCloudProjection } from "@/services/CloudSyncService";
+
+const source = fs.readFileSync(path.resolve(process.cwd(), "src/services/CloudSyncService.ts"), "utf8");
 
 function operator(role: "CM" | "EXCON" | "EXERCISE_BOOTSTRAP", scopeId = "EX-A"): OperatorSessionState {
   return {
@@ -38,18 +43,13 @@ describe("CM shared-workflow projection ownership", () => {
     expect(canOperatorPublishCloudProjection(operator("EXCON"), "EX-B")).toBe(false);
   });
 
-  test("bootstrap can publish only one previously unknown READY projection", () => {
-    expect(canOperatorBootstrapCloudProjection(operator("EXERCISE_BOOTSTRAP"), "EX-A", "READY", false)).toBe(true);
-    expect(canOperatorBootstrapCloudProjection(operator("EXERCISE_BOOTSTRAP"), "EX-A", "RUNNING", false)).toBe(false);
-    expect(canOperatorBootstrapCloudProjection(operator("EXERCISE_BOOTSTRAP"), "EX-A", "READY", true)).toBe(false);
+  test("bootstrap cannot use the active projection publisher", () => {
     expect(canOperatorPublishCloudProjection(operator("EXERCISE_BOOTSTRAP"), "EX-A")).toBe(false);
+    expect(source).toContain('if (lifecycleState === "READY"');
   });
 
-  test("uses insert-only publication for bootstrap and preserves scoped EXCON upsert", () => {
-    expect(cloudProjectionWriteMethod(false, true)).toBe("INSERT");
-    expect(cloudProjectionWriteMethod(true, false)).toBe("UPSERT");
-    expect(cloudProjectionWriteMethod(true, true)).toBe("UPSERT");
-    expect(cloudProjectionReturnsServerRow("INSERT")).toBe(false);
-    expect(cloudProjectionReturnsServerRow("UPSERT")).toBe(true);
+  test("READY and active publications use distinct server contracts", () => {
+    expect(source).toContain('client.rpc("create_initial_exercise_state"');
+    expect(source).toContain('client.rpc("publish_exercise_state_current_writer"');
   });
 });
