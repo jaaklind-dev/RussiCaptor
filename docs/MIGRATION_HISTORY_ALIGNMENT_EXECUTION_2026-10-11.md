@@ -1,6 +1,6 @@
 # Migration history alignment execution — 2026-10-11
 
-Project: `fimcsrivizpliiuoqopv`. Starting branch `feature/exercise-builder-v1` at `f7fdde32cbb8a2400b21a7162df467137a95031c`. This is a running evidence record; live-history repair is forbidden until the isolated fresh-database gate passes. Historical audit: [semantic comparison](MIGRATION_HISTORY_ALIGNMENT_AUDIT_2026-10-11.md); [baseline resolution](MIGRATION_PRELEDGER_BASELINE_RESOLUTION_2026-10-11.md).
+Project: `fimcsrivizpliiuoqopv`. Starting branch `feature/exercise-builder-v1` at `f7fdde32cbb8a2400b21a7162df467137a95031c`. This is a cumulative evidence record: local alignment, isolated reconstruction, and the later separately authorized production history repair. Historical audit: [semantic comparison](MIGRATION_HISTORY_ALIGNMENT_AUDIT_2026-10-11.md); [baseline resolution](MIGRATION_PRELEDGER_BASELINE_RESOLUTION_2026-10-11.md).
 
 ## Pre-change and local alignment
 
@@ -66,7 +66,7 @@ The twelve unchanged files (eight early baseline plus four already matched by ve
 
 Active file-path references were mechanically updated in 33 source/test/config files (63 lines); historical narrative documents retain their period-correct filenames and are superseded by this mapping. Targeted migration-related tests: 6 suites / 37 tests PASS. Complete suite: 317 suites / 2639 tests PASS. TypeScript, ESLint, field-release configuration and Runtime/multi-device guardrails PASS. These tests do **not** substitute for isolated fresh-database replay.
 
-## Production pre-repair fingerprints
+## Initial production pre-repair fingerprints (historical checkpoint)
 
 Read-only `pg_catalog`/`pg_policies` snapshots hash each category's ordered object keys and definitions with MD5. The function category hashes `pg_get_functiondef`; grants hash relation/function ACLs; publication hashes public table membership. These are comparison fingerprints, not credential data. The same exact query is to be run immediately before and after any future supported repair.
 
@@ -82,17 +82,17 @@ Read-only `pg_catalog`/`pg_policies` snapshots hash each category's ordered obje
 | relations | 35 | `2cafaf03cfb62742f4c9060daa7404be` |
 | triggers | 12 | `e1882bcec3b899980578fcd8e0a245ce` |
 
-The live ledger's first version was `202608190001`; its highest was `20261010110021`. The initial ledger count and fingerprints were captured before any local rename. No live schema or history mutation has occurred so far.
+The live ledger's first version was `202608190001`; its highest was `20261010110021`. The initial ledger count and fingerprints were captured before any local rename. At this historical checkpoint, no live schema or history mutation had occurred.
 
 ## Fresh-database hard gate and repair semantics
 
 The canonical isolated bootstrap to test is: initialize a **new disposable Supabase database** with standard managed `auth`/Realtime schemas, apply the tracked `supabase/schema.sql` shared-state precursor, then apply all 50 canonical-order files from `supabase/migrations`. `schema.sql` creates `exercise_states`, which no migration file creates. Compare tables, columns, constraints, indexes, triggers, functions/RPCs, policies, grants and publication membership to the production snapshot, classifying environment-specific differences separately. A bare `supabase db reset` is not proof of this repository's two-stage bootstrap.
 
-At the earlier local-alignment checkpoint, no isolated database was available on this host. The separately authorized scratch project `thixnregyriwevgptclw` was subsequently created; its completed replay and read-only production comparison are recorded below. **No live repair may occur without a separately authorized production-history repair work package.**
+At the earlier local-alignment checkpoint, no isolated database was available on this host. The separately authorized scratch project `thixnregyriwevgptclw` was subsequently created; its completed replay and read-only production comparison are recorded below. The later production repair was separately authorized and is recorded at the end of this document.
 
-Installed Supabase CLI: **2.119.0**. Its `migration repair --help` accepts `--status applied` and explicit versions. [Official Supabase documentation](https://supabase.com/docs/reference/cli/supabase-migration-repair) specifies that applied repair inserts history rows without running migration SQL; [db push documentation](https://supabase.com/docs/reference/cli/supabase-db-push) defines `--dry-run` and `--include-all`. No repair command has been run. The exact eight allowed future versions are `202607270001`, `202607270002`, `202607270003`, `202608120001`, `202608120002`, `202608120003`, `202608140001`, `202608140002`; their live effects and limited historical provenance are recorded in the prior audits. A repair, if later reached, records **operational alignment, not proof of original byte-for-byte execution**.
+Installed Supabase CLI: **2.119.0**. Its `migration repair --help` accepts `--status applied` and explicit versions. [Official Supabase documentation](https://supabase.com/docs/reference/cli/supabase-migration-repair) specifies that applied repair inserts history rows without running migration SQL; [db push documentation](https://supabase.com/docs/reference/cli/supabase-db-push) defines `--dry-run` and `--include-all`. At this historical checkpoint no repair command had been run. The exact eight later-authorized versions are `202607270001`, `202607270002`, `202607270003`, `202608120001`, `202608120002`, `202608120003`, `202608140001`, `202608140002`; their live effects and limited historical provenance are recorded in the prior audits. A repair records **operational alignment, not proof of original byte-for-byte execution**.
 
-## Remaining execution gates
+## Execution gates as recorded before the separately authorized repair
 
 1. **Completed below:** authorized isolated scratch project, two-stage bootstrap and material schema comparison passed.
 2. Immediately before any live repair, re-read the 42-row ledger and all production fingerprints; stop on drift.
@@ -100,7 +100,7 @@ Installed Supabase CLI: **2.119.0**. Its `migration repair --help` accepts `--st
 4. Require 50 local = 50 live exact versions, zero local-only/remote-only, and unchanged production schema/policy/grant/function fingerprints. Run supported read-only list and dry-run; require zero historical SQL pending even with `--include-all`.
 5. Only then set `MIGRATION_HISTORY_ALIGNMENT` and C7 to PASS. A future migration must be CLI-generated, unique and later than `20261010110021`; no writer-fence migration is authored in this work package.
 
-Earlier intermediate result (before scratch replay): local 38-file alignment, SQL-byte preservation, version uniqueness and 42/42 known-live matching **PASS**. The scratch bootstrap has since passed; live history repair, 50/50 production readback, post-repair fingerprints and no-replay dry-run remain **NOT RUN**. Thus `MIGRATION_HISTORY_ALIGNMENT = READY_FOR_PRODUCTION_HISTORY_REPAIR` and C7 remains **BLOCKED_PENDING_PRODUCTION_HISTORY_REPAIR**. No production schema, data, RLS, grants, functions or Edge Functions changed; no branch push.
+Earlier intermediate result (before scratch replay): local 38-file alignment, SQL-byte preservation, version uniqueness and 42/42 known-live matching **PASS**. At this checkpoint, scratch bootstrap had passed but live history repair, 50/50 production readback, post-repair fingerprints and no-replay dry-run were **NOT RUN**. The later authorized repair and final result appear below.
 
 ### Historical stopping checkpoint before scratch project authorization
 
@@ -188,6 +188,48 @@ The same read-only catalog queries were run on both projects. Row sets were comp
 
 Physical column order differs only in `module_versions`: scratch places `created_by_import_run_id` before `registered_at`/`registered_by`; production appends it after them. Names, types, defaults, nullability, constraints and function definitions match. The migration's `SELECT * INTO` uses that table's own rowtype on either project. This is a harmless physical-order/provenance difference, not a material application-schema difference; it does not prove that the eight pre-ledger files historically ran verbatim. There are zero material table, function, RLS, grant or security-object differences in the compared final public schema.
 
-### Gate and next action
+### Gate and next action at the scratch-only checkpoint
 
-`SCRATCH_PROJECT_IDENTITY`, `SCRATCH_SCHEMA_BASELINE`, `SCRATCH_FIRST_MIGRATION_IDENTITY`, `SCRATCH_FIRST_MIGRATION_APPLY`, `SCRATCH_50_MIGRATION_CHAIN`, `SCRATCH_MIGRATION_ORDER`, `SCRATCH_SCHEMA_FINGERPRINT`, `SCRATCH_PRODUCTION_SCHEMA_EQUIVALENCE`, `MIGRATION_FRESH_DB_BOOTSTRAP` and `MIGRATION_FRESH_LIVE_SCHEMA_EQUIVALENCE` are **PASS**. `MIGRATION_HISTORY_ALIGNMENT = READY_FOR_PRODUCTION_HISTORY_REPAIR`; C7 is **BLOCKED_PENDING_PRODUCTION_HISTORY_REPAIR**. No production ledger/schema/data/RLS/grant/function/Edge Function mutation, production migration repair, writer-fence migration, or branch push occurred. The next separately authorized action is a supported production history repair for the eight pre-ledger canonical versions, with immediate pre/post schema fingerprints and 50/50 version-set readback; this document does not authorize that action.
+`SCRATCH_PROJECT_IDENTITY`, `SCRATCH_SCHEMA_BASELINE`, `SCRATCH_FIRST_MIGRATION_IDENTITY`, `SCRATCH_FIRST_MIGRATION_APPLY`, `SCRATCH_50_MIGRATION_CHAIN`, `SCRATCH_MIGRATION_ORDER`, `SCRATCH_SCHEMA_FINGERPRINT`, `SCRATCH_PRODUCTION_SCHEMA_EQUIVALENCE`, `MIGRATION_FRESH_DB_BOOTSTRAP` and `MIGRATION_FRESH_LIVE_SCHEMA_EQUIVALENCE` were **PASS**. At this point `MIGRATION_HISTORY_ALIGNMENT = READY_FOR_PRODUCTION_HISTORY_REPAIR`; C7 was **BLOCKED_PENDING_PRODUCTION_HISTORY_REPAIR**. The later work package explicitly authorized the repair; this earlier scratch-only work package did not.
+
+## Separately authorized production history repair — 2026-10-11
+
+The production target was re-verified as project `fimcsrivizpliiuoqopv`, `jaaklind-dev's Project`, organization `stcktcuxpqywzkaveusy`, region `eu-west-1`, database host `db.fimcsrivizpliiuoqopv.supabase.co`. Starting branch HEAD was `e4f99daf2e23831253be9334c7ce53d63d391e75`; the working tree was clean before CLI-generated temporary metadata was removed. The immediate preflight found **50** local SQL files, **42** live ledger entries, and all eight exact authorized versions absent. The 42-row ledger exactly matched the prior saved snapshot.
+
+CLI **2.119.0** was used. Its documented `migration repair --status applied` operation inserts history metadata and does **not** execute migration SQL. The explicit project ref and one exact allowlisted version were supplied for each command. The command form was `supabase migration repair <version> --status applied --project-ref fimcsrivizpliiuoqopv --output-format text`. Each command returned `Repaired migration history: [<version>] => applied`; a separate immediate ledger readback verified the new named row, expected count, and retention of preceding rows. No migration SQL, `db push`, manual ledger SQL, schema change or writer-fence work was performed.
+
+| Order | Version | Migration name | Immediate ledger count | Result |
+| ---: | --- | --- | ---: | --- |
+| 1 | `202607270001` | `module_import_foundation` | 43 | PASS |
+| 2 | `202607270002` | `import_run_rollback` | 44 | PASS |
+| 3 | `202607270003` | `exercise_self_binding` | 45 | PASS |
+| 4 | `202608120001` | `authorization_foundation` | 46 | PASS |
+| 5 | `202608120002` | `instructor_evaluation_foundation` | 47 | PASS |
+| 6 | `202608120003` | `runtime_checkpoint_authority` | 48 | PASS |
+| 7 | `202608140001` | `runtime_missing_recovery` | 49 | PASS |
+| 8 | `202608140002` | `runtime_recovery_acceptance_fixture` | 50 | PASS |
+
+Post-repair ledger comparison found **50/50 exact version-set equality**, zero local-only, zero remote-only and zero duplicate versions. `supabase migration list --project-ref fimcsrivizpliiuoqopv` displayed all 50 local and remote versions on the same rows. The read-only/no-execution check `supabase db push --dry-run --skip-vault --include-all --project-ref fimcsrivizpliiuoqopv` returned `DRY RUN: migrations will not be pushed` and `Remote database is up to date`; historical pending count is **0**. No production `db push` was run.
+
+Immediately before repair, full read-only application-catalog row sets matched the saved production snapshot. After repair, the same categories were read again and each row set matched its immediate pre-repair counterpart exactly. Compact fingerprints below are the FNV-1a-64 identifiers of the validated pre-repair row sets; because the full post-repair row sets are equal, the post-repair fingerprints are identical. Function rows include definition MD5, identity, SECURITY DEFINER, volatility, search path/config and ACL. Relation rows include RLS settings and ACL. Constraint and trigger deparsing used the same pretty-print mode on both sides.
+
+| Category | Objects pre/post | Pre fingerprint | Post fingerprint | Full row equality |
+| --- | ---: | --- | --- | --- |
+| Relations and relation ACLs | 35 | `cf91e3dbea000b08` | `cf91e3dbea000b08` | YES |
+| Columns/defaults/nullability | 262 | `ef7a277b68e3820b` | `ef7a277b68e3820b` | YES |
+| Constraints | 168 | `837d911bbd8a45c7` | `837d911bbd8a45c7` | YES |
+| Indexes | 63 | `982eec9a3980f1fc` | `982eec9a3980f1fc` | YES |
+| Triggers | 12 | `45a00ad7f10a3d8e` | `45a00ad7f10a3d8e` | YES |
+| RLS policies | 35 | `0a0e73af096252da` | `0a0e73af096252da` | YES |
+| Functions, definitions, security and ACLs | 61 | `f2e732d2b1fc1f5e` | `f2e732d2b1fc1f5e` | YES |
+| Realtime public-table membership | 5 | `3ecbf6fc7593937d` | `3ecbf6fc7593937d` | YES |
+| Public schema ACL | 1 | `7d2af1497a29e375` | `7d2af1497a29e375` | YES |
+| Public default ACLs | 6 | `484d53a85cabf964` | `484d53a85cabf964` | YES |
+
+Application/runtime read-only counts also remained the same before and after: `exercise_states` 158, `runtime_checkpoints` 142, canonical artifacts 55, role assignments 301, writer leases 145, module versions 12, exercise versions 3, and `auth.users` 114. These counts and the history-only command semantics support **no repair-attributable data change**; they are not a claim of a complete row-by-row data audit. Schema, RLS, grants, functions, triggers and Realtime metadata did not change.
+
+The highest canonical migration remains `20261010110021`. The next migration must be generated when authored with a unique UTC timestamp greater than that value (per repository convention); no next migration was created in this work package. If recovery from a future history issue is needed, first preserve the ledger and schema snapshots and use supported Supabase history tooling under separate authorization; do not manually edit the ledger or rerun baseline SQL.
+
+**Historical provenance remains limited:** the supported migration-history repair establishes operational alignment only. It does not retroactively prove that the exact eight pre-ledger local SQL files were historically executed.
+
+Final gate for this work package: `MIGRATION_HISTORY_ALIGNMENT = PASS`; `C7 = PASS`. `C1_ALL_WRITES_CLASSIFIED` remains PASS from the preceding writer-fence inventory. `C2`–`C6` and `C8`–`C12` are not established here. No writer-fence migration, runtime source change, RLS/grant change or Edge Function deployment was performed.
