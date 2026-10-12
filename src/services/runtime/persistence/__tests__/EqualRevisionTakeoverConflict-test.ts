@@ -106,12 +106,12 @@ describe("equal-revision writer takeover checkpoint authority", () => {
     const takeover = source.slice(source.indexOf("export async function takeOverRuntimeWriter"),
       source.indexOf("/** Explicit user recovery"));
     expect(takeover.indexOf("prepareRuntimeWriterCandidateBeforeLease")).toBeLessThan(
-      takeover.indexOf("acquireRuntimeWriterTerminal"),
+      takeover.indexOf("repository.takeOverWriter"),
     );
     expect(takeover.indexOf("acceptAuthoritativeRuntimeCheckpointForReaderAsync")).toBeLessThan(
-      takeover.indexOf("acquireRuntimeWriterTerminal"),
+      takeover.indexOf("repository.takeOverWriter"),
     );
-    expect(takeover.indexOf("acquireRuntimeWriterTerminal")).toBeLessThan(
+    expect(takeover.indexOf("repository.takeOverWriter")).toBeLessThan(
       takeover.indexOf("wakeCheckpointPublicationForCurrentWriter"),
     );
     const startup = source.slice(source.indexOf("async function startRuntimeCheckpointSyncForExercise"),

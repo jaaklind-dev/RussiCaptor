@@ -10,6 +10,41 @@ const sharedState = (time: number) => ({
 function client(result:{data?:unknown;error?:{message:string}}){return {rpc:jest.fn(async()=>({data:result.data??null,error:result.error??null})),from:jest.fn(()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:result.data,error:result.error??null})})})}))} as never;}
 
 describe("WP-44B Supabase repository diagnostics",()=>{
+  test("TAKEOVER-ORDER: explicit takeover compare-and-swaps the observed lease and returns the current generation/revision",async()=>{
+    const mockClient={rpc:jest.fn()
+      .mockResolvedValueOnce({data:{prior_lease_id:"LEASE-A",prior_writer_instance_id:"A",prior_writer_generation:4},error:null})
+      .mockResolvedValueOnce({data:{exercise_id:"E",writer_instance_id:"B",lease_id:"LEASE-B",user_id:"U",
+        writer_generation:5,prior_writer_instance_id:"A",checkpoint_revision:9,checkpoint_payload_hash:"H9",
+        expires_at:"2026-10-12T12:00:00Z",takeover_occurred:true},error:null})};
+    const repository=new SupabaseRuntimeCheckpointRepository(mockClient as never);
+    await expect(repository.takeOverWriter("E","B",60)).resolves.toEqual({
+      status:"TAKEN_OVER",checkpointRevision:9,checkpointPayloadHash:"H9",priorWriterInstanceId:"A",
+      lease:{leaseId:"LEASE-B",exerciseId:"E",writerInstanceId:"B",userId:"U",
+        expiresAt:"2026-10-12T12:00:00Z",writerGeneration:5},
+    });
+    expect(mockClient.rpc.mock.calls).toEqual([
+      ["read_runtime_writer_takeover_target",{p_exercise_id:"E"}],
+      ["takeover_runtime_writer",{p_exercise_id:"E",p_writer_instance_id:"B",
+        p_expected_prior_lease_id:"LEASE-A",p_lease_seconds:60}],
+    ]);
+  });
+  test("TAKEOVER-ORDER: concurrent replacement is a bounded conflict, not an ordinary active-writer error",async()=>{
+    const mockClient={rpc:jest.fn()
+      .mockResolvedValueOnce({data:{prior_lease_id:"LEASE-A"},error:null})
+      .mockResolvedValueOnce({data:null,error:{message:"TAKEOVER_CONCURRENT_CONFLICT"}})};
+    await expect(new SupabaseRuntimeCheckpointRepository(mockClient as never).takeOverWriter("E","C",60))
+      .resolves.toEqual({status:"REJECTED",code:"TAKEOVER_CONCURRENT_CONFLICT"});
+  });
+  test("TAKEOVER-ORDER: missing current writer and unauthorized caller never submit a takeover",async()=>{
+    const missing={rpc:jest.fn().mockResolvedValue({data:null,error:{message:"WRITER_NOT_PRESENT"}})};
+    await expect(new SupabaseRuntimeCheckpointRepository(missing as never).takeOverWriter("E","B",60))
+      .resolves.toEqual({status:"REJECTED",code:"WRITER_NOT_PRESENT"});
+    expect(missing.rpc).toHaveBeenCalledTimes(1);
+    const unauthorized={rpc:jest.fn().mockResolvedValue({data:null,error:{message:"UNAUTHORIZED"}})};
+    await expect(new SupabaseRuntimeCheckpointRepository(unauthorized as never).takeOverWriter("E","B",60))
+      .resolves.toEqual({status:"REJECTED",code:"UNAUTHORIZED"});
+    expect(unauthorized.rpc).toHaveBeenCalledTimes(1);
+  });
   test("maps a stale backend writer rejection to a stable result",async()=>{
     const repository=new SupabaseRuntimeCheckpointRepository(client({error:{message:"STALE_WRITER"}}));
     await expect(repository.publish({leaseId:"L",exerciseId:"E",writerInstanceId:"W",userId:"U",expiresAt:"x"},4,{checkpointRevision:5} as never))

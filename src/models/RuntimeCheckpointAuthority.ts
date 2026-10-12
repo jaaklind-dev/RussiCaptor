@@ -29,7 +29,17 @@ export type RuntimeWriterLease = Readonly<{
   writerInstanceId: string;
   userId: string;
   expiresAt: string;
+  writerGeneration?: number;
 }>;
+
+export type WriterTakeoverResult = Readonly<
+  | { status: "TAKEN_OVER" | "ALREADY_OWNED"; lease: RuntimeWriterLease;
+      checkpointRevision: number; checkpointPayloadHash: string;
+      priorWriterInstanceId?: string }
+  | { status: "REJECTED"; code: "UNAUTHORIZED" | "EXERCISE_NOT_FOUND" |
+      "INVALID_EXERCISE_STATE" | "TAKEOVER_NOT_ALLOWED" | "WRITER_NOT_PRESENT" |
+      "TAKEOVER_CONCURRENT_CONFLICT" | "AUTHORITY_UNAVAILABLE" }
+>;
 
 export type CheckpointAuthorityDiagnosticCode =
   | "CHECKPOINT_NOT_FOUND"

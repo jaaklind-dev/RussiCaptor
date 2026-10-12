@@ -628,7 +628,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     const lease = takeover.indexOf("lease=acquired.lease");
     const acquiring = takeover.indexOf('setStatus({state:"ACQUIRING"');
     const writer = takeover.indexOf('setStatus({state:"WRITER"');
-    const restore = takeover.indexOf("acceptAuthoritativeRuntimeCheckpointAsync(prepared.checkpoint, true");
+    const restore = takeover.indexOf("acceptAuthoritativeRuntimeCheckpointAsync(canonicalCheckpoint, true");
     const owner = takeover.indexOf("establishExerciseRuntimeOwnerForCurrentWriter", restore);
     const resumeCompletion = takeover.indexOf("writerReadyGeneration.resumePendingCompletion", owner);
     const routinePublication = takeover.indexOf("wakeCheckpointPublicationForCurrentWriter", resumeCompletion);

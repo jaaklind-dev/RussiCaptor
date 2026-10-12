@@ -4,6 +4,7 @@ import type {
   RuntimeCheckpointEnvelope,
   RuntimeCheckpointCanonicalRepresentation,
   RuntimeWriterLease,
+  WriterTakeoverResult,
   WriterAcquisitionResult,
 } from "@/models/RuntimeCheckpointAuthority";
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
@@ -34,6 +35,7 @@ export interface RuntimeCheckpointRepository {
   loadDeltas(exerciseId: string, fromRevision: number, toRevision: number, limit: number): Promise<readonly RuntimeCheckpointDelta[]>;
   loadDeltaMetadata(exerciseId: string, fromRevision: number, toRevision: number, limit: number): Promise<readonly RuntimeCheckpointDeltaMetadata[]>;
   acquireWriter(exerciseId: string, writerInstanceId: string, expectedRevision: number, leaseSec: number): Promise<WriterAcquisitionResult>;
+  takeOverWriter(exerciseId: string, writerInstanceId: string, leaseSec: number): Promise<WriterTakeoverResult>;
   renewWriter(lease: RuntimeWriterLease, leaseSec: number): Promise<WriterAcquisitionResult>;
   releaseWriter(lease: RuntimeWriterLease): Promise<void>;
   publish(lease: RuntimeWriterLease, expectedRevision: number, checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>, baseCheckpoint?: RuntimeCheckpointEnvelope<SharedExerciseState>, control?: RuntimeCheckpointPublicationControl): Promise<CheckpointPublishResult<SharedExerciseState>>;
@@ -88,6 +90,12 @@ export async function loadCheckpointFreshness(
 
 function code(message: string): string {
   return ["STALE_WRITER", "CHECKPOINT_REVISION_CONFLICT", "WRITER_AUTHORITY_HELD", "TAKEOVER_DENIED"]
+    .find(item => message.includes(item)) ?? "AUTHORITY_UNAVAILABLE";
+}
+
+function takeoverCode(message: string): Extract<WriterTakeoverResult, { status: "REJECTED" }>["code"] {
+  return (["UNAUTHORIZED", "EXERCISE_NOT_FOUND", "INVALID_EXERCISE_STATE", "TAKEOVER_NOT_ALLOWED",
+    "WRITER_NOT_PRESENT", "TAKEOVER_CONCURRENT_CONFLICT"] as const)
     .find(item => message.includes(item)) ?? "AUTHORITY_UNAVAILABLE";
 }
 
@@ -215,6 +223,34 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
     if (error) return { status: code(error.message) === "WRITER_AUTHORITY_HELD" ? "HELD_BY_OTHER_WRITER" : code(error.message) === "CHECKPOINT_REVISION_CONFLICT" ? "STALE_LOCAL_STATE" : "AUTHORITY_UNAVAILABLE", code: code(error.message) as never };
     const row = Array.isArray(data) ? data[0] : data;
     return { status: row.already_owned ? "ALREADY_OWNED" : "ACQUIRED", checkpointRevision: Number(row.checkpoint_revision), lease: Object.freeze({ leaseId: row.lease_id, exerciseId, writerInstanceId, userId: row.user_id, expiresAt: row.expires_at }) };
+  }
+  async takeOverWriter(exerciseId: string, writerInstanceId: string, leaseSec: number): Promise<WriterTakeoverResult> {
+    const target = await this.client.rpc("read_runtime_writer_takeover_target", { p_exercise_id: exerciseId });
+    recordSupabaseTraffic({ operation: "RPC", endpoint: "read_runtime_writer_takeover_target", data: target.data });
+    if (target.error) return { status: "REJECTED", code: takeoverCode(target.error.message) };
+    const prior = Array.isArray(target.data) ? target.data[0] : target.data;
+    if (!prior?.prior_lease_id) return { status: "REJECTED", code: "WRITER_NOT_PRESENT" };
+    const result = await this.client.rpc("takeover_runtime_writer", {
+      p_exercise_id: exerciseId, p_writer_instance_id: writerInstanceId,
+      p_expected_prior_lease_id: prior.prior_lease_id, p_lease_seconds: leaseSec,
+    });
+    recordSupabaseTraffic({ operation: "RPC", endpoint: "takeover_runtime_writer", data: result.data });
+    if (result.error) return { status: "REJECTED", code: takeoverCode(result.error.message) };
+    const row = Array.isArray(result.data) ? result.data[0] : result.data;
+    if (!row || !Number.isSafeInteger(Number(row.writer_generation)) || Number(row.writer_generation) < 1 ||
+        !Number.isSafeInteger(Number(row.checkpoint_revision)) || Number(row.checkpoint_revision) < 1 ||
+        typeof row.checkpoint_payload_hash !== "string" || !row.checkpoint_payload_hash ||
+        typeof row.lease_id !== "string" || typeof row.user_id !== "string") {
+      return { status: "REJECTED", code: "AUTHORITY_UNAVAILABLE" };
+    }
+    return {
+      status: row.takeover_occurred ? "TAKEN_OVER" : "ALREADY_OWNED",
+      checkpointRevision: Number(row.checkpoint_revision),
+      checkpointPayloadHash: row.checkpoint_payload_hash,
+      ...(row.prior_writer_instance_id ? { priorWriterInstanceId: row.prior_writer_instance_id } : {}),
+      lease: Object.freeze({ leaseId: row.lease_id, exerciseId, writerInstanceId,
+        userId: row.user_id, expiresAt: row.expires_at, writerGeneration: Number(row.writer_generation) }),
+    };
   }
   async renewWriter(lease: RuntimeWriterLease, leaseSec: number): Promise<WriterAcquisitionResult> {
     const { data, error } = await this.client.rpc("renew_runtime_writer", { p_lease_id: lease.leaseId, p_writer_instance_id: lease.writerInstanceId, p_lease_seconds: leaseSec });

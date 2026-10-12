@@ -19,7 +19,7 @@ function repository(remote: RuntimeCheckpointEnvelope<SharedExerciseState> | und
       exerciseId: remote.exerciseId, checkpointRevision: remote.checkpointRevision,
       payloadHash: remote.payloadHash, provenanceHash: remote.provenanceHash, writerInstanceId: "W",
     }) : undefined,
-    acquireWriter: jest.fn(), renewWriter: jest.fn(), releaseWriter: jest.fn(),
+    acquireWriter: jest.fn(), takeOverWriter: jest.fn(), renewWriter: jest.fn(), releaseWriter: jest.fn(),
   } as RuntimeCheckpointRepository;
 }
 

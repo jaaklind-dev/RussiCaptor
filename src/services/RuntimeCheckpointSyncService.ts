@@ -750,30 +750,71 @@ export async function takeOverRuntimeWriter(): Promise<Status> {
     }});
   }
   const writerId=await startupAwait(getRuntimeWriterInstanceId());
-  const acquired=await acquireRuntimeWriterTerminal(repository,exerciseId,writerId,remote.checkpointRevision,LEASE_SECONDS);
-  if ("code" in acquired) return setAndReturn({state:"READER",code:acquired.code,revision:acquired.checkpointRevision});
+  // Ordinary acquisition must not steal an active writer. The explicit RPC
+  // compare-and-swaps the observed lease and returns the latest checkpoint
+  // revision after every earlier A publication has committed.
+  const acquired=await startupAwait(repository.takeOverWriter(exerciseId,writerId,LEASE_SECONDS));
+  if (acquired.status === "REJECTED") return setAndReturn({state:"READER",code:acquired.code});
+  if (isOperatorSignOutDraining()) {
+    await repository.releaseWriter(acquired.lease);
+    return setAndReturn({state:"READER",code:"WRITER_SIGNOUT_DRAINING"});
+  }
   lease=acquired.lease;
   recordRenewalDiagnostic("LEASE_ACQUIRED", "takeover");
-  setStatus({state:"ACQUIRING",revision:remote.checkpointRevision});
+  setStatus({state:"ACQUIRING",revision:acquired.checkpointRevision});
   if (!ensureLeaseRenewalForCurrentWriter?.()) {
     await repository.releaseWriter(acquired.lease); lease=undefined;
-    return setAndReturn({state:"READER",code:"WRITER_RENEWAL_NOT_READY",revision:remote.checkpointRevision});
+    return setAndReturn({state:"READER",code:"WRITER_RENEWAL_NOT_READY",revision:acquired.checkpointRevision});
   }
   const confirmed=await confirmAcquiredRuntimeWriter(repository,acquired.lease);
-  if (!confirmed) return setAndReturn({state:"READER",code:"WRITER_AUTHORITY_UNAVAILABLE",revision:remote.checkpointRevision});
-  const latest=await loadCheckpointFreshness(repository,exerciseId,"takeover");
-  if (!latest || latest.checkpointRevision!==remote.checkpointRevision || latest.payloadHash!==remote.payloadHash) {
-    await repository.releaseWriter(confirmed); return setAndReturn({state:"CONFLICT",code:"CHECKPOINT_REVISION_CONFLICT"});
+  if (!confirmed) {
+    lease=undefined;
+    return setAndReturn({state:"READER",code:"WRITER_AUTHORITY_UNAVAILABLE",revision:acquired.checkpointRevision});
+  }
+  let latest:Awaited<ReturnType<typeof loadCheckpointFreshness>>;
+  try {
+    latest=await loadCheckpointFreshness(repository,exerciseId,"takeover");
+  } catch {
+    await repository.releaseWriter(confirmed); lease=undefined;
+    return setAndReturn({state:"CONFLICT",code:"CHECKPOINT_REVISION_CONFLICT"});
+  }
+  if (!latest || latest.checkpointRevision!==acquired.checkpointRevision || latest.payloadHash!==acquired.checkpointPayloadHash) {
+    await repository.releaseWriter(confirmed); lease=undefined;
+    return setAndReturn({state:"CONFLICT",code:"CHECKPOINT_REVISION_CONFLICT"});
+  }
+  let canonicalCheckpoint=prepared.checkpoint;
+  if (canonicalCheckpoint.checkpointRevision!==latest.checkpointRevision || canonicalCheckpoint.payloadHash!==latest.payloadHash) {
+    // A may have published after B's reader preflight but before the atomic
+    // takeover. Hydrate that committed checkpoint while still ACQUIRING; no
+    // local writer owner or publication is installed until it is validated.
+    let fresh:RuntimeCheckpointEnvelope<SharedExerciseState>|undefined;
+    try {
+      fresh=await loadRuntimeCheckpointWithCache(repository,exerciseId,canonicalCheckpoint,"takeover");
+    } catch {
+      await repository.releaseWriter(confirmed); lease=undefined;
+      return setAndReturn({state:"CONFLICT",code:"CHECKPOINT_REVISION_CONFLICT"});
+    }
+    if (!fresh || !isValidRuntimeCheckpoint(fresh) || fresh.checkpointRevision!==latest.checkpointRevision ||
+        fresh.payloadHash!==latest.payloadHash) {
+      await repository.releaseWriter(confirmed); lease=undefined;
+      return setAndReturn({state:"CONFLICT",code:"CHECKPOINT_REVISION_CONFLICT"});
+    }
+    try {
+      await acceptAuthoritativeRuntimeCheckpointForReaderAsync(fresh,yieldToEventLoop);
+    } catch {
+      await repository.releaseWriter(confirmed); lease=undefined;
+      return setAndReturn({state:"CONFLICT",code:"CANONICAL_CHECKPOINT_CONFLICT"});
+    }
+    canonicalCheckpoint=fresh;
   }
   // The lease is authoritative before the checkpoint restore starts. Mark the
   // internal write boundary first so a concurrent shared-state echo cannot
   // clear the Runtime owners being installed by rehydration.
   lease=confirmed; remoteRevision=latest.checkpointRevision;
   setStatus({state:"WRITER",revision:remoteRevision});
-  // `prepared.checkpoint` is the payload already validated and, when needed,
-  // durably rebased above. The second
-  // check reads only atomic metadata unless a rollout-safe fallback is needed.
-  await acceptAuthoritativeRuntimeCheckpointAsync(prepared.checkpoint, true, yieldToEventLoop);
+  // The writer restores only the checkpoint matching the revision returned by
+  // the takeover transaction, including a late A publication if one won first.
+  await acceptAuthoritativeRuntimeCheckpointAsync(canonicalCheckpoint, true, yieldToEventLoop);
   if (!await ensureSharedWorkflowHeadsForCurrentWriter?.()) {
     await repository.releaseWriter(confirmed); lease=undefined; stopClockRunner();
     return setAndReturn({state:"READER",code:"WORKFLOW_HEAD_INITIALIZATION_FAILED",revision:remoteRevision});
