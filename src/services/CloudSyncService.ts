@@ -212,6 +212,11 @@ export function isRemoteRuntimeLifecycleActive(exerciseId: string): boolean | un
   return latestRemoteExercise.lifecycleState === "RUNNING" || latestRemoteExercise.lifecycleState === "PAUSED";
 }
 
+/** READY is a distinct bootstrap state; false from the active check also includes terminal rows. */
+export function isRemoteRuntimeLifecycleReady(exerciseId: string): boolean {
+  return latestRemoteExercise?.exerciseId === exerciseId && latestRemoteExercise.lifecycleState === "READY";
+}
+
 export function waitForRemoteRuntimeLifecycleActive(
   exerciseId: string,
   read: typeof isRemoteRuntimeLifecycleActive = isRemoteRuntimeLifecycleActive,

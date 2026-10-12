@@ -25,7 +25,7 @@ import { interceptRuntimeCheckpointPublicationResponseForValidation } from "@/se
 import { getRuntimeWriterInstanceId } from "@/services/runtime/persistence/RuntimeWriterIdentityService";
 import { runtimeWritesAllowed, setRuntimePublicationGeneration, setRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { publishRuntimeCheckpointTerminal, type RuntimeCheckpointPublicationTerminal } from "@/services/runtime/persistence/RuntimeCheckpointPublicationService";
-import { getCloudSyncStatus, isRemoteRuntimeLifecycleActive, subscribeToCloudSyncStatus, waitForRemoteRuntimeLifecycleActive } from "@/services/CloudSyncService";
+import { getCloudSyncStatus, isRemoteRuntimeLifecycleActive, isRemoteRuntimeLifecycleReady, subscribeToCloudSyncStatus, waitForRemoteRuntimeLifecycleActive } from "@/services/CloudSyncService";
 import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
 import { parseRuntimeCheckpointMetadata, RuntimeCheckpointMetadataCoordinator } from "@/services/runtime/persistence/RuntimeCheckpointMetadataCoordinator";
 import { loadRuntimeCheckpointWithCache } from "@/services/runtime/persistence/RuntimeCheckpointHydrationService";
@@ -607,6 +607,16 @@ export function runtimeWriterAcquisitionAllowed(
     && hasActiveRole(operator, "EXCON", exerciseId);
 }
 
+/** A locally accepted START may acquire the first lease against the exact remote READY row.
+ * The projection still cannot be sent until the acquired lease is installed. */
+export function shouldBootstrapWriterFromReady(
+  localExerciseId: string, localLifecycle: string, remoteExerciseId: string,
+  remoteLifecycle: string, authorizedExcon: boolean,
+): boolean {
+  return localExerciseId === remoteExerciseId && localLifecycle === "RUNNING"
+    && remoteLifecycle === "READY" && authorizedExcon;
+}
+
 export function runtimeWriterAppStateAction(nextState: string): "PRESERVE" | "RECONCILE" {
   return nextState === "active" ? "RECONCILE" : "PRESERVE";
 }
@@ -933,10 +943,15 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   establishExerciseRuntimeOwnerForCurrentWriter = establishRuntimeOwner;
   ensureSharedWorkflowHeadsForCurrentWriter = ensureWorkflowHeads;
   let remoteLifecycleActive = isRemoteRuntimeLifecycleActive(exerciseId);
-  if (remoteLifecycleActive === false && isActiveExercise()) {
+  const readyBootstrap = remoteLifecycleActive === false && shouldBootstrapWriterFromReady(
+    getCanonicalExerciseSnapshot().exerciseId, getCanonicalExerciseSnapshot().lifecycleState,
+    exerciseId, isRemoteRuntimeLifecycleReady(exerciseId) ? "READY" : "OTHER",
+    runtimeWriterAcquisitionAllowed(getOperatorSession(), exerciseId),
+  );
+  if (remoteLifecycleActive === false && isActiveExercise() && !readyBootstrap) {
     remoteLifecycleActive = await startupAwait(waitForRemoteRuntimeLifecycleActive(exerciseId));
   }
-  if (remoteLifecycleActive === false) {
+  if (remoteLifecycleActive === false && !readyBootstrap) {
     stopClockRunner();
     setStatus({state:"DISABLED",code:"EXERCISE_NOT_ACTIVE"});
     return()=>{};
@@ -1080,6 +1095,11 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
           await repository.releaseWriter(acquired.lease); lease=undefined;
           setRuntimeWriterAuthorityState("READER");
           setStatus({state:"READER",code:"RUNTIME_OWNER_NOT_READY",revision:remoteRevision});
+        } else if (readyBootstrap && !generationStopped() && isActiveExercise()) {
+          // START happened locally before the lease existed, so its earlier
+          // notification could not produce a publishable projection intent.
+          // Re-emit that exact mutation only after writer authority is ready.
+          notifySync("local");
         }
       }
       else {

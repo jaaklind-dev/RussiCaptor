@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   acquireRuntimeWriterTerminal,
+  shouldBootstrapWriterFromReady,
   shouldRetryFreshRuntimeBootstrap,
   type RuntimeBootstrapRetrySignal,
 } from "@/services/RuntimeCheckpointSyncService";
@@ -18,6 +19,69 @@ const signal = (overrides: Partial<RuntimeBootstrapRetrySignal> = {}): RuntimeBo
 });
 
 describe("FRESH-RUNTIME-BOOTSTRAP-AUTHORITY-01", () => {
+  describe("START-WRITER initial READY boundary", () => {
+    const allowed = (localId = "EX-FRESH", localState = "RUNNING", remoteId = "EX-FRESH",
+      remoteState = "READY", authorized = true) => shouldBootstrapWriterFromReady(
+        localId, localState, remoteId, remoteState, authorized,
+      );
+
+    test("START-WRITER-01 authorized EXCON may acquire the first writer from exact READY", () => {
+      expect(allowed()).toBe(true);
+      const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+      expect(source).toContain("remoteLifecycleActive === false && isActiveExercise() && !readyBootstrap");
+      expect(source).toContain("readyBootstrap && !generationStopped() && isActiveExercise()");
+    });
+    test("START-WRITER-02 RUNNING transition is published only after stable authority", () => {
+      const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+      const acquire = source.indexOf("const acquired=await acquireRuntimeWriterTerminal(repository,exerciseId,writerId,remoteRevision,LEASE_SECONDS)");
+      const owner = source.indexOf("establishRuntimeOwner()", acquire);
+      const resubmit = source.indexOf('notifySync("local");', owner);
+      expect(acquire).toBeGreaterThan(-1);
+      expect(owner).toBeGreaterThan(acquire);
+      expect(resubmit).toBeGreaterThan(owner);
+    });
+    test("START-WRITER-03 first generation is a server-issued lease, not a local fabricated ID", () => {
+      const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
+      expect(source).toContain("lease=acquired.lease;");
+      expect(source).toContain('setRuntimeWriterAuthorityState("WRITER")');
+    });
+    test("START-WRITER-04 concurrent initial acquisitions elect one writer", async () => {
+      let owner: string | undefined;
+      const repository = {
+        acquireWriter: async (_exercise: string, writer: string) => {
+          if (owner && owner !== writer) return { status: "HELD_BY_OTHER_WRITER" as const, code: "WRITER_AUTHORITY_HELD" as const };
+          owner = writer;
+          return { status: "ACQUIRED" as const, checkpointRevision: 0, lease: {
+            leaseId: "LEASE-1", exerciseId: "EX-FRESH", writerInstanceId: writer, userId: "USER-1", expiresAt: "2099-01-01T00:00:00Z",
+          } };
+        },
+        loadWriterLease: async () => undefined,
+        releaseWriter: jest.fn(async () => undefined),
+      };
+      const results = await Promise.all(["A", "B"].map(writer => acquireRuntimeWriterTerminal(repository, "EX-FRESH", writer, 0, 60)));
+      expect(results.filter(result => "lease" in result)).toHaveLength(1);
+    });
+    test("START-WRITER-05 missing EXCON authority cannot use bootstrap", () => expect(allowed("EX-FRESH", "RUNNING", "EX-FRESH", "READY", false)).toBe(false));
+    test("START-WRITER-06 wrong exercise cannot use bootstrap", () => expect(allowed("EX-OTHER")).toBe(false));
+    test("START-WRITER-07 already RUNNING remote uses the normal writer path", () => expect(allowed("EX-FRESH", "RUNNING", "EX-FRESH", "RUNNING")).toBe(false));
+    test("START-WRITER-08 terminal remote cannot bootstrap", () => expect(allowed("EX-FRESH", "RUNNING", "EX-FRESH", "COMPLETED")).toBe(false));
+    test("START-WRITER-09 first projection still requires a server lease and canonical revision", () => {
+      const source = fs.readFileSync(path.join(process.cwd(), "src/services/CloudSyncService.ts"), "utf8");
+      expect(source).toContain("writerLeaseId: getRuntimeWriterPublicationLeaseId()");
+      expect(source).toContain("p_expected_revision: expectedRevision");
+    });
+    test("START-WRITER-10 identical acquisition retry retains the same lease", async () => {
+      const lease = { leaseId: "LEASE-1", exerciseId: "EX-FRESH", writerInstanceId: "A", userId: "USER-1", expiresAt: "2099-01-01T00:00:00Z" };
+      const repository = { acquireWriter: jest.fn(async () => ({ status: "ALREADY_OWNED" as const, checkpointRevision: 0, lease })),
+        loadWriterLease: async () => undefined, releaseWriter: jest.fn(async () => undefined) };
+      await expect(acquireRuntimeWriterTerminal(repository, "EX-FRESH", "A", 0, 60)).resolves.toMatchObject({ status: "ALREADY_OWNED", lease });
+    });
+    test("START-WRITER-11 READY itself does not acquire a lease before START", () => expect(allowed("EX-FRESH", "READY")).toBe(false));
+    test("START-WRITER-12 stale or unrelated lifecycle cannot open the bootstrap path", () => {
+      expect(allowed("EX-FRESH", "PAUSED")).toBe(false);
+      expect(allowed("EX-FRESH", "RUNNING", "EX-FRESH", "OTHER")).toBe(false);
+    });
+  });
   test("BOOT-G01/G09 concurrent eligible clients still elect exactly one writer", async () => {
     let owner: string | undefined;
     let maxWriters = 0;

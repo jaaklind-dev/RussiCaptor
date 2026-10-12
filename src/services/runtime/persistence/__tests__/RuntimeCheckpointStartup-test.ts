@@ -534,7 +534,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     expect(takeover).toContain("isRemoteRuntimeLifecycleActive(exerciseId) === false");
     expect(takeover).toContain('code:"EXERCISE_NOT_ACTIVE"');
     expect(startup).toContain("remoteLifecycleActive = await startupAwait(waitForRemoteRuntimeLifecycleActive(exerciseId))");
-    expect(startup).toContain("if (remoteLifecycleActive === false)");
+    expect(startup).toContain("if (remoteLifecycleActive === false && !readyBootstrap)");
     expect(startup).toContain('code:"EXERCISE_NOT_ACTIVE"');
   });
   test("only proven authority loss revokes writer after publication", () => {
