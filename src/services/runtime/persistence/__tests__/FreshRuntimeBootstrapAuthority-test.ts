@@ -29,16 +29,21 @@ describe("FRESH-RUNTIME-BOOTSTRAP-AUTHORITY-01", () => {
       expect(allowed()).toBe(true);
       const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
       expect(source).toContain("remoteLifecycleActive === false && isActiveExercise() && !readyBootstrap");
-      expect(source).toContain("readyBootstrap && !generationStopped() && isActiveExercise()");
+      expect(source).toContain("if (readyBootstrap) {");
+      expect(source).toContain("publishInitialRunningExerciseState({");
     });
-    test("START-WRITER-02 RUNNING transition is published only after stable authority", () => {
+    test("START-WRITER-02 RUNNING transition is durable before workflow-head bootstrap or command ownership", () => {
       const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
       const acquire = source.indexOf("const acquired=await acquireRuntimeWriterTerminal(repository,exerciseId,writerId,remoteRevision,LEASE_SECONDS)");
-      const owner = source.indexOf("establishRuntimeOwner()", acquire);
-      const resubmit = source.indexOf('notifySync("local");', owner);
+      const start = source.indexOf("runInitialWriterStartOrder({", acquire);
+      const publish = source.indexOf("publishInitialRunningExerciseState({", start);
+      const heads = source.indexOf("initializeWorkflowHeads: ensureWorkflowHeads", publish);
+      const owner = source.indexOf("establishRuntimeOwner: () => Boolean(establishRuntimeOwner())", heads);
       expect(acquire).toBeGreaterThan(-1);
-      expect(owner).toBeGreaterThan(acquire);
-      expect(resubmit).toBeGreaterThan(owner);
+      expect(start).toBeGreaterThan(acquire);
+      expect(publish).toBeGreaterThan(start);
+      expect(heads).toBeGreaterThan(publish);
+      expect(owner).toBeGreaterThan(heads);
     });
     test("START-WRITER-03 first generation is a server-issued lease, not a local fabricated ID", () => {
       const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");

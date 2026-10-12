@@ -25,7 +25,8 @@ import { interceptRuntimeCheckpointPublicationResponseForValidation } from "@/se
 import { getRuntimeWriterInstanceId } from "@/services/runtime/persistence/RuntimeWriterIdentityService";
 import { runtimeWritesAllowed, setRuntimePublicationGeneration, setRuntimeWriterAuthorityState } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { publishRuntimeCheckpointTerminal, type RuntimeCheckpointPublicationTerminal } from "@/services/runtime/persistence/RuntimeCheckpointPublicationService";
-import { getCloudSyncStatus, isRemoteRuntimeLifecycleActive, isRemoteRuntimeLifecycleReady, subscribeToCloudSyncStatus, waitForRemoteRuntimeLifecycleActive } from "@/services/CloudSyncService";
+import { getCloudSyncStatus, isRemoteRuntimeLifecycleActive, isRemoteRuntimeLifecycleReady, publishInitialRunningExerciseState, subscribeToCloudSyncStatus, waitForRemoteRuntimeLifecycleActive } from "@/services/CloudSyncService";
+import { runInitialWriterStartOrder } from "@/services/runtime/persistence/InitialWriterStartOrder";
 import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
 import { parseRuntimeCheckpointMetadata, RuntimeCheckpointMetadataCoordinator } from "@/services/runtime/persistence/RuntimeCheckpointMetadataCoordinator";
 import { loadRuntimeCheckpointWithCache } from "@/services/runtime/persistence/RuntimeCheckpointHydrationService";
@@ -913,6 +914,9 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
   const ensureWorkflowHeads = async (): Promise<boolean> => {
     if (isOperatorSignOutDraining() || generationStopped() || !lease || status.state !== "WRITER") return false;
     const patientIds = getAllPatients().map(patient => patient.id);
+    traceRuntimeLeaseLifecycle("WORKFLOW_HEAD_INITIALIZATION_SENT", {
+      generation: traceGeneration, detail: { exerciseId, patientCount: patientIds.length },
+    });
     try {
       await startupAwait(ensureSharedWorkflowPatientHeads(exerciseId, patientIds));
     } catch (error) {
@@ -1087,7 +1091,33 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         setRuntimeWriterAuthorityState("WRITER");
         setStatus({state:"WRITER",revision:remoteRevision});
         await acceptAuthoritativeRuntimeCheckpointAsync(resolved.checkpoint, true, yieldToEventLoop);
-        if (!await ensureWorkflowHeads()) {
+        if (readyBootstrap) {
+          const initialLease = acquired.lease;
+          const currentWriter = async () => {
+            if (generationStopped() || lease?.leaseId !== initialLease.leaseId || status.state !== "WRITER" ||
+              !runtimeWriterAcquisitionAllowed(getOperatorSession(), exerciseId)) return false;
+            const durableLease = await repository.loadWriterLease(exerciseId);
+            return durableLease?.leaseId === initialLease.leaseId && durableLease.writerInstanceId === writerId;
+          };
+          const started = await runInitialWriterStartOrder({
+            currentWriter,
+            publishAndConfirmRunning: () => publishInitialRunningExerciseState({
+              exerciseId, leaseId: initialLease.leaseId, writerInstanceId: writerId,
+              isCurrent: () => !generationStopped() && lease?.leaseId === initialLease.leaseId && status.state === "WRITER",
+            }),
+            initializeWorkflowHeads: ensureWorkflowHeads,
+            establishRuntimeOwner: () => Boolean(establishRuntimeOwner()),
+          });
+          traceRuntimeLeaseLifecycle(started.ok ? "INITIAL_RUNNING_BOOTSTRAP_COMPLETE" : "INITIAL_RUNNING_BOOTSTRAP_FAILED", {
+            generation: traceGeneration, detail: { exerciseId, phase: started.phase,
+              ...(!started.ok ? { code: started.code } : { revision: started.revision }) },
+          });
+          if (!started.ok) {
+            await repository.releaseWriter(initialLease); lease=undefined; stopClockRunner();
+            setRuntimeWriterAuthorityState("READER");
+            setStatus({state:"READER",code:started.code,revision:remoteRevision});
+          }
+        } else if (!await ensureWorkflowHeads()) {
           await repository.releaseWriter(acquired.lease); lease=undefined; stopClockRunner();
           setRuntimeWriterAuthorityState("READER");
           setStatus({state:"READER",code:"WORKFLOW_HEAD_INITIALIZATION_FAILED",revision:remoteRevision});
@@ -1095,11 +1125,6 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
           await repository.releaseWriter(acquired.lease); lease=undefined;
           setRuntimeWriterAuthorityState("READER");
           setStatus({state:"READER",code:"RUNTIME_OWNER_NOT_READY",revision:remoteRevision});
-        } else if (readyBootstrap && !generationStopped() && isActiveExercise()) {
-          // START happened locally before the lease existed, so its earlier
-          // notification could not produce a publishable projection intent.
-          // Re-emit that exact mutation only after writer authority is ready.
-          notifySync("local");
         }
       }
       else {

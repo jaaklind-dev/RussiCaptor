@@ -11,6 +11,7 @@ import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepo
 import { getRuntimeWriterAuthorityState, getRuntimeWriterPublicationGeneration,
   getRuntimeWriterPublicationLeaseId, getRuntimePublicationGeneration } from "@/services/runtime/persistence/RuntimeWriterAuthorityState";
 import { getRuntimeWriterInstanceId } from "@/services/runtime/persistence/RuntimeWriterIdentityService";
+import { traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { getRuntimeReaderConvergenceState, getRuntimeReaderConvergenceVersion } from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
 import { exerciseLifecycle, resolveCurrentExercise, resolveScopedOperatorExercise } from "@/services/exercise/CurrentExerciseSelectionService";
 import type { CurrentExerciseCandidate } from "@/services/exercise/CurrentExerciseSelectionService";
@@ -927,6 +928,98 @@ async function publishCloudProjection(candidate: ExerciseProjectionCandidate<Pre
   latestRemoteProjectionAuthority = projectionPackageAuthority(sharedProjection);
   setStatus({ state: "synced", syncedAt: row.updated_at });
   return { publishedIdentity: latest.identity };
+}
+
+/** The one initial READY→RUNNING publication precedes workflow-head creation.
+ * It uses the same atomic writer-fenced RPC as ordinary active projections,
+ * without advertising runtime command ownership before the heads are durable. */
+export async function publishInitialRunningExerciseState(input: Readonly<{
+  exerciseId: string; leaseId: string; writerInstanceId: string; isCurrent: () => boolean;
+}>): Promise<Readonly<{ ok: true; revision: number }> | Readonly<{ ok: false; code: string }>> {
+  const client = supabase;
+  const reject = (code: string) => ({ ok: false as const, code });
+  const authorityCurrent = () => input.isCurrent() && getCanonicalExerciseSnapshot().exerciseId === input.exerciseId &&
+    getRuntimeWriterAuthorityState() === "WRITER" && getRuntimeWriterPublicationLeaseId() === input.leaseId &&
+    getSelectedOperatorMode() === "EXCON" && !shouldSuppressCloudProjectionWrite(input.exerciseId) &&
+    canOperatorPublishCloudProjection(getOperatorSession(), input.exerciseId);
+  if (!client || !authorityCurrent() || getCanonicalExerciseSnapshot().lifecycleState !== "RUNNING") {
+    return reject("WRITER_NOT_READY");
+  }
+  const operator = getOperatorSession();
+  const { data: authData } = await client.auth.getUser();
+  if (operator.state !== "AUTHENTICATED" || authData.user?.id !== operator.profile.userId || !authorityCurrent()) {
+    return reject("UNAUTHORIZED");
+  }
+  const { data: beforeData, error: beforeError } = await client.from("exercise_states")
+    .select("exercise_id,revision,state,updated_at,updated_by").eq("exercise_id", input.exerciseId).single();
+  if (beforeError || !beforeData) return reject("EXERCISE_NOT_FOUND");
+  const before = beforeData as unknown as ExerciseStateRow;
+  if (!isSharedExerciseState(before.state) || !Number.isSafeInteger(before.revision) ||
+    before.revision < 1 || !authorityCurrent()) {
+    return reject("CANONICAL_REBASE_INVALIDATED");
+  }
+  const state = compactActiveExerciseState(createSharedExerciseProjection());
+  const localPackage = projectionPackageAuthority(state);
+  const remotePackage = projectionPackageAuthority(before.state);
+  if (exerciseLifecycle(state) !== "RUNNING" || state.exerciseSession.exerciseId !== input.exerciseId ||
+    !localPackage.packageId || !localPackage.packageVersion ||
+    localPackage.packageId !== remotePackage.packageId ||
+    localPackage.packageVersion !== remotePackage.packageVersion ||
+    !canPublishProjectionWithPackageAuthority(state, remotePackage, getLocalRuntimeCheckpoint())) {
+    return reject("PACKAGE_PROJECTION_DIVERGENCE");
+  }
+  if (exerciseLifecycle(before.state) === "RUNNING") {
+    // An ACK can be lost after the server commits. A subsequent bootstrap
+    // generation must not publish RUNNING twice; the current lease and exact
+    // canonical RUNNING/package readback suffice to resume head creation.
+    remoteVersions.set(input.exerciseId, { revision: before.revision, updatedAt: before.updated_at });
+    latestRemoteExercise = { exerciseId: input.exerciseId, lifecycleState: "RUNNING" };
+    latestRemoteProjectionAuthority = remotePackage;
+    traceRuntimeLeaseLifecycle("INITIAL_RUNNING_READBACK_CONFIRMED", {
+      detail: { exerciseId: input.exerciseId, leaseId: input.leaseId, revision: before.revision, resumed: true },
+    });
+    return { ok: true, revision: before.revision };
+  }
+  if (exerciseLifecycle(before.state) !== "READY") return reject("CANONICAL_REBASE_INVALIDATED");
+  // This request is frozen across an ambiguous transport retry. The server
+  // resolves the same operation ID idempotently while revalidating the lease.
+  const operationId = `START-RUNNING-${input.leaseId}`;
+  const request = { p_exercise_id: input.exerciseId, p_operation_id: operationId,
+    p_lease_id: input.leaseId, p_writer_instance_id: input.writerInstanceId,
+    p_expected_revision: before.revision, p_state: state };
+  if (!authorityCurrent()) return reject("WRITER_NOT_READY");
+  traceRuntimeLeaseLifecycle("INITIAL_RUNNING_PUBLISH_SENT", {
+    detail: { exerciseId: input.exerciseId, leaseId: input.leaseId, expectedRevision: before.revision, operationId },
+  });
+  let result = await client.rpc("publish_exercise_state_current_writer", request);
+  recordSupabaseTraffic({ operation: "ACTIVE_RPC", endpoint: "exercise_states.initial_running", data: result.data });
+  if (result.error && result.status === 0 && authorityCurrent()) {
+    result = await client.rpc("publish_exercise_state_current_writer", request);
+    recordSupabaseTraffic({ operation: "ACTIVE_RPC", endpoint: "exercise_states.initial_running_retry", data: result.data });
+  }
+  if (result.error) return reject(result.status === 0 ? "NETWORK_UNAVAILABLE" : exerciseStateMutationErrorCode(result.error.message));
+  const ack = Array.isArray(result.data) ? result.data[0] : result.data;
+  if (!ack || ack.exercise_id !== input.exerciseId || !Number.isSafeInteger(ack.revision) ||
+    ack.revision !== before.revision + 1 || !authorityCurrent()) return reject("CANONICAL_REBASE_INVALIDATED");
+  const { data: afterData, error: afterError } = await client.from("exercise_states")
+    .select("exercise_id,revision,state,updated_at,updated_by").eq("exercise_id", input.exerciseId).single();
+  if (afterError || !afterData) return reject("CANONICAL_READBACK_FAILED");
+  const after = afterData as unknown as ExerciseStateRow;
+  const durablePackage = isSharedExerciseState(after.state) ? projectionPackageAuthority(after.state) : undefined;
+  if (after.exercise_id !== input.exerciseId || after.revision !== ack.revision ||
+    !durablePackage || durablePackage.lifecycle !== "RUNNING" ||
+    durablePackage.packageId !== localPackage.packageId ||
+    durablePackage.packageVersion !== localPackage.packageVersion || !authorityCurrent()) {
+    return reject("CANONICAL_READBACK_FAILED");
+  }
+  remoteVersions.set(input.exerciseId, { revision: after.revision, updatedAt: after.updated_at });
+  latestRemoteExercise = { exerciseId: input.exerciseId, lifecycleState: "RUNNING" };
+  latestRemoteProjectionAuthority = durablePackage;
+  traceRuntimeLeaseLifecycle("INITIAL_RUNNING_READBACK_CONFIRMED", {
+    detail: { exerciseId: input.exerciseId, leaseId: input.leaseId, revision: after.revision },
+  });
+  setStatus({ state: "synced", syncedAt: after.updated_at });
+  return { ok: true, revision: after.revision };
 }
 
 const projectionWriteCoordinator = new ExerciseProjectionWriteCoordinator(
