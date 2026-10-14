@@ -40,3 +40,7 @@ Final controlled-state counts: active writer leases 0; active CM 0; active EXCON
 The post-deploy source passed 318/318 suites and 2658/2658 tests, TypeScript, ESLint, runtime guardrails (19 suites/242 tests), multi-device guardrails (16 suites/183 tests), persistence guardrails (18 suites/198 tests), and `git diff --check`. Only Samsung `R5GL236L6ZJ` was connected; it was powered and awake. The second Samsung was unavailable, so an actual two-physical-client takeover was **not run**. Server-side A→B identities were independent writer instances under one controlled authenticated account; no claim is made that a mobile client failed to observe Realtime.
 
 Production migration/RPC/permission/runtime acceptance and scoped cleanup: **PASS**. The broader physical two-client C11 checkpoint remains **NOT RUN**, so the combined all-C-checkpoint atomicity gate is not claimed as PASS. No merge, tag, or release was performed.
+
+## Subsequent physical checkpoint
+
+The preceding NOT RUN statement describes the 2026-10-11 deployment checkpoint and is preserved as history. C11 was subsequently completed on 2026-10-14 with two physical Samsung clients and a non-distributable APK 172. See [the later C11 acceptance report](SERVER_WRITER_FENCE_C11_DUAL_PHYSICAL_ACCEPTANCE_2026-10-14.md) for the physical/server evidence, limitations, and cleanup. At that later checkpoint C1–C12 and the server writer-fence atomicity gate were accepted as PASS; this does not retroactively change what had been tested on 2026-10-11.
