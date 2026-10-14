@@ -55,18 +55,22 @@ describe("WP-NEXT-02 production release gate", () => {
 
   test("release verification fails closed when a required remote migration is absent", () => {
     const script = path.join(root, "../scripts/verify-field-release-config.mjs");
+    const requiredVersions = JSON.parse(read("../release/field-release.json"))
+      .requiredSupabaseMigrations.map((migration: { remoteVersion: string }) => migration.remoteVersion);
     const rejected = spawnSync(process.execPath, [script], { encoding: "utf8", env: {
       ...process.env,
       RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS: "1",
-      RUSSICAPTOR_DEPLOYED_MIGRATIONS: "20260829135717",
+      RUSSICAPTOR_DEPLOYED_MIGRATIONS: requiredVersions.filter(
+        (version: string) => version !== "20261011090155",
+      ).join(","),
     }});
     expect(rejected.status).not.toBe(0);
-    expect(rejected.stderr).toContain("required remote migration");
+    expect(rejected.stderr).toContain("required remote migration 20261011090155");
 
     const accepted = spawnSync(process.execPath, [script], { encoding: "utf8", env: {
       ...process.env,
       RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS: "1",
-      RUSSICAPTOR_DEPLOYED_MIGRATIONS: "202608190001,20260826190508,20260828083146,20260828113258,20260829124632,20260829124829,20260829135717",
+      RUSSICAPTOR_DEPLOYED_MIGRATIONS: requiredVersions.join(","),
     }});
     expect(accepted.status).toBe(0);
   });

@@ -3,7 +3,7 @@
   "document": "docs/RUNTIME_REGRESSION_GUARDRAILS.md",
   "runner": "scripts/run-runtime-guardrails.mjs",
   "guardrails": [
-    { "id": "A", "name": "single-writer-authority", "tests": ["src/services/runtime/persistence/__tests__/RuntimeWriterAuthorityState-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"] },
+    { "id": "A", "name": "single-writer-authority", "tests": ["src/services/runtime/persistence/__tests__/RuntimeWriterAuthorityState-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts", "src/services/exercise/__tests__/ExerciseStateServerWriteBoundary-test.ts"] },
     { "id": "B", "name": "reader-convergence", "tests": ["src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointAuthority-test.ts"] },
     { "id": "C", "name": "coherent-snapshot-hydration", "tests": ["src/services/runtime/persistence/__tests__/RuntimeCheckpointCanonicalArtifact-test.ts", "src/services/runtime/persistence/__tests__/CanonicalRuntimePersistence-test.ts"] },
     { "id": "D", "name": "durable-intent-time", "tests": ["src/services/runtime/commands/__tests__/ClinicalTreatmentRuntimePatientCommandMaterializer-test.ts"] },
@@ -453,6 +453,7 @@
       "src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts",
       "src/services/runtime/commands/__tests__/DurablePatientInternalTransferCommand-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeWriterAuthorityState-test.ts",
+      "src/services/exercise/__tests__/ExerciseStateServerWriteBoundary-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeReaderConvergence-test.ts",
       "src/services/runtime/persistence/__tests__/RuntimeCheckpointAuthority-test.ts",
       "src/services/runtime/commands/__tests__/ClinicalTreatmentRuntimePatientCommandMaterializer-test.ts",

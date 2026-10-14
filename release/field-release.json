@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
   "applicationVersion": "1.2.0",
-  "versionCode": 151,
-  "minimumVersionCodeExclusive": 150,
+  "versionCode": 173,
+  "minimumVersionCodeExclusive": 172,
   "environment": "production",
   "releaseChannel": "field",
   "packageId": "com.jaaklind.RussiCaptor",
-  "artifactFilename": "RussiCaptor-Android-1.2.0-v151.apk",
+  "artifactFilename": "RussiCaptor-Android-1.2.0-v173.apk",
   "signingCertificateSha256": "b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d30198980e59fcde96b",
   "versionPolicy": {
     "versionName": "semantic product version; signing-only work does not change it",
@@ -41,8 +41,24 @@
     {
       "remoteVersion": "20260829135717",
       "localFile": "20260829135717_conflict_safe_multi_cm_shared_workflow.sql"
+    },
+    {
+      "remoteVersion": "20261010051206",
+      "localFile": "20261010051206_platform_admin_break_glass_recovery.sql"
+    },
+    {
+      "remoteVersion": "20261010110021",
+      "localFile": "20261010110021_builder_lab_package_binding.sql"
+    },
+    {
+      "remoteVersion": "20261011090155",
+      "localFile": "20261011090155_exercise_state_server_writer_fence.sql"
+    },
+    {
+      "remoteVersion": "20261012102900",
+      "localFile": "20261012102900_atomic_active_writer_takeover.sql"
     }
   ],
-  "minimumCompatibleBackendState": "WP-EGRESS-01/03/04 + WP-NEXT-02/03 deployed",
+  "minimumCompatibleBackendState": "WP-EGRESS-01/03/04 + WP-NEXT-02/03 + PLATFORM_ADMIN_RECOVERY + BUILDER_LAB_BINDING + SERVER_WRITER_FENCE + ATOMIC_ACTIVE_TAKEOVER deployed",
   "releaseNotes": "docs/WP_NEXT_07_PRODUCTION_SIGNING_DISTRIBUTABLE_RELEASE.md"
 }

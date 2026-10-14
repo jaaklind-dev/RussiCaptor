@@ -14,6 +14,21 @@ function body(name: string): string {
 }
 
 describe("exercise_states server mutation boundary", () => {
+  test("retired physical acceptance probe cannot be reached from production application or build", () => {
+    const root = process.cwd();
+    expect(fs.existsSync(path.resolve(root,
+      "src/services/runtime/persistence/C11StaleWriterAcceptanceProbe.ts"))).toBe(false);
+    expect(fs.existsSync(path.resolve(root,
+      "src/components/excon/C11StaleWriterAcceptanceControls.tsx"))).toBe(false);
+    const dashboard = fs.readFileSync(path.resolve(root, "src/app/excon/dashboard.tsx"), "utf8");
+    const build = fs.readFileSync(path.resolve(root, "scripts/build-field-release.mjs"), "utf8");
+    expect(dashboard).not.toMatch(/C11StaleWriter|C11_STALE_WRITER/);
+    expect(build).not.toMatch(/C11_STALE_WRITER_PROBE|c11StaleWriterProbe|c11ProbeRequested/);
+    expect(client).not.toMatch(/C11StaleWriter|C11_STALE_WRITER/);
+    expect(client).toContain('client.rpc("publish_exercise_state_current_writer"');
+    expect(migration).toContain("WRITER_GENERATION_STALE");
+  });
+
   test("EXSTATE-AUTH-01/02/05 current lease and caller are checked under a row lock", () => {
     const sql = body("publish_exercise_state_current_writer");
     expect(sql).toMatch(/runtime_writer_leases as lease[\s\S]*?for update/);

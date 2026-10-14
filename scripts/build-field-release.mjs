@@ -13,13 +13,9 @@ const manifest = readJson("release/field-release.json");
 const releaseVariant = process.env.RUSSICAPTOR_RELEASE_VARIANT ?? "canonical";
 const versionCodeOverride = process.env.RUSSICAPTOR_RELEASE_VERSION_CODE;
 const validationHarnessRequested = process.env.RUSSICAPTOR_ENABLE_SHARED_WORKFLOW_VALIDATION_HARNESS === "1";
-const c11ProbeRequested = process.env.RUSSICAPTOR_ENABLE_C11_STALE_WRITER_PROBE === "1";
 if (releaseVariant === "canonical" && versionCodeOverride) throw new Error("Canonical release versionCode cannot be overridden.");
 if (!new Set(["canonical", "upgrade-validation", "rollback-validation"]).has(releaseVariant)) throw new Error("Unknown field release variant.");
 if (releaseVariant === "canonical" && validationHarnessRequested) throw new Error("Canonical release cannot include a validation harness.");
-if (c11ProbeRequested && (releaseVariant === "canonical" || !validationHarnessRequested)) {
-  throw new Error("C11 stale-writer probe requires a non-distributable validation build and validation harness.");
-}
 const buildVersionCode = versionCodeOverride ? Number(versionCodeOverride) : manifest.versionCode;
 if (!Number.isInteger(buildVersionCode) || buildVersionCode < manifest.versionCode) throw new Error("Release versionCode override must be monotonic.");
 if (releaseVariant !== "canonical" && buildVersionCode <= manifest.versionCode) throw new Error("Validation release must have a higher versionCode.");
@@ -77,7 +73,6 @@ Object.assign(process.env, {
   RUSSICAPTOR_VERSION_NAME: manifest.applicationVersion,
   RUSSICAPTOR_VERSION_CODE: String(buildVersionCode),
   EXPO_PUBLIC_SHARED_WORKFLOW_VALIDATION_HARNESS: releaseVariant !== "canonical" && validationHarnessRequested ? "1" : "0",
-  EXPO_PUBLIC_C11_STALE_WRITER_PROBE: c11ProbeRequested ? "1" : "0",
 });
 
 run(path.join(root, "node_modules/.bin/expo"), ["prebuild", "--clean", "--platform", "android", "--no-install"]);
@@ -123,7 +118,6 @@ const generated = {
   artifactSizeBytes: artifactBytes.byteLength,
   debuggable: false,
   sharedWorkflowValidationHarness: releaseVariant !== "canonical" && validationHarnessRequested,
-  c11StaleWriterProbe: c11ProbeRequested,
   permissions,
   minSdk,
   targetSdk,

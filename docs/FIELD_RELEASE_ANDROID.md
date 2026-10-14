@@ -19,6 +19,8 @@ The keystore is held outside Git in encrypted release-secret storage. Losing or 
 3. Run `npm run field-release:android`, or manually dispatch **Android field release** in GitHub Actions.
 4. Distribute the APK together with `release-manifest.json`, its `.sha256` file, this guide and the release notes from `dist/field-release/`. Only a canonical manifest with `distributable: true` is a field release.
 
+Post-C11 merge preparation reserves local canonical `versionCode` **173**. The highest known installed, production-signed *validation* APK is 172; it is explicitly non-distributable but a future in-place install on the two acceptance devices must still exceed it. The previous canonical descriptor was 151. `minimumVersionCodeExclusive` is therefore 172, matching the established convention of exceeding the highest validated installation. `versionName` remains 1.2.0 in this configuration-only preparation; product release naming and publication are separate decisions. This reservation is **not** a signed distributable artifact, EAS remote-version update, tag, or release. The required backend list now includes platform-admin recovery, Builder lab binding, the writer-fence migration, and atomic active takeover; verify these against the production ledger again at build time.
+
 ## Fresh install
 
 The old versionCode 1 validation APK is debug-signed and cannot be upgraded to the production signer. Perform the one-time approved uninstall/reinstall boundary, launch RussiCaptor, sign in with a provisioned production operator, and confirm the Supabase project reference shown on the login screen. Disable the temporary installation permission afterward.
