@@ -23,6 +23,7 @@ import {
 } from "@/services/runtime/persistence/RuntimePersistenceFailureState";
 import { exerciseLifecycleLabel, exercisePackageNameLabel } from "@/localization/et";
 import CloudSyncStatusCard from "@/components/dashboard/CloudSyncStatusCard";
+import C11StaleWriterAcceptanceControls from "@/components/excon/C11StaleWriterAcceptanceControls";
 import {
   getRuntimeCompletionPhase,
   getRuntimeCompletionPresentation,
@@ -110,6 +111,7 @@ function AuthorizedExerciseDashboardScreen() {
           </View>
           {isExerciseController && <RuntimeRecoveryCard snapshot={exerciseSnapshot} onRecovered={refreshPresentation} />}
           <CloudSyncStatusCard lifecycleState={completionPresentation.lifecycleState} />
+          <C11StaleWriterAcceptanceControls />
           {isExerciseController && !recoveryRequired && <ExerciseControlsCard snapshot={exerciseSnapshot} onApplied={refreshPresentation}
             awaitingTerminalAck={completionPresentation.awaitingAuthoritativeAck} />}
           {showIroControls && iroPatientId && <NarvaIroScenarioControlsCard key={`${exerciseSnapshot.exerciseId}:${iroPatientId}`}

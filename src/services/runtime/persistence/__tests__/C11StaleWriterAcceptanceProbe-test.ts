@@ -34,6 +34,7 @@ let db: { auth: { getUser: jest.Mock }; from: jest.Mock; rpc: jest.Mock };
 let currentLease = leaseA;
 const source = fs.readFileSync(path.resolve(process.cwd(), "src/services/CloudSyncService.ts"), "utf8");
 const buildSource = fs.readFileSync(path.resolve(process.cwd(), "scripts/build-field-release.mjs"), "utf8");
+const workboardSource = fs.readFileSync(path.resolve(process.cwd(), "src/app/excon/dashboard.tsx"), "utf8");
 const exconSource = fs.readFileSync(path.resolve(process.cwd(), "src/app/excon/index.tsx"), "utf8");
 const controlsSource = fs.readFileSync(path.resolve(process.cwd(), "src/components/excon/C11StaleWriterAcceptanceControls.tsx"), "utf8");
 
@@ -44,6 +45,11 @@ beforeEach(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   probe = require("../C11StaleWriterAcceptanceProbe") as Probe;
   db = (jest.requireMock("@/services/SupabaseService") as { supabase: typeof db }).supabase;
+  (jest.requireMock("@/config/ReleaseConfig") as { getBuildProvenance: jest.Mock })
+    .getBuildProvenance.mockReturnValue({ supabaseProjectRef: "fimcsrivizpliiuoqopv" });
+  (jest.requireMock("@/config/SharedWorkflowValidationHarness") as {
+    isSharedWorkflowValidationHarnessEnabled: jest.Mock;
+  }).isSharedWorkflowValidationHarnessEnabled.mockReturnValue(true);
   currentLease = leaseA;
   db.auth.getUser.mockReset().mockResolvedValue({ data: { user: { id: "USER-A", is_anonymous: false } }, error: null });
   db.rpc.mockReset().mockResolvedValue({ error: { message: "WRITER_GENERATION_STALE" }, status: 403 });
@@ -66,6 +72,19 @@ describe("C11 physical stale-writer acceptance probe", () => {
     expect((await probe.captureC11StaleWriterProbe()).code).toBe("PROBE_DISABLED");
     expect(buildSource).toContain('releaseVariant === "canonical" || !validationHarnessRequested');
     expect(buildSource).toContain('EXPO_PUBLIC_C11_STALE_WRITER_PROBE: c11ProbeRequested ? "1" : "0"');
+  });
+
+  test("C11-PROBE-01B requires the non-distributable harness and exact project", async () => {
+    const harness = jest.requireMock("@/config/SharedWorkflowValidationHarness") as {
+      isSharedWorkflowValidationHarnessEnabled: jest.Mock;
+    };
+    const release = jest.requireMock("@/config/ReleaseConfig") as { getBuildProvenance: jest.Mock };
+    harness.isSharedWorkflowValidationHarnessEnabled.mockReturnValue(false);
+    expect(probe.isC11StaleWriterProbeEnabled()).toBe(false);
+    harness.isSharedWorkflowValidationHarnessEnabled.mockReturnValue(true);
+    release.getBuildProvenance.mockReturnValue({ supabaseProjectRef: "thixnregyriwevgptclw" });
+    expect(probe.isC11StaleWriterProbeEnabled()).toBe(false);
+    expect((await probe.captureC11StaleWriterProbe()).code).toBe("PROBE_DISABLED");
   });
 
   test("C11-PROBE-02 requires the current authenticated operator session", async () => {
@@ -94,6 +113,7 @@ describe("C11 physical stale-writer acceptance probe", () => {
 
   test("C11-PROBE-05 preserves A's old lease/writer/generation evidence", async () => {
     await captureAndTakeover();
+    expect(probe.getC11StaleWriterProbeCapture()?.writerGeneration).toBe(1);
     const result = await probe.sendC11StaleWriterProbe();
     expect(result.writerGeneration).toBe(1);
     expect(db.rpc.mock.calls[0][1]).toMatchObject({ p_lease_id: "LEASE-A", p_writer_instance_id: "WRITER-A" });
@@ -111,6 +131,18 @@ describe("C11 physical stale-writer acceptance probe", () => {
     await captureAndTakeover();
     expect((await probe.sendC11StaleWriterProbe()).ok).toBe(true);
     expect((await probe.sendC11StaleWriterProbe()).code).toBe("PROBE_NOT_ARMED");
+    expect(db.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  test("C11-PROBE-07B cannot send without a valid captured A context", async () => {
+    expect((await probe.sendC11StaleWriterProbe()).code).toBe("PROBE_NOT_ARMED");
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  test("C11-PROBE-07C concurrent explicit sends still produce exactly one RPC", async () => {
+    await captureAndTakeover();
+    const results = await Promise.all([probe.sendC11StaleWriterProbe(), probe.sendC11StaleWriterProbe()]);
+    expect(results.map(result => result.code).sort()).toEqual(["PROBE_NOT_ARMED", "WRITER_GENERATION_STALE"]);
     expect(db.rpc).toHaveBeenCalledTimes(1);
   });
 
@@ -143,9 +175,11 @@ describe("C11 physical stale-writer acceptance probe", () => {
     expect(db.rpc).not.toHaveBeenCalled();
   });
 
-  test("C11-PROBE-12 is reachable in EXCON mode without granting PLATFORM_ADMIN", () => {
-    expect(exconSource).toContain("<C11StaleWriterAcceptanceControls />");
+  test("C11-PROBE-12 is reachable on the active EXCON workboard without PLATFORM_ADMIN", () => {
+    expect(workboardSource).toContain("<C11StaleWriterAcceptanceControls />");
+    expect(exconSource).not.toContain("<C11StaleWriterAcceptanceControls />");
     expect(controlsSource).toContain("if (!isC11StaleWriterProbeEnabled()) return null");
+    expect(controlsSource).toContain("useSyncExternalStore(subscribeToWriterAuthority");
     expect(controlsSource).toContain("captureC11StaleWriterProbe");
     expect(controlsSource).toContain("sendC11StaleWriterProbe");
     expect(controlsSource).not.toContain("hasPlatformAdminAuthority");
