@@ -34,6 +34,8 @@ let db: { auth: { getUser: jest.Mock }; from: jest.Mock; rpc: jest.Mock };
 let currentLease = leaseA;
 const source = fs.readFileSync(path.resolve(process.cwd(), "src/services/CloudSyncService.ts"), "utf8");
 const buildSource = fs.readFileSync(path.resolve(process.cwd(), "scripts/build-field-release.mjs"), "utf8");
+const exconSource = fs.readFileSync(path.resolve(process.cwd(), "src/app/excon/index.tsx"), "utf8");
+const controlsSource = fs.readFileSync(path.resolve(process.cwd(), "src/components/excon/C11StaleWriterAcceptanceControls.tsx"), "utf8");
 
 beforeEach(() => {
   jest.resetModules();
@@ -139,5 +141,13 @@ describe("C11 physical stale-writer acceptance probe", () => {
     }).getOperatorAuthSessionGeneration.mockReturnValue(2);
     expect((await probe.sendC11StaleWriterProbe()).code).toBe("EXERCISE_OR_SCOPE_CHANGED");
     expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  test("C11-PROBE-12 is reachable in EXCON mode without granting PLATFORM_ADMIN", () => {
+    expect(exconSource).toContain("<C11StaleWriterAcceptanceControls />");
+    expect(controlsSource).toContain("if (!isC11StaleWriterProbeEnabled()) return null");
+    expect(controlsSource).toContain("captureC11StaleWriterProbe");
+    expect(controlsSource).toContain("sendC11StaleWriterProbe");
+    expect(controlsSource).not.toContain("hasPlatformAdminAuthority");
   });
 });

@@ -16,6 +16,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text } from "react-native";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { signOutOperator } from "@/services/authorization/OperatorSessionService";
 import RoleModeSwitcher from "@/components/RoleModeSwitcher";
+import C11StaleWriterAcceptanceControls from "@/components/excon/C11StaleWriterAcceptanceControls";
 import { useExconRouteReadiness } from "@/hooks/useExconRouteReadiness";
 import { ExconRouteReadinessBoundary } from "@/components/excon/ExconRouteReadinessBoundary";
 
@@ -57,6 +58,8 @@ function AuthorizedExconScreen() {
       <Text style={styles.title}>Õppuse juhtimine</Text>
 
       <RoleModeSwitcher />
+
+      <C11StaleWriterAcceptanceControls />
 
       <Text style={styles.subtitle}>EXCON · Õppuse juhtimiskeskus</Text>
       {operator.state === "AUTHENTICATED" && <Text style={styles.operator}>Operaator: {operator.profile.displayName}</Text>}
