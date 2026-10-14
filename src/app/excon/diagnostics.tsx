@@ -13,6 +13,12 @@ import {
   armNextRuntimeCheckpointPublicationLostResponseForValidation,
   isRuntimeCheckpointPublicationLostResponseArmedForValidation,
 } from "@/services/runtime/persistence/RuntimeCheckpointPublicationValidationHarness";
+import {
+  captureC11StaleWriterProbe,
+  getC11StaleWriterProbeCapture,
+  isC11StaleWriterProbeEnabled,
+  sendC11StaleWriterProbe,
+} from "@/services/runtime/persistence/C11StaleWriterAcceptanceProbe";
 
 const severityLabel: Readonly<Record<OperationalSeverity,string>> = {INFO:"INFO",DEGRADED:"HÄIRITUD",ACTION_REQUIRED:"VAJAB TEGEVUST",EXERCISE_BLOCKING:"ÕPPUST BLOKEERIV"};
 
@@ -20,6 +26,7 @@ export default function LiveOperationsDiagnosticsScreen() {
   const [snapshot,setSnapshot]=useState(captureOperationalDiagnosticSnapshot);
   const [pending,setPending]=useState<string>();
   const [validationRenewal,setValidationRenewal]=useState<string>();
+  const [c11ProbeResult,setC11ProbeResult]=useState<string>();
   const [lostResponseArmed,setLostResponseArmed]=useState(()=>isRuntimeCheckpointPublicationLostResponseArmedForValidation(snapshot.exercise.exerciseId));
   const refresh=()=>{const next=captureOperationalDiagnosticSnapshot();setSnapshot(next);
     setLostResponseArmed(isRuntimeCheckpointPublicationLostResponseArmedForValidation(next.exercise.exerciseId));};
@@ -54,6 +61,14 @@ export default function LiveOperationsDiagnosticsScreen() {
       label={lostResponseArmed?"Järgmise kontrollpunkti vastuse kadu on aktiveeritud":"Järgmine kontrollpunkt: simuleeri vastuse kadu pärast commit’i"}
       disabled={Boolean(pending)||lostResponseArmed}
       onPress={()=>setLostResponseArmed(armNextRuntimeCheckpointPublicationLostResponseForValidation(snapshot.exercise.exerciseId))}/>}
+    {isC11StaleWriterProbeEnabled()&&<><Text style={styles.sectionTitle}>C11 ainult testkoostes: serveri writer-tõke</Text>
+      <Text style={styles.warning}>Ainult kontrollitud TEST-õppuse jaoks. Salvesta A writer enne B ülevõtmist; saada täpselt üks muutmata olekuga päring pärast B avaldamist.</Text>
+      {!getC11StaleWriterProbeCapture()&&<Action label="Salvesta selle seadme writer" disabled={Boolean(pending)||snapshot.runtime.state!=="WRITER"}
+        onPress={()=>void run("c11-capture",async()=>{const result=await captureC11StaleWriterProbe();setC11ProbeResult(result.code);})}/>}
+      {getC11StaleWriterProbeCapture()&&!getC11StaleWriterProbeCapture()?.sent&&<Action label="Saada üks vana writer'i testpäring"
+        disabled={Boolean(pending)} onPress={()=>void run("c11-send",async()=>{const result=await sendC11StaleWriterProbe();setC11ProbeResult(`${result.code} · HTTP ${result.httpStatus??"–"}`);})}/>}
+      {c11ProbeResult&&<Text selectable style={styles.warning}>{c11ProbeResult}</Text>}
+    </>}
     {snapshot.runtime.durableCache==="MISSING_OR_DIFFERENT_EXERCISE"&&<Text style={styles.warning}>Puuduva kontrollpunktiga RUNNING õppust ei taastata lokaalselt. Kasuta töölaua auditeeritud lõpetamist, kui recovery õigus on olemas.</Text>}
     <Action label="Jaga ohutu diagnostikaülevaade" disabled={Boolean(pending)} onPress={()=>void Share.share({title:"RussiCaptor operatsioonidiagnostika",message:exportOperationalDiagnostics(captureOperationalDiagnosticSnapshot())})}/>
     <Pressable style={styles.back} onPress={()=>router.back()}><Text style={styles.backText}>Tagasi</Text></Pressable>
