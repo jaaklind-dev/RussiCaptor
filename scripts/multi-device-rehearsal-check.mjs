@@ -17,7 +17,11 @@ add('SOURCE_ALIGNMENT', head && head === remote ? 'READY' : 'BLOCKED', head && r
 const manifestPath = path.join(root, 'dist/field-release/release-manifest.json');
 const manifest = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : undefined;
 const apkPath = manifest ? path.join(root, 'dist/field-release', manifest.artifactFilename) : '';
-add('CANONICAL_RELEASE', manifest?.distributable === true && manifest?.sourceDirty === false && fs.existsSync(apkPath) ? 'READY' : 'BLOCKED', manifest ? `${manifest.artifactFilename} @ ${manifest.gitSha}` : 'Release manifest unavailable');
+// A mutable sidecar is not release proof. Verify the signed APK's mode and a
+// fresh production compatibility check before accepting canonical readiness.
+const artifactVerified = manifest && fs.existsSync(apkPath) && Boolean(run(process.execPath,
+  ['scripts/verify-field-release-artifact.mjs', manifestPath, '--require-canonical']));
+add('CANONICAL_RELEASE', artifactVerified ? 'READY' : 'BLOCKED', manifest ? `${manifest.artifactFilename} @ ${manifest.gitSha}` : 'Release manifest unavailable');
 const supabaseHttp = run('curl', ['-sS', '-o', '/dev/null', '-w', '%{http_code}', 'https://fimcsrivizpliiuoqopv.supabase.co/rest/v1/']);
 add('SUPABASE_REACHABLE', /^\d{3}$/.test(supabaseHttp) && supabaseHttp !== '000' ? 'READY' : 'BLOCKED', `Production Data API HTTP ${supabaseHttp || 'unreachable'}`);
 

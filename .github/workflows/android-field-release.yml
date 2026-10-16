@@ -35,7 +35,8 @@ jobs:
         env:
           RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS: "1"
           RUSSICAPTOR_DEPLOYED_MIGRATIONS: ${{ vars.RUSSICAPTOR_DEPLOYED_MIGRATIONS }}
-        run: npm run field-release:verify
+          RUSSICAPTOR_MIGRATION_PROJECT_REF: fimcsrivizpliiuoqopv
+        run: npm run field-release:verify -- --mode=canonical
       - run: npm test
       - run: npm run typecheck
       - run: npm run lint
@@ -58,7 +59,10 @@ jobs:
           RUSSICAPTOR_RELEASE_KEY_PASSWORD: ${{ secrets.RUSSICAPTOR_RELEASE_KEY_PASSWORD }}
           RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS: "1"
           RUSSICAPTOR_DEPLOYED_MIGRATIONS: ${{ vars.RUSSICAPTOR_DEPLOYED_MIGRATIONS }}
-        run: npm run field-release:android
+          RUSSICAPTOR_MIGRATION_PROJECT_REF: fimcsrivizpliiuoqopv
+        run: |
+          npm run field-release:android -- --mode=canonical
+          node scripts/verify-field-release-artifact.mjs dist/field-release/release-manifest.json --require-canonical
       - uses: actions/upload-artifact@v4
         with:
           name: russicaptor-android-field-release

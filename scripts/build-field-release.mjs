@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { buildPlan, buildEvidence, EMBEDDED_EVIDENCE_PATH, verifyArtifactEvidence } from "./field-release-policy.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 process.env.ANDROID_HOME ||= path.join(process.env.HOME, "Library/Android/sdk");
@@ -10,18 +11,6 @@ process.env.ANDROID_SDK_ROOT ||= process.env.ANDROID_HOME;
 const run = (command, args, options = {}) => execFileSync(command, args, { cwd: options.cwd ?? root, encoding: "utf8", stdio: options.capture ? "pipe" : "inherit", env: process.env });
 const readJson = file => JSON.parse(fs.readFileSync(path.join(root, file), "utf8"));
 const manifest = readJson("release/field-release.json");
-const releaseVariant = process.env.RUSSICAPTOR_RELEASE_VARIANT ?? "canonical";
-const versionCodeOverride = process.env.RUSSICAPTOR_RELEASE_VERSION_CODE;
-const validationHarnessRequested = process.env.RUSSICAPTOR_ENABLE_SHARED_WORKFLOW_VALIDATION_HARNESS === "1";
-if (releaseVariant === "canonical" && versionCodeOverride) throw new Error("Canonical release versionCode cannot be overridden.");
-if (!new Set(["canonical", "upgrade-validation", "rollback-validation"]).has(releaseVariant)) throw new Error("Unknown field release variant.");
-if (releaseVariant === "canonical" && validationHarnessRequested) throw new Error("Canonical release cannot include a validation harness.");
-const buildVersionCode = versionCodeOverride ? Number(versionCodeOverride) : manifest.versionCode;
-if (!Number.isInteger(buildVersionCode) || buildVersionCode < manifest.versionCode) throw new Error("Release versionCode override must be monotonic.");
-if (releaseVariant !== "canonical" && buildVersionCode <= manifest.versionCode) throw new Error("Validation release must have a higher versionCode.");
-const artifactFilename = releaseVariant === "canonical"
-  ? manifest.artifactFilename
-  : `RussiCaptor-${manifest.applicationVersion}-${buildVersionCode}-${releaseVariant}.apk`;
 
 function loadLocalPublicEnvironment() {
   const envFile = path.join(root, ".env");
@@ -33,16 +22,22 @@ function loadLocalPublicEnvironment() {
 }
 
 loadLocalPublicEnvironment();
-process.env.RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS ||= "1";
-run(process.execPath, ["scripts/verify-field-release-config.mjs"]);
+const modeArguments = process.argv.slice(2).filter(arg => arg.startsWith("--mode="));
+if (modeArguments.length > 1 || modeArguments.length !== process.argv.length - 2) throw new Error("Invalid build arguments.");
+const plan = buildPlan(manifest, process.env, modeArguments[0]?.slice("--mode=".length));
+const { mode: releaseVariant, versionCode: buildVersionCode, artifactFilename } = plan;
+const verification = JSON.parse(run(process.execPath, ["scripts/verify-field-release-config.mjs", `--mode=${releaseVariant}`, "--json"], { capture: true }));
+if (verification.configuration !== "PASS") throw new Error("Release verification failed closed.");
 run(process.execPath, ["scripts/builder-verify-published.mjs"]);
-const status = run("git", ["status", "--porcelain", "--untracked-files=no"], { capture: true }).trim();
+const status = run("git", ["status", "--porcelain", "--untracked-files=normal"], { capture: true }).trim();
 const sourceDirty = Boolean(status);
-if (sourceDirty && process.env.RUSSICAPTOR_ALLOW_DIRTY_BUILD !== "1") throw new Error("Field release requires a clean tracked working tree.");
+if (sourceDirty && process.env.RUSSICAPTOR_ALLOW_DIRTY_BUILD !== "1") throw new Error("Field release requires a clean working tree.");
+if (sourceDirty && releaseVariant === "predeployment-candidate") throw new Error("Predeployment candidate requires committed clean source.");
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
 const key = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
 if (!/^https:\/\/[a-z0-9]+\.supabase\.co\/?$/i.test(url)) throw new Error("A production Supabase URL is required.");
+if (new URL(url).hostname !== "fimcsrivizpliiuoqopv.supabase.co") throw new Error("Wrong production project configuration.");
 if (!key.startsWith("sb_publishable_") && !key.startsWith("eyJ")) throw new Error("A Supabase publishable/legacy anon key is required.");
 if (key.startsWith("sb_secret_") || /service_role/i.test(key)) throw new Error("A secret/service-role key must never be bundled.");
 
@@ -64,6 +59,7 @@ if (keystorePath === path.join(root, "android/app/debug.keystore")) throw new Er
 
 const gitSha = run("git", ["rev-parse", "HEAD"], { capture: true }).trim();
 const buildTimestamp = new Date().toISOString();
+const evidence = buildEvidence(manifest, plan, verification.compatibility, verification.integrity, { gitSha, buildTimestamp, sourceDirty });
 Object.assign(process.env, {
   NODE_ENV: "production",
   EXPO_PUBLIC_RELEASE_ENVIRONMENT: "production",
@@ -72,15 +68,20 @@ Object.assign(process.env, {
   EXPO_PUBLIC_ANDROID_VERSION_CODE: String(buildVersionCode),
   RUSSICAPTOR_VERSION_NAME: manifest.applicationVersion,
   RUSSICAPTOR_VERSION_CODE: String(buildVersionCode),
-  EXPO_PUBLIC_SHARED_WORKFLOW_VALIDATION_HARNESS: releaseVariant !== "canonical" && validationHarnessRequested ? "1" : "0",
+  EXPO_PUBLIC_SHARED_WORKFLOW_VALIDATION_HARNESS: plan.sharedWorkflowValidationHarness ? "1" : "0",
 });
 
 run(path.join(root, "node_modules/.bin/expo"), ["prebuild", "--clean", "--platform", "android", "--no-install"]);
 run(process.execPath, ["scripts/configure-field-release-native.mjs"]);
+// This file is covered by the APK signature. Sidecar edits cannot promote a
+// candidate: the artifact verifier independently reads this signed evidence.
+const evidencePath = path.join(root, "android/app/src/main", EMBEDDED_EVIDENCE_PATH);
+fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
+fs.writeFileSync(evidencePath, `${JSON.stringify(evidence)}\n`);
 run(path.join(root, "android/gradlew"), [":app:assembleRelease", "--no-daemon"], { cwd: path.join(root, "android") });
 const sourceApk = path.join(root, "android/app/build/outputs/apk/release/app-release.apk");
 if (!fs.existsSync(sourceApk)) throw new Error(`APK not produced at ${sourceApk}`);
-const output = path.join(root, "dist/field-release");
+const output = path.join(root, plan.outputDirectory);
 fs.mkdirSync(output, { recursive: true });
 const artifact = path.join(output, artifactFilename);
 fs.copyFileSync(sourceApk, artifact);
@@ -105,26 +106,28 @@ const minSdk = /sdkVersion:'([^']+)'/.exec(badging)?.[1];
 const targetSdk = /targetSdkVersion:'([^']+)'/.exec(badging)?.[1];
 const generated = {
   ...manifest,
-  versionCode: buildVersionCode,
-  artifactFilename,
-  releaseVariant,
-  gitSha,
-  buildTimestamp,
-  sourceDirty,
-  distributable: !sourceDirty && releaseVariant === "canonical",
+  ...evidence,
+  buildValidity: "PASS",
+  signingVerification: "PASS",
+  packageVersionIdentity: "PASS",
   signingProfile: "stable-production-field-release",
   signingCertificateSha256: fingerprint,
   artifactSha256: crypto.createHash("sha256").update(artifactBytes).digest("hex"),
   artifactSizeBytes: artifactBytes.byteLength,
   debuggable: false,
-  sharedWorkflowValidationHarness: releaseVariant !== "canonical" && validationHarnessRequested,
   permissions,
   minSdk,
   targetSdk,
-  verifiedSupabaseMigrations: (process.env.RUSSICAPTOR_DEPLOYED_MIGRATIONS ?? "").split(",").map(value => value.trim()).filter(Boolean),
+  verifiedSupabaseMigrations: verification.compatibility.deployedVersions,
 };
-fs.writeFileSync(path.join(output, "release-manifest.json"), `${JSON.stringify(generated, null, 2)}\n`);
+verifyArtifactEvidence(manifest, generated, JSON.parse(run("unzip", ["-p", artifact, EMBEDDED_EVIDENCE_PATH], { capture: true })), {
+  signatureVerified: true, signingCertificateSha256: fingerprint.toLowerCase(),
+  packageId: packageMatch[1], versionCode: Number(packageMatch[2]), applicationVersion: packageMatch[3],
+  debuggable: false, devOverlay: false, artifactSha256: generated.artifactSha256, artifactSizeBytes: artifactBytes.byteLength,
+}, releaseVariant === "canonical");
+fs.writeFileSync(path.join(output, plan.manifestFilename), `${JSON.stringify(generated, null, 2)}\n`);
 fs.writeFileSync(path.join(output, `${artifactFilename}.sha256`), `${generated.artifactSha256}  ${artifactFilename}\n`);
+run(process.execPath, ["scripts/verify-field-release-artifact.mjs", path.join(output, plan.manifestFilename), ...(releaseVariant === "canonical" ? ["--require-canonical"] : [])]);
 for (const file of [
   "docs/FIELD_RELEASE_ANDROID.md",
   "docs/WP_NEXT_04_CONTROLLED_FIELD_RELEASE_DEPLOYMENT.md",

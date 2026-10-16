@@ -60,6 +60,7 @@ describe("WP-NEXT-02 production release gate", () => {
     const rejected = spawnSync(process.execPath, [script], { encoding: "utf8", env: {
       ...process.env,
       RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS: "1",
+      RUSSICAPTOR_MIGRATION_PROJECT_REF: "fimcsrivizpliiuoqopv",
       RUSSICAPTOR_DEPLOYED_MIGRATIONS: requiredVersions.filter(
         (version: string) => version !== "20261011090155",
       ).join(","),
@@ -70,6 +71,7 @@ describe("WP-NEXT-02 production release gate", () => {
     const accepted = spawnSync(process.execPath, [script], { encoding: "utf8", env: {
       ...process.env,
       RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS: "1",
+      RUSSICAPTOR_MIGRATION_PROJECT_REF: "fimcsrivizpliiuoqopv",
       RUSSICAPTOR_DEPLOYED_MIGRATIONS: requiredVersions.join(","),
     }});
     expect(accepted.status).toBe(0);

@@ -39,6 +39,7 @@ describe("post-C11 field-release compatibility", () => {
       [path.resolve(root, "scripts/verify-field-release-config.mjs")], {
         encoding: "utf8", env: { ...process.env,
           RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS: "1",
+          RUSSICAPTOR_MIGRATION_PROJECT_REF: "fimcsrivizpliiuoqopv",
           RUSSICAPTOR_DEPLOYED_MIGRATIONS: deployed.join(","),
         },
       });
@@ -51,7 +52,9 @@ describe("post-C11 field-release compatibility", () => {
   test("canonical build has no acceptance-probe activation path", () => {
     const build = fs.readFileSync(path.resolve(root, "scripts/build-field-release.mjs"), "utf8");
     expect(build).not.toMatch(/C11_STALE_WRITER_PROBE|c11StaleWriterProbe|c11ProbeRequested/);
-    expect(build).toContain('releaseVariant === "canonical" && validationHarnessRequested');
-    expect(build).toContain('EXPO_PUBLIC_SHARED_WORKFLOW_VALIDATION_HARNESS: releaseVariant !== "canonical"');
+    expect(build).toContain('EXPO_PUBLIC_SHARED_WORKFLOW_VALIDATION_HARNESS: plan.sharedWorkflowValidationHarness');
+    const policy = fs.readFileSync(path.resolve(root, "scripts/field-release-policy.mjs"), "utf8");
+    expect(policy).toContain('if (!validation && harness)');
+    expect(policy).toContain('sharedWorkflowValidationHarness: validation && harness');
   });
 });

@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+import { buildPlan, localMigrationIntegrity, productionCompatibility, requireProductionCompatibility } from "./field-release-policy.mjs";
 
 const manifest = JSON.parse(fs.readFileSync(new URL("../release/field-release.json", import.meta.url), "utf8"));
 const app = JSON.parse(fs.readFileSync(new URL("../app.json", import.meta.url), "utf8")).expo;
@@ -23,11 +25,15 @@ for (const migration of manifest.requiredSupabaseMigrations) {
   const matches = fs.readdirSync(new URL("../supabase/migrations", import.meta.url)).includes(migration.localFile);
   if (!matches) fail(`migration file ${migration.localFile} is not tracked`);
 }
-const deployed = new Set((process.env.RUSSICAPTOR_DEPLOYED_MIGRATIONS ?? "").split(",").map(value => value.trim()).filter(Boolean));
-if (process.env.RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS === "1" && !deployed.size) fail("verified remote migration list is required");
-for (const version of remoteVersions) {
-  if (deployed.size && !deployed.has(version)) fail(`required remote migration ${version} is not deployed`);
-}
+const modeArguments = process.argv.slice(2).filter(arg => arg.startsWith("--mode="));
+if (modeArguments.length > 1 || process.argv.slice(2).some(arg => arg !== "--json" && !arg.startsWith("--mode="))) fail("invalid verification arguments");
+const mode = modeArguments[0]?.slice("--mode=".length);
+const plan = mode ? buildPlan(manifest, process.env, mode) : undefined;
+const compatibility = productionCompatibility([...remoteVersions], process.env);
+// Static config verification remains usable offline. Every actual build passes
+// an explicit mode; canonical/validation builds cannot opt out through env vars.
+if ((plan && plan.mode !== "predeployment-candidate") || (!plan && (process.env.RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS === "1" || compatibility.evidenceStatus === "AVAILABLE"))) requireProductionCompatibility(compatibility);
+const integrity = plan ? localMigrationIntegrity(fileURLToPath(new URL("../", import.meta.url)), manifest) : undefined;
 if (pkg.dependencies?.["expo-dev-client"]) fail("expo-dev-client must not be a production dependency");
 if (app.plugins?.some(plugin => plugin === "expo-dev-client" || plugin?.[0] === "expo-dev-client")) fail("expo-dev-client plugin must not be configured");
 if (!app.android.blockedPermissions?.includes("android.permission.SYSTEM_ALERT_WINDOW")) fail("dev overlay permission must be blocked");
@@ -35,4 +41,10 @@ if (app.android.allowBackup !== false) fail("field app backup must be disabled")
 if (!nativeConfigurator.includes("RUSSICAPTOR_RELEASE_KEYSTORE")) fail("external release signing is not configured");
 if (!nativeConfigurator.includes("signingConfig signingConfigs.release")) fail("release build must require production signing");
 if (nativeConfigurator.includes("releaseSigningConfigured ?")) fail("release signing must not fall back");
-console.log("FIELD_RELEASE_CONFIG_VALID");
+console.log(process.argv.includes("--json")
+  ? JSON.stringify({ configuration: "PASS", compatibility, integrity })
+  : "FIELD_RELEASE_CONFIG_VALID");
+if (!process.argv.includes("--json")) {
+  console.log(`PRODUCTION_COMPATIBILITY=${compatibility.status}`);
+  console.log(`MIGRATION_EVIDENCE=${compatibility.evidenceStatus}`);
+}
