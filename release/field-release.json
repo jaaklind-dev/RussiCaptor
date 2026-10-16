@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
   "applicationVersion": "1.2.0",
-  "versionCode": 174,
-  "minimumVersionCodeExclusive": 173,
+  "versionCode": 175,
+  "minimumVersionCodeExclusive": 174,
   "environment": "production",
   "releaseChannel": "field",
   "packageId": "com.jaaklind.RussiCaptor",
-  "artifactFilename": "RussiCaptor-Android-1.2.0-v174.apk",
+  "artifactFilename": "RussiCaptor-Android-1.2.0-v175.apk",
   "signingCertificateSha256": "b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d30198980e59fcde96b",
   "versionPolicy": {
     "versionName": "semantic product version; signing-only work does not change it",
@@ -57,8 +57,12 @@
     {
       "remoteVersion": "20261012102900",
       "localFile": "20261012102900_atomic_active_writer_takeover.sql"
+    },
+    {
+      "remoteVersion": "20261016065854",
+      "localFile": "20261016065854_ready_exercise_cancellation.sql"
     }
   ],
-  "minimumCompatibleBackendState": "WP-EGRESS-01/03/04 + WP-NEXT-02/03 + PLATFORM_ADMIN_RECOVERY + BUILDER_LAB_BINDING + SERVER_WRITER_FENCE + ATOMIC_ACTIVE_TAKEOVER deployed",
+  "minimumCompatibleBackendState": "WP-EGRESS-01/03/04 + WP-NEXT-02/03 + PLATFORM_ADMIN_RECOVERY + BUILDER_LAB_BINDING + SERVER_WRITER_FENCE + ATOMIC_ACTIVE_TAKEOVER + READY_CANCELLATION_ACTIVATION_GATE deployed; cancellation remains OFF until compatible-client rollout is separately authorized",
   "releaseNotes": "docs/WP_NEXT_07_PRODUCTION_SIGNING_DISTRIBUTABLE_RELEASE.md"
 }

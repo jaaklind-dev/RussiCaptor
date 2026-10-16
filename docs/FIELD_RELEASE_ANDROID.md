@@ -19,7 +19,9 @@ The keystore is held outside Git in encrypted release-secret storage. Losing or 
 3. Run `npm run field-release:android`, or manually dispatch **Android field release** in GitHub Actions.
 4. Distribute the APK together with `release-manifest.json`, its `.sha256` file, this guide and the release notes from `dist/field-release/`. Only a canonical manifest with `distributable: true` is a field release.
 
-The next canonical `versionCode` is **174**, following the signed distributable APK 173 used for physical release acceptance. `minimumVersionCodeExclusive` is therefore 173, preserving in-place upgrade ordering. `versionName` remains 1.2.0 for this authentication-diagnostics correction; product release naming and publication are separate decisions. Updating this descriptor does not publish an APK, advance EAS remote version state, create a tag, or authorize release. The required backend list includes platform-admin recovery, Builder lab binding, the writer-fence migration, and atomic active takeover; verify these against the production ledger again at build time.
+The next canonical candidate `versionCode` is **175**, following signed distributable APK 174. `minimumVersionCodeExclusive` is therefore 174, preserving in-place upgrade ordering. `versionName` remains 1.2.0. Repository release descriptors and GitHub release assets were checked during preparation: no version 175 was recorded, and the highest current canonical descriptor was 174. Recheck for any later/out-of-band distributed build before allocating the actual artifact. The canonical local field build uses this descriptor; this preparation does not query or advance the separate EAS remote version counter.
+
+APK 175 is prepared, not built or released. The required backend list now includes `20261016065854_ready_exercise_cancellation.sql` with the default-OFF activation gate. Production currently has only the preceding 52 migrations, so remote compatibility verification must reject a distributable build until the exact migration is separately authorized and deployed. Do not substitute scratch history or fabricated migration metadata for the verified production ledger. The existing signer, package identity, and writer-fence requirements remain unchanged.
 
 ## Fresh install
 
@@ -36,3 +38,5 @@ Android will not normally accept a lower `versionCode`. Preferred rollback is a 
 ## Backend ordering
 
 Deploy backward-compatible Supabase migrations before dependent clients. Keep old clients working during staged rollout. Never bundle destructive automatic migrations. Confirm the remote migration ledger contains every version required by the release manifest before installing the first client.
+
+READY cancellation must remain OFF through database/Edge deployment and client rollout. Activate only after separate authorization and verified coverage of compatible Admin/EXCON/CM clients, including offline/spare devices. APK 173/174 are not compatible with existing CANCELLED records; switching the gate OFF later does not make those records safe for old clients. Follow [the activation runbook](READY_CANCELLATION_ACTIVATION_GATE_2026-10-16.md) and preserve historical audit records.
