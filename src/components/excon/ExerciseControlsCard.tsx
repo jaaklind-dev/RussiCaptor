@@ -12,7 +12,7 @@ import { getCurrentExerciseDiscoveryReadiness } from "@/services/CloudSyncServic
 const SPEEDS: readonly CanonicalExerciseSpeed[] = [1, 2, 4];
 export function getExerciseControlAvailability(state: CanonicalExerciseSnapshot["lifecycleState"]) {
   return { start: state === "READY", pause: state === "RUNNING", resume: state === "PAUSED",
-    complete: state === "RUNNING" || state === "PAUSED", speed: state !== "COMPLETED" };
+    complete: state === "RUNNING" || state === "PAUSED", speed: state !== "COMPLETED" && state !== "CANCELLED" };
 }
 
 export default function ExerciseControlsCard({ snapshot, onApplied, awaitingTerminalAck = false }: {

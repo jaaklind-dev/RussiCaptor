@@ -1,5 +1,5 @@
 import {
-  grantExerciseBootstrap, grantExerciseRole, inviteAdminUser, listAdminExercises,
+  cancelReadyExercise, grantExerciseBootstrap, grantExerciseRole, inviteAdminUser, listAdminExercises,
   listAdminUsers, requestAdminPasswordReset, revokeExerciseRole, revokeUnusedExerciseBootstrap,
   setAdminUserActive,
 } from "../PlatformAdminService";
@@ -66,5 +66,25 @@ describe("platform administration client", () => {
     mockInvoke.mockResolvedValue({ data: null, error: { message: "Unavailable", context: { status: 503 } } });
     await expect(grantExerciseRole("USER-1", "EX-1", "CM")).rejects.toThrow("Unavailable");
     expect(mockInvoke).toHaveBeenCalledTimes(1);
+  });
+
+  test("READY cancellation sends exact revision and stable supplied operation ID, with no mutation retry", async () => {
+    const operationId = "00000000-0000-4000-8000-000000000001";
+    mockInvoke.mockResolvedValueOnce({ data: { ok: true, exerciseId: "EX-READY", revision: 2,
+      lifecycleState: "CANCELLED", cancelledAt: "2026-10-16T10:00:00Z", idempotent: false }, error: null });
+    await expect(cancelReadyExercise("EX-READY", 1, operationId, "UNUSED_READY"))
+      .resolves.toMatchObject({ exerciseId: "EX-READY", revision: 2, lifecycleState: "CANCELLED" });
+    expect(mockInvoke).toHaveBeenCalledWith("platform-admin-exercises", { body: {
+      operation: "cancelReady", exerciseId: "EX-READY", expectedRevision: 1,
+      operationId, reason: "UNUSED_READY",
+    } });
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+  });
+
+  test("READY cancellation fails closed on an inconsistent acknowledgement", async () => {
+    mockInvoke.mockResolvedValue({ data: { ok: true, exerciseId: "EX-READY", revision: 1,
+      lifecycleState: "CANCELLED", cancelledAt: "2026-10-16T10:00:00Z", idempotent: false }, error: null });
+    await expect(cancelReadyExercise("EX-READY", 1, "00000000-0000-4000-8000-000000000001"))
+      .rejects.toThrow("READY_CANCELLATION_READBACK_FAILED");
   });
 });

@@ -37,7 +37,9 @@ function newestFirst(a: CurrentExerciseCandidate, b: CurrentExerciseCandidate): 
  * retained as the historical presentation context.
  */
 export function resolveCurrentExercise(candidates: readonly CurrentExerciseCandidate[]): CurrentExerciseSelection {
-  const valid = candidates.filter(candidate => candidate.state.exerciseSession.exerciseId === candidate.exerciseId);
+  // CANCELLED belongs in Admin history only, never a Runtime/current choice.
+  const valid = candidates.filter(candidate => candidate.state.exerciseSession.exerciseId === candidate.exerciseId &&
+    exerciseLifecycle(candidate.state) !== "CANCELLED");
   const active = valid
     .filter(candidate => ["READY", "RUNNING", "PAUSED"].includes(exerciseLifecycle(candidate.state)))
     .sort(newestFirst);
@@ -64,7 +66,8 @@ export function resolveScopedOperatorExercise(
 ): CurrentExerciseSelection {
   const authorized = new Set(assignedExerciseIds);
   const scoped = candidates.filter(candidate => authorized.has(candidate.exerciseId) &&
-    candidate.state.exerciseSession.exerciseId === candidate.exerciseId);
+    candidate.state.exerciseSession.exerciseId === candidate.exerciseId &&
+    exerciseLifecycle(candidate.state) !== "CANCELLED");
   if (!scoped.length) return Object.freeze({ status: "NONE" });
   if (authorized.size === 1) return resolveCurrentExercise(scoped);
   const selected = explicitlySelectedExerciseId && scoped.find(candidate =>

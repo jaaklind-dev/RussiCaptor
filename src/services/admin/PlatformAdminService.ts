@@ -75,3 +75,25 @@ export async function revokeExerciseRole(assignment: AdminAssignment): Promise<v
     userId: assignment.user_id, role: assignment.role,
   });
 }
+
+export type ReadyCancellationReason = "UNUSED_READY" | "FAILED_START" | "TEST_CLEANUP";
+export type ReadyCancellationResult = Readonly<{
+  exerciseId: string; revision: number; lifecycleState: "CANCELLED";
+  cancelledAt: string; idempotent: boolean;
+}>;
+export async function cancelReadyExercise(
+  exerciseId: string, expectedRevision: number, operationId: string,
+  reason: ReadyCancellationReason = "UNUSED_READY",
+): Promise<ReadyCancellationResult> {
+  const result = await invoke<{ ok: true; exerciseId: string; revision: number;
+    lifecycleState: "CANCELLED"; cancelledAt: string; idempotent: boolean }>(
+    "platform-admin-exercises",
+    { operation: "cancelReady", exerciseId, expectedRevision, operationId, reason },
+  );
+  if (result.exerciseId !== exerciseId || result.lifecycleState !== "CANCELLED"
+    || !Number.isSafeInteger(result.revision) || result.revision !== expectedRevision + 1
+    || typeof result.cancelledAt !== "string") {
+    throw new Error("READY_CANCELLATION_READBACK_FAILED");
+  }
+  return result;
+}

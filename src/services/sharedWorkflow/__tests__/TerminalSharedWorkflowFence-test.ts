@@ -112,10 +112,11 @@ describe("WP-NARVA-07K terminal shared-workflow immutability", () => {
     const patient = fs.readFileSync(path.resolve(process.cwd(), "src/app/patient/[id].tsx"), "utf8");
     const scan = fs.readFileSync(path.resolve(process.cwd(), "src/app/scan.tsx"), "utf8");
     expect(dashboard).toMatch(/readOnly=\{canonicalExercise\.lifecycleState === "COMPLETED"\}/);
+    expect(dashboard).toContain('canonicalExercise.lifecycleState !== "CANCELLED" && <SharedWorkflowValidationCard');
     expect(card).toMatch(/disabled=\{pending \|\| readOnly\}/);
     expect(card).toMatch(/disabled=\{pending \|\| !prepared \|\| readOnly\}/);
     expect(card).toContain("Õppus on lõpetatud · ainult lugemiseks");
-    expect(patient).toMatch(/isExerciseCompleted \|\| isCompleted \|\| !canCurrentCaseManagerEditPatient/);
+    expect(patient).toMatch(/isExerciseTerminal \|\| isCompleted \|\| !canCurrentCaseManagerEditPatient/);
     expect(scan).toMatch(/disabled=\{pending \|\| readOnly\}/);
     expect(scan).toContain("Patsiente ei saa enam määrata.");
   });

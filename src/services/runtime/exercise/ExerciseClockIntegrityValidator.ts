@@ -1,7 +1,7 @@
 import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
 import type { ExerciseClockDiagnostic, ExerciseClockIntegrityResult } from "./ExerciseClockDiagnostics";
 
-const lifecycles = ["READY", "RUNNING", "PAUSED", "COMPLETED"];
+const lifecycles = ["READY", "RUNNING", "PAUSED", "COMPLETED", "CANCELLED"];
 const speeds = [1, 2, 4];
 const diagnostic = (severity: ExerciseClockDiagnostic["severity"], code: ExerciseClockDiagnostic["code"], message: string): ExerciseClockDiagnostic => Object.freeze({ severity, code, message });
 
@@ -19,6 +19,7 @@ export function validateExerciseClock(snapshot: CanonicalExerciseSnapshot, optio
   const previous = options.previous;
   if (previous?.exerciseId === snapshot.exerciseId && snapshot.simulationTimeSec < previous.simulationTimeSec) diagnostics.push(diagnostic("ERROR", "CLOCK_REGRESSION", "Simulation time regressed"));
   if (previous?.exerciseId === snapshot.exerciseId && previous.lifecycleState === "COMPLETED" && (snapshot.lifecycleState !== "COMPLETED" || snapshot.simulationTimeSec !== previous.simulationTimeSec || snapshot.speed !== previous.speed)) diagnostics.push(diagnostic("ERROR", "COMPLETED_CLOCK_MUTATED", "Completed exercise clock is immutable"));
+  if (previous?.exerciseId === snapshot.exerciseId && previous.lifecycleState === "CANCELLED" && (snapshot.lifecycleState !== "CANCELLED" || snapshot.simulationTimeSec !== previous.simulationTimeSec || snapshot.speed !== previous.speed)) diagnostics.push(diagnostic("ERROR", "CANCELLED_CLOCK_MUTATED", "Cancelled exercise clock is immutable"));
   const hasLegacy = snapshot.clockVersion !== 2 || snapshot.clockInitializedAtSimulationTimeSec === undefined;
   if (diagnostics.length === 0) diagnostics.push(diagnostic("INFO", "CLOCK_CANONICAL", "Exercise clock is canonical"));
   const hasError = diagnostics.some(item => item.severity === "ERROR");

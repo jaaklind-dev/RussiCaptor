@@ -23,6 +23,8 @@ describe("WP-24A canonical Exercise Clock integrity", () => {
     expect(validateExerciseClock(canonical(), { ownerExerciseId: "OTHER" }).diagnostics[0].code).toBe("OWNER_MISMATCH");
     expect(validateExerciseClock(canonical({ simulationTimeSec: 9 }), { previous: canonical({ simulationTimeSec: 10 }) }).diagnostics.some(item => item.code === "CLOCK_REGRESSION")).toBe(true);
     expect(validateExerciseClock(canonical({ lifecycleState: "RUNNING", simulationTimeSec: 11 }), { previous: canonical({ lifecycleState: "COMPLETED", simulationTimeSec: 10 }) }).diagnostics.some(item => item.code === "COMPLETED_CLOCK_MUTATED")).toBe(true);
+    expect(validateExerciseClock(canonical({ lifecycleState: "CANCELLED" })).valid).toBe(true);
+    expect(validateExerciseClock(canonical({ lifecycleState: "RUNNING" }), { previous: canonical({ lifecycleState: "CANCELLED" }) }).diagnostics.some(item => item.code === "CANCELLED_CLOCK_MUTATED")).toBe(true);
     expect(validateExerciseClock(canonical({ simulationTimeSec: -1 })).valid).toBe(false);
   });
 

@@ -106,15 +106,15 @@ export default function DashboardScreen() {
 
       </View>
 
-      {isSharedWorkflowValidationHarnessEnabled() && <SharedWorkflowValidationCard readOnly={canonicalExercise.lifecycleState === "COMPLETED"} />}
+      {isSharedWorkflowValidationHarnessEnabled() && canonicalExercise.lifecycleState !== "CANCELLED" && <SharedWorkflowValidationCard readOnly={canonicalExercise.lifecycleState === "COMPLETED"} />}
 
-      {canonicalExercise.lifecycleState !== "COMPLETED" && <Pressable style={styles.button} onPress={() => router.push("/scan")}>
+      {canonicalExercise.lifecycleState !== "COMPLETED" && canonicalExercise.lifecycleState !== "CANCELLED" && <Pressable style={styles.button} onPress={() => router.push("/scan")}>
 
         <Text style={styles.buttonText}>Skaneeri patsient</Text>
 
       </Pressable>}
 
-      {canonicalExercise.lifecycleState !== "COMPLETED" && <Pressable
+      {canonicalExercise.lifecycleState !== "COMPLETED" && canonicalExercise.lifecycleState !== "CANCELLED" && <Pressable
         style={styles.secondaryButton}
         onPress={() => router.push("/location")}
       >

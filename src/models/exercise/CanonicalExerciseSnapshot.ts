@@ -1,4 +1,4 @@
-export type ExerciseLifecycleState = "READY" | "RUNNING" | "PAUSED" | "COMPLETED";
+export type ExerciseLifecycleState = "READY" | "RUNNING" | "PAUSED" | "COMPLETED" | "CANCELLED";
 export type CanonicalExerciseSpeed = 1 | 2 | 4;
 export type ExerciseClockVersion = 1 | 2;
 

@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from "expo-router";
+import * as Crypto from "expo-crypto";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { grantExerciseRole, listAdminExercises, listAdminUsers, revokeExerciseRole, type AdminExercise, type AdminUser } from "@/services/admin/PlatformAdminService";
+import { cancelReadyExercise, grantExerciseRole, listAdminExercises, listAdminUsers, revokeExerciseRole, type AdminExercise, type AdminUser } from "@/services/admin/PlatformAdminService";
 import { refreshOperatorSession } from "@/services/authorization/OperatorSessionService";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { assignmentStatusLabel, exerciseLifecycleLabel, exercisePackageIdLabel, publicErrorMessage } from "@/localization/et";
@@ -15,6 +16,7 @@ export default function AdminExercisesScreen() {
   const [loading, setLoading] = useState(false); const [listError, setListError] = useState<string>(); const [usersError, setUsersError] = useState<string>();
   const [userSearch, setUserSearch] = useState("");
   const generation = useRef(0);
+  const cancellationOperationIds = useRef<Record<string, string>>({});
   const load = useCallback(async () => {
     if (!adminReady) return;
     const request = ++generation.current;
@@ -47,6 +49,19 @@ export default function AdminExercisesScreen() {
   }, [userSearch, users]);
   const perform = async (action: () => Promise<void>, success: string) => { setBusy(true); setMessage(undefined); try { await action(); setMessage(success); await refreshOperatorSession(); await load(); } catch (error) { setMessage(publicErrorMessage(error)); } finally { setBusy(false); } };
   const displayMessage = message ?? (createdExercise ? "Uus õppus on loodud." : undefined);
+  const cancelReady = (target: AdminExercise) => {
+    if (target.lifecycleState !== "READY" || busy) return;
+    Alert.alert("Tühista kasutamata õppus", `Õppus ${target.exerciseId} jääb auditiks alles, kuid seda ei saa enam käivitada. Kas jätkata?`, [
+      { text: "Loobu", style: "cancel" },
+      { text: "Tühista õppus", style: "destructive", onPress: () => {
+        const key = `${target.exerciseId}:${target.revision}`;
+        cancellationOperationIds.current[key] ??= Crypto.randomUUID();
+        void perform(async () => {
+          await cancelReadyExercise(target.exerciseId, target.revision, cancellationOperationIds.current[key]);
+        }, "Õppus tühistatud. Rollide tühistamine on eraldi toiming.");
+      } },
+    ]);
+  };
   if (operator.state === "LOADING") return <View style={styles.page}><Text>Laadin kasutajaõigusi…</Text></View>;
   if (!adminReady) return <View style={styles.page}><Text accessibilityRole="alert">Administraatori õigused pole saadaval.</Text></View>;
   return <ScrollView contentContainerStyle={styles.page}>
@@ -59,14 +74,15 @@ export default function AdminExercisesScreen() {
     {usersError && <Text testID="admin-exercises-users-error" accessibilityRole="alert" style={styles.message}>{usersError}</Text>}
     {(listError || usersError || exercises) && <Pressable testID="admin-exercises-retry" accessibilityRole="button" disabled={loading} onPress={() => void load()}><Text style={styles.back}>{loading ? "Uuendan…" : "Värskenda nimekirja"}</Text></Pressable>}
     {exercise && <View style={styles.panel}><Text style={styles.panelTitle}>Osalejad · {exercisePackageIdLabel(exercise.packageId)}</Text>
-      {(exercise.lifecycleState === "COMPLETED" || exercise.lifecycleState === "TERMINATED") && <Text style={styles.warning}>Terminalne õppus on kirjutuskaitstud.</Text>}
+      {(["COMPLETED", "CANCELLED", "TERMINATED"].includes(exercise.lifecycleState)) && <Text style={styles.warning}>Terminalne õppus on kirjutuskaitstud.</Text>}
+      {exercise.lifecycleState === "READY" && <Pressable testID="admin-cancel-ready" accessibilityRole="button" disabled={busy} style={styles.outline} onPress={() => cancelReady(exercise)}><Text style={styles.remove}>Tühista kasutamata õppus</Text></Pressable>}
       <Text style={styles.label}>Vali kasutaja</Text>
       <TextInput accessibilityLabel="Otsi kasutajat" value={userSearch} onChangeText={value => { setUserSearch(value); setSelectedUser(undefined); }} placeholder="Nimi või e-post" autoCapitalize="none" style={styles.search} />
       {userSearch.trim().length < 2 && <Text style={styles.meta}>Sisesta vähemalt kaks tähemärki.</Text>}
       {userSearch.trim().length >= 2 && eligibleUsers.length === 0 && <Text style={styles.meta}>Sobivaid aktiivseid kasutajaid ei leitud.</Text>}
       <View style={styles.choices}>{eligibleUsers.map(user => <Pressable key={user.userId} onPress={() => setSelectedUser(user.userId)} style={[styles.choice, selectedUser === user.userId && styles.choiceSelected]}><Text style={styles.choiceText}>{user.displayName || user.email}</Text><Text style={styles.choiceEmail}>{user.email}</Text></Pressable>)}</View>
-      <View style={styles.row}><Pressable disabled={busy || !selectedUser || exercise.lifecycleState === "COMPLETED" || exercise.lifecycleState === "TERMINATED"} style={styles.outline} onPress={() => void perform(() => grantExerciseRole(selectedUser!, exercise.exerciseId, "CM"), "CM roll määratud.")}><Text style={styles.outlineText}>Lisa CM</Text></Pressable>
-        <Pressable disabled={busy || !selectedUser || exercise.lifecycleState === "COMPLETED" || exercise.lifecycleState === "TERMINATED"} style={styles.outline} onPress={() => void perform(() => grantExerciseRole(selectedUser!, exercise.exerciseId, "EXCON"), "EXCON roll määratud.")}><Text style={styles.outlineText}>Lisa EXCON</Text></Pressable></View>
+      <View style={styles.row}><Pressable disabled={busy || !selectedUser || ["COMPLETED", "CANCELLED", "TERMINATED"].includes(exercise.lifecycleState)} style={styles.outline} onPress={() => void perform(() => grantExerciseRole(selectedUser!, exercise.exerciseId, "CM"), "CM roll määratud.")}><Text style={styles.outlineText}>Lisa CM</Text></Pressable>
+        <Pressable disabled={busy || !selectedUser || ["COMPLETED", "CANCELLED", "TERMINATED"].includes(exercise.lifecycleState)} style={styles.outline} onPress={() => void perform(() => grantExerciseRole(selectedUser!, exercise.exerciseId, "EXCON"), "EXCON roll määratud.")}><Text style={styles.outlineText}>Lisa EXCON</Text></Pressable></View>
       {exercise.assignments.map(assignment => <View key={assignment.id} style={styles.assignment}><Text style={styles.meta}>{users.find(user => user.userId === assignment.user_id)?.displayName || "Tundmatu kasutaja"} · {assignment.role} · {assignmentStatusLabel(assignment.status)}</Text>
         {assignment.status === "ACTIVE" && <Pressable onPress={() => Alert.alert("Tühista roll", "Kui kasutaja juhib parajasti õppust, tuleb juhtimine enne turvaliselt üle anda. Jätkata?", [{ text: "Loobu", style: "cancel" }, { text: "Tühista", style: "destructive", onPress: () => void perform(() => revokeExerciseRole(assignment), "Roll tühistatud.") }])}><Text style={styles.remove}>Tühista</Text></Pressable>}</View>)}
     </View>}

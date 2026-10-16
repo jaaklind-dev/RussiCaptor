@@ -14,7 +14,7 @@ export const et = Object.freeze({
 const safe = (value: string, labels: Readonly<Record<string, string>>): string => labels[value] ?? et.unknown;
 
 export const exerciseLifecycleLabel = (value: string): string => safe(value, {
-  READY: "Valmis", RUNNING: "Käimas", PAUSED: "Peatatud", COMPLETED: "Lõpetatud", DRAFT: "Mustand",
+  READY: "Valmis", RUNNING: "Käimas", PAUSED: "Peatatud", COMPLETED: "Lõpetatud", CANCELLED: "Tühistatud", DRAFT: "Mustand",
 });
 export const patientStatusLabel = (value: string): string => safe(value, {
   Active: "Aktiivne", Incoming: "Saabumas", Transferred: "Üle antud", Completed: "Lõpetatud",

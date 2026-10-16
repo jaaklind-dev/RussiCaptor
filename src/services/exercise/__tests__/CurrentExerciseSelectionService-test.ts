@@ -1,6 +1,6 @@
 import { resolveCurrentExercise, resolveScopedExconExercise, resolveScopedOperatorExercise, type CurrentExerciseCandidate } from "../CurrentExerciseSelectionService";
 
-function candidate(exerciseId: string, lifecycleState: "READY" | "RUNNING" | "PAUSED" | "COMPLETED", updatedAt: string): CurrentExerciseCandidate {
+function candidate(exerciseId: string, lifecycleState: "READY" | "RUNNING" | "PAUSED" | "COMPLETED" | "CANCELLED", updatedAt: string): CurrentExerciseCandidate {
   return {
     exerciseId,
     revision: 1,
@@ -13,6 +13,13 @@ function candidate(exerciseId: string, lifecycleState: "READY" | "RUNNING" | "PA
 }
 
 describe("canonical current exercise selection", () => {
+  test("CANCELLED remains in Admin history but is absent from active and scoped Runtime discovery", () => {
+    const cancelled = candidate("EX-CANCELLED", "CANCELLED", "2026-10-16T09:00:00Z");
+    const running = candidate("EX-RUNNING", "RUNNING", "2026-10-16T08:00:00Z");
+    expect(resolveCurrentExercise([cancelled, running])).toMatchObject({ status: "SELECTED", candidate: { exerciseId: "EX-RUNNING" } });
+    expect(resolveCurrentExercise([cancelled])).toEqual({ status: "NONE" });
+    expect(resolveScopedExconExercise([cancelled], [cancelled.exerciseId])).toEqual({ status: "NONE" });
+  });
   test("completed historical A and RUNNING B select B on every surface", () => {
     expect(resolveCurrentExercise([
       candidate("EX-A", "COMPLETED", "2026-08-18T08:00:00Z"),

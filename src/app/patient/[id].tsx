@@ -100,7 +100,8 @@ const runWorkflow=async <T extends {message:string}>(operation:()=>Promise<T>):P
   const patient = findPatientById(id ?? "");
 const isCompleted = patient?.status === "Completed";
 const canonicalExercise = getCanonicalExerciseSnapshot();
-const isExerciseCompleted = canonicalExercise.lifecycleState === "COMPLETED";
+const isExerciseTerminal = canonicalExercise.lifecycleState === "COMPLETED" || canonicalExercise.lifecycleState === "CANCELLED";
+const terminalExerciseLabel = canonicalExercise.lifecycleState === "CANCELLED" ? "Õppus tühistatud" : "Õppus lõpetatud";
 const exerciseId = canonicalExercise.exerciseId;
 const laboratoryWorkflow = getActiveLaboratoryWorkflow(exerciseId, patient?.id ?? "");
 const imagingWorkflow = getActiveImagingWorkflow(exerciseId, patient?.id ?? "");
@@ -116,7 +117,7 @@ const laboratoryCommandReadiness = runtimePatientCommandSubmissionReadiness(
 const assignment = patient ? getPatientAssignment(patient.id) : undefined;
 const pendingTransfer = patient ? getPendingPatientTransfer(patient.id) : undefined;
 const isReadOnly = patient
-  ? isExerciseCompleted || isCompleted || !canCurrentCaseManagerEditPatient(patient.id)
+  ? isExerciseTerminal || isCompleted || !canCurrentCaseManagerEditPatient(patient.id)
   : true;
 const [questions, setQuestions] = useState(
   patient ? getQuestions(patient.id) : []
@@ -182,9 +183,9 @@ useEffect(() => {
         </Text>
         {workflowMessage&&<Text accessibilityRole="alert" style={workflowPending?styles.pendingNotice:styles.workflowNotice}>{workflowMessage}</Text>}
 
-        {(isCompleted || isExerciseCompleted) && (
+        {(isCompleted || isExerciseTerminal) && (
           <Text style={styles.completedNotice}>
-            {isExerciseCompleted ? "Õppus lõpetatud" : "Käsitlus lõpetatud"} · vaatamisrežiim
+            {isExerciseTerminal ? terminalExerciseLabel : "Käsitlus lõpetatud"} · vaatamisrežiim
           </Text>
         )}
 

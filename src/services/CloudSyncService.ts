@@ -243,7 +243,7 @@ export function shouldIgnoreActiveSharedProjection(
   authorityState: string,
 ): boolean {
   return localExerciseId === remoteExerciseId && (
-    authorityState === "WRITER" || localLifecycle === "COMPLETED"
+    authorityState === "WRITER" || localLifecycle === "COMPLETED" || localLifecycle === "CANCELLED"
   );
 }
 
@@ -256,7 +256,7 @@ export function shouldIgnoreHistoricalExerciseProjection(
   authorityState = getRuntimeWriterAuthorityState(),
 ): boolean {
   const localIsActive = localLifecycle === "RUNNING" || localLifecycle === "PAUSED";
-  const remoteIsTerminal = remoteLifecycle === "COMPLETED";
+  const remoteIsTerminal = remoteLifecycle === "COMPLETED" || remoteLifecycle === "CANCELLED";
   const isDifferentExercise = localExerciseId !== remoteExerciseId;
   return localIsActive && isDifferentExercise && (
     remoteIsTerminal || authorityState === "WRITER"
@@ -651,7 +651,7 @@ export async function selectAssignedRemoteExercise(
     return { ok: false, code: "EXERCISE_IDENTITY_MISMATCH" };
   }
   const lifecycle = exerciseLifecycle(data.state);
-  if (lifecycle === "COMPLETED") return { ok: false, code: "EXERCISE_TERMINAL" };
+  if (lifecycle === "COMPLETED" || lifecycle === "CANCELLED") return { ok: false, code: "EXERCISE_TERMINAL" };
   if (!referencedPackageAvailable(data.state.exercisePackageReference,
     (id, version) => exercisePackageRegistry.get(id, version))) {
     return { ok: false, code: "EXERCISE_PACKAGE_UNAVAILABLE" };
@@ -749,7 +749,7 @@ function prepareCloudProjection(): ExerciseProjectionCandidate<PreparedCloudProj
   // READY creation has its own one-shot Admin RPC; finalization has its own
   // atomic server RPC. Only explicit terminal checkpoint reconciliation may
   // schedule a terminal projection here.
-  if (lifecycleState === "READY" || (lifecycleState === "COMPLETED" &&
+  if (lifecycleState === "READY" || lifecycleState === "CANCELLED" || (lifecycleState === "COMPLETED" &&
     localProjectionMutationIntent.origin !== "EXPLICIT_TERMINAL_RECONCILIATION")) return undefined;
   const publicationStamp = captureProjectionPublicationStamp(currentProjectionPublicationContext());
   if (!publicationStamp || publicationStamp.exerciseId !== exerciseId ||

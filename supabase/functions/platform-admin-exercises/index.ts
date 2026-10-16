@@ -6,7 +6,9 @@ type ExerciseOperation =
   | Readonly<{ operation: "grantBootstrap"; userId: string }>
   | Readonly<{ operation: "revokeBootstrap"; userId: string; bootstrapId: string }>
   | Readonly<{ operation: "grantRole"; userId: string; exerciseId: string; role: "CM" | "EXCON" }>
-  | Readonly<{ operation: "revokeRole"; assignmentId: string; exerciseId: string; userId: string; role: "CM" | "EXCON" }>;
+  | Readonly<{ operation: "revokeRole"; assignmentId: string; exerciseId: string; userId: string; role: "CM" | "EXCON" }>
+  | Readonly<{ operation: "cancelReady"; exerciseId: string; expectedRevision: number;
+    operationId: string; reason: "UNUSED_READY" | "FAILED_START" | "TEST_CLEANUP" }>;
 
 const exercisePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
 function exerciseId(value: unknown): string {
@@ -19,13 +21,14 @@ function userId(value: unknown): string {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("INVALID_USER_ID");
   return id;
 }
-function bootstrapId(value: unknown): string {
+function uuidId(value: unknown, errorCode: string): string {
   const id = typeof value === "string" ? value.trim() : "";
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-    throw new Error("INVALID_BOOTSTRAP_ID");
+    throw new Error(errorCode);
   }
   return id;
 }
+const bootstrapId = (value: unknown) => uuidId(value, "INVALID_BOOTSTRAP_ID");
 
 async function listExercises(context: AdminContext): Promise<Response> {
   const [{ data: states, error: stateError }, { data: assignments, error: assignmentError }, { data: leases, error: leaseError }] = await Promise.all([
@@ -67,11 +70,40 @@ async function assertExerciseMutable(context: AdminContext, id: string): Promise
   const { data, error } = await context.service.from("exercise_states").select("state").eq("exercise_id", id).maybeSingle();
   if (error || !data) throw new Error("EXERCISE_NOT_FOUND");
   const state = data.state && typeof data.state === "object" ? data.state as Record<string, unknown> : {};
-  if (state.lifecycleState === "COMPLETED" || state.lifecycleState === "TERMINATED") throw new Error("TERMINAL_EXERCISE_READ_ONLY");
+  const session = state.exerciseSession && typeof state.exerciseSession === "object"
+    ? state.exerciseSession as Record<string, unknown> : {};
+  if (["COMPLETED", "CANCELLED", "TERMINATED"].includes(String(session.lifecycleState ?? ""))) {
+    throw new Error("TERMINAL_EXERCISE_READ_ONLY");
+  }
 }
 
 async function operate(context: AdminContext, body: ExerciseOperation): Promise<Response> {
   if (body.operation === "list") return listExercises(context);
+  if (body.operation === "cancelReady") {
+    const id = exerciseId(body.exerciseId);
+    const operationId = uuidId(body.operationId, "INVALID_CANCELLATION_REQUEST");
+    if (!Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 1 ||
+      !["UNUSED_READY", "FAILED_START", "TEST_CLEANUP"].includes(body.reason)) {
+      throw new Error("INVALID_CANCELLATION_REQUEST");
+    }
+    const { data, error } = await context.service.rpc("trusted_admin_cancel_ready_exercise", {
+      p_exercise_id: id, p_expected_revision: body.expectedRevision,
+      p_operation_id: operationId, p_reason: body.reason, p_actor_user_id: context.user.id,
+    });
+    if (error) {
+      const code = ["PLATFORM_ADMIN_REQUIRED", "EXERCISE_NOT_FOUND", "REVISION_CONFLICT",
+        "EXERCISE_NOT_READY", "ACTIVE_WRITER_PRESENT", "RUNTIME_ACTIVITY_PRESENT",
+        "OPERATION_ID_CONFLICT"].find(candidate => error.message.includes(candidate));
+      throw new Error(code ?? "READY_CANCELLATION_FAILED");
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || row.exercise_id !== id || row.lifecycle_state !== "CANCELLED") {
+      throw new Error("READY_CANCELLATION_READBACK_FAILED");
+    }
+    return json({ ok: true, exerciseId: id, revision: row.revision,
+      lifecycleState: "CANCELLED", cancelledAt: row.cancelled_at,
+      idempotent: row.idempotent });
+  }
   if (!("userId" in body)) throw new Error("INVALID_OPERATION");
   const targetUserId = userId(body.userId);
   if (body.operation === "grantBootstrap") {
@@ -142,7 +174,13 @@ Deno.serve(async request => {
     body = await request.json() as ExerciseOperation;
     return await operate(context, body);
   } catch (error) {
-    if (context && body && body.operation !== "list") {
+    if (context && body?.operation === "cancelReady") {
+      const id = typeof body.exerciseId === "string" && exercisePattern.test(body.exerciseId)
+        ? body.exerciseId : undefined;
+      await audit(context, "EXERCISE_READY_CANCELLED", "FAILURE", undefined, id,
+        { error: error instanceof Error ? error.message : "READY_CANCELLATION_FAILED" }).catch(() => undefined);
+    }
+    if (context && body && body.operation !== "list" && body.operation !== "cancelReady") {
       const action = body.operation === "grantBootstrap" ? "EXERCISE_BOOTSTRAP_GRANTED"
         : body.operation === "revokeBootstrap" ? "EXERCISE_BOOTSTRAP_REVOKED"
         : body.role === "CM" ? (body.operation === "grantRole" ? "CM_GRANTED" : "CM_REVOKED")

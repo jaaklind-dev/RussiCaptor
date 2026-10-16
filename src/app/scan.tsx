@@ -26,10 +26,10 @@ export default function ScanScreen() {
   const [nationalId, setNationalId] = useState("");
   const [pending, setPending] = useState(false);
   const gate = useRef(new SingleFlightActionGate()).current;
-  const readOnly = getCanonicalExerciseSnapshot().lifecycleState === "COMPLETED";
+  const readOnly = ["COMPLETED", "CANCELLED"].includes(getCanonicalExerciseSnapshot().lifecycleState);
 
   function handleFindPatient(value = nationalId): Promise<void> {
-    if (readOnly) { Alert.alert("Õppus on lõpetatud", "Patsiente ei saa enam määrata."); return Promise.resolve(); }
+    if (readOnly) { Alert.alert("Õppus on terminalses olekus", "Patsiente ei saa enam määrata."); return Promise.resolve(); }
     setPending(true);
     return gate.run(() => findAndClaimPatient(value)).finally(() => setPending(false));
   }

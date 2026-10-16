@@ -10,6 +10,7 @@ export type ExerciseClockDiagnosticCode =
   | "SPEED_INVALID"
   | "CLOCK_REGRESSION"
   | "COMPLETED_CLOCK_MUTATED"
+  | "CANCELLED_CLOCK_MUTATED"
   | "OWNER_MISMATCH";
 
 export type ExerciseClockDiagnostic = Readonly<{

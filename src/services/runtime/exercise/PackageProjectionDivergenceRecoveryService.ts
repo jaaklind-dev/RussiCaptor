@@ -94,7 +94,7 @@ export function evaluatePackageProjectionDivergence(
   }
   const projectionLifecycle = lifecycleOf(projection.state);
   const checkpointLifecycle = lifecycleOf(checkpoint.payload);
-  if (projectionLifecycle === "COMPLETED") return Object.freeze({ code: "ALREADY_TERMINAL" });
+  if (projectionLifecycle === "COMPLETED" || projectionLifecycle === "CANCELLED") return Object.freeze({ code: "ALREADY_TERMINAL" });
   if ((projectionLifecycle !== "RUNNING" && projectionLifecycle !== "PAUSED") ||
     checkpointLifecycle !== projectionLifecycle) return Object.freeze({ code: "LIFECYCLE_CONFLICT" });
   const projectionVersion = sessionVersionOf(projection.state);
