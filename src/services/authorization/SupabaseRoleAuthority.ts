@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RoleAssignment } from "@/models/authorization/Authorization";
 import { deepFreeze } from "@/utils/immutable";
 import { recordSupabaseTraffic } from "@/services/SupabaseTrafficMetrics";
+import { classifyOperatorAuthFailure, recordOperatorAuthDiagnostic } from "./OperatorAuthDiagnostics";
 
 type AssignmentRow = {
   id: string; user_id: string; role: string; scope_type: string; scope_id: string | null;
@@ -30,12 +31,20 @@ export class SupabaseRoleAuthority {
         (bootstrapError && (bootstrapStatus === 401 || bootstrapStatus === 403))) {
         return Object.freeze({ state: "DENIED", status: status === 403 || bootstrapStatus === 403 ? 403 : 401 });
       }
-      if (error || bootstrapError) return Object.freeze({ state: "UNAVAILABLE" });
+      if (error || bootstrapError) {
+        if (error) recordOperatorAuthDiagnostic("ROLE_LOOKUP", classifyOperatorAuthFailure(error, status));
+        if (bootstrapError) recordOperatorAuthDiagnostic("BOOTSTRAP_LOOKUP", classifyOperatorAuthFailure(bootstrapError, bootstrapStatus));
+        return Object.freeze({ state: "UNAVAILABLE" });
+      }
       const rows = (data ?? []) as AssignmentRow[];
-      if (rows.some(row => row.user_id !== userId || !["CM", "EXCON"].includes(row.role) || !["GLOBAL", "EXERCISE"].includes(row.scope_type) || !["ACTIVE", "REVOKED"].includes(row.status))) return Object.freeze({ state: "UNAVAILABLE" });
+      if (rows.some(row => row.user_id !== userId || !["CM", "EXCON"].includes(row.role) || !["GLOBAL", "EXERCISE"].includes(row.scope_type) || !["ACTIVE", "REVOKED"].includes(row.status))) {
+        recordOperatorAuthDiagnostic("ROLE_LOOKUP", "INVALID_RESPONSE");
+        return Object.freeze({ state: "UNAVAILABLE" });
+      }
       const bootstrapRows = (bootstrapData ?? []) as BootstrapRow[];
       if (bootstrapRows.some(row => row.user_id !== userId || !["ACTIVE", "REVOKED"].includes(row.status)
         || typeof row.expires_at !== "string" || (row.consumed_exercise_id !== null && typeof row.consumed_exercise_id !== "string"))) {
+        recordOperatorAuthDiagnostic("BOOTSTRAP_LOOKUP", "INVALID_RESPONSE");
         return Object.freeze({ state: "UNAVAILABLE" });
       }
       const assignments = [
@@ -45,6 +54,9 @@ export class SupabaseRoleAuthority {
           issuedAt: row.issued_at, expiresAt: row.expires_at, issuedBy: row.issued_by })),
       ].sort((a, b) => a.assignmentId.localeCompare(b.assignmentId));
       const now = this.now(); return deepFreeze({ state: "VERIFIED", assignments, verifiedAt: now.toISOString(), expiresAt: new Date(now.getTime() + this.validityMs).toISOString() });
-    } catch { return Object.freeze({ state: "UNAVAILABLE" }); }
+    } catch (cause) {
+      recordOperatorAuthDiagnostic("ROLE_LOOKUP", classifyOperatorAuthFailure(cause));
+      return Object.freeze({ state: "UNAVAILABLE" });
+    }
   }
 }

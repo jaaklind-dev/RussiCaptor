@@ -7,7 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import { getBuildProvenance, getReleaseConfigurationError } from "@/config/ReleaseConfig";
 import { publicErrorMessage } from "@/localization/et";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
-import { signInOperator } from "@/services/authorization/OperatorSessionService";
+import { refreshOperatorSession, signInOperator } from "@/services/authorization/OperatorSessionService";
 import { resolveSelectedModeNavigationTarget } from "@/services/ui/OperatorRouteService";
 import { reconcileOperatorMode } from "@/services/ui/OperatorModeService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
@@ -23,8 +23,9 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>();
   const [submitting, setSubmitting] = useState(false);
+  const [retryingAuthority, setRetryingAuthority] = useState(false);
   const authorityError = operator.state === "UNAUTHORIZED" ? operator.message
-    : operator.state === "UNAVAILABLE" ? "Sisselogimisteenus pole praegu saadaval. Proovi hiljem uuesti."
+    : operator.state === "UNAVAILABLE" ? "Seanssi või operaatori õigusi ei saanud praegu kinnitada. Proovi uuesti."
       : undefined;
 
   useEffect(() => {
@@ -40,10 +41,17 @@ export default function LoginScreen() {
     try {
       const result = await signInOperator(email, password);
       if (result.state === "UNAUTHORIZED") setError(result.message);
-      else if (result.state === "UNAVAILABLE") setError("Sisselogimisteenus pole praegu saadaval. Proovi hiljem uuesti.");
       else if (result.state === "UNAUTHENTICATED") setError("Sisselogimise sessiooni ei saanud kinnitada. Proovi uuesti.");
     } catch (cause) { setError(publicErrorMessage(cause, "Sisselogimine ebaõnnestus.")); }
     finally { setSubmitting(false); }
+  }
+
+  async function retryAuthority(): Promise<void> {
+    if (retryingAuthority) return;
+    setRetryingAuthority(true);
+    setError(undefined);
+    try { await refreshOperatorSession(); }
+    finally { setRetryingAuthority(false); }
   }
 
   return (
@@ -66,6 +74,11 @@ export default function LoginScreen() {
       <Pressable accessibilityRole="button" disabled={Boolean(releaseConfigurationError) || submitting || !email.trim() || !password} style={[styles.button, (releaseConfigurationError || submitting || !email.trim() || !password) && styles.buttonDisabled]} onPress={() => void submit()}>
         <Text style={styles.buttonText}>{submitting ? "Kontrollin…" : "Logi sisse"}</Text>
       </Pressable>
+      {operator.state === "UNAVAILABLE" && <Pressable accessibilityRole="button" accessibilityLabel="Kontrolli seanssi ja õigusi uuesti"
+        disabled={retryingAuthority} style={[styles.button, retryingAuthority && styles.buttonDisabled]}
+        onPress={() => void retryAuthority()}>
+        <Text style={styles.buttonText}>Kontrolli uuesti</Text>
+      </Pressable>}
 
     </View>
 

@@ -6,6 +6,7 @@ import { SupabaseAuthenticationAdapter } from "./SupabaseAuthenticationAdapter";
 import { SupabaseRoleAuthority } from "./SupabaseRoleAuthority";
 import { PrincipalService } from "./PrincipalService";
 import { completeOperatorSignOutDrain, prepareOperatorSignOut } from "./OperatorSignOutLifecycle";
+import { classifyOperatorAuthFailure, recordOperatorAuthDiagnostic } from "./OperatorAuthDiagnostics";
 
 export type OperatorProfile = Readonly<{ userId: string; displayName: string }>;
 export type OperatorSessionState = Readonly<
@@ -27,6 +28,7 @@ let refreshInFlight: { expectedUserId?: string; postLogin: boolean; sessionGener
   promise: Promise<OperatorSessionState> } | undefined;
 let authRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 const authorityRefreshTimeoutMs = 8_000;
+class AuthorityRefreshTimeout extends Error {}
 
 function publish(next: OperatorSessionState): void {
   snapshot = Object.freeze(next);
@@ -61,7 +63,11 @@ type ProfileResult = Readonly<{ state: "VERIFIED"; profile: OperatorProfile }> |
 async function resolveProfile(userId: string): Promise<ProfileResult> {
   if (!supabase) return { state: "UNAVAILABLE" };
   const { data, error, status } = await supabase.from("operator_profiles").select("user_id,display_name").eq("user_id", userId).maybeSingle();
-  if (error) return { state: status === 401 || status === 403 ? "DENIED" : "UNAVAILABLE" };
+  if (error) {
+    if (status === 401 || status === 403) return { state: "DENIED" };
+    recordOperatorAuthDiagnostic("PROFILE_LOOKUP", classifyOperatorAuthFailure(error, status));
+    return { state: "UNAVAILABLE" };
+  }
   if (!data || data.user_id !== userId || typeof data.display_name !== "string" || !data.display_name.trim()) {
     return { state: "DENIED" };
   }
@@ -73,13 +79,24 @@ type AdminResult = Readonly<{ state: "VERIFIED"; value: boolean }> |
 async function resolvePlatformAdmin(): Promise<AdminResult> {
   if (!supabase) return { state: "UNAVAILABLE" };
   const { data, error, status } = await supabase.rpc("is_platform_admin");
-  if (error) return { state: status === 401 || status === 403 ? "DENIED" : "UNAVAILABLE" };
-  return typeof data === "boolean" ? { state: "VERIFIED", value: data } : { state: "UNAVAILABLE" };
+  if (error) {
+    if (status === 401 || status === 403) return { state: "DENIED" };
+    recordOperatorAuthDiagnostic("ADMIN_LOOKUP", classifyOperatorAuthFailure(error, status));
+    return { state: "UNAVAILABLE" };
+  }
+  if (typeof data !== "boolean") {
+    recordOperatorAuthDiagnostic("ADMIN_LOOKUP", "INVALID_RESPONSE");
+    return { state: "UNAVAILABLE" };
+  }
+  return { state: "VERIFIED", value: data };
 }
 
 type OperatorResolution = OperatorSessionState | Readonly<{ state: "POST_LOGIN_ROLE_401" }>;
 async function resolveOperatorSession(postLoginUserId?: string): Promise<OperatorResolution> {
-  if (!supabase) return { state: "UNAVAILABLE", message: "Supabase pole seadistatud." };
+  if (!supabase) {
+    recordOperatorAuthDiagnostic("SESSION_RESTORE", "CONFIGURATION");
+    return { state: "UNAVAILABLE", message: "Supabase pole seadistatud." };
+  }
   const principalState = await new PrincipalService(
     new SupabaseAuthenticationAdapter(supabase), new SupabaseRoleAuthority(supabase),
   ).resolve();
@@ -109,7 +126,7 @@ async function resolveOperatorSession(postLoginUserId?: string): Promise<Operato
 
 function boundedAuthorityRead<T>(work: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("AUTHORITY_REFRESH_TIMEOUT")), authorityRefreshTimeoutMs);
+    const timer = setTimeout(() => reject(new AuthorityRefreshTimeout()), authorityRefreshTimeoutMs);
     work.then(value => { clearTimeout(timer); resolve(value); }, error => { clearTimeout(timer); reject(error); });
   });
 }
@@ -147,7 +164,10 @@ export function refreshOperatorSession(expectedUserId?: string, postLogin = fals
   const task = (async (): Promise<OperatorSessionState> => {
     let result: OperatorSessionState;
     try { result = await boundedAuthorityRead(resolveWithTransientRetry(postLogin ? expectedUserId : undefined)); }
-    catch { result = { state: "UNAVAILABLE", message: "Operaatori õiguste kontroll aegus. Proovi uuesti." }; }
+    catch (cause) {
+      recordOperatorAuthDiagnostic("AUTHORITY_REFRESH", cause instanceof AuthorityRefreshTimeout ? "TIMEOUT" : "UNEXPECTED");
+      result = { state: "UNAVAILABLE", message: "Seansi või operaatori õiguste kontroll ei õnnestunud." };
+    }
     if (generation !== refreshGeneration || sessionGeneration !== authSessionGeneration) return snapshot;
     if (expectedUserId && result.state === "AUTHENTICATED" && result.profile.userId !== expectedUserId) {
       publish({ state: "UNAUTHENTICATED" });
@@ -168,10 +188,33 @@ export function refreshOperatorSession(expectedUserId?: string, postLogin = fals
 }
 
 export async function signInOperator(email: string, password: string): Promise<OperatorSessionState> {
-  if (!supabase) { publish({ state: "UNAVAILABLE", message: "Supabase pole seadistatud." }); return snapshot; }
-  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-  if (error) { publish({ state: "UNAUTHENTICATED" }); throw new Error("Sisselogimine ebaõnnestus. Kontrolli kasutajatunnust ja parooli."); }
-  if (!data.user?.id) { publish({ state: "UNAVAILABLE", message: "Sisselogimise sessiooni ei saanud kinnitada." }); return snapshot; }
+  if (!supabase) {
+    recordOperatorAuthDiagnostic("SIGN_IN", "CONFIGURATION");
+    publish({ state: "UNAVAILABLE", message: "Supabase pole seadistatud." });
+    return snapshot;
+  }
+  let response: Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>;
+  try { response = await supabase.auth.signInWithPassword({ email: email.trim(), password }); }
+  catch (cause) {
+    recordOperatorAuthDiagnostic("SIGN_IN", classifyOperatorAuthFailure(cause));
+    publish({ state: "UNAVAILABLE", message: "Sisselogimise päring ei õnnestunud." });
+    return snapshot;
+  }
+  const { data, error } = response;
+  if (error) {
+    if ([400, 401, 403].includes(Number(error.status))) {
+      publish({ state: "UNAUTHENTICATED" });
+      throw new Error("Sisselogimine ebaõnnestus. Kontrolli kasutajatunnust ja parooli.");
+    }
+    recordOperatorAuthDiagnostic("SIGN_IN", classifyOperatorAuthFailure(error));
+    publish({ state: "UNAVAILABLE", message: "Sisselogimise päring ei õnnestunud." });
+    return snapshot;
+  }
+  if (!data.user?.id) {
+    recordOperatorAuthDiagnostic("SIGN_IN", "INVALID_RESPONSE");
+    publish({ state: "UNAVAILABLE", message: "Sisselogimise sessiooni ei saanud kinnitada." });
+    return snapshot;
+  }
   return refreshOperatorSession(data.user.id, true);
 }
 
@@ -204,7 +247,11 @@ export function signOutOperator(): Promise<void> {
 
 export function startOperatorSession(): () => void {
   stopAuth?.();
-  if (!supabase) { publish({ state: "UNAVAILABLE", message: "Supabase pole seadistatud." }); return () => {}; }
+  if (!supabase) {
+    recordOperatorAuthDiagnostic("SESSION_RESTORE", "CONFIGURATION");
+    publish({ state: "UNAVAILABLE", message: "Supabase pole seadistatud." });
+    return () => {};
+  }
   const { data } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
     if (event === "SIGNED_OUT" || !session || session.user.is_anonymous) {
       if (authRefreshTimer) clearTimeout(authRefreshTimer);

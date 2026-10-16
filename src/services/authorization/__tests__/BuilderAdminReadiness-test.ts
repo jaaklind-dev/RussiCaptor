@@ -24,7 +24,7 @@ jest.mock("@/services/CurrentUserService", () => ({ setAuthenticatedCaseManager:
 // Supabase reference cannot read an uninitialized test binding.
 // eslint-disable-next-line import/first
 import { getOperatorSession, refreshOperatorSession, resetOperatorSessionForTests,
-  startOperatorSession } from "../OperatorSessionService";
+  startOperatorSession, hasPlatformAdminAuthority } from "../OperatorSessionService";
 
 const confirmed = async () => {
   await refreshOperatorSession();
@@ -132,10 +132,55 @@ describe("BUILDER-AUTHREADY platform-admin refresh", () => {
 
   test("12 initial stalled authority check becomes a retryable error", async () => {
     jest.useFakeTimers();
+    const warning = jest.spyOn(console, "warn").mockImplementation(() => undefined);
     mockGetSession.mockImplementationOnce(() => new Promise(() => undefined));
     const pending = refreshOperatorSession();
     expect(getOperatorSession().state).toBe("LOADING");
     await jest.advanceTimersByTimeAsync(8_001);
     await expect(pending).resolves.toMatchObject({ state: "UNAVAILABLE" });
+    expect(warning).toHaveBeenCalledWith("OPERATOR_AUTH_DIAGNOSTIC",
+      { stage: "AUTHORITY_REFRESH", reason: "TIMEOUT" });
+    warning.mockRestore();
+  });
+
+  test("13 restored session resolves current authority without a new password sign-in", async () => {
+    const stop = startOperatorSession();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await expect(refreshOperatorSession()).resolves.toMatchObject({ state: "AUTHENTICATED", isPlatformAdmin: true });
+    stop();
+  });
+
+  test("14 transient session transport failure recovers once and logs no session contents", async () => {
+    const warning = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    mockGetSession.mockResolvedValueOnce({ data: { session: null },
+      error: { name: "AuthRetryableFetchError", message: "private-refresh-token" } });
+    await expect(refreshOperatorSession()).resolves.toMatchObject({ state: "AUTHENTICATED" });
+    expect(warning).toHaveBeenCalledWith("OPERATOR_AUTH_DIAGNOSTIC",
+      { stage: "SESSION_RESTORE", reason: "NETWORK" });
+    expect(JSON.stringify(warning.mock.calls)).not.toContain("private-refresh-token");
+    warning.mockRestore();
+  });
+
+  test("15 failed role lookup stays fail-closed and an explicit later refresh recovers", async () => {
+    const warning = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    mockRoleQuery.mockResolvedValue({ data: null, error: { status: 503, message: "private-access-token" }, status: 503 });
+    await expect(refreshOperatorSession()).resolves.toMatchObject({ state: "UNAVAILABLE" });
+    expect(hasPlatformAdminAuthority(getOperatorSession())).toBe(false);
+    expect(warning).toHaveBeenCalledWith("OPERATOR_AUTH_DIAGNOSTIC",
+      { stage: "ROLE_LOOKUP", reason: "SERVICE_ERROR" });
+    expect(JSON.stringify(warning.mock.calls)).not.toContain("private-access-token");
+    mockRoleQuery.mockImplementation(() => Promise.resolve({ data: [], error: null, status: 200 }));
+    await expect(refreshOperatorSession()).resolves.toMatchObject({ state: "AUTHENTICATED", isPlatformAdmin: true });
+    warning.mockRestore();
+  });
+
+  test("16 unexpected startup exception is not falsely labelled as a timeout", async () => {
+    const warning = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    mockRpc.mockRejectedValue(new Error("private-session-content"));
+    await expect(refreshOperatorSession()).resolves.toMatchObject({ state: "UNAVAILABLE" });
+    expect(warning).toHaveBeenCalledWith("OPERATOR_AUTH_DIAGNOSTIC",
+      { stage: "AUTHORITY_REFRESH", reason: "UNEXPECTED" });
+    expect(JSON.stringify(warning.mock.calls)).not.toContain("private-session-content");
+    warning.mockRestore();
   });
 });

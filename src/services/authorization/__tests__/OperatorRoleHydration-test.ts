@@ -122,6 +122,19 @@ describe("AUTH-HYDRATE post-login role ordering", () => {
     expect(getOperatorSession().state).toBe("UNAUTHENTICATED");
   });
 
+  test("transport failure during password sign-in is unavailable, not invalid credentials", async () => {
+    const warning = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    mockSignIn.mockResolvedValue({ data: { user: null, session: null },
+      error: { status: 503, message: "private-password" } });
+    await expect(signInOperator(user.email, "not-a-real-password"))
+      .resolves.toMatchObject({ state: "UNAVAILABLE" });
+    expect(mockRoleQuery).not.toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledWith("OPERATOR_AUTH_DIAGNOSTIC",
+      { stage: "SIGN_IN", reason: "SERVICE_ERROR" });
+    expect(JSON.stringify(warning.mock.calls)).not.toContain("private-password");
+    warning.mockRestore();
+  });
+
   test("AUTH-HYDRATE-09: logout invalidates a pending successful role response", async () => {
     const stop = startOperatorSession();
     await new Promise(resolve => setTimeout(resolve, 0));
