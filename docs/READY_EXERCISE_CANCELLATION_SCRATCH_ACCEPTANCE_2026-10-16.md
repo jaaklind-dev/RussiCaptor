@@ -1,5 +1,7 @@
 # READY exercise cancellation: scratch acceptance (2026-10-16)
 
+Historical evidence for the original cancellation implementation at `37f11a66`. The undeployed migration was subsequently amended with a default-OFF activation gate and fully rebuilt/retested. Current migration identity, OFF behavior, activation authority, deployment order, and acceptance results are recorded in [READY_CANCELLATION_ACTIVATION_GATE_2026-10-16.md](READY_CANCELLATION_ACTIVATION_GATE_2026-10-16.md). Its staged deployment/activation procedure supersedes the ungated deployment guidance below; the original observations remain preserved.
+
 ## Boundary and provenance
 
 - Source baseline: `origin/main` at `aeaef720429a81133ef6f0477e39a2f237a89733`.

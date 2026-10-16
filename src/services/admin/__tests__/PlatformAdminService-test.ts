@@ -1,5 +1,5 @@
 import {
-  cancelReadyExercise, grantExerciseBootstrap, grantExerciseRole, inviteAdminUser, listAdminExercises,
+  cancelReadyExercise, grantExerciseBootstrap, grantExerciseRole, inviteAdminUser, listAdminExerciseOverview, listAdminExercises,
   listAdminUsers, requestAdminPasswordReset, revokeExerciseRole, revokeUnusedExerciseBootstrap,
   setAdminUserActive,
 } from "../PlatformAdminService";
@@ -62,6 +62,15 @@ describe("platform administration client", () => {
     expect(mockInvoke).toHaveBeenCalledTimes(1);
   });
 
+  test("activation readback is strictly boolean and absent metadata remains disabled", async () => {
+    mockInvoke.mockResolvedValueOnce({ data: { ok: true, exercises: [], readyCancellationEnabled: true }, error: null })
+      .mockResolvedValueOnce({ data: { ok: true, exercises: [], readyCancellationEnabled: "true" }, error: null })
+      .mockResolvedValueOnce({ data: { ok: true, exercises: [] }, error: null });
+    await expect(listAdminExerciseOverview()).resolves.toEqual({ exercises: [], readyCancellationEnabled: true });
+    await expect(listAdminExerciseOverview()).resolves.toEqual({ exercises: [], readyCancellationEnabled: false });
+    await expect(listAdminExerciseOverview()).resolves.toEqual({ exercises: [], readyCancellationEnabled: false });
+  });
+
   test("ADMIN-LIST mutations are never retried even on 503", async () => {
     mockInvoke.mockResolvedValue({ data: null, error: { message: "Unavailable", context: { status: 503 } } });
     await expect(grantExerciseRole("USER-1", "EX-1", "CM")).rejects.toThrow("Unavailable");
@@ -86,5 +95,14 @@ describe("platform administration client", () => {
       lifecycleState: "CANCELLED", cancelledAt: "2026-10-16T10:00:00Z", idempotent: false }, error: null });
     await expect(cancelReadyExercise("EX-READY", 1, "00000000-0000-4000-8000-000000000001"))
       .rejects.toThrow("READY_CANCELLATION_READBACK_FAILED");
+  });
+
+  test("disabled cancellation maps only the bounded server code and never retries the mutation", async () => {
+    mockInvoke.mockResolvedValue({ data: null, error: { message: "FunctionsHttpError", context: {
+      status: 400, clone: () => ({ json: async () => ({ ok: false, error: "READY_CANCELLATION_DISABLED" }) }),
+    } } });
+    await expect(cancelReadyExercise("EX-READY", 1, "00000000-0000-4000-8000-000000000001"))
+      .rejects.toThrow("READY_CANCELLATION_DISABLED");
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
   });
 });

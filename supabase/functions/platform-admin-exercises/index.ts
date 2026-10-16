@@ -31,7 +31,8 @@ function uuidId(value: unknown, errorCode: string): string {
 const bootstrapId = (value: unknown) => uuidId(value, "INVALID_BOOTSTRAP_ID");
 
 async function listExercises(context: AdminContext): Promise<Response> {
-  const [{ data: states, error: stateError }, { data: assignments, error: assignmentError }, { data: leases, error: leaseError }] = await Promise.all([
+  const [{ data: states, error: stateError }, { data: assignments, error: assignmentError }, { data: leases, error: leaseError },
+    { data: activation, error: activationError }] = await Promise.all([
     context.service.from("exercise_states").select([
       "exercise_id", "revision", "updated_at", "updated_by",
       "exercise_session:state->exerciseSession",
@@ -39,9 +40,15 @@ async function listExercises(context: AdminContext): Promise<Response> {
     ].join(",")).order("updated_at", { ascending: false }).limit(200),
     context.service.from("authorization_role_assignments").select("id,user_id,role,scope_id,status,issued_at,revoked_at").eq("scope_type", "EXERCISE"),
     context.service.from("runtime_writer_leases").select("exercise_id,writer_user_id,expires_at,released_at"),
+    context.service.from("ready_exercise_cancellation_activation").select("feature_key,enabled")
+      .eq("feature_key", "READY_CANCELLATION").maybeSingle(),
   ]);
   if (stateError || assignmentError || leaseError) throw new Error("EXERCISE_LIST_FAILED");
-  return json({ ok: true, exercises: (states ?? []).map(row => {
+  // The status is advisory for Admin UI only. Missing/unreadable state is OFF;
+  // the cancellation RPC enforces the gate transactionally.
+  const readyCancellationEnabled = !activationError && activation?.feature_key === "READY_CANCELLATION"
+    && activation.enabled === true;
+  return json({ ok: true, readyCancellationEnabled, exercises: (states ?? []).map(row => {
     const session = row.exercise_session && typeof row.exercise_session === "object"
       ? row.exercise_session as Record<string, unknown> : {};
     const packageReference = row.exercise_package_reference && typeof row.exercise_package_reference === "object"
@@ -91,7 +98,7 @@ async function operate(context: AdminContext, body: ExerciseOperation): Promise<
       p_operation_id: operationId, p_reason: body.reason, p_actor_user_id: context.user.id,
     });
     if (error) {
-      const code = ["PLATFORM_ADMIN_REQUIRED", "EXERCISE_NOT_FOUND", "REVISION_CONFLICT",
+      const code = ["READY_CANCELLATION_DISABLED", "PLATFORM_ADMIN_REQUIRED", "EXERCISE_NOT_FOUND", "REVISION_CONFLICT",
         "EXERCISE_NOT_READY", "ACTIVE_WRITER_PRESENT", "RUNTIME_ACTIVITY_PRESENT",
         "OPERATION_ID_CONFLICT"].find(candidate => error.message.includes(candidate));
       throw new Error(code ?? "READY_CANCELLATION_FAILED");
@@ -174,12 +181,9 @@ Deno.serve(async request => {
     body = await request.json() as ExerciseOperation;
     return await operate(context, body);
   } catch (error) {
-    if (context && body?.operation === "cancelReady") {
-      const id = typeof body.exerciseId === "string" && exercisePattern.test(body.exerciseId)
-        ? body.exerciseId : undefined;
-      await audit(context, "EXERCISE_READY_CANCELLED", "FAILURE", undefined, id,
-        { error: error instanceof Error ? error.message : "READY_CANCELLATION_FAILED" }).catch(() => undefined);
-    }
+    // Cancellation success is audited in the same SQL transaction as its state
+    // and receipt. Rejects never write a cancellation event, including malformed
+    // requests rejected before the authoritative activation check can run.
     if (context && body && body.operation !== "list" && body.operation !== "cancelReady") {
       const action = body.operation === "grantBootstrap" ? "EXERCISE_BOOTSTRAP_GRANTED"
         : body.operation === "revokeBootstrap" ? "EXERCISE_BOOTSTRAP_REVOKED"

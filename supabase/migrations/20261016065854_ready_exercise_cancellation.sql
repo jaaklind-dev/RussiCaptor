@@ -18,8 +18,75 @@ alter table public.administrative_action_audit
     'EXERCISE_BOOTSTRAP_REVOKED', 'CM_GRANTED', 'EXCON_GRANTED',
     'CM_REVOKED', 'EXCON_REVOKED',
     'PLATFORM_ADMIN_GRANTED', 'PLATFORM_ADMIN_REVOKED',
-    'EXERCISE_READY_CANCELLED'
+    'EXERCISE_READY_CANCELLED',
+    'READY_CANCELLATION_ENABLED', 'READY_CANCELLATION_DISABLED'
   ));
+
+-- Deployment is intentionally inert. A database deployment administrator must
+-- explicitly enable this one feature after compatible clients are in place.
+-- The service role may read the status for the Admin UI, but cannot change it.
+create table public.ready_exercise_cancellation_activation (
+  feature_key text primary key check (feature_key = 'READY_CANCELLATION'),
+  enabled boolean not null default false,
+  changed_at timestamptz not null default clock_timestamp(),
+  change_reference text not null check (change_reference ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{3,119}$')
+);
+insert into public.ready_exercise_cancellation_activation
+  (feature_key, enabled, change_reference)
+values ('READY_CANCELLATION', false, 'MIGRATION_DEFAULT_OFF');
+alter table public.ready_exercise_cancellation_activation enable row level security;
+revoke all on table public.ready_exercise_cancellation_activation
+  from public,anon,authenticated,service_role;
+grant select on table public.ready_exercise_cancellation_activation to service_role;
+
+-- This is a database-deployment operation, not an application Admin/EXCON
+-- capability. It uses the table row lock that cancellation reads FOR SHARE, so
+-- an ON/OFF transition and an in-flight cancellation have one commit order.
+-- A repeated request for the existing value is a read-only, idempotent result.
+create function public.set_ready_exercise_cancellation_activation(
+  p_enabled boolean, p_change_reference text
+)
+returns table(enabled boolean, changed boolean, changed_at timestamptz)
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_gate public.ready_exercise_cancellation_activation%rowtype;
+  v_now timestamptz;
+begin
+  if p_enabled is null or p_change_reference is null
+    or p_change_reference <> btrim(p_change_reference)
+    or p_change_reference !~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{3,119}$' then
+    raise exception 'INVALID_ACTIVATION_REQUEST' using errcode = '22023';
+  end if;
+  select gate.* into v_gate from public.ready_exercise_cancellation_activation as gate
+    where gate.feature_key = 'READY_CANCELLATION' for update;
+  if not found then
+    raise exception 'READY_CANCELLATION_GATE_UNAVAILABLE' using errcode = '55000';
+  end if;
+  if v_gate.enabled = p_enabled then
+    return query select v_gate.enabled,false,v_gate.changed_at;
+    return;
+  end if;
+  v_now := clock_timestamp();
+  update public.ready_exercise_cancellation_activation as gate
+    set enabled = p_enabled, changed_at = v_now,
+      change_reference = p_change_reference
+    where gate.feature_key = 'READY_CANCELLATION';
+  insert into public.administrative_action_audit
+    (actor_user_id,action,outcome,details,occurred_at)
+    values (null,
+      case when p_enabled then 'READY_CANCELLATION_ENABLED'
+        else 'READY_CANCELLATION_DISABLED' end,
+      'SUCCESS',pg_catalog.jsonb_build_object(
+        'mechanism','DATABASE_DEPLOYMENT_OPERATOR',
+        'databaseRole',current_user,
+        'changeReference',p_change_reference,
+        'previousEnabled',v_gate.enabled,
+        'enabled',p_enabled),v_now);
+  return query select p_enabled,true,v_now;
+end;
+$$;
+revoke all on function public.set_ready_exercise_cancellation_activation(boolean,text)
+  from public,anon,authenticated,service_role;
 
 create function public.trusted_admin_cancel_ready_exercise(
   p_exercise_id text, p_expected_revision bigint, p_operation_id uuid,
@@ -36,6 +103,7 @@ declare
   v_now timestamptz;
   v_hash text;
   v_next jsonb;
+  v_activation_enabled boolean;
 begin
   if p_exercise_id is null or p_exercise_id <> btrim(p_exercise_id)
     or length(p_exercise_id) not between 1 and 160
@@ -51,6 +119,17 @@ begin
       and profile.status = 'ACTIVE' and not person.is_anonymous
       and (person.banned_until is null or person.banned_until <= clock_timestamp());
   if not found then raise exception 'PLATFORM_ADMIN_REQUIRED' using errcode = '42501'; end if;
+
+  -- Check before the old-operation receipt path: while OFF, even an exact
+  -- retry must fail, and no state, receipt, or cancellation audit is written.
+  -- Hold the shared row lock until commit. An activation UPDATE takes the
+  -- exclusive lock, so it cannot overtake this cancellation transaction.
+  select gate.enabled into v_activation_enabled
+    from public.ready_exercise_cancellation_activation as gate
+    where gate.feature_key = 'READY_CANCELLATION' for share;
+  if v_activation_enabled is distinct from true then
+    raise exception 'READY_CANCELLATION_DISABLED' using errcode = '55000';
+  end if;
 
   v_hash := pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
     pg_catalog.jsonb_build_object('kind','CANCEL','exerciseId',p_exercise_id,

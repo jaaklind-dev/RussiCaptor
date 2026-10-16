@@ -14,11 +14,27 @@ export type AdminExercise = Readonly<{
   lifecycleState: string; updatedAt: string; participantCount: number; cmCount: number;
   exconCount: number; activeWriterUserId?: string | null; assignments: readonly AdminAssignment[];
 }>;
+export type AdminExerciseOverview = Readonly<{
+  exercises: readonly AdminExercise[]; readyCancellationEnabled: boolean;
+}>;
 export type ExerciseBootstrapAuthorization = Readonly<{
   id: string; user_id: string; status: "ACTIVE"; consumed_exercise_id: null; expires_at: string;
 }>;
 
-async function invoke<T>(functionName: string, body: Record<string, unknown>, retryTransientRead = false): Promise<T> {
+async function boundedErrorCode(error: unknown, allowedCodes: readonly string[]): Promise<string | undefined> {
+  if (!allowedCodes.length) return undefined;
+  const context = (error as { context?: { clone?: () => { json: () => Promise<unknown> } } })?.context;
+  try {
+    const payload = await context?.clone?.().json();
+    const code = payload && typeof payload === "object" && "error" in payload ? payload.error : undefined;
+    return typeof code === "string" && allowedCodes.includes(code) ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function invoke<T>(functionName: string, body: Record<string, unknown>, retryTransientRead = false,
+  allowedErrorCodes: readonly string[] = []): Promise<T> {
   if (!supabase) throw new Error("Supabase pole seadistatud.");
   for (let attempt = 0; attempt < (retryTransientRead ? 2 : 1); attempt += 1) {
     const { data, error } = await supabase.functions.invoke(functionName, { body });
@@ -30,7 +46,8 @@ async function invoke<T>(functionName: string, body: Record<string, unknown>, re
         await new Promise(resolve => setTimeout(resolve, 250));
         continue;
       }
-      throw new Error(error.message || "Administreerimise päring ebaõnnestus.");
+      throw new Error(await boundedErrorCode(error, allowedErrorCodes)
+        || error.message || "Administreerimise päring ebaõnnestus.");
     }
     if (!data?.ok) throw new Error(String(data?.error || "Administreerimise päring ebaõnnestus."));
     return data as T;
@@ -51,7 +68,13 @@ export async function setAdminUserActive(userId: string, active: boolean): Promi
   await invoke("platform-admin-users", { operation: active ? "reactivate" : "deactivate", userId });
 }
 export async function listAdminExercises(): Promise<readonly AdminExercise[]> {
-  return (await invoke<{ ok: true; exercises: AdminExercise[] }>("platform-admin-exercises", { operation: "list" }, true)).exercises;
+  return (await listAdminExerciseOverview()).exercises;
+}
+export async function listAdminExerciseOverview(): Promise<AdminExerciseOverview> {
+  const result = await invoke<{ ok: true; exercises: AdminExercise[]; readyCancellationEnabled?: unknown }>(
+    "platform-admin-exercises", { operation: "list" }, true);
+  if (!Array.isArray(result.exercises)) throw new Error("EXERCISE_LIST_FAILED");
+  return { exercises: result.exercises, readyCancellationEnabled: result.readyCancellationEnabled === true };
 }
 export async function grantExerciseBootstrap(userId: string): Promise<ExerciseBootstrapAuthorization> {
   const result = await invoke<{ ok: true; authorization: ExerciseBootstrapAuthorization }>(
@@ -89,6 +112,7 @@ export async function cancelReadyExercise(
     lifecycleState: "CANCELLED"; cancelledAt: string; idempotent: boolean }>(
     "platform-admin-exercises",
     { operation: "cancelReady", exerciseId, expectedRevision, operationId, reason },
+    false, ["READY_CANCELLATION_DISABLED"],
   );
   if (result.exerciseId !== exerciseId || result.lifecycleState !== "CANCELLED"
     || !Number.isSafeInteger(result.revision) || result.revision !== expectedRevision + 1

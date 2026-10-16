@@ -2,8 +2,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as Crypto from "expo-crypto";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { cancelReadyExercise, grantExerciseRole, listAdminExercises, listAdminUsers, revokeExerciseRole, type AdminExercise, type AdminUser } from "@/services/admin/PlatformAdminService";
-import { refreshOperatorSession } from "@/services/authorization/OperatorSessionService";
+import { cancelReadyExercise, grantExerciseRole, listAdminExerciseOverview, listAdminUsers, revokeExerciseRole, type AdminExercise, type AdminUser } from "@/services/admin/PlatformAdminService";
+import { getOperatorAuthSessionGeneration, refreshOperatorSession } from "@/services/authorization/OperatorSessionService";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { assignmentStatusLabel, exerciseLifecycleLabel, exercisePackageIdLabel, publicErrorMessage } from "@/localization/et";
 
@@ -11,36 +11,50 @@ export default function AdminExercisesScreen() {
   const { createdExerciseId } = useLocalSearchParams<{ createdExerciseId?: string }>();
   const operator = useOperatorSession();
   const adminReady = operator.state === "AUTHENTICATED" && operator.isPlatformAdmin === true;
+  const adminUserId = adminReady ? operator.profile.userId : undefined;
+  const authGeneration = getOperatorAuthSessionGeneration();
   const [exercises, setExercises] = useState<readonly AdminExercise[]>(); const [users, setUsers] = useState<readonly AdminUser[]>([]);
+  const [readyCancellation, setReadyCancellation] = useState<{ userId: string; authGeneration: number; enabled: boolean }>();
   const [selectedExercise, setSelectedExercise] = useState<string>(); const [selectedUser, setSelectedUser] = useState<string>(); const [busy, setBusy] = useState(false); const [message, setMessage] = useState<string>();
   const [loading, setLoading] = useState(false); const [listError, setListError] = useState<string>(); const [usersError, setUsersError] = useState<string>();
   const [userSearch, setUserSearch] = useState("");
   const generation = useRef(0);
+  const cancellationAllowed = useRef(false);
   const cancellationOperationIds = useRef<Record<string, string>>({});
   const load = useCallback(async () => {
-    if (!adminReady) return;
+    if (!adminUserId) return;
     const request = ++generation.current;
+    cancellationAllowed.current = false;
+    setReadyCancellation(undefined);
     setLoading(true);
     setListError(undefined);
     setUsersError(undefined);
     // User enrichment is independent: its failure must not erase a valid exercise list.
-    const [exerciseResult, userResult] = await Promise.allSettled([listAdminExercises(), listAdminUsers()]);
-    if (request !== generation.current) return;
-    if (exerciseResult.status === "fulfilled") setExercises(exerciseResult.value);
+    const [exerciseResult, userResult] = await Promise.allSettled([listAdminExerciseOverview(), listAdminUsers()]);
+    if (request !== generation.current || authGeneration !== getOperatorAuthSessionGeneration()) return;
+    if (exerciseResult.status === "fulfilled") {
+      setExercises(exerciseResult.value.exercises);
+      const enabled = exerciseResult.value.readyCancellationEnabled === true;
+      setReadyCancellation({ userId: adminUserId, authGeneration, enabled });
+      cancellationAllowed.current = enabled;
+    }
     else setListError(publicErrorMessage(exerciseResult.reason, "Õppuste laadimine ebaõnnestus."));
     if (userResult.status === "fulfilled") setUsers(userResult.value);
     else setUsersError("Kasutajate laadimine ebaõnnestus. Proovi uuesti.");
     setLoading(false);
-  }, [adminReady]);
+  }, [adminUserId, authGeneration]);
   useEffect(() => {
     let active = true;
-    if (adminReady) void Promise.resolve().then(() => { if (active) return load(); });
-    return () => { active = false; generation.current += 1; };
-  }, [adminReady, load]);
+    if (adminUserId) void Promise.resolve().then(() => { if (active) return load(); });
+    else cancellationAllowed.current = false;
+    return () => { active = false; generation.current += 1; cancellationAllowed.current = false; };
+  }, [adminUserId, load]);
   const visibleExercises = useMemo(() => exercises ?? [], [exercises]);
   const createdExercise = useMemo(() => createdExerciseId ? visibleExercises.find(item => item.exerciseId === createdExerciseId) : undefined, [createdExerciseId, visibleExercises]);
   const effectiveSelectedExercise = selectedExercise ?? createdExercise?.exerciseId;
   const exercise = useMemo(() => visibleExercises.find(item => item.exerciseId === effectiveSelectedExercise), [effectiveSelectedExercise, visibleExercises]);
+  const cancellationEnabled = adminUserId !== undefined && readyCancellation?.userId === adminUserId &&
+    readyCancellation.authGeneration === authGeneration && readyCancellation.enabled === true && !loading && !listError;
   const eligibleUsers = useMemo(() => {
     const query = userSearch.trim().toLocaleLowerCase("et");
     if (query.length < 2) return [];
@@ -50,14 +64,21 @@ export default function AdminExercisesScreen() {
   const perform = async (action: () => Promise<void>, success: string) => { setBusy(true); setMessage(undefined); try { await action(); setMessage(success); await refreshOperatorSession(); await load(); } catch (error) { setMessage(publicErrorMessage(error)); } finally { setBusy(false); } };
   const displayMessage = message ?? (createdExercise ? "Uus õppus on loodud." : undefined);
   const cancelReady = (target: AdminExercise) => {
-    if (target.lifecycleState !== "READY" || busy) return;
+    if (target.lifecycleState !== "READY" || busy || !cancellationEnabled || !cancellationAllowed.current) return;
     Alert.alert("Tühista kasutamata õppus", `Õppus ${target.exerciseId} jääb auditiks alles, kuid seda ei saa enam käivitada. Kas jätkata?`, [
       { text: "Loobu", style: "cancel" },
       { text: "Tühista õppus", style: "destructive", onPress: () => {
+        if (!cancellationAllowed.current) return;
         const key = `${target.exerciseId}:${target.revision}`;
         cancellationOperationIds.current[key] ??= Crypto.randomUUID();
         void perform(async () => {
-          await cancelReadyExercise(target.exerciseId, target.revision, cancellationOperationIds.current[key]);
+          try {
+            await cancelReadyExercise(target.exerciseId, target.revision, cancellationOperationIds.current[key]);
+          } catch (error) {
+            cancellationAllowed.current = false;
+            setReadyCancellation(undefined);
+            throw error;
+          }
         }, "Õppus tühistatud. Rollide tühistamine on eraldi toiming.");
       } },
     ]);
@@ -75,7 +96,9 @@ export default function AdminExercisesScreen() {
     {(listError || usersError || exercises) && <Pressable testID="admin-exercises-retry" accessibilityRole="button" disabled={loading} onPress={() => void load()}><Text style={styles.back}>{loading ? "Uuendan…" : "Värskenda nimekirja"}</Text></Pressable>}
     {exercise && <View style={styles.panel}><Text style={styles.panelTitle}>Osalejad · {exercisePackageIdLabel(exercise.packageId)}</Text>
       {(["COMPLETED", "CANCELLED", "TERMINATED"].includes(exercise.lifecycleState)) && <Text style={styles.warning}>Terminalne õppus on kirjutuskaitstud.</Text>}
-      {exercise.lifecycleState === "READY" && <Pressable testID="admin-cancel-ready" accessibilityRole="button" disabled={busy} style={styles.outline} onPress={() => cancelReady(exercise)}><Text style={styles.remove}>Tühista kasutamata õppus</Text></Pressable>}
+      {exercise.lifecycleState === "READY" && (cancellationEnabled
+        ? <Pressable testID="admin-cancel-ready" accessibilityRole="button" disabled={busy} style={styles.outline} onPress={() => cancelReady(exercise)}><Text style={styles.remove}>Tühista kasutamata õppus</Text></Pressable>
+        : <Text style={styles.meta}>Kasutamata õppuse tühistamine ei ole praegu saadaval.</Text>)}
       <Text style={styles.label}>Vali kasutaja</Text>
       <TextInput accessibilityLabel="Otsi kasutajat" value={userSearch} onChangeText={value => { setUserSearch(value); setSelectedUser(undefined); }} placeholder="Nimi või e-post" autoCapitalize="none" style={styles.search} />
       {userSearch.trim().length < 2 && <Text style={styles.meta}>Sisesta vähemalt kaks tähemärki.</Text>}

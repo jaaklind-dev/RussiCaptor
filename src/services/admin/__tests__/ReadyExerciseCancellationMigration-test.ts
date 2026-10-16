@@ -66,7 +66,44 @@ describe("READY cancellation server contract", () => {
     expect(cancel).toContain("where es.exercise_id = p_exercise_id and es.revision = p_expected_revision");
     expect(cancel).toContain("'EXERCISE_READY_CANCELLED'");
     expect(cancel).toContain("'SUCCESS'");
-    expect(edge).toContain('audit(context, "EXERCISE_READY_CANCELLED", "FAILURE"');
+    expect(edge).not.toContain('audit(context, "EXERCISE_READY_CANCELLED"');
+    expect(edge).toContain('body.operation !== "cancelReady"');
+  });
+
+  test("the singleton activation gate is seeded OFF and invisible to ordinary clients", () => {
+    expect(sql).toContain("create table public.ready_exercise_cancellation_activation");
+    expect(sql).toContain("values ('READY_CANCELLATION', false, 'MIGRATION_DEFAULT_OFF')");
+    expect(sql).toContain("alter table public.ready_exercise_cancellation_activation enable row level security");
+    expect(sql).toMatch(/revoke all on table public\.ready_exercise_cancellation_activation\s+from public,anon,authenticated,service_role;/);
+    expect(sql).toContain("grant select on table public.ready_exercise_cancellation_activation to service_role");
+    expect(sql).not.toMatch(/grant (?:insert|update|delete) on table public\.ready_exercise_cancellation_activation to (?:anon|authenticated|service_role)/i);
+  });
+
+  test("OFF fails before receipt readback and holds a transactional gate lock", () => {
+    const cancel = functionBody("trusted_admin_cancel_ready_exercise");
+    const gate = cancel.indexOf("from public.ready_exercise_cancellation_activation as gate");
+    const disabled = cancel.indexOf("READY_CANCELLATION_DISABLED");
+    const receipt = cancel.indexOf("from public.exercise_state_publication_operations as op");
+    const exerciseLock = cancel.indexOf("pg_catalog.pg_advisory_xact_lock");
+    expect(gate).toBeGreaterThan(0);
+    expect(cancel).toContain("for share");
+    expect(disabled).toBeGreaterThan(gate);
+    expect(disabled).toBeLessThan(exerciseLock);
+    expect(exerciseLock).toBeLessThan(receipt);
+    expect(cancel).toContain("v_activation_enabled is distinct from true");
+  });
+
+  test("only the database deployment operator can change activation, with atomic audit", () => {
+    const activation = functionBody("set_ready_exercise_cancellation_activation");
+    expect(activation).toContain("security invoker set search_path = ''");
+    expect(activation).toContain("for update");
+    expect(activation).toContain("update public.ready_exercise_cancellation_activation");
+    expect(activation).toContain("insert into public.administrative_action_audit");
+    expect(activation).toContain("'READY_CANCELLATION_ENABLED'");
+    expect(activation).toContain("'READY_CANCELLATION_DISABLED'");
+    expect(activation).toContain("p_change_reference");
+    expect(sql).toMatch(/revoke all on function public\.set_ready_exercise_cancellation_activation\(boolean,text\)\s+from public,anon,authenticated,service_role;/);
+    expect(sql).not.toMatch(/grant execute on function public\.set_ready_exercise_cancellation_activation/i);
   });
 
   test("terminal row rejects new patient mutation and role grant but keeps separate role revoke", () => {

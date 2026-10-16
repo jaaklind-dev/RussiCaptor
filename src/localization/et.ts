@@ -82,6 +82,7 @@ export const cardiacRhythmLabel = (value: string): string => ({
 
 export function publicErrorMessage(error: unknown, fallback = "Toiming ebaõnnestus. Proovi uuesti."): string {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  if (message === "READY_CANCELLATION_DISABLED") return "Õppuse tühistamine ei ole praegu sisse lülitatud.";
   const normalized = message.toLocaleLowerCase("et");
   if (normalized.includes("already") || normalized.includes("duplicate") || normalized.includes("juba")) {
     return "See kirje on juba olemas.";
