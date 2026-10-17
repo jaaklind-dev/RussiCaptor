@@ -107,10 +107,10 @@ describe("safe predeployment candidate and fail-closed canonical release", () =>
     expect(config("predeployment-candidate", { ...missing, RUSSICAPTOR_MIGRATION_PROJECT_REF: projectRef }).status).not.toBe(0);
   });
 
-  test("artifact, output directory and manifest are separated; candidate retains exact version 178", () => {
+  test("artifact, output directory and manifest are separated; candidate retains exact version 179", () => {
     const candidate = evaluate("policy.buildPlan(input, { RUSSICAPTOR_RELEASE_VARIANT: 'predeployment-candidate' })", descriptor);
     const canonical = evaluate("policy.buildPlan(input, {})", descriptor);
-    expect(candidate.versionCode).toBe(178);
+    expect(candidate.versionCode).toBe(179);
     expect(candidate.artifactFilename).not.toBe(canonical.artifactFilename);
     expect(candidate.outputDirectory).not.toBe(canonical.outputDirectory);
     expect(candidate.manifestFilename).not.toBe(canonical.manifestFilename);
@@ -124,7 +124,7 @@ describe("safe predeployment candidate and fail-closed canonical release", () =>
 
   test("legacy validation variants remain non-distributable and require a higher version", () => {
     expect(invoke("policy.buildPlan(input, { RUSSICAPTOR_RELEASE_VARIANT: 'upgrade-validation' })", descriptor).status).not.toBe(0);
-    expect(evaluate("policy.buildPlan(input, { RUSSICAPTOR_RELEASE_VARIANT: 'rollback-validation', RUSSICAPTOR_RELEASE_VERSION_CODE: '179' })", descriptor).versionCode).toBe(179);
+    expect(evaluate("policy.buildPlan(input, { RUSSICAPTOR_RELEASE_VARIANT: 'rollback-validation', RUSSICAPTOR_RELEASE_VERSION_CODE: '180' })", descriptor).versionCode).toBe(180);
   });
 
   test("contradictory or missing verification results cannot assign distributable true", () => {
@@ -154,7 +154,7 @@ describe("signed artifact evidence cannot be promoted by sidecar edits", () => {
   const artifactInput = (mode = "predeployment-candidate") => {
     const embedded = evidenceFixture(mode, complete);
     const actual = { signatureVerified: true, signingCertificateSha256: descriptor.signingCertificateSha256,
-      packageId: descriptor.packageId, versionCode: 178, applicationVersion: "1.2.0", debuggable: false,
+      packageId: descriptor.packageId, versionCode: 179, applicationVersion: "1.2.0", debuggable: false,
       devOverlay: false, artifactSha256: "b".repeat(64), artifactSizeBytes: 1234 };
     const metadata = { ...embedded, signingCertificateSha256: actual.signingCertificateSha256,
       artifactSha256: actual.artifactSha256, artifactSizeBytes: actual.artifactSizeBytes,
@@ -181,7 +181,7 @@ describe("signed artifact evidence cannot be promoted by sidecar edits", () => {
 
   test("signature, pinned signer, APK hash, version and package mismatches all fail closed", () => {
     for (const change of [{ signatureVerified: false }, { signingCertificateSha256: "c".repeat(64) },
-      { artifactSha256: "d".repeat(64) }, { versionCode: 179 }, { packageId: "wrong.package" }, { debuggable: true }, { devOverlay: true }]) {
+      { artifactSha256: "d".repeat(64) }, { versionCode: 180 }, { packageId: "wrong.package" }, { debuggable: true }, { devOverlay: true }]) {
       const input = artifactInput();
       Object.assign(input.actual, change);
       expect(verify(input).status).not.toBe(0);
