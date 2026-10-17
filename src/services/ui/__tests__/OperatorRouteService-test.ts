@@ -48,7 +48,8 @@ describe("operator landing route", () => {
   test("MODE-NAV-02/03/04 routes only through the selected authorized mode", () => {
     expect(resolveSelectedModeRoute(administrator(), "ADMIN", "EX-1")).toBe("/admin");
     expect(resolveSelectedModeRoute(administrator(), "CM", "EX-1")).toBe("/dashboard");
-    expect(resolveSelectedModeRoute(authenticated("EXCON", "EX-1"), "EXCON", "EX-1")).toBe("/excon");
+    expect(resolveSelectedModeRoute(authenticated("EXCON", "EX-1"), "EXCON", "EX-1",
+      { state: "AUTHORIZED", exerciseId: "EX-1", intendedExerciseId: "EX-1" })).toBe("/excon");
   });
   test("MODE-NAV-06 fails a stale or cross-exercise selection into mode choice", () => {
     expect(resolveSelectedModeRoute(administrator(), "EXCON", "EX-1")).toBe("/mode");

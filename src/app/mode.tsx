@@ -5,6 +5,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import RoleModeSwitcher from "@/components/RoleModeSwitcher";
 import { useOperatorMode } from "@/hooks/useOperatorMode";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
+import { useExconRouteReadiness } from "@/hooks/useExconRouteReadiness";
+import { refreshRemoteCurrentExercise } from "@/services/CloudSyncService";
 import { exercisePackageIdLabel } from "@/localization/et";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { refreshOperatorSession } from "@/services/authorization/OperatorSessionService";
@@ -24,6 +26,7 @@ export default function ModeSelectionScreen() {
   const { target, reason } = useLocalSearchParams<{ target?: string; reason?: string }>();
   const operator = useOperatorSession();
   const mode = useOperatorMode();
+  const exconReadiness = useExconRouteReadiness();
   const syncVersion = useSyncExternalStore(subscribeToSync, getSyncVersion, getSyncVersion);
   const [details, setDetails] = useState<readonly ActiveExerciseConflictDetail[]>([]);
   const [pending, setPending] = useState<string>();
@@ -36,9 +39,17 @@ export default function ModeSelectionScreen() {
 
   useEffect(() => {
     if (operator.state !== "AUTHENTICATED") return;
-    const route = resolveSelectedModeRoute(operator, mode.selectedMode, current.exerciseId);
+    const route = resolveSelectedModeRoute(operator, mode.selectedMode, current.exerciseId, exconReadiness);
     if (route !== "/mode") router.replace(route);
-  }, [current.exerciseId, mode.selectedMode, operator, syncVersion]);
+  }, [current.exerciseId, mode.selectedMode, operator, syncVersion, exconReadiness]);
+
+  const retryExercise = async () => {
+    if (pending) return;
+    setPending("discovery"); setError(undefined);
+    try { await refreshRemoteCurrentExercise("manual"); }
+    catch { setError("Õppuse andmete kontroll ei õnnestunud. Proovi uuesti."); }
+    finally { setPending(undefined); }
+  };
 
   useEffect(() => {
     if (!shouldLoadConflictDetails) return;
@@ -65,6 +76,16 @@ export default function ModeSelectionScreen() {
     <Text style={styles.title}>Vali töörežiim</Text>
     <Text style={styles.subtitle}>Näed ainult neid režiime ja õppusi, mille jaoks sul on kehtiv õigus.</Text>
     <RoleModeSwitcher />
+    {mode.selectedMode === "EXCON" && exconReadiness.state !== "AUTHORIZED" &&
+      <View style={styles.panel} testID="excon-discovery-retry">
+        <Text accessibilityRole="alert" style={styles.note}>{exconReadiness.state === "PENDING"
+          ? "Kontrollin õppuse andmeid. EXCON avaneb pärast autoriteetse seisu kinnitamist."
+          : "EXCON-i ligipääsu ei saanud kinnitada. Kontrolli õppuse andmeid või vali teine lubatud režiim."}</Text>
+        <Pressable accessibilityRole="button" testID="retry-exercise-discovery" disabled={Boolean(pending)}
+          style={[styles.refresh, pending && styles.disabled]} onPress={() => void retryExercise()}>
+          <Text style={styles.refreshText}>{pending === "discovery" ? "Kontrollin…" : "Kontrolli õppust uuesti"}</Text>
+        </Pressable>
+      </View>}
     {requested && mode.selectedMode !== requested && <Text style={styles.note}>Vali jätkamiseks {modeLabels[requested]}.</Text>}
     {reason === "exercise-unavailable" && <Text accessibilityRole="alert" style={styles.error}>
       Määratud õppust ei õnnestunud avada. Vali õppus uuesti või värskenda õigusi.

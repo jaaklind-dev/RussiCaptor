@@ -1,6 +1,7 @@
 import type { OperatorSessionState } from "@/services/authorization/OperatorSessionService";
 import { hasActiveRole, hasPlatformAdminAuthority } from "@/services/authorization/OperatorSessionService";
 import type { OperatorMode } from "./OperatorModeService";
+import type { ExconRouteReadiness } from "./ExconRouteReadinessService";
 
 export type OperatorLandingRoute = "/dashboard" | "/excon" | "/admin" | "/mode" | "/";
 
@@ -8,11 +9,15 @@ export function resolveSelectedModeRoute(
   operator: OperatorSessionState,
   selectedMode: OperatorMode | undefined,
   exerciseId?: string,
+  exconReadiness?: ExconRouteReadiness,
 ): OperatorLandingRoute {
   if (selectedMode === "ADMIN") return hasPlatformAdminAuthority(operator) ? "/admin" : "/mode";
   if (selectedMode === "CM") return hasActiveRole(operator, "CM", exerciseId) ? "/dashboard" : "/mode";
   if (selectedMode === "EXCON") {
-    return hasActiveRole(operator, "EXCON", exerciseId) || hasActiveRole(operator, "EXERCISE_BOOTSTRAP")
+    // Use the same readiness decision as the protected EXCON route. A scoped
+    // role alone must not bounce mode selection back into a denied route.
+    return exconReadiness?.state === "AUTHORIZED" && exconReadiness.exerciseId === exerciseId &&
+      (hasActiveRole(operator, "EXCON", exerciseId) || hasActiveRole(operator, "EXERCISE_BOOTSTRAP"))
       ? "/excon" : "/mode";
   }
   return operator.state === "AUTHENTICATED" ? "/mode" : "/";
@@ -44,7 +49,8 @@ export function resolveSelectedModeNavigationTarget(
   selectedMode: OperatorMode | undefined,
   exerciseId: string,
   currentRoute = "/",
+  exconReadiness?: ExconRouteReadiness,
 ): OperatorLandingRoute | undefined {
-  const target = resolveSelectedModeRoute(operator, selectedMode, exerciseId);
+  const target = resolveSelectedModeRoute(operator, selectedMode, exerciseId, exconReadiness);
   return target === currentRoute ? undefined : target;
 }

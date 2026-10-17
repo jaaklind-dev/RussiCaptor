@@ -20,8 +20,11 @@ jest.mock("@/services/authorization/OperatorSessionService", () => ({
     ? state.principal.roleAssignments.filter(item => item.status === "ACTIVE" && item.role === role && item.scope.scopeType === "EXERCISE")
       .map(item => item.scope.scopeType === "EXERCISE" ? item.scope.scopeId : "") : [],
   hasPlatformAdminAuthority: (state: OperatorSessionState) => state.state === "AUTHENTICATED" && state.isPlatformAdmin === true,
+  hasActiveRole: (state: OperatorSessionState, role: string) => state.state === "AUTHENTICATED" &&
+    state.principal.roleAssignments.some(item => item.role === role && item.status === "ACTIVE"),
 }));
-jest.mock("@/services/CloudSyncService", () => ({ refreshRemoteCurrentExercise: () => mockRefreshExercise() }));
+jest.mock("@/services/CloudSyncService", () => ({ refreshRemoteCurrentExercise: () => mockRefreshExercise(),
+  getCurrentExerciseDiscoveryReadiness: () => "RESOLVED" }));
 jest.mock("@/services/ui/OperatorModeService", () => {
   const actual = jest.requireActual("@/services/ui/OperatorModeService");
   return { ...actual, switchOperatorMode: (...args: unknown[]) => mockSwitchMode(...args) };

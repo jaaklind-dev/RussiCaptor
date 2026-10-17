@@ -1,0 +1,81 @@
+{
+  "workPackage": "PRODUCTION ROUTE LOOP FIX AND COMPLETION RECOVERY VALIDATION",
+  "baselineCommit": "f7eda4a7aa5386ce7798b10f6846c435139361f0",
+  "incident": {
+    "exerciseId": "EX-1792248579668-1",
+    "completionCommandId": "EXCON-1792250118376-2",
+    "lastReportedProjectionRevision": 17,
+    "lastReportedCheckpointRevision": 799,
+    "lastReportedLifecycle": "RUNNING",
+    "lastReportedCompletionStatus": "PENDING",
+    "productionStateRefreshedInThisWorkPackage": false,
+    "historicalCrash": "ProductionRouteGate: Maximum update depth exceeded",
+    "exactHistoricalTriggerConfirmed": false
+  },
+  "confirmedNavigationDefect": {
+    "conditions": ["Authenticated scoped EXCON", "Selected EXCON mode", "Discovery UNAVAILABLE"],
+    "before": ["/excon/dashboard", "/mode", "/excon", "/mode"],
+    "after": ["/excon/dashboard", "/mode"],
+    "stableState": "Mode selection with explicit exercise-discovery retry and other authorized modes",
+    "resolvedDiscovery": "Automatically resume EXCON only when the same protected-route readiness contract authorizes the exact exercise",
+    "missingReadiness": "Fail closed in mode selection",
+    "adminAccess": "Unchanged and independent of EXCON discovery",
+    "automaticRetriesAdded": 0
+  },
+  "isolatedRecoveryEvidence": {
+    "evidenceClass": "Synthetic in-memory RPC transport with real client coordinators/adapters and exercise control handler; not a real-DB or physical acceptance result",
+    "realComponents": ["RuntimeCheckpointRecoveryCoordinator", "SupabaseRuntimeCheckpointRepository", "SupabaseRuntimeCompletionGateway", "RuntimeCompletionFinalizerResumeCoordinator", "RuntimeExerciseOwnerGeneration", "handleExerciseControlCommand", "RuntimeCheckpointAuthorityService"],
+    "initialProjectionRevision": 17,
+    "initialCheckpointRevision": 799,
+    "initialWriterGeneration": 1,
+    "initialActiveLeaseCount": 0,
+    "initialOwnershipCount": 0,
+    "recoveryWriterGeneration": 2,
+    "originalCommandIdReused": true,
+    "newCompletionRequests": 0,
+    "terminalProjectionRevision": 18,
+    "terminalCheckpointRevision": 800,
+    "terminalLifecycle": "COMPLETED",
+    "terminalCompletionStatus": "COMPLETED",
+    "finalActiveLeaseCount": 0,
+    "finalOwnershipCount": 0,
+    "negativeCases": ["Old generation lease identity", "Expired lease", "Checkpoint CAS mismatch", "Interrupted restoration", "Interrupted finalization", "Lost response after commit", "Concurrent writer acquisition", "Process recreation after uncommitted local completion"],
+    "preservation": ["Patient payload", "Persisted Runtime payload", "Historical synthetic timeline evidence"]
+  },
+  "independentImagingBlocker": {
+    "status": "UNRESOLVED",
+    "observedResult": "RECONNECT_REQUIRED",
+    "acceptedRuntimeCommands": 0,
+    "reason": "Reader command-readiness refusal before transport; exact failed convergence/time predicate was not captured",
+    "imagingImplementationChanged": false,
+    "orderRetried": false
+  },
+  "nextProductionRecoveryRequirements": [
+    "Review and separately authorize integration and a validated higher-version canonical APK; no APK is built in this work package",
+    "Separately authorize production recovery of the existing exercise only",
+    "Re-read current exercise, pending command, checkpoint integrity, roles, leases and ownership before acting",
+    "Restore the authoritative remote checkpoint and obtain writer authority only through the supported EXCON recovery flow",
+    "Resume the existing pending command without submitting a new completion operation",
+    "Verify atomic COMPLETED projection/checkpoint/request, zero active writer leases and zero patient ownership",
+    "Revoke only this exercise's CM and EXCON assignments through audited Admin controls",
+    "Preserve permanent PLATFORM_ADMIN and historical exercise evidence; keep READY cancellation OFF"
+  ],
+  "automatedValidation": {
+    "focusedNewRegressionSuites": 3,
+    "focusedNewRegressionTests": 20,
+    "fullSuitesPassed": 329,
+    "fullTestsPassed": 2814,
+    "allGuardrailSuitesPassed": 87,
+    "allGuardrailTestsPassed": 874,
+    "typeScript": "PASS",
+    "eslint": "PASS",
+    "builderPublishedAssets": "PASS: 1 package, 2 assets",
+    "releaseConfigurationStatic": "PASS; live compatibility evidence intentionally not refreshed",
+    "diffCheck": "PASS",
+    "environmentNote": "First broad run lacked the external Narva workbook fixtures. Existing source files were copied into the isolated parent; unchanged hash checks and complete reruns passed."
+  },
+  "productionRecoveryAuthorized": false,
+  "productionWritesPerformed": false,
+  "apkBuiltOrInstalled": false,
+  "releaseReadiness": "BLOCKED"
+}

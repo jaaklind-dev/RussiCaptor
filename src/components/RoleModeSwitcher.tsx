@@ -6,7 +6,8 @@ import { useOperatorMode } from "@/hooks/useOperatorMode";
 import { useOperatorSession } from "@/hooks/useOperatorSession";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { refreshOperatorSession } from "@/services/authorization/OperatorSessionService";
-import { refreshRemoteCurrentExercise } from "@/services/CloudSyncService";
+import { getCurrentExerciseDiscoveryReadiness, refreshRemoteCurrentExercise } from "@/services/CloudSyncService";
+import { resolveExconRouteReadiness } from "@/services/ui/ExconRouteReadinessService";
 import {
   resolveAvailableUserModes,
   switchOperatorMode,
@@ -42,7 +43,11 @@ export default function RoleModeSwitcher() {
     try {
       await switchOperatorMode(operator, next);
       if (next === "EXCON") await refreshRemoteCurrentExercise("manual");
-      const target = resolveSelectedModeRoute(operator, next, getCanonicalExerciseSnapshot().exerciseId);
+      const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+      const readiness = next === "EXCON" ? resolveExconRouteReadiness({ operator,
+        mode: { userId: operator.profile.userId, selectedMode: next }, currentExerciseId: exerciseId,
+        discovery: getCurrentExerciseDiscoveryReadiness() }) : undefined;
+      const target = resolveSelectedModeRoute(operator, next, exerciseId, readiness);
       router.replace(target === "/mode" ? { pathname: "/mode", params: { target: next } } : target);
     } catch {
       setError("Režiimi vahetamine ei õnnestunud. Proovi uuesti.");

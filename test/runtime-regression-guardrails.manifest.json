@@ -22,7 +22,7 @@
     { "id": "Q", "name": "large-payload-publication", "tests": ["src/services/runtime/persistence/__tests__/RuntimeTerminalCheckpointRepository-test.ts", "src/services/runtime/persistence/__tests__/RuntimeLargeCheckpointRestore-test.ts"] },
     { "id": "R", "name": "terminal-completion", "tests": ["src/services/runtime/persistence/__tests__/RuntimeTerminalConvergenceIntegration-test.ts", "src/services/runtime/exercise/__tests__/RuntimeCompletionService-test.ts", "supabase/tests/narva_terminal_completion_test.sql"] },
     { "id": "S", "name": "completion-fence", "tests": ["src/services/runtime/commands/__tests__/RuntimePatientCommandConcurrency-test.ts", "src/services/sharedWorkflow/__tests__/TerminalSharedWorkflowFence-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"] },
-    { "id": "T", "name": "pending-completion-recovery", "tests": ["src/services/runtime/persistence/__tests__/RuntimeTerminalConvergenceIntegration-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts"] },
+    { "id": "T", "name": "pending-completion-recovery", "tests": ["src/services/runtime/persistence/__tests__/RuntimeTerminalConvergenceIntegration-test.ts", "src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts", "src/services/runtime/persistence/__tests__/IncidentPendingCompletionRecovery-test.ts", "src/services/ui/__tests__/ProductionRouteLoop-test.ts", "src/components/__tests__/ModeDiscoveryRecovery-test.tsx"] },
     { "id": "U", "name": "heartbeat-lease-lifecycle", "tests": ["src/services/runtime/persistence/__tests__/RuntimeCheckpointStartup-test.ts", "src/services/runtime/persistence/__tests__/RuntimeLeaseLifecycleTrace-test.ts", "src/services/runtime/persistence/__tests__/RuntimeWriterLeaseContinuity-test.ts"] },
     { "id": "V", "name": "package-immutability", "tests": ["src/services/exercise/__tests__/IroPackageImmutability-test.ts", "src/services/exercise/__tests__/ExercisePackageFramework-test.ts"] },
     { "id": "W", "name": "package-hash-freeze", "tests": ["src/services/exercise/__tests__/IroPackageImmutability-test.ts", "src/services/runtime/commands/__tests__/NarvaIroScenarioControlCommand-test.ts"] },
@@ -446,6 +446,8 @@
       "src/modules/massiveTransfusion/__tests__/MtpCalciumReplacement-test.ts"
     ],
     "runtime": [
+      "src/services/ui/__tests__/ProductionRouteLoop-test.ts",
+      "src/components/__tests__/ModeDiscoveryRecovery-test.tsx",
       "src/services/runtime/persistence/__tests__/RuntimeCmReaderReadinessReconciliation-test.ts",
       "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/CmReaderWorkflowHeadAuthority-test.ts",
@@ -486,6 +488,7 @@
       "src/services/operations/__tests__/MultiDeviceRehearsalPreparation-test.ts"
     ],
     "persistence": [
+      "src/services/runtime/persistence/__tests__/IncidentPendingCompletionRecovery-test.ts",
       "src/services/runtime/persistence/__tests__/FreshRuntimeBootstrapAuthority-test.ts",
       "src/services/runtime/persistence/__tests__/EqualRevisionTakeoverConflict-test.ts",
       "src/services/sharedWorkflow/__tests__/SharedWorkflowCanonicalReconciliation-test.ts",
