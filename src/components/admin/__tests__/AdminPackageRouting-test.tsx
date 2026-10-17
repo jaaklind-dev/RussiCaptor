@@ -12,11 +12,13 @@ import {
 } from "@/services/admin/AdminPackageSelectionService";
 import AdminExerciseCreateScreen from "../AdminExerciseCreateScreen";
 import AdminPackageSelectionScreen from "../AdminPackageSelectionScreen";
+import { AdminExerciseCreationError } from "@/services/admin/PlatformAdminExerciseCreation";
 
 const mockBack = jest.fn();
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockCreate = jest.fn();
+const mockDiscard = jest.fn(() => true);
 
 jest.mock("expo-router", () => ({ router: {
   back: (...args: unknown[]) => mockBack(...args),
@@ -27,8 +29,10 @@ jest.mock("@/hooks/useOperatorSession", () => ({ useOperatorSession: () => ({
   state: "AUTHENTICATED", profile: { userId: "USER-ADMIN", displayName: "Admin" },
 }) }));
 jest.mock("@/services/admin/PlatformAdminExerciseCreation", () => ({
+  ...jest.requireActual("@/services/admin/PlatformAdminExerciseCreation"),
   createAdminExercise: (...args: unknown[]) => mockCreate(...args),
   createAdminExerciseOperationId: () => "ADMIN-CREATE-ROUTE-TEST",
+  discardAdminExerciseCreationOperation: () => mockDiscard(),
 }));
 
 const registry = {
@@ -43,7 +47,8 @@ const visibleText = (renderer: TestRenderer.ReactTestRenderer): string => render
   .join(" ");
 
 describe("Admin package-selection routing", () => {
-  beforeEach(() => { mockBack.mockReset(); mockPush.mockReset(); mockReplace.mockReset(); mockCreate.mockReset(); });
+  beforeEach(() => { mockBack.mockReset(); mockPush.mockReset(); mockReplace.mockReset(); mockCreate.mockReset();
+    mockDiscard.mockReset().mockReturnValue(true); });
 
   test("ADMIN-PKG-01 package selection routes to the Admin creation screen", () => {
     const exercisesRoute = fs.readFileSync(path.join(process.cwd(), "src/app/admin/exercises.tsx"), "utf8");
@@ -53,6 +58,23 @@ describe("Admin package-selection routing", () => {
       pathname: "/admin/exercise-create",
       params: { packageId: AIRWAY_EXERCISE_PACKAGE.packageId, packageVersion: AIRWAY_EXERCISE_PACKAGE.packageVersion },
     });
+  });
+  test("pending rollback cannot be silently discarded through Cancel", async () => {
+    mockDiscard.mockReturnValue(false);
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<AdminExerciseCreateScreen routeInput={adminPackageRouteParams(AIRWAY_EXERCISE_PACKAGE)} />); });
+    await act(async () => renderer.root.findByProps({ testID: "admin-package-create-cancel" }).props.onPress());
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(visibleText(renderer)).toContain("Kohaliku oleku taastamine pole lõppenud");
+  });
+  test("confirmed server creation with failed local activation is not presented as failed server creation", async () => {
+    mockCreate.mockRejectedValue(new AdminExerciseCreationError({ stage: "LOCAL_ACTIVATION",
+      code: "ADMIN_CREATION_LOCAL_ACTIVATION_FAILED", durableConfirmed: true }));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<AdminExerciseCreateScreen routeInput={adminPackageRouteParams(AIRWAY_EXERCISE_PACKAGE)} />); });
+    await act(async () => renderer.root.findByProps({ testID: "admin-create-selected-package" }).props.onPress());
+    expect(visibleText(renderer)).toContain("Õppus on serveris loodud");
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   test("ADMIN-PKG-02 preserves exact package ID and version", () => {

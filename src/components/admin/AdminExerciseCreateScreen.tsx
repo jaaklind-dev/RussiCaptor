@@ -9,6 +9,7 @@ import {
   createAdminExercise,
   createAdminExerciseOperationId,
   discardAdminExerciseCreationOperation,
+  AdminExerciseCreationError,
 } from "@/services/admin/PlatformAdminExerciseCreation";
 import { exercisePackageRegistry } from "@/services/exercise/ExercisePackageService";
 
@@ -19,6 +20,11 @@ export default function AdminExerciseCreateScreen({ routeInput }: Readonly<{ rou
   const [message, setMessage] = useState<string>();
   const operationId = useRef(createAdminExerciseOperationId()).current;
   const submission = useRef<Promise<string> | undefined>(undefined);
+  const discard = () => {
+    if (discardAdminExerciseCreationOperation(operationId)) return true;
+    setMessage("Kohaliku oleku taastamine pole lõppenud. Proovi sama toimingut uuesti enne lahkumist.");
+    return false;
+  };
 
   const create = async () => {
     if (!resolution.ok || operator.state !== "AUTHENTICATED") return;
@@ -30,7 +36,8 @@ export default function AdminExerciseCreateScreen({ routeInput }: Readonly<{ rou
       const exerciseId = await pending;
       router.replace({ pathname: "/admin/exercises", params: { createdExerciseId: exerciseId } });
     } catch (error) {
-      setMessage(publicErrorMessage(error, "Õppuse loomine ebaõnnestus."));
+      setMessage(error instanceof AdminExerciseCreationError ? error.message
+        : publicErrorMessage(error, "Õppuse loomine ebaõnnestus."));
     } finally {
       submission.current = undefined;
       setBusy(false);
@@ -49,7 +56,7 @@ export default function AdminExerciseCreateScreen({ routeInput }: Readonly<{ rou
 
   const pkg = resolution.package;
   return <ScrollView contentContainerStyle={styles.page}>
-    <Pressable accessibilityRole="button" disabled={busy} onPress={() => { discardAdminExerciseCreationOperation(operationId); router.back(); }} testID="admin-package-create-back"><Text style={styles.back}>‹ Vali teine pakett</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={busy} onPress={() => { if (discard()) router.back(); }} testID="admin-package-create-back"><Text style={styles.back}>‹ Vali teine pakett</Text></Pressable>
     <Text style={styles.title}>Loo uus õppus</Text>
     <View style={styles.card} testID="admin-selected-package">
       <Text style={styles.label}>Valitud õppusepakett</Text>
@@ -62,7 +69,7 @@ export default function AdminExerciseCreateScreen({ routeInput }: Readonly<{ rou
     <Pressable accessibilityRole="button" disabled={busy} onPress={() => void create()} style={[styles.primary, busy && styles.disabled]} testID="admin-create-selected-package">
       <Text style={styles.primaryText}>{busy ? "Loon õppust…" : "Loo õppus"}</Text>
     </Pressable>
-    <Pressable accessibilityRole="button" disabled={busy} onPress={() => { discardAdminExerciseCreationOperation(operationId); router.replace("/admin/exercises"); }} style={styles.cancel} testID="admin-package-create-cancel">
+    <Pressable accessibilityRole="button" disabled={busy} onPress={() => { if (discard()) router.replace("/admin/exercises"); }} style={styles.cancel} testID="admin-package-create-cancel">
       <Text style={styles.cancelText}>Loobu</Text>
     </Pressable>
   </ScrollView>;

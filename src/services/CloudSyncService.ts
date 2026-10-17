@@ -1111,8 +1111,14 @@ function initialExercisePublicationPort(): InitialExercisePublicationPort {
       if (error) throw new Error("ADMIN_EXERCISE_INITIAL_INSERT_FAILED");
     },
     discover: async exerciseId => {
-      await refreshRemoteCurrentExercise("manual");
-      return latestRemoteExercise?.exerciseId === exerciseId && remoteVersions.has(exerciseId);
+      // Creation confirmation is a scoped read, not a global discovery/hydration
+      // side effect. Keep the previously loaded Runtime intact until the caller
+      // has a durable ACK and explicitly activates the detached READY projection.
+      const { data, error } = await client.from("exercise_states")
+        .select(EXERCISE_DISCOVERY_COLUMNS).eq("exercise_id", exerciseId).maybeSingle();
+      recordSupabaseTraffic({ operation: "SELECT", endpoint: "exercise_states.initial_create_discovery", data });
+      const row = data as unknown as InitialExerciseReadback | null;
+      return !error && row?.exercise_id === exerciseId && Boolean(row.revision >= 1);
     },
     wait: delay,
   };

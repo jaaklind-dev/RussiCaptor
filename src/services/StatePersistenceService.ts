@@ -28,7 +28,7 @@ import {
   exercisePackageLoader,
   getExercisePackage,
 } from "@/services/exercise/ExercisePackageService";
-import { installCurrentExercise } from "@/repositories/ExerciseRepository";
+import { getCurrentExercise, installCurrentExercise } from "@/repositories/ExerciseRepository";
 import { getPatientMaterialization, restorePatientMaterialization } from "@/services/exercise/PackagePatientMaterializationService";
 import { captureActiveClinicalReferenceRuntimes, captureActiveClinicalReferenceRuntimesAsync, clearActiveClinicalReferenceRuntime, fenceActiveLaboratoryWorkflowsAtTerminal, getActiveClinicalReferenceRuntimeClocks, isClinicalReferenceRuntimeReadReady, prepareActiveClinicalReferenceRuntime, prepareActiveClinicalReferenceRuntimeAsync } from "@/services/runtime/exercise/ClinicalReferenceRuntimeService";
 import type { RuntimeCheckpointCanonicalRepresentation, RuntimeCheckpointEnvelope } from "@/models/RuntimeCheckpointAuthority";
@@ -236,6 +236,25 @@ export function createSharedExerciseProjection(): SharedExerciseState {
   return collectSharedExerciseProjection();
 }
 
+const adminProjectionMetadata = new WeakMap<SharedExerciseState, ReturnType<typeof getCurrentExercise>>();
+/** Lossless local projection backup; deliberately excludes clinical engine capture. */
+export function captureAdminExerciseProjection(): SharedExerciseState {
+  const state = collectSharedExerciseProjection();
+  state.runtimePatientCommandCursor = getRuntimePatientCommandCursor(state.exerciseSession.exerciseId);
+  adminProjectionMetadata.set(state, { ...getCurrentExercise() });
+  return state;
+}
+
+/** Admin rollback is a local projection transaction, not a clinical checkpoint.
+ * Keep the existing engine instances and their clocks intact (even if a stale
+ * local discovery clock differs). This must never be used for checkpoint restore.
+ */
+export function restoreAdminExerciseProjection(state: SharedExerciseState): void {
+  restoreSharedExerciseCollections(state, false, false);
+  const previousIdentity = adminProjectionMetadata.get(state);
+  if (previousIdentity) Object.assign(getCurrentExercise(), previousIdentity);
+}
+
 export function subscribeToLocalRuntimeCheckpointPrepared(listener: () => void): () => void {
   checkpointPreparedListeners.add(listener);
   return () => checkpointPreparedListeners.delete(listener);
@@ -435,10 +454,10 @@ export async function restoreSharedExerciseStateAsync(
   await restoreCanonicalRuntimeAsync(restored, startRuntime, yieldControl);
 }
 
-function restoreSharedExerciseCollections(restored: SharedExerciseState): void {
-  stopClockRunner();
+function restoreSharedExerciseCollections(restored: SharedExerciseState, stopClock = true, restoreArchives = true): void {
+  if (stopClock) stopClockRunner();
   restoreInstalledWorkbook(restored.installedWorkbook);
-  restoreExerciseIdentity(restored);
+  restoreExerciseIdentity(restored, restoreArchives);
   restoreRuntimePatientCommandCursor(restored.exerciseSession.exerciseId, restored.runtimePatientCommandCursor);
   restoreExerciseControlAudit(restored.exerciseControlAudit ?? []);
   restoreInstructorCommandAudit(restored.instructorCommandAudit ?? []);

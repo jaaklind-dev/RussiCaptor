@@ -4,6 +4,8 @@ export type PendingInitialExercisePublication = Readonly<{
   operationId: string;
   exerciseId: string;
   packageIdentity: AdminPackageIdentity;
+  /** Detached Admin creation must not hydrate any discovery row before ACK. */
+  preserveLocalUntilAcknowledged?: boolean;
 }>;
 
 let pending: PendingInitialExercisePublication | undefined;
@@ -29,7 +31,8 @@ export function getPendingInitialExercisePublication(): PendingInitialExercisePu
 }
 
 export function shouldPreservePendingInitialExercise(localExerciseId: string, remoteExerciseId: string): boolean {
-  return Boolean(pending && pending.exerciseId === localExerciseId && pending.exerciseId !== remoteExerciseId);
+  return Boolean(pending && (pending.preserveLocalUntilAcknowledged ||
+    (pending.exerciseId === localExerciseId && pending.exerciseId !== remoteExerciseId)));
 }
 
 export function resetInitialExercisePublicationFenceForTests(): void {

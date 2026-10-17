@@ -6,12 +6,13 @@ import type { AdminPackageIdentity } from "./AdminPackageSelectionService";
 import { grantExerciseBootstrap, revokeUnusedExerciseBootstrap,
   type ExerciseBootstrapAuthorization } from "./PlatformAdminService";
 import {
-  createSharedExerciseSnapshot,
-  restoreSharedExerciseState,
+  captureAdminExerciseProjection,
+  restoreAdminExerciseProjection,
   type SharedExerciseState,
 } from "@/services/StatePersistenceService";
 import { notifySync } from "@/services/SyncService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { stopClockRunner } from "@/services/ClockRunner";
 import {
   acknowledgeInitialExercisePublication,
   type InitialExercisePublicationAcknowledgement,
@@ -33,6 +34,9 @@ export type AdminExerciseCreationDependencies = Readonly<{
   currentExerciseId?: () => string;
   restoreLocalState: (state: SharedExerciseState) => void;
   commitPackageSelection?: (identity: AdminPackageIdentity) => void;
+  finishLocalActivation?: () => void;
+  /** Preparation returns a detached projection and never mutates the live store. */
+  detachedPreparation?: boolean;
   acknowledge: (input: Readonly<{
     operationId: string; userId: string; exerciseId: string;
     packageId: string; packageVersion: string; bootstrapAuthorizationId: string;
@@ -42,6 +46,7 @@ export type AdminExerciseCreationDependencies = Readonly<{
 
 const defaultDependencies: AdminExerciseCreationDependencies = Object.freeze({
   resolvePackage: identity => exercisePackageRegistry.get(identity.packageId, identity.packageVersion),
+  detachedPreparation: true,
   grantBootstrap: grantExerciseBootstrap,
   revokeBootstrap: revokeUnusedExerciseBootstrap,
   prepare: (identity, operationId, exerciseId) => {
@@ -51,9 +56,11 @@ const defaultDependencies: AdminExerciseCreationDependencies = Object.freeze({
     return Object.freeze({ ok: true as const, exerciseId,
       exercisePackage: pkg, projection });
   },
-  captureLocalState: createSharedExerciseSnapshot,
+  // This backup is never published and never captures/revalidates clinical engines.
+  captureLocalState: captureAdminExerciseProjection,
   currentExerciseId: () => getCanonicalExerciseSnapshot().exerciseId,
-  restoreLocalState: state => { restoreSharedExerciseState(state, false); notifySync("remote"); },
+  restoreLocalState: restoreAdminExerciseProjection,
+  finishLocalActivation: () => { notifySync("remote"); stopClockRunner(); },
   commitPackageSelection: identity => {
     // The durable ACK already committed the exercise. An optional local
     // selector persistence failure must not turn that success into a retry.
@@ -65,7 +72,37 @@ const defaultDependencies: AdminExerciseCreationDependencies = Object.freeze({
 export type AdminExerciseCreationPhase = "IDLE" | "CREATING_BOOTSTRAP" | "BOOTSTRAPPING_RUNTIME"
   | "PROVISIONAL_CREATED" | "PACKAGE_PREPARING" | "READY_FOR_INITIAL_PUBLICATION"
   | "PUBLISHING_INITIAL_STATE" | "WAITING_FOR_BACKEND_ACK" | "VERIFYING_DISCOVERY"
+  | "CAPTURING_PREVIOUS_PROJECTION" | "ACTIVATING_LOCAL_STATE" | "ROLLING_BACK"
   | "SUCCEEDED" | "FAILED";
+
+export type AdminCreationFailureStage = "LOCAL_PREPARATION" | "PACKAGE_VALIDATION"
+  | "BOOTSTRAP_AUTHORIZATION" | "SERVER_CREATION" | "INITIAL_PUBLICATION"
+  | "LOCAL_ACTIVATION" | "ROLLBACK";
+export type AdminCreationDiagnostic = Readonly<{ stage: AdminCreationFailureStage;
+  code: string; durableConfirmed: boolean }>;
+const safeCodes = new Set(["RUNTIME_CHECKPOINT_CLOCK_MISMATCH", "RUNTIME_CHECKPOINT_EXERCISE_MISMATCH",
+  "ADMIN_EXERCISE_CREATE_IDENTITY_MISMATCH", "ADMIN_EXERCISE_PACKAGE_INCOMPATIBLE",
+  "ADMIN_EXERCISE_CREATE_ACK_MISMATCH", "ADMIN_EXERCISE_INITIAL_INSERT_FAILED",
+  "ADMIN_EXERCISE_DURABLE_ACK_TIMEOUT", "ADMIN_EXERCISE_READBACK_FAILED",
+  "ADMIN_EXERCISE_BOOTSTRAP_UNAVAILABLE", "ADMIN_EXERCISE_AUTH_MISMATCH",
+  "BOOTSTRAP_GRANT_FAILED", "PLATFORM_ADMIN_REQUIRED", "AUTHENTICATION_REQUIRED"]);
+const safeMessages = new Set(["Aktiivne õppus tuleb enne lõpetada.",
+  "Valitud õppusepakett pole enam saadaval. Vali pakett uuesti.",
+  "Loodud õppuse paketisidumine ei vasta valitud paketile."]);
+export class AdminExerciseCreationError extends Error {
+  constructor(readonly diagnostic: AdminCreationDiagnostic, publicMessage?: string) {
+    super(publicMessage && safeMessages.has(publicMessage) ? publicMessage : diagnostic.durableConfirmed
+      ? "Õppus on serveris loodud, kuid kohalik aktiveerimine ebaõnnestus. Proovi sama toimingut uuesti."
+      : "Õppuse loomine ei õnnestunud. Proovi uuesti.");
+    this.name = "AdminExerciseCreationError";
+  }
+}
+function failureDiagnostic(stage: AdminCreationFailureStage, error: unknown,
+  durableConfirmed: boolean): AdminCreationDiagnostic {
+  const message = error instanceof Error ? error.message : "";
+  return Object.freeze({ stage, code: safeCodes.has(message) ? message : `ADMIN_CREATION_${stage}_FAILED`,
+    durableConfirmed });
+}
 
 type CreationAttempt = {
   operationId: string;
@@ -78,6 +115,8 @@ type CreationAttempt = {
   prepared?: Extract<PreparationResult, { ok: true }>;
   bootstrap?: ExerciseBootstrapAuthorization;
   acknowledgement?: InitialExercisePublicationAcknowledgement;
+  diagnostic?: AdminCreationDiagnostic;
+  rollbackPending?: boolean;
 };
 
 const attempts = new Map<string, CreationAttempt>();
@@ -91,6 +130,9 @@ export function createAdminExerciseOperationId(): string {
 export function getAdminExerciseCreationPhase(operationId: string): AdminExerciseCreationPhase {
   return attempts.get(operationId)?.phase ?? "IDLE";
 }
+export function getAdminExerciseCreationDiagnostic(operationId: string): AdminCreationDiagnostic | undefined {
+  return attempts.get(operationId)?.diagnostic;
+}
 
 export function resetAdminExerciseCreationAttemptsForTests(): void {
   attempts.clear();
@@ -99,7 +141,7 @@ export function resetAdminExerciseCreationAttemptsForTests(): void {
 
 export function discardAdminExerciseCreationOperation(operationId: string): boolean {
   const attempt = attempts.get(operationId);
-  if (attempt?.inFlight) return false;
+  if (attempt?.inFlight || attempt?.rollbackPending) return false;
   finishInitialExercisePublication(operationId);
   attempts.delete(operationId);
   return true;
@@ -121,17 +163,32 @@ async function runCreationAttempt(
   dependencies: AdminExerciseCreationDependencies,
 ): Promise<string> {
   let fenceActive = false;
+  let stage: AdminCreationFailureStage = "LOCAL_PREPARATION";
+  let activationStarted = false;
   try {
+    attempt.diagnostic = undefined;
+    if (attempt.rollbackPending && attempt.beforeState) {
+      stage = "ROLLBACK";
+      dependencies.restoreLocalState(attempt.beforeState);
+      attempt.rollbackPending = false;
+    }
     if (!attempt.prepared) {
-      attempt.beforeState = dependencies.captureLocalState();
+      attempt.phase = "CAPTURING_PREVIOUS_PROJECTION";
+      if (!dependencies.detachedPreparation) attempt.beforeState = dependencies.captureLocalState();
       attempt.provisionalExerciseId = provisionalExerciseId(attempt.operationId);
       attempt.phase = "PROVISIONAL_CREATED";
       attempt.phase = "CREATING_BOOTSTRAP";
+      stage = "BOOTSTRAP_AUTHORIZATION";
       attempt.bootstrap = await dependencies.grantBootstrap(userId);
       attempt.phase = "PACKAGE_PREPARING";
+      stage = "LOCAL_PREPARATION";
       const result = dependencies.prepare({ packageId: selected.packageId, packageVersion: selected.packageVersion },
         attempt.operationId, attempt.provisionalExerciseId);
       if (!result.ok) throw new Error(result.message);
+      stage = "PACKAGE_VALIDATION";
+      if (dependencies.detachedPreparation && !result.projection) {
+        throw new Error("ADMIN_EXERCISE_PROJECTION_MISMATCH");
+      }
       if (result.projection && result.exerciseId !== attempt.provisionalExerciseId) {
         throw new Error("ADMIN_EXERCISE_CREATE_IDENTITY_MISMATCH");
       }
@@ -154,43 +211,60 @@ async function runCreationAttempt(
     if (!prepared) throw new Error("Õppuse loomine ei õnnestunud. Proovi uuesti.");
     if (!attempt.bootstrap) {
       attempt.phase = "CREATING_BOOTSTRAP";
+      stage = "BOOTSTRAP_AUTHORIZATION";
       attempt.bootstrap = await dependencies.grantBootstrap(userId);
     }
-    attempt.phase = "PUBLISHING_INITIAL_STATE";
-    beginInitialExercisePublication({ operationId: attempt.operationId, exerciseId: prepared.exerciseId,
-      packageIdentity: identity });
-    fenceActive = true;
-    attempt.phase = "WAITING_FOR_BACKEND_ACK";
-    const acknowledgement = await dependencies.acknowledge({
-      operationId: attempt.operationId,
-      userId,
-      exerciseId: prepared.exerciseId,
-      packageId: selected.packageId,
-      packageVersion: selected.packageVersion,
-      bootstrapAuthorizationId: attempt.bootstrap.id,
-      ...(prepared.projection ? { projection: prepared.projection } : {}),
-    });
-    attempt.phase = "VERIFYING_DISCOVERY";
-    if (acknowledgement.exerciseId !== prepared.exerciseId
-      || acknowledgement.packageId !== selected.packageId
-      || acknowledgement.packageVersion !== selected.packageVersion) {
-      throw new Error("ADMIN_EXERCISE_CREATE_ACK_MISMATCH");
+    if (!attempt.acknowledgement) {
+      stage = "INITIAL_PUBLICATION";
+      attempt.phase = "PUBLISHING_INITIAL_STATE";
+      beginInitialExercisePublication({ operationId: attempt.operationId, exerciseId: prepared.exerciseId,
+        packageIdentity: identity, preserveLocalUntilAcknowledged: dependencies.detachedPreparation === true });
+      fenceActive = true;
+      attempt.phase = "WAITING_FOR_BACKEND_ACK";
+      const acknowledgement = await dependencies.acknowledge({
+        operationId: attempt.operationId,
+        userId,
+        exerciseId: prepared.exerciseId,
+        packageId: selected.packageId,
+        packageVersion: selected.packageVersion,
+        bootstrapAuthorizationId: attempt.bootstrap.id,
+        ...(prepared.projection ? { projection: prepared.projection } : {}),
+      });
+      attempt.phase = "VERIFYING_DISCOVERY";
+      if (acknowledgement.exerciseId !== prepared.exerciseId
+        || acknowledgement.packageId !== selected.packageId
+        || acknowledgement.packageVersion !== selected.packageVersion) {
+        throw new Error("ADMIN_EXERCISE_CREATE_ACK_MISMATCH");
+      }
+      attempt.acknowledgement = acknowledgement;
     }
-    attempt.acknowledgement = acknowledgement;
     finishInitialExercisePublication(attempt.operationId);
     fenceActive = false;
     if (prepared.projection) {
+      stage = "LOCAL_ACTIVATION";
+      attempt.phase = "ACTIVATING_LOCAL_STATE";
+      // Capture a fresh local-only rollback projection at the synchronous
+      // replacement boundary, not before the asynchronous server operation.
+      attempt.beforeState = dependencies.captureLocalState();
+      activationStarted = true;
       dependencies.restoreLocalState(prepared.projection);
       dependencies.commitPackageSelection?.(identity);
+      dependencies.finishLocalActivation?.();
     }
     attempt.phase = "SUCCEEDED";
     return prepared.exerciseId;
   } catch (error) {
     if (fenceActive) finishInitialExercisePublication(attempt.operationId);
-    if (attempt.beforeState && attempt.prepared && !attempt.acknowledgement
+    let rollbackError: unknown;
+    if (attempt.beforeState && (activationStarted || (attempt.prepared && !attempt.acknowledgement
       && (!attempt.prepared.projection || !dependencies.currentExerciseId
-        || dependencies.currentExerciseId() !== attempt.beforeState.exerciseSession.exerciseId)) {
-      dependencies.restoreLocalState(attempt.beforeState);
+        || dependencies.currentExerciseId() !== attempt.beforeState.exerciseSession.exerciseId)))) {
+      attempt.phase = "ROLLING_BACK";
+      attempt.rollbackPending = true;
+      try {
+        dependencies.restoreLocalState(attempt.beforeState);
+        attempt.rollbackPending = false;
+      } catch (caught) { rollbackError = caught; }
     }
     if (attempt.bootstrap && !attempt.acknowledgement) {
       try {
@@ -202,11 +276,14 @@ async function runCreationAttempt(
       }
     }
     attempt.phase = "FAILED";
-    const message = error instanceof Error ? error.message : "";
-    if (message.startsWith("ADMIN_EXERCISE_")) {
-      throw new Error("Õppuse loomine ei õnnestunud. Proovi uuesti.");
-    }
-    throw error;
+    const code = error instanceof Error ? error.message : "";
+    if (stage === "LOCAL_PREPARATION" && code === "ADMIN_EXERCISE_PACKAGE_INCOMPATIBLE") stage = "PACKAGE_VALIDATION";
+    if (stage === "INITIAL_PUBLICATION" && code === "ADMIN_EXERCISE_INITIAL_INSERT_FAILED") stage = "SERVER_CREATION";
+    attempt.diagnostic = failureDiagnostic(rollbackError ? "ROLLBACK" : stage,
+      rollbackError ?? error, Boolean(attempt.acknowledgement));
+    // Log only an allowlisted category/code, never the exception or payload.
+    console.warn("ADMIN_EXERCISE_CREATION_FAILED", attempt.diagnostic);
+    throw new AdminExerciseCreationError(attempt.diagnostic, error instanceof Error ? error.message : undefined);
   }
 }
 
@@ -216,8 +293,15 @@ export async function createAdminExercise(
   operationId = createAdminExerciseOperationId(),
   dependencies: AdminExerciseCreationDependencies = defaultDependencies,
 ): Promise<string> {
-  const selected = dependencies.resolvePackage(identity);
-  if (!selected) throw new Error("Valitud õppusepakett pole enam saadaval. Vali pakett uuesti.");
+  let selected: ExercisePackage | undefined;
+  try {
+    selected = dependencies.resolvePackage(identity);
+    if (!selected) throw new Error("Valitud õppusepakett pole enam saadaval. Vali pakett uuesti.");
+  } catch (error) {
+    const diagnostic = failureDiagnostic("PACKAGE_VALIDATION", error, false);
+    console.warn("ADMIN_EXERCISE_CREATION_FAILED", diagnostic);
+    throw new AdminExerciseCreationError(diagnostic, error instanceof Error ? error.message : undefined);
+  }
   const key = attemptKey(userId, identity);
   const existing = attempts.get(operationId);
   if (existing && existing.key !== key) throw new Error("Õppuse loomise identiteet ei vasta valitud paketile.");
