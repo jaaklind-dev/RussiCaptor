@@ -1,13 +1,40 @@
 import { Order } from "@/models/Order";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { getOrderStatusLabel } from "@/utils/status";
+import { useRef, useState, useSyncExternalStore } from "react";
+import {
+  getCanonicalExerciseSnapshot, getCanonicalExerciseSnapshotVersion, subscribeToCanonicalExerciseSnapshot,
+} from "@/repositories/ExerciseSessionRepository";
+import {
+  getRuntimeReaderConvergenceVersion, subscribeToRuntimeReaderConvergence,
+} from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
+import { runtimePatientCommandSubmissionReadiness } from "@/services/runtime/commands/RuntimePatientCommandService";
+
 type Props = {
   orders: Order[];
-  onPlaceOrder: (order: Order) => void;
+  onPlaceOrder: (order: Order) => void | Promise<unknown>;
   readOnly?: boolean;
 };
 
 export default function OrdersTab({ orders, onPlaceOrder, readOnly = false }: Props) {
+  useSyncExternalStore(subscribeToRuntimeReaderConvergence, getRuntimeReaderConvergenceVersion, getRuntimeReaderConvergenceVersion);
+  useSyncExternalStore(subscribeToCanonicalExerciseSnapshot, getCanonicalExerciseSnapshotVersion, getCanonicalExerciseSnapshotVersion);
+  const inFlight = useRef(false);
+  const [pending, setPending] = useState(false);
+  const imagingReadiness = (order: Order) => runtimePatientCommandSubmissionReadiness(
+    order.exerciseId, getCanonicalExerciseSnapshot().simulationTimeSec, "IMAGING_ORDER");
+  const placeOrder = async (order: Order) => {
+    if (readOnly || inFlight.current || order.status !== "available" ||
+      (order.category === "imaging" && !imagingReadiness(order).ready)) return;
+    inFlight.current = true;
+    setPending(true);
+    try {
+      await onPlaceOrder(order);
+    } finally {
+      inFlight.current = false;
+      setPending(false);
+    }
+  };
   return (
     <View style={styles.card}>
       <Text style={styles.title}>Tellimused</Text>
@@ -19,25 +46,36 @@ export default function OrdersTab({ orders, onPlaceOrder, readOnly = false }: Pr
       {orders.length === 0 ? (
         <Text style={styles.empty}>Tellimusi ei ole.</Text>
       ) : (
-        orders.map((order) => (
-          <View key={order.id} style={styles.row}>
-            <View>
-              <Text style={styles.orderTitle}>{order.title}</Text>
-             <Text style={styles.meta}>
-               {order.category} · {getOrderStatusLabel(order.status)}
-             </Text>
-            </View>
+        orders.map((order) => {
+          const readiness = order.category === "imaging" ? imagingReadiness(order) : { ready: true };
+          return (
+            <View key={order.id} style={styles.row}>
+              <View>
+                <Text style={styles.orderTitle}>{order.title}</Text>
+                <Text style={styles.meta}>
+                  {order.category} · {getOrderStatusLabel(order.status)}
+                </Text>
+                {order.status === "available" && !readiness.ready && !readOnly && (
+                  <Text accessibilityRole="alert" style={styles.readOnly}>
+                    {readiness.reason ?? "Pilditellimus ootab õppuse andmete sünkroonimist. Tellimust ei saadetud."}
+                  </Text>
+                )}
+              </View>
 
-            {order.status === "available" && !readOnly && (
-              <Pressable
-                style={styles.button}
-                onPress={() => onPlaceOrder(order)}
-              >
-                <Text style={styles.buttonText}>Telli</Text>
-              </Pressable>
-            )}
-          </View>
-        ))
+              {order.status === "available" && !readOnly && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Telli ${order.title}`}
+                  disabled={pending || !readiness.ready}
+                  style={[styles.button, (pending || !readiness.ready) && styles.disabled]}
+                  onPress={() => { void placeOrder(order); }}
+                >
+                  <Text style={styles.buttonText}>Telli</Text>
+                </Pressable>
+              )}
+            </View>
+          );
+        })
       )}
     </View>
   );
@@ -92,4 +130,5 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
   },
+  disabled: { opacity: 0.5 },
 });

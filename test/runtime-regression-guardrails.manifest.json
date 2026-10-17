@@ -417,6 +417,8 @@
       ,"src/services/runtime/commands/__tests__/NarvaOxygenTherapyDurableCommand-test.ts"
     ],
     "imaging": [
+      "src/components/patient/__tests__/OrdersTabReadiness-test.tsx",
+      "src/services/runtime/commands/__tests__/RuntimeCommandReadinessDiagnostics-test.ts",
       "src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts",
       "src/services/exercise/__tests__/NarvaTraumaImagingDefinitions-test.ts",
       "src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts",

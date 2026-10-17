@@ -12,7 +12,8 @@ import { supabase } from "@/services/SupabaseService";
 import { notifySync } from "@/services/SyncService";
 import type { RuntimeWriterLease } from "@/models/RuntimeCheckpointAuthority";
 import { advanceRuntimePatientCommandCursor, getRuntimePatientCommandCursor } from "./RuntimePatientCommandCursor";
-import { runtimeReaderCommandReadiness } from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
+import { getRuntimeReaderConvergenceState, runtimeReaderCommandReadiness } from "@/services/runtime/persistence/RuntimeReaderConvergenceService";
+import { recordRuntimeCommandReadinessDiagnostic } from "./RuntimeCommandReadinessDiagnostics";
 
 export interface RuntimePatientCommandGateway {
   submit(command: RuntimePatientCommandSubmission): Promise<RuntimePatientCommandSubmissionResult>;
@@ -125,6 +126,7 @@ export type RuntimePatientCommandSubmissionReadiness = Readonly<{
 export function runtimePatientCommandSubmissionReadiness(
   exerciseId: string,
   simulationTimeSec?: number,
+  commandType?: RuntimePatientCommandSubmission["commandType"],
 ): RuntimePatientCommandSubmissionReadiness {
   if (!gateway) return Object.freeze({ ready: false,
     reason: "Patsiendi käskude saatmine ei ole ühendatud." });
@@ -132,8 +134,15 @@ export function runtimePatientCommandSubmissionReadiness(
   if (exercise.exerciseId !== exerciseId || exercise.lifecycleState !== "RUNNING") {
     return Object.freeze({ ready: false, reason: "Õppus lõpetatakse või on lõpetatud." });
   }
-  // Render-time callers only need authoritative convergence. Submission callers
-  // pass the exact intent time below, adding the stricter time-alignment fence.
+  // Imaging UI and submission both require tracked authority, including during
+  // cold startup. Preserve legacy UNTRACKED semantics for other command types.
+  if (commandType === "IMAGING_ORDER") {
+    const reader = getRuntimeReaderConvergenceState();
+    if (reader.phase === "UNTRACKED" || reader.exerciseId !== exerciseId) {
+      return Object.freeze({ ready: false, reason: "Ootan valitud õppuse kinnitatud andmeid. Pilditellimust ei saadetud." });
+    }
+  }
+  // Imaging render callers pass the same exact canonical intent time as submit.
   return runtimeReaderCommandReadiness(exerciseId, simulationTimeSec);
 }
 
@@ -146,9 +155,23 @@ Readonly<{ simulationTimeSec?: number }>): Promise<RuntimePatientCommandSubmissi
     return Object.freeze({ status: "EXERCISE_NOT_ACTIVE", patientRevision: head.revision, ownerUserId: head.ownerUserId });
   }
   const simulationTimeSec = input.simulationTimeSec ?? exercise.simulationTimeSec;
-  const commandReadiness = runtimePatientCommandSubmissionReadiness(input.exerciseId, simulationTimeSec);
+  const commandReadiness = runtimePatientCommandSubmissionReadiness(input.exerciseId, simulationTimeSec, input.commandType);
   if (!commandReadiness.ready) {
     runtimeReaderCommandReadiness(input.exerciseId, simulationTimeSec, true);
+    const reader = getRuntimeReaderConvergenceState();
+    recordRuntimeCommandReadinessDiagnostic({
+      readerPhase: reader.phase,
+      exerciseIdentityMatch: reader.exerciseId === input.exerciseId,
+      revisionConvergence: reader.phase === "WRITER" ? "WRITER"
+        : reader.appliedRevision === undefined || reader.advertisedRevision === undefined ? "UNKNOWN"
+          : reader.appliedRevision === reader.advertisedRevision ? "CONVERGED" : "PENDING",
+      simulationClockMatch: simulationTimeSec === reader.simulationTimeSec,
+      failureCategory: reader.phase === "UNTRACKED" ? "READER_NOT_TRACKED"
+        : reader.exerciseId !== input.exerciseId ? "EXERCISE_BINDING_MISMATCH"
+          : reader.phase === "READY" ? "CLOCK_MISMATCH"
+            : reader.reason === "AUTHORITY_UNAVAILABLE" ? "AUTHORITY_UNAVAILABLE" : "CHECKPOINT_PENDING",
+      gatewaySubmitCalled: false,
+    });
     return Object.freeze({ status: "RECONNECT_REQUIRED", patientRevision: head.revision, ownerUserId: head.ownerUserId });
   }
   const result = await gateway.submit(Object.freeze({ ...input, patientBaseRevision: head.revision,

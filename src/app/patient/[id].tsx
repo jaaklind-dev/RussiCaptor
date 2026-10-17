@@ -383,9 +383,9 @@ useEffect(() => {
     readOnly={isReadOnly}
     onPlaceOrder={(order) => {
       if (order.category === "imaging") {
-        void runWorkflow(() => submitImagingOrder(exerciseId, patient.id, order.workflow.resultTargetId));
+        return runWorkflow(() => submitImagingOrder(exerciseId, patient.id, order.workflow.resultTargetId));
       } else {
-        void runWorkflow(() => placeOrderConflictSafe(order));
+        return runWorkflow(() => placeOrderConflictSafe(order));
       }
     }}
   />
