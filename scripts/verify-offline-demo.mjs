@@ -17,9 +17,16 @@ export function verifyDemoGraph(root = path.join(repository, 'offline-demo'), en
     if (visited.has(real)) return;
     visited.add(real);
     if (shared) sharedVisited.add(real);
-    const text = fs.readFileSync(real, 'utf8');
     const demoRelative = path.relative(base, real).split(path.sep).join('/');
+    if(/\.(png|jpe?g)$/i.test(real)) {
+      policy.assertAuditedDemoAsset(demoRelative,fs.readFileSync(real));return;
+    }
+    const text = fs.readFileSync(real, 'utf8');
     if (Object.hasOwn(policy.AUDITED_DEMO_SOURCES, demoRelative)) policy.assertAuditedDemoSource(demoRelative, text);
+    // Only this exact hash-pinned JSON data document may carry source/license URLs. It cannot execute code.
+    if(demoRelative==='assets/imaging/manifest.json') {
+      policy.assertAuditedDemoSource(demoRelative,text);JSON.parse(text);return;
+    }
     if (/https?:|SUPABASE|SERVICE_ROLE|access_token|refresh_token|eval\s*\(|new\s+Function/.test(text)) throw new Error('OFFLINE_DEMO_UNSAFE_SOURCE');
     const ast = ts.createSourceFile(real, text, ts.ScriptTarget.Latest, true, real.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
     function dependency(node) {

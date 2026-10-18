@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { demoKey, alias, loadDemoPassword, signingFingerprint } from './demo-signing.mjs';
-import { validatePolicy, validateArtifact, validateAuditedBundleSources, validateManifestDump, verifyAuditedDemoSources, EMBEDDED } from './offline-demo-build-policy.mjs';
+import { validatePolicy, validateArtifact, validateAuditedBundleSources, validateManifestDump, verifyAuditedDemoSources, verifyAuditedDemoAssets, validatePackagedDemoAssets, EMBEDDED } from './offline-demo-build-policy.mjs';
 import { verifyOfflineDemo } from './verify-offline-demo.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const app = path.join(root, 'offline-demo');
@@ -18,7 +18,7 @@ const env = { ...process.env, NODE_ENV: 'production', EXPO_OFFLINE: '1', EXPO_NO
 env.ANDROID_SDK_ROOT = env.ANDROID_HOME;
 const run = (cmd, args, cwd = app, binary = false) => execFileSync(cmd, args, { cwd, env, encoding: binary ? undefined : 'utf8', maxBuffer: 128 * 1024 * 1024 });
 if (run('git', ['status', '--porcelain'], root).trim()) throw new Error('OFFLINE_DEMO_CLEAN_COMMITTED_SOURCE_REQUIRED');
-const evidence = { ...policy, auditedDemoSources: verifyAuditedDemoSources(), sourceCommit: run('git', ['rev-parse', 'HEAD'], root).trim(), sourceDirty: false, buildTimestamp: new Date().toISOString() };
+const evidence = { ...policy, auditedDemoSources: verifyAuditedDemoSources(), auditedDemoAssets:verifyAuditedDemoAssets(), sourceCommit: run('git', ['rev-parse', 'HEAD'], root).trim(), sourceDirty: false, buildTimestamp: new Date().toISOString() };
 const password = loadDemoPassword();
 if (signingFingerprint(password) !== policy.signingCertificateSha256) throw new Error('OFFLINE_DEMO_SIGNER_MISMATCH');
 env.DEMO_KEY_PASSWORD = password;
@@ -58,15 +58,18 @@ const embedded = JSON.parse(run('unzip', ['-p', apk, EMBEDDED]));
 const map = JSON.parse(fs.readFileSync(path.join(native, 'app/build/generated/sourcemaps/react/release/index.android.bundle.map'), 'utf8'));
 const auditedDemoSources = validateAuditedBundleSources(map);
 const entries = run('unzip', ['-Z1', apk]).trim().split('\n');
+const imageEntries=[];
 for (const entry of entries.filter(e => !e.endsWith('/'))) {
   const bytes = run('unzip', ['-p', apk, entry], app, true);
+  if(/\.(png|jpe?g)$/i.test(entry))imageEntries.push(bytes);
   const text = bytes.toString('latin1');
   if (/fimcsrivizpliiuoqopv|supabase\.co|sb_publishable_|sb_secret_|SupabaseService|OperatorSessionService|CloudSyncService|RuntimeNativeLeaseHeartbeat|C11_PHYSICAL|ADMIN_API_RAW_RESPONSE_ACCEPTANCE/.test(text)) throw new Error('OFFLINE_DEMO_PRODUCTION_MARKER_PRESENT');
 }
 const actual = { packageId: match?.[1], versionCode: Number(match?.[2]), versionName: match?.[3],
   certificate: /certificate SHA-256 digest: ([0-9a-f]+)/i.exec(cert)?.[1]?.toLowerCase(), signatureVerified: cert.includes('Verified using v'),
   debuggable: badging.includes('application-debuggable'), manifestIsolation: validateManifestDump(manifestDump, badging),
-  productionMarkersAbsent: true, bundledApplicationGraphVerified: true, auditedDemoSources, auditedBundleContentsVerified: true };
+  productionMarkersAbsent: true, bundledApplicationGraphVerified: true, auditedDemoSources, auditedBundleContentsVerified: true,
+  auditedDemoAssets:validatePackagedDemoAssets(imageEntries) };
 validateArtifact(policy, embedded, actual);
 const output = path.join(app, 'dist');
 fs.mkdirSync(output, { recursive: true });

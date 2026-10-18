@@ -2,6 +2,8 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Alert, AppState, BackHandler, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import DemoVitalsCard from './DemoVitalsCard';
 import DemoLaboratoryCard from './DemoLaboratoryCard';
+import DemoImagingCard from './DemoImagingCard';
+import { DEMO_IMAGING_DELAY_SEC, demoImagingCommandId, demoImagingDefinition } from './DemoImaging';
 import { DEMO_LAB_DELAY_SEC, DEMO_LAB_PANEL } from './DemoLaboratory';
 import { formatDemoDuration } from './DemoTime';
 import { DEMO_PATIENTS, DEMO_MAX_SECONDS } from './DemoDomain';
@@ -10,7 +12,8 @@ import { DemoSessionStore, type DemoEvent, type DemoSession } from './DemoSessio
 const eventLabels: Record<DemoEvent['kind'], string> = { START: 'Demoõppus käivitatud', PAUSE: 'Simulatsioon peatatud',
   RESUME: 'Simulatsioon jätkatud', BACKGROUND: 'Taustale minekul peatatud', RECOVERY: 'Sessioon taastatud peatatud olekus',
   BINDER_APPLIED: 'Vaagnalahas paigaldatud patsiendile A', LAB_ORDERED: 'DEMO laboritellimus ja proov kinnitatud',
-  LAB_RESULTED: 'DEMO laboritulemus valmis', LIMIT: '15 minuti demopiir saavutatud; taasta algseis' };
+  LAB_RESULTED: 'DEMO laboritulemus valmis', IMAGING_ORDERED: 'DEMO pildiuuring tellitud',
+  IMAGING_RESULTED: 'DEMO pildiuuringu tulemus valmis', LIMIT: '15 minuti demopiir saavutatud; taasta algseis' };
 const lifecycleLabels = { READY: 'Valmis', RUNNING: 'Käib', PAUSED: 'Peatatud' };
 function Button({ label, onPress, disabled = false }: Readonly<{ label: string; onPress: () => void; disabled?: boolean }>) {
   return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress}
@@ -86,6 +89,15 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
         } catch { setMessage('Salvestatud demo vastuvõtutõendit ei saanud kinnitada. Tõendit ei eksporditud.'); }
       } }]);
   };
+  const imagingOrder = (patientId: DemoSession['selectedPatient']) => {
+    if(!session||!controller)return;
+    const latest=store.getSnapshot();
+    if(latest.status!=='READY'||latest.session.sessionId!==session.sessionId||latest.session.generation!==session.generation||
+      latest.session.mode!=='CM'||latest.session.selectedPatient!==patientId||latest.session.imaging.instances.some(i=>i.patientId===patientId))return;
+    const d=demoImagingDefinition(patientId);
+    perform(()=>controller.dispatch({id:demoImagingCommandId(session.sessionId,patientId,d.examinationId),sessionId:session.sessionId,
+      generation:session.generation,time:latest.session.time,patientId,type:'IMAGING_ORDER',examinationId:d.examinationId}));
+  };
   return <View style={styles.root}>
     <View style={styles.banner}><Text style={styles.bannerTitle} onLongPress={acceptanceExport}
       accessibilityHint="Hoia all, et eksportida piiratud kohalik DEMO vastuvõtutõend">DEMO · AINULT SÜNTEETILISED ANDMED</Text>
@@ -104,7 +116,7 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
           <Button label="EXCON" onPress={() => perform(() => navigate('EXCON'))} />
         </View>
         {session.mode === 'home' ? <>
-          <Text>Kaks sünteetilist traumapatsienti, ühine kohalik mootor, vaagnalahas ja kohalik labori põhipaneel. Pildiuuringud pole selles etapis rakendatud.</Text>
+          <Text>Kaks sünteetilist traumapatsienti, ühine kohalik mootor, vaagnalahas ja kohalik labori põhipaneel. Kohalikud pildiuuringud kasutavad selgelt märgistatud õppematerjali.</Text>
           <Button label="Alusta demoõppust" disabled={!controller || session.lifecycle !== 'READY'} onPress={() => perform(() => { if (control('START')) navigate('CM'); })} />
         </> : <>
           {session.mode === 'EXCON' && <>
@@ -128,6 +140,8 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
                 <DemoVitalsCard patient={patient} sessionId={session.sessionId} />
                 <DemoLaboratoryCard session={session} patientId={fixture.id} onOrder={() => laboratoryOrder(fixture.id)}
                   disabled={!controller || session.lifecycle !== 'RUNNING' || session.time + DEMO_LAB_DELAY_SEC > DEMO_MAX_SECONDS || session.mode !== 'CM' || session.selectedPatient !== fixture.id} />
+                <DemoImagingCard session={session} patientId={fixture.id} onOrder={()=>imagingOrder(fixture.id)}
+                  disabled={!controller||session.lifecycle!=='RUNNING'||session.time+DEMO_IMAGING_DELAY_SEC>DEMO_MAX_SECONDS||session.mode!=='CM'||session.selectedPatient!==fixture.id}/>
               </>}
               {session.mode === 'CM' && fixture.id === 'DEMO-PT-A' && session.selectedPatient === fixture.id && <>
                 <Button label="Paigalda vaagnalahas (DEMO)" disabled={!controller || session.lifecycle !== 'RUNNING' || session.commands.some(c => c.type === 'APPLY_PELVIC_BINDER')} onPress={binder} />
@@ -140,7 +154,7 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
       </>}
       <Button label="Taasta demo algseis" disabled={!controller} onPress={reset} />
       <Button label="Välju demost" onPress={exit} />
-      <Text>Taustale minek peatab simulatsiooni ja labori ooteaja. Demoseanss kestab kuni 15 simulatsiooniminutit. Labor kasutab piiratud sünteetilist mudelit; kliiniline valideerimine ja pildiuuringud ei kuulu sellesse demosse.</Text>
+      <Text>Taustale minek peatab simulatsiooni ning labori ja pildiuuringute ooteaja. Demoseanss kestab kuni 15 simulatsiooniminutit. Õppematerjal ja sünteetilised raportid ei ole kliiniliselt valideeritud.</Text>
     </ScrollView>
   </View>;
 }

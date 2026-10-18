@@ -1,15 +1,29 @@
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
-const { assertOfflineEnvironment, SHARED_SOURCES, AUDITED_DEMO_SOURCES, assertAuditedDemoSource } = require('../offline-demo/isolation-policy.cjs');
+const { assertOfflineEnvironment, SHARED_SOURCES, AUDITED_DEMO_SOURCES, assertAuditedDemoSource, AUDITED_DEMO_ASSETS, assertAuditedDemoAsset } = require('../offline-demo/isolation-policy.cjs');
 const demoRoot = fileURLToPath(new URL('../offline-demo/', import.meta.url));
 export function verifyAuditedDemoSources(root = demoRoot) {
   for (const relative of Object.keys(AUDITED_DEMO_SOURCES)) {
     assertAuditedDemoSource(relative, fs.readFileSync(path.join(root, relative)));
   }
   return { ...AUDITED_DEMO_SOURCES };
+}
+export function verifyAuditedDemoAssets(root=demoRoot) {
+  for(const file of Object.keys(AUDITED_DEMO_ASSETS))assertAuditedDemoAsset(file,fs.readFileSync(path.join(root,file)));
+  return {...AUDITED_DEMO_ASSETS};
+}
+function validAssetIdentities(value) {
+  return value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===Object.keys(AUDITED_DEMO_ASSETS).length&&
+    Object.entries(AUDITED_DEMO_ASSETS).every(([file,hash])=>value[file]===hash);
+}
+export function validatePackagedDemoAssets(entries) {
+  const hashes=new Set(entries.map(bytes=>crypto.createHash('sha256').update(bytes).digest('hex')));
+  if(!Object.values(AUDITED_DEMO_ASSETS).every(hash=>hashes.has(hash)))throw new Error('OFFLINE_DEMO_PACKAGED_ASSET_MISMATCH');
+  return {...AUDITED_DEMO_ASSETS};
 }
 function validAuditedIdentities(value) {
   return value && typeof value === 'object' && !Array.isArray(value) &&
@@ -30,6 +44,8 @@ export function validatePolicy(policy, environment = {}) {
 export function validateArtifact(policy, embedded, actual) {
   validatePolicy(policy);
   verifyAuditedDemoSources();
+  verifyAuditedDemoAssets();
+  if(!validAssetIdentities(embedded.auditedDemoAssets)||!validAssetIdentities(actual.auditedDemoAssets))throw new Error('OFFLINE_DEMO_ASSET_IDENTITY_INVALID');
   if (!validAuditedIdentities(embedded.auditedDemoSources) || !validAuditedIdentities(actual.auditedDemoSources) || actual.auditedBundleContentsVerified !== true) {
     throw new Error('OFFLINE_DEMO_EMBEDDED_MODULE_IDENTITY_INVALID');
   }
@@ -48,6 +64,7 @@ export function validateBundleSources(sources) {
     if (['\0polyfill:external-require', '\0polyfill:assets-registry'].includes(s)) continue;
     if (/supabase|expo-router|CloudSync|OperatorSession|RuntimeNativeLeaseHeartbeat|RuntimeCheckpoint|SupabaseService/i.test(s)) throw new Error('OFFLINE_DEMO_BUNDLE_PRODUCTION_MODULE');
     const own = s.replace(/^(?:\.\/|\/)/, '');
+    if(Object.hasOwn(AUDITED_DEMO_ASSETS,own)){assertAuditedDemoAsset(own,fs.readFileSync(path.join(demoRoot,own)));continue;}
     if (Object.hasOwn(AUDITED_DEMO_SOURCES, own)) {
       assertAuditedDemoSource(own, fs.readFileSync(path.join(demoRoot, own)));
       audited[own] = AUDITED_DEMO_SOURCES[own];

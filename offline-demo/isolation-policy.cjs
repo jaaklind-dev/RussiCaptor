@@ -1,11 +1,23 @@
 const PACKAGE_ID = 'com.jaaklind.RussiCaptor.demo';
 // Exact reviewed demo-owned sources; never a directory grant.
 const AUDITED_DEMO_SOURCES = Object.freeze({
+  'src/runtime/DemoImaging.ts': '1b2b72b613f067875d10abe86af7231b38164e4ff491fe99b70f4d2680f9aee3',
+  'src/runtime/DemoImagingCard.tsx': '2836ee7e771e805b1813a0529266d4a17f792e482d1ddea0230d55e971c36f4a',
+  'assets/imaging/manifest.json': '130b7ebe540d7da602056f01cfc7af36cb19b9d6e320152a260ce6b229e9d51b',
   'src/runtime/DemoVitalsCard.tsx': 'fb3cb9a8c3162ee324303cc6507ebb9db1f22a28718187e8eae2b8eb21b97838',
   'src/runtime/DemoTime.ts': '358fd31e2dadacbae8a198b7a61fb9efcb3e0498e9e6b34f319b6a5588f19e44',
   'src/runtime/DemoLaboratoryCard.tsx': '797d48883696c71443c596f98efdb63e7da2a6b0c0e6383820a5e21fa2eb0b40',
   'src/runtime/DemoLaboratory.ts': 'c4813c65ad8887c96074b910003989abb23ef76f9fb1929dafbe344748255af7',
 });
+const AUDITED_DEMO_ASSETS = Object.freeze({
+  'assets/imaging/pelvis-generated.jpg': '67e0866d46ae3ebee501fe7b10cdd1fff6c19a4f0886bfce646d9e5d314a5f39',
+  'assets/imaging/chest-pneumothorax.png': 'c5a57c48190c85e8acbf067980f5741e3a895a5779ece097e6ebc259cc3ab2cd',
+});
+function assertAuditedDemoAsset(relative, bytes) {
+  if(!Object.hasOwn(AUDITED_DEMO_ASSETS,relative)||require('node:crypto').createHash('sha256').update(bytes).digest('hex')!==AUDITED_DEMO_ASSETS[relative]) {
+    throw new Error('OFFLINE_DEMO_ASSET_HASH_INVALID');
+  }
+}
 function assertAuditedDemoSource(relative, bytes) {
   if (!Object.hasOwn(AUDITED_DEMO_SOURCES, relative) ||
       require('node:crypto').createHash('sha256').update(bytes).digest('hex') !== AUDITED_DEMO_SOURCES[relative]) {
@@ -14,6 +26,8 @@ function assertAuditedDemoSource(relative, bytes) {
 }
 // Exact reviewed pure engines/presentation only. A source change requires a fresh side-effect audit.
 const SHARED_SOURCES = Object.freeze({
+  'src/services/runtime/imaging/ImagingWorkflowCore.ts': '101e3bdbdee441e0678b683aedc4b10cda647e14a850c69f66dca0186e842b00',
+  'src/models/ImagingWorkflow.ts': '4d2d5f98010b413a1e060dd83ce4d2bd064a1a15167c4959ce41bbb0d2306bbf',
   'src/services/runtime/HemorrhagePatientProcess.ts': '5ed38db24ccf079c2d49937e3552afe7ef6a78e9c961cbd1949eff88dc4e70b5',
   'src/services/runtime/PleuralInjuryPatientProcess.ts': '0d620316416bc3b37d72e8ab1ec8b8794255b7d3f7c575d9174ebe5006f8eec5',
   'src/services/runtime/RespiratoryFailurePatientProcess.ts': '935010d592766f94faa3d88a46db7a2a6b971d0c7d615263075553899be1ce33',
@@ -45,4 +59,4 @@ function assertSpecifier(specifier) {
     throw new Error('OFFLINE_DEMO_IMPORT_FORBIDDEN');
   }
 }
-module.exports = { PACKAGE_ID, AUDITED_DEMO_SOURCES, assertAuditedDemoSource, SHARED_SOURCES, SHARED_ALIASES, assertOfflineEnvironment, assertSpecifier };
+module.exports = { PACKAGE_ID, AUDITED_DEMO_SOURCES, AUDITED_DEMO_ASSETS, assertAuditedDemoAsset, assertAuditedDemoSource, SHARED_SOURCES, SHARED_ALIASES, assertOfflineEnvironment, assertSpecifier };

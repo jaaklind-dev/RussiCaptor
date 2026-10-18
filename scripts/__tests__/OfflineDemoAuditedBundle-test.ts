@@ -6,13 +6,14 @@ import { spawnSync } from 'node:child_process';
 const root = process.cwd();
 const { AUDITED_DEMO_SOURCES, assertAuditedDemoSource } = require('../../offline-demo/isolation-policy.cjs');
 const files = ['src/runtime/DemoVitalsCard.tsx', 'src/runtime/DemoTime.ts',
-  'src/runtime/DemoLaboratoryCard.tsx', 'src/runtime/DemoLaboratory.ts'];
+  'src/runtime/DemoLaboratoryCard.tsx', 'src/runtime/DemoLaboratory.ts',
+  'src/runtime/DemoImaging.ts','src/runtime/DemoImagingCard.tsx','assets/imaging/manifest.json'];
 function evaluate(code: string) {
   return spawnSync(process.execPath, ['--input-type=module', '-e',
     `import {validateBundleSources,verifyAuditedDemoSources,validateAuditedBundleSources} from './scripts/offline-demo-build-policy.mjs';${code}`], { cwd: root, encoding: 'utf8' });
 }
 describe('exact audited offline-demo bundle sources', () => {
-  test('only the four audited modules are added, each with its exact source hash', () => {
+  test('only the reviewed exact modules/data are added, each with its exact source hash', () => {
     expect(Object.keys(AUDITED_DEMO_SOURCES).sort()).toEqual([...files].sort());
     for (const file of files) {
       const bytes = fs.readFileSync(path.join(root, 'offline-demo', file));
@@ -53,10 +54,10 @@ describe('exact audited offline-demo bundle sources', () => {
     const changed = evaluate(`import fs from 'node:fs';const read=fs.readFileSync.bind(fs);fs.readFileSync=(p,...args)=>String(p)===${JSON.stringify(path.join(root,'offline-demo',file))}?Buffer.from('changed'):read(p,...args);validateBundleSources(${JSON.stringify(['/'+file])});`);
     expect(changed.status).not.toBe(0); expect(changed.stderr).toContain('OFFLINE_DEMO_AUDITED_SOURCE_HASH_INVALID');
   });
-  test('actual bundled source contents, not only local filenames, must match all four embedded identities', () => {
+  test('actual bundled source contents, not only local filenames, must match every embedded identity', () => {
     const map = { sources: files.map(f => '/' + f), sourcesContent: files.map(f => fs.readFileSync(path.join(root,'offline-demo',f),'utf8')) };
     expect(evaluate(`validateAuditedBundleSources(${JSON.stringify(map)});`).status).toBe(0);
-    for (const index of [0,1,2,3]) {
+    for (const index of files.keys()) {
       const changed = { ...map, sourcesContent: map.sourcesContent.map((text,i) => i===index ? text+'\n// altered bundle input' : text) };
       const r=evaluate(`validateAuditedBundleSources(${JSON.stringify(changed)});`);
       expect(r.status).not.toBe(0);expect(r.stderr).toContain('OFFLINE_DEMO_AUDITED_SOURCE_HASH_INVALID');

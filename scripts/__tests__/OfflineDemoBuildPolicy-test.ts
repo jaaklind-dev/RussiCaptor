@@ -3,13 +3,13 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 const root = process.cwd();
 const policy = JSON.parse(fs.readFileSync(path.join(root, 'offline-demo/build-policy.json'), 'utf8'));
-const { AUDITED_DEMO_SOURCES } = require('../../offline-demo/isolation-policy.cjs');
+const { AUDITED_DEMO_SOURCES, AUDITED_DEMO_ASSETS } = require('../../offline-demo/isolation-policy.cjs');
 function evaluate(expression: string) {
   return spawnSync(process.execPath, ['--input-type=module', '-e', `import {validatePolicy,validateArtifact,validateBundleSources,validateManifestDump} from './scripts/offline-demo-build-policy.mjs';const policy=${JSON.stringify(policy)};${expression}`], { cwd: root, encoding: 'utf8' });
 }
-const embedded = { ...policy, auditedDemoSources: AUDITED_DEMO_SOURCES, sourceCommit: 'a'.repeat(40), sourceDirty: false, buildTimestamp: '2026-10-18T12:00:00.000Z' };
+const embedded = { ...policy, auditedDemoSources: AUDITED_DEMO_SOURCES, auditedDemoAssets:AUDITED_DEMO_ASSETS, sourceCommit: 'a'.repeat(40), sourceDirty: false, buildTimestamp: '2026-10-18T12:00:00.000Z' };
 const actual = { packageId: policy.packageId, versionCode: policy.versionCode, versionName: policy.applicationVersion, certificate: policy.signingCertificateSha256,
-  signatureVerified: true, debuggable: false, manifestIsolation: true, productionMarkersAbsent: true, bundledApplicationGraphVerified: true, auditedDemoSources: AUDITED_DEMO_SOURCES, auditedBundleContentsVerified: true };
+  signatureVerified: true, debuggable: false, manifestIsolation: true, productionMarkersAbsent: true, bundledApplicationGraphVerified: true, auditedDemoSources: AUDITED_DEMO_SOURCES, auditedBundleContentsVerified: true, auditedDemoAssets:AUDITED_DEMO_ASSETS };
 describe('dedicated signed offline-demo build contract', () => {
   test('independent demo policy permits no migration dependency', () => {
     expect(evaluate('validatePolicy(policy);').status).toBe(0);
@@ -87,6 +87,7 @@ describe('dedicated signed offline-demo build contract', () => {
       'src/config/NarvaLaboratoryCatalog.ts', 'src/utils/immutable.ts',
       'src/services/runtime/laboratory/NarvaLabPhysiologyV1Generator.ts', 'src/services/runtime/laboratory/NarvaLabPatientIdentity.ts',
       'src/components/patient/LaboratoryResultPresentation.ts',
+      'src/services/runtime/imaging/ImagingWorkflowCore.ts','src/models/ImagingWorkflow.ts',
     ].sort());
     expect(SHARED_SOURCES['src/presentation/vitalSigns.ts']).toBe('b756df51f94079d0b50ff2546e84b4336f84cf38574c7c466ce289dd823924e3');
     jest.isolateModules(() => {
@@ -104,7 +105,7 @@ describe('dedicated signed offline-demo build contract', () => {
   test.each(['src/presentation/vitalSigns.ts', 'src/components/patient/VitalsTab.tsx',
     'src/config/NarvaLaboratoryCatalog.ts', 'src/utils/immutable.ts',
     'src/services/runtime/laboratory/NarvaLabPhysiologyV1Generator.ts', 'src/services/runtime/laboratory/NarvaLabPatientIdentity.ts',
-    'src/components/patient/LaboratoryResultPresentation.ts'])(
+    'src/components/patient/LaboratoryResultPresentation.ts','src/services/runtime/imaging/ImagingWorkflowCore.ts','src/models/ImagingWorkflow.ts'])(
     'shared presentation remains fail-closed when %s is modified', relative => {
       jest.isolateModules(() => {
         jest.doMock('expo/metro-config', () => ({ getDefaultConfig: () => ({ resolver: {} }) }));

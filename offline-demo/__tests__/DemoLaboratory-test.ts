@@ -98,8 +98,8 @@ describe('local laboratory integration with real shared physiology generator (no
   });
   test('schema v2 upgrade preserves old state/record; v3 roundtrip and corrupt results fail closed',()=>{
     const {store,map,storage,tick}=fixture();tick(4);const old=structuredClone(state(store)) as unknown as Record<string,unknown>;
-    delete old.laboratory;old.schemaVersion=2;const raw=JSON.stringify(old);map.set(DEMO_RUNTIME_KEY,raw);
-    const recovered=new DemoSessionStore(storage);expect(state(recovered)).toMatchObject({schemaVersion:3,time:4,lifecycle:'PAUSED',laboratory:emptyDemoLabs()});
+    delete old.laboratory;delete old.imaging;old.schemaVersion=2;const raw=JSON.stringify(old);map.set(DEMO_RUNTIME_KEY,raw);
+    const recovered=new DemoSessionStore(storage);expect(state(recovered)).toMatchObject({schemaVersion:4,time:4,lifecycle:'PAUSED',laboratory:emptyDemoLabs()});
     expect(map.get(DEMO_RUNTIME_KEY)).toBe(raw);expect(state(recovered).patients).toEqual(old.patients);
     recovered.navigate('CM');recovered.control('RESUME');recovered.command(command(recovered));
     const saved=map.get(DEMO_RUNTIME_KEY)!;expect(restoreSession(saved).laboratory).toEqual(state(recovered).laboratory);

@@ -1,20 +1,22 @@
 import { advancePatients, applyBinder, DEMO_FIXTURE, DEMO_MAX_SECONDS, initialPatients, type DemoPatient } from './DemoDomain';
 import { advanceDemoLabs, DEMO_LAB_DELAY_SEC, DEMO_LAB_PANEL, emptyDemoLabs, orderDemoLab, type DemoLabCommand, type DemoLabState } from './DemoLaboratory';
+import { advanceDemoImaging, DEMO_IMAGING_DELAY_SEC, demoImagingCommandId, demoImagingDefinition, emptyDemoImaging, imagingEqual, orderDemoImaging, type DemoImagingCommand } from './DemoImaging';
+import type { ImagingWorkflowSnapshot } from '../../../src/models/ImagingWorkflow';
 export const DEMO_RUNTIME_KEY = 'russicaptor.offline-demo.runtime.v2';
 export const DEMO_RESET_RECEIPT_KEY = 'russicaptor.offline-demo.acceptance.reset.v1';
-export type DemoCommand = Readonly<{ id: string; sessionId: string; generation: number; time: number; patientId: 'DEMO-PT-A'; type: 'APPLY_PELVIC_BINDER' }> | DemoLabCommand;
-export type DemoEvent = Readonly<{ id: number; time: number; kind: 'START' | 'PAUSE' | 'RESUME' | 'BACKGROUND' | 'RECOVERY' | 'BINDER_APPLIED' | 'LAB_ORDERED' | 'LAB_RESULTED' | 'LIMIT'; commandId?: string }>;
-export type DemoSession = { schemaVersion: 3; fixture: typeof DEMO_FIXTURE; sessionId: string; generation: number;
+export type DemoCommand = Readonly<{ id: string; sessionId: string; generation: number; time: number; patientId: 'DEMO-PT-A'; type: 'APPLY_PELVIC_BINDER' }> | DemoLabCommand | DemoImagingCommand;
+export type DemoEvent = Readonly<{ id: number; time: number; kind: 'START' | 'PAUSE' | 'RESUME' | 'BACKGROUND' | 'RECOVERY' | 'BINDER_APPLIED' | 'LAB_ORDERED' | 'LAB_RESULTED' | 'IMAGING_ORDERED' | 'IMAGING_RESULTED' | 'LIMIT'; commandId?: string }>;
+export type DemoSession = { schemaVersion: 4; fixture: typeof DEMO_FIXTURE; sessionId: string; generation: number;
   mode: 'home' | 'CM' | 'EXCON'; selectedPatient: 'DEMO-PT-A' | 'DEMO-PT-B'; lifecycle: 'READY' | 'RUNNING' | 'PAUSED';
-  time: number; patients: DemoPatient[]; commands: DemoCommand[]; events: DemoEvent[]; laboratory: DemoLabState };
+  time: number; patients: DemoPatient[]; commands: DemoCommand[]; events: DemoEvent[]; laboratory: DemoLabState; imaging: ImagingWorkflowSnapshot };
 export type DemoStorage = Readonly<{ getItemSync(key: string): string | null; setItemSync(key: string, value: string): void }>;
 export type SessionView = Readonly<{ status: 'READY'; session: DemoSession; restored: boolean } | { status: 'RECOVERY_REQUIRED'; reason: 'STATE_INVALID' | 'STORAGE_UNAVAILABLE' }>;
 export const newDemoId = () => `DEMO-LOCAL-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 function freeze<T>(value: T): T { if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; }
 export function freshSession(id: string, generation: number): DemoSession {
   if (!/^DEMO-LOCAL-[a-z0-9-]{1,100}$/.test(id) || !Number.isSafeInteger(generation) || generation < 0 || generation >= Number.MAX_SAFE_INTEGER) throw new Error('DEMO_SESSION_IDENTITY_INVALID');
-  return { schemaVersion: 3, fixture: DEMO_FIXTURE, sessionId: id, generation, mode: 'home', selectedPatient: 'DEMO-PT-A',
-    lifecycle: 'READY', time: 0, patients: initialPatients(), commands: [], events: [], laboratory: emptyDemoLabs() };
+  return { schemaVersion: 4, fixture: DEMO_FIXTURE, sessionId: id, generation, mode: 'home', selectedPatient: 'DEMO-PT-A',
+    lifecycle: 'READY', time: 0, patients: initialPatients(), commands: [], events: [], laboratory: emptyDemoLabs(), imaging: emptyDemoImaging() };
 }
 function keys(value: unknown, expected: string): boolean {
   return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).sort().join(',') === expected.split(',').sort().join(',');
@@ -26,7 +28,7 @@ export type DemoAcceptanceReport = Readonly<{
   schemaVersion: 1; kind: 'OFFLINE_DEMO_ACCEPTANCE'; source: 'PERSISTED_DEMO_ROW'; sessionId: string;
   generation: number; simulationTimeSec: number; lifecycle: DemoSession['lifecycle']; commandCount: number;
   commands: readonly Readonly<{ id: string; type: DemoCommand['type']; simulationTimeSec: number;
-    processingStatus: 'APPLIED_EVENT_VERIFIED' | 'PENDING_SAMPLE_VERIFIED' | 'RESULT_VERIFIED' }>[];
+    processingStatus: 'APPLIED_EVENT_VERIFIED' | 'PENDING_SAMPLE_VERIFIED' | 'IMAGING_PENDING_VERIFIED' | 'RESULT_VERIFIED' }>[];
   resetTransition: Readonly<{ status: 'NOT_AVAILABLE' } | { status: 'PERSISTED_BEFORE_AND_AFTER'; fromGeneration: number;
     toGeneration: number; fromSimulationTimeSec: number; toSimulationTimeSec: 0 }>;
 }>;
@@ -42,12 +44,15 @@ function resetReceipt(raw: string): ResetReceipt {
 }
 export function validCommand(value: unknown): value is DemoCommand {
   const lab = (value as DemoCommand | null)?.type === 'LAB_ORDER';
-  if (!keys(value, lab ? 'id,sessionId,generation,time,patientId,type,panelId' : 'id,sessionId,generation,time,patientId,type')) return false;
+  const imaging = (value as DemoCommand | null)?.type === 'IMAGING_ORDER';
+  if (!keys(value, lab ? 'id,sessionId,generation,time,patientId,type,panelId' : imaging ? 'id,sessionId,generation,time,patientId,type,examinationId' : 'id,sessionId,generation,time,patientId,type')) return false;
   const c = value as DemoCommand;
   return typeof c.id === 'string' && /^DEMO-CMD-[A-Za-z0-9:-]{1,160}$/.test(c.id) && /^DEMO-LOCAL-[a-z0-9-]{1,100}$/.test(c.sessionId) &&
     safeInt(c.generation) && safeInt(c.time, DEMO_MAX_SECONDS) &&
     (c.type === 'APPLY_PELVIC_BINDER' && c.patientId === 'DEMO-PT-A' || c.type === 'LAB_ORDER' &&
-      ['DEMO-PT-A','DEMO-PT-B'].includes(c.patientId) && c.panelId === DEMO_LAB_PANEL && c.id === `DEMO-CMD-${c.sessionId}:lab:${c.patientId}`);
+      ['DEMO-PT-A','DEMO-PT-B'].includes(c.patientId) && c.panelId === DEMO_LAB_PANEL && c.id === `DEMO-CMD-${c.sessionId}:lab:${c.patientId}` ||
+      c.type === 'IMAGING_ORDER' && ['DEMO-PT-A','DEMO-PT-B'].includes(c.patientId) &&
+      c.examinationId === demoImagingDefinition(c.patientId).examinationId && c.id === demoImagingCommandId(c.sessionId,c.patientId,c.examinationId));
 }
 export function restoreSession(raw: string): DemoSession {
   if (raw.length > 160_000) throw new Error('DEMO_STATE_INVALID');
@@ -56,25 +61,31 @@ export function restoreSession(raw: string): DemoSession {
   const legacy = s as unknown as Record<string, unknown>;
   if (legacy?.schemaVersion === 2 && keys(legacy, 'schemaVersion,fixture,sessionId,generation,mode,selectedPatient,lifecycle,time,patients,commands,events') &&
       Array.isArray(legacy.commands) && legacy.commands.every(c => c?.type === 'APPLY_PELVIC_BINDER')) {
-    s = { ...s, schemaVersion: 3, laboratory: emptyDemoLabs() };
+    s = { ...s, schemaVersion: 3, laboratory: emptyDemoLabs() } as unknown as DemoSession;
   }
-  if (!keys(s, 'schemaVersion,fixture,sessionId,generation,mode,selectedPatient,lifecycle,time,patients,commands,events,laboratory') || s.schemaVersion !== 3 ||
+  const prior = s as unknown as Record<string,unknown>;
+  if (prior?.schemaVersion === 3 && keys(prior,'schemaVersion,fixture,sessionId,generation,mode,selectedPatient,lifecycle,time,patients,commands,events,laboratory') &&
+    Array.isArray(prior.commands) && prior.commands.every(c=>c?.type==='APPLY_PELVIC_BINDER'||c?.type==='LAB_ORDER')) {
+    s = { ...s, schemaVersion: 4, imaging: emptyDemoImaging() };
+  }
+  if (!keys(s, 'schemaVersion,fixture,sessionId,generation,mode,selectedPatient,lifecycle,time,patients,commands,events,laboratory,imaging') || s.schemaVersion !== 4 ||
       s.fixture !== DEMO_FIXTURE || typeof s.sessionId !== 'string' || !/^DEMO-LOCAL-[a-z0-9-]{1,100}$/.test(s.sessionId) ||
       !safeInt(s.generation) || !safeInt(s.time, DEMO_MAX_SECONDS) || !['home','CM','EXCON'].includes(s.mode) ||
       !['DEMO-PT-A','DEMO-PT-B'].includes(s.selectedPatient) || !['READY','RUNNING','PAUSED'].includes(s.lifecycle) ||
-      !Array.isArray(s.commands) || s.commands.length > 3 || !Array.isArray(s.events) || s.events.length > 2000 ||
+      !Array.isArray(s.commands) || s.commands.length > 5 || !Array.isArray(s.events) || s.events.length > 2000 ||
       s.lifecycle === 'READY' && (s.time !== 0 || s.commands.length !== 0 || s.events.length !== 0)) throw new Error('DEMO_STATE_INVALID');
   for (const c of s.commands) if (!validCommand(c) || c.sessionId !== s.sessionId || c.generation !== s.generation || c.time > s.time ||
-    c.type === 'LAB_ORDER' && c.time + DEMO_LAB_DELAY_SEC > DEMO_MAX_SECONDS) throw new Error('DEMO_STATE_INVALID');
+    (c.type === 'LAB_ORDER' && c.time + DEMO_LAB_DELAY_SEC > DEMO_MAX_SECONDS ||
+     c.type === 'IMAGING_ORDER' && c.time + DEMO_IMAGING_DELAY_SEC > DEMO_MAX_SECONDS)) throw new Error('DEMO_STATE_INVALID');
   if (new Set(s.commands.map(c => c.id)).size !== s.commands.length || s.commands.some((c, i) => i > 0 && c.time < s.commands[i - 1].time)) throw new Error('DEMO_STATE_INVALID');
   let lastTime = 0; let phase: DemoSession['lifecycle'] = 'READY';
   for (const [index, event] of s.events.entries()) {
-    if (!keys(event, ['BINDER_APPLIED','LAB_ORDERED','LAB_RESULTED'].includes(event.kind) ? 'id,time,kind,commandId' : 'id,time,kind') || event.id !== index + 1 ||
-        !safeInt(event.time, s.time) || event.time < lastTime || !['START','PAUSE','RESUME','BACKGROUND','RECOVERY','BINDER_APPLIED','LAB_ORDERED','LAB_RESULTED','LIMIT'].includes(event.kind) ||
+    if (!keys(event, ['BINDER_APPLIED','LAB_ORDERED','LAB_RESULTED','IMAGING_ORDERED','IMAGING_RESULTED'].includes(event.kind) ? 'id,time,kind,commandId' : 'id,time,kind') || event.id !== index + 1 ||
+        !safeInt(event.time, s.time) || event.time < lastTime || !['START','PAUSE','RESUME','BACKGROUND','RECOVERY','BINDER_APPLIED','LAB_ORDERED','LAB_RESULTED','IMAGING_ORDERED','IMAGING_RESULTED','LIMIT'].includes(event.kind) ||
         event.time > lastTime && phase !== 'RUNNING') throw new Error('DEMO_STATE_INVALID');
     if (event.kind === 'START') { if (phase !== 'READY' || event.time !== 0) throw new Error('DEMO_STATE_INVALID'); phase = 'RUNNING'; }
     else if (event.kind === 'RESUME') { if (phase !== 'PAUSED' || event.time >= DEMO_MAX_SECONDS) throw new Error('DEMO_STATE_INVALID'); phase = 'RUNNING'; }
-    else if (['BINDER_APPLIED','LAB_ORDERED','LAB_RESULTED'].includes(event.kind)) { if (phase !== 'RUNNING') throw new Error('DEMO_STATE_INVALID'); }
+    else if (['BINDER_APPLIED','LAB_ORDERED','LAB_RESULTED','IMAGING_ORDERED','IMAGING_RESULTED'].includes(event.kind)) { if (phase !== 'RUNNING') throw new Error('DEMO_STATE_INVALID'); }
     else { if (phase !== 'RUNNING' || event.kind === 'LIMIT' && event.time !== DEMO_MAX_SECONDS) throw new Error('DEMO_STATE_INVALID'); phase = 'PAUSED'; }
     lastTime = event.time;
   }
@@ -86,18 +97,24 @@ export function restoreSession(raw: string): DemoSession {
   // Reconstruct using the real domain engines. Never trust a deserialized clinical object by shape alone.
   let patients = initialPatients();
   let laboratory = emptyDemoLabs();
+  let imaging = emptyDemoImaging();
   const labEvents: { kind: 'LAB_ORDERED' | 'LAB_RESULTED'; time: number; commandId: string }[] = [];
+  const imagingEvents: { kind: 'IMAGING_ORDERED' | 'IMAGING_RESULTED'; time: number; commandId: string }[] = [];
   for (let time = 0; time <= s.time; time++) {
     if (time > 0) patients = advancePatients(patients, time);
     const advanced = advanceDemoLabs(laboratory, time); laboratory = advanced.state;
     for (const id of advanced.completed) labEvents.push({ kind: 'LAB_RESULTED', time, commandId: id });
+    const advancedImaging = advanceDemoImaging(imaging,time); imaging=advancedImaging.state;
+    for(const id of advancedImaging.completed)imagingEvents.push({kind:'IMAGING_RESULTED',time,commandId:id});
     for (const c of s.commands.filter(command => command.time === time)) {
       if (c.type === 'APPLY_PELVIC_BINDER') patients = applyBinder(patients, c.id, time);
-      else { laboratory = orderDemoLab(laboratory, c, patients.find(p => p.id === c.patientId)!); labEvents.push({ kind: 'LAB_ORDERED', time, commandId: c.id }); }
+      else if(c.type==='LAB_ORDER') { laboratory = orderDemoLab(laboratory, c, patients.find(p => p.id === c.patientId)!); labEvents.push({ kind: 'LAB_ORDERED', time, commandId: c.id }); }
+      else { imaging=orderDemoImaging(imaging,c);imagingEvents.push({kind:'IMAGING_ORDERED',time,commandId:c.id}); }
     }
   }
   if (JSON.stringify(patients) !== JSON.stringify(s.patients) || JSON.stringify(laboratory) !== JSON.stringify(s.laboratory) ||
-      JSON.stringify(labEvents) !== JSON.stringify(s.events.filter(e => ['LAB_ORDERED','LAB_RESULTED'].includes(e.kind)).map(e => ({ kind: e.kind, time: e.time, commandId: e.commandId })))) throw new Error('DEMO_STATE_INVALID');
+      JSON.stringify(labEvents) !== JSON.stringify(s.events.filter(e => ['LAB_ORDERED','LAB_RESULTED'].includes(e.kind)).map(e => ({ kind: e.kind, time: e.time, commandId: e.commandId }))) ||
+      !imagingEqual(imaging,s.imaging) || !imagingEqual(imagingEvents,s.events.filter(e=>['IMAGING_ORDERED','IMAGING_RESULTED'].includes(e.kind)).map(e=>({kind:e.kind,time:e.time,commandId:e.commandId})))) throw new Error('DEMO_STATE_INVALID');
   return s;
 }
 export class DemoSessionStore {
@@ -161,6 +178,8 @@ export class DemoSessionStore {
     next.time++; next.patients = advancePatients(next.patients, next.time);
     const lab = advanceDemoLabs(next.laboratory, next.time); next.laboratory = lab.state;
     lab.completed.forEach(id => this.event(next, 'LAB_RESULTED', id));
+    const imaging=advanceDemoImaging(next.imaging,next.time);next.imaging=imaging.state;
+    imaging.completed.forEach(id=>this.event(next,'IMAGING_RESULTED',id));
     if (next.time === DEMO_MAX_SECONDS) { next.lifecycle = 'PAUSED'; this.event(next, 'LIMIT'); }
     this.save(next); return true;
   }
@@ -175,13 +194,17 @@ export class DemoSessionStore {
     if (value.type === 'APPLY_PELVIC_BINDER') {
       if (session.commands.some(c => c.type === 'APPLY_PELVIC_BINDER')) throw new Error('DEMO_BINDER_ALREADY_APPLIED');
       next.patients = applyBinder(next.patients, value.id, value.time); this.event(next, 'BINDER_APPLIED', value.id);
-    } else {
+    } else if(value.type==='LAB_ORDER') {
       if (session.time + DEMO_LAB_DELAY_SEC > DEMO_MAX_SECONDS) throw new Error('DEMO_LAB_TIME_LIMIT');
       next.laboratory = orderDemoLab(next.laboratory, value, next.patients.find(p => p.id === value.patientId)!);
       this.event(next, 'LAB_ORDERED', value.id);
+    } else {
+      if(session.time+DEMO_IMAGING_DELAY_SEC>DEMO_MAX_SECONDS)throw new Error('DEMO_IMAGING_TIME_LIMIT');
+      next.imaging=orderDemoImaging(next.imaging,value);this.event(next,'IMAGING_ORDERED',value.id);
     }
     next.commands.push({ id: value.id, sessionId: value.sessionId, generation: value.generation, time: value.time,
-      patientId: value.patientId, type: value.type, ...(value.type === 'LAB_ORDER' ? { panelId: value.panelId } : {}) } as DemoCommand);
+      patientId: value.patientId, type: value.type, ...(value.type === 'LAB_ORDER' ? { panelId: value.panelId } : {}),
+      ...(value.type==='IMAGING_ORDER'?{examinationId:value.examinationId}:{}) } as DemoCommand);
     this.save(next); return 'ACCEPTED';
   }
   /** Read-only, whitelisted evidence from the real committed row, never the rendered/in-memory command list. */
@@ -192,7 +215,7 @@ export class DemoSessionStore {
       if (raw === null) throw new Error(); // A never-saved fresh session is not persisted evidence.
       const s = restoreSession(raw);
       if (s.sessionId !== binding.sessionId || s.generation !== binding.generation ||
-          s.commands.some(c => c.id !== (c.type === 'APPLY_PELVIC_BINDER' ? `DEMO-CMD-${s.sessionId}:binder` : `DEMO-CMD-${s.sessionId}:lab:${c.patientId}`))) throw new Error();
+          s.commands.some(c => c.id !== (c.type === 'APPLY_PELVIC_BINDER' ? `DEMO-CMD-${s.sessionId}:binder` : c.type==='IMAGING_ORDER'?demoImagingCommandId(s.sessionId,c.patientId,c.examinationId):`DEMO-CMD-${s.sessionId}:lab:${c.patientId}`))) throw new Error();
       const receiptRaw = this.storage.getItemSync(DEMO_RESET_RECEIPT_KEY);
       const receipt = receiptRaw === null ? undefined : resetReceipt(receiptRaw);
       const transition: DemoAcceptanceReport['resetTransition'] = receipt?.toSessionId === s.sessionId && receipt.toGeneration === s.generation
@@ -204,7 +227,8 @@ export class DemoSessionStore {
         generation: s.generation, simulationTimeSec: s.time, lifecycle: s.lifecycle, commandCount: s.commands.length,
         commands: s.commands.map(c => ({ id: c.id, type: c.type, simulationTimeSec: c.time,
           processingStatus: c.type === 'APPLY_PELVIC_BINDER' ? 'APPLIED_EVENT_VERIFIED' :
-            s.laboratory.orders.find(o => o.orderId === c.id)?.status === 'RESULTED' ? 'RESULT_VERIFIED' : 'PENDING_SAMPLE_VERIFIED' })),
+            c.type==='IMAGING_ORDER' ? s.imaging.instances.find(i=>i.orderCommandId===c.id)?.status==='RESULTED'?'RESULT_VERIFIED':'IMAGING_PENDING_VERIFIED' :
+              s.laboratory.orders.find(o => o.orderId === c.id)?.status === 'RESULTED' ? 'RESULT_VERIFIED' : 'PENDING_SAMPLE_VERIFIED' })),
         resetTransition: transition });
     } catch { throw new Error('DEMO_ACCEPTANCE_UNAVAILABLE'); }
   }

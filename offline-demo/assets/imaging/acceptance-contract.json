@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "scope": "Offline demo source implementation only; not clinical validation or publication approval",
+  "baselineCommit": "f6f476f654598141713d8f0e2d27b2ba74c19d05",
+  "pelvicApproval": {
+    "decision": "Use the exact supplied JPEG explicitly approved by the user after original PNG identity mismatch",
+    "sha256": "67e0866d46ae3ebee501fe7b10cdd1fff6c19a4f0886bfce646d9e5d314a5f39",
+    "dimensions": [1280, 948],
+    "status": "Synthetic generated illustration, not a real patient radiograph",
+    "bytesModified": false
+  },
+  "chestLicense": {
+    "source": "https://commons.wikimedia.org/wiki/File:Tpneumopneumomed.png",
+    "creator": "James Heilman, MD",
+    "license": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "sha256": "c5a57c48190c85e8acbf067980f5741e3a895a5779ece097e6ebc259cc3ab2cd",
+    "conditions": "Retain attribution, source and license link; indicate modifications; adaptations of this image must retain the same license. No endorsement implied.",
+    "bytesModified": false,
+    "verificationDate": "2026-10-18"
+  },
+  "sharedCore": {
+    "approach": "Mechanical extraction with injected report digest, equality, asset validation and legacy adaptation",
+    "canonicalApiUnchanged": true,
+    "canonicalSnapshotSchemaUnchanged": true,
+    "writerFenceAndMutationCallbackUnchanged": true,
+    "oracle": "src/services/runtime/imaging/__fixtures__/ImagingRuntimeBeforeExtraction.fixture.ts",
+    "equivalenceTests": "src/services/runtime/imaging/__tests__/ImagingWorkflowCoreEquivalence-test.ts"
+  },
+  "localContract": {
+    "delaySimulationSeconds": 30,
+    "ordersPerPatientPerSession": 1,
+    "repeatOrderAvailable": false,
+    "networkFallback": false,
+    "canonicalStorageAccess": false,
+    "states": ["ORDERED", "PROCESSING", "RESULTED"],
+    "displayErrorsChangeClinicalState": false,
+    "persistenceSchema": 4,
+    "migration": "Schemas 2 and 3 are validated and extended with empty imaging, preserving laboratory, engines, clock, commands and history. Original persisted record is not rewritten merely by reading it.",
+    "reset": "Generation fencing, timers stopped, local labs/imaging/commands/events cleared; unrelated demo Builder data preserved"
+  },
+  "guardrailImpact": [
+    "Authoritative status and result identity",
+    "Command idempotency and scope",
+    "Clock, checkpoint restoration and terminal fencing",
+    "Closed local asset identity, attribution and error handling",
+    "Demo production isolation and default-deny module graph"
+  ],
+  "futurePhysicalAcceptance": {
+    "requiresSeparateBuildAndInstallAuthorization": true,
+    "requiresHigherAvailableDemoVersionCode": true,
+    "steps": [
+      "Validate signed offline-demo APK identity, exact image hashes and no INTERNET permission before in-place upgrade",
+      "In airplane mode verify pelvic and thoracic patient each map to the correct initial examination",
+      "Submit one initial order for each examination; capture actual command IDs and pending states",
+      "Pause before 30 simulation seconds; verify no result or wall-clock catch-up after restart",
+      "Resume to due time and verify exactly one RESULTED event/result per command in both CM and EXCON",
+      "Open both local images; verify generated-image label, chest attribution, synthetic reports and no false hemothorax confirmation",
+      "Verify repeat controls unavailable; mode switching/restart does not add commands or results",
+      "Reset with pending and resulted state; verify generation change, empty labs/imaging and T+0 after restart",
+      "Restore original network settings and verify canonical application coexistence without production mutations"
+    ],
+    "status": "NOT_EXECUTED"
+  },
+  "limitations": [
+    "Two closed authored reports only; no radiological interpretation engine or clinical validation",
+    "No repeat imaging orders, remote images, pleural drainage or production runtime import",
+    "Actual APK packaging, image decoding and device viewing remain untested in this source-only task",
+    "Canonical main is not modified or integrated; pure extraction exists only on the demo feature branch"
+  ],
+  "publicationAuthorization": "NOT_GRANTED"
+}
