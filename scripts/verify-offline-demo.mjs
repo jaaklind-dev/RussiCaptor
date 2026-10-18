@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 const require = createRequire(import.meta.url);
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const policy = require(path.join(repository, 'offline-demo/isolation-policy.cjs'));
+const {verifyGeneratedVirtualRegistry}=require('./lib/offline-demo-expo-registry-probe.cjs');
 export function verifyDemoGraph(root = path.join(repository, 'offline-demo'), entry = 'index.js') {
   const base = fs.realpathSync(root), visited = new Set(), sharedVisited = new Set();
   function visit(file) {
@@ -75,7 +76,7 @@ export function verifyOfflineDemo() {
   const root = path.join(repository,'offline-demo');
   const source = fs.readFileSync(path.join(root,'index.js'),'utf8');
   if (!(source.indexOf('installOfflineNetworkBoundary(globalThis)') < source.indexOf("require('expo')"))) throw new Error('OFFLINE_DEMO_BOUNDARY_ORDER_INVALID');
-  return { ...verifyDemoGraph(), assetRegistry, packageId: config.android.package, internetPermissionRequested: false,
+  return { ...verifyDemoGraph(), assetRegistry, virtualAssetRegistry:verifyGeneratedVirtualRegistry(), packageId: config.android.package, internetPermissionRequested: false,
     nativeArtifactVerified: false, apkBuildPerformed: false, publicationAuthorization: 'NOT_GRANTED' };
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) console.log(JSON.stringify(verifyOfflineDemo()));

@@ -1,3 +1,4 @@
+const { Buffer } = require('node:buffer');
 const PACKAGE_ID = 'com.jaaklind.RussiCaptor.demo';
 // Metro-generated import only. This is not a general application external or @react-native/* grant.
 const ASSET_REGISTRY = Object.freeze({
@@ -6,6 +7,47 @@ const ASSET_REGISTRY = Object.freeze({
   sha256: '4edff3064f1d79e8a0dd866b9163e13fbb48bec4d3a832ad7673b076d799bd7c',
   packageJsonSha256: '835ab65e7bed2b367029d1c07f3715ec87b5065ca44cc2bedf59976e80f42345',
 });
+const VIRTUAL_ASSET_REGISTRY = Object.freeze({
+  id: '\0polyfill:assets-registry',
+  sha256: '08d971df622a4b72fa1799ad924b850d6b014e0f9c5557822399a7ddccf92228',
+  producerVersion: '57.0.6',
+  producerRelativePath: 'expo/node_modules/@expo/cli/build/src/start/server/metro/withMetroMultiPlatform.js',
+  producerSha256: '953421680566e30d277f1e635c2b56ad60cde46b25a59752e574a7fcba1c0f47',
+  producerPackageJsonSha256: '0f72a0c80a9e11dd0f4713b85a692e364637d2fe90f9fe045f3c3c87789c18ce',
+});
+// Existing framework consumers only; no arbitrary app importer or node_modules directory grant.
+const REGISTRY_IMPORTERS = Object.freeze({
+  'react-native/Libraries/Image/resolveAssetSource.js': '4b9f298900bb16f73369eb806e30505d39c6e3a269bd93a8058a8fac6603f6ca',
+  'react-native/Libraries/Image/AssetRegistry.js': '4f4913fe94704629a285bd40ae65627018545c0e8d1fbc14f8621b4cda4ec96e',
+  'react-native/Libraries/Image/RelativeImageStub.js': '5edf8dfbc8e1ef11bafe15adf0563f7238851e23fb3f0954916175ad1c4732bf',
+  'expo-asset/build/Asset.js': 'dae936a9d6522900a9d728b742b473db0bc16928a46741577fa98df12a3698bb',
+  'expo-asset/build/resolveAssetSource.js': '2db350ee9f002f53529111627f03157c019b49208b240f5a711a0d2133212ef2',
+});
+function assertVirtualRegistrySource(source) {
+  if(typeof source!=='string'&& !Buffer.isBuffer(source))throw new Error('OFFLINE_DEMO_VIRTUAL_SOURCE_INVALID');
+  if(require('node:crypto').createHash('sha256').update(source).digest('hex')!==VIRTUAL_ASSET_REGISTRY.sha256)
+    throw new Error('OFFLINE_DEMO_VIRTUAL_SOURCE_HASH_INVALID');
+}
+function verifyVirtualRegistryProducer(modulesRoot) {
+  const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+  const root=fs.realpathSync(modulesRoot),file=path.join(root,VIRTUAL_ASSET_REGISTRY.producerRelativePath);
+  const source=fs.readFileSync(file,'utf8'),metadata=fs.readFileSync(path.join(root,'expo/node_modules/@expo/cli/package.json'));
+  if(fs.realpathSync(file)!==file||crypto.createHash('sha256').update(source).digest('hex')!==VIRTUAL_ASSET_REGISTRY.producerSha256||
+    crypto.createHash('sha256').update(metadata).digest('hex')!==VIRTUAL_ASSET_REGISTRY.producerPackageJsonSha256||
+    JSON.parse(metadata).version!==VIRTUAL_ASSET_REGISTRY.producerVersion)throw new Error('OFFLINE_DEMO_VIRTUAL_PRODUCER_INVALID');
+  const matches=[...source.matchAll(/const ASSET_REGISTRY_SRC = `([^`]+)`/g)];
+  if(matches.length!==1)throw new Error('OFFLINE_DEMO_VIRTUAL_PRODUCER_INVALID');
+  assertVirtualRegistrySource(matches[0][1]);
+  return {...VIRTUAL_ASSET_REGISTRY};
+}
+function assertRegistryImporter(origin,appRoot,modulesRoot) {
+  const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+  const own=path.relative(appRoot,origin).split(path.sep).join('/');
+  if(Object.hasOwn(AUDITED_DEMO_ASSETS,own)){assertAuditedDemoAsset(own,fs.readFileSync(origin));return;}
+  const relative=path.relative(modulesRoot,origin).split(path.sep).join('/');
+  if(!Object.hasOwn(REGISTRY_IMPORTERS,relative)||crypto.createHash('sha256').update(fs.readFileSync(origin)).digest('hex')!==REGISTRY_IMPORTERS[relative])
+    throw new Error('OFFLINE_DEMO_REGISTRY_IMPORTER_FORBIDDEN');
+}
 function assertAssetRegistryBytes(bytes) {
   if (require('node:crypto').createHash('sha256').update(bytes).digest('hex') !== ASSET_REGISTRY.sha256)
     throw new Error('OFFLINE_DEMO_ASSET_REGISTRY_HASH_INVALID');
@@ -83,4 +125,4 @@ function assertSpecifier(specifier) {
     throw new Error('OFFLINE_DEMO_IMPORT_FORBIDDEN');
   }
 }
-module.exports = { PACKAGE_ID, ASSET_REGISTRY, assertAssetRegistryBytes, verifyAssetRegistry, AUDITED_DEMO_SOURCES, AUDITED_DEMO_ASSETS, assertAuditedDemoAsset, assertAuditedDemoSource, SHARED_SOURCES, SHARED_ALIASES, assertOfflineEnvironment, assertSpecifier };
+module.exports = { PACKAGE_ID, ASSET_REGISTRY, VIRTUAL_ASSET_REGISTRY, REGISTRY_IMPORTERS, assertVirtualRegistrySource, verifyVirtualRegistryProducer, assertRegistryImporter, assertAssetRegistryBytes, verifyAssetRegistry, AUDITED_DEMO_SOURCES, AUDITED_DEMO_ASSETS, assertAuditedDemoAsset, assertAuditedDemoSource, SHARED_SOURCES, SHARED_ALIASES, assertOfflineEnvironment, assertSpecifier };

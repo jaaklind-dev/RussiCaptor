@@ -59,13 +59,8 @@ describe('exact audited Metro-generated asset registry',()=>{
     expect(()=>verifyAssetRegistry(modules)).toThrow('OFFLINE_DEMO_ASSET_REGISTRY_PACKAGE_INVALID');spy.mockRestore();
     expect(()=>resolve(context(registry.filePath),'./unsafe','android')).toThrow('OFFLINE_DEMO_ASSET_REGISTRY_DEPENDENCY_FORBIDDEN');
   });
-  test('bundled source content must match the audited registry; missing, duplicate and forged source fail',()=>{
+  test('physical registry source cannot stand in for the actual emitted Expo virtual registry',()=>{
     const map={sources:[registry.filePath],sourcesContent:[bytes]};
-    expect(run(`validateAssetRegistryBundle(${JSON.stringify(map)});`).status).toBe(0);
-    for(const bad of [{sources:[],sourcesContent:[]},{sources:map.sources,sourcesContent:[null]},
-      {sources:map.sources,sourcesContent:[bytes+'\nrequire("unsafe")']},{sources:[...map.sources,...map.sources],sourcesContent:[bytes,bytes]}]){
-      const r=run(`validateAssetRegistryBundle(${JSON.stringify(bad)});`);expect(r.status).not.toBe(0);
-      expect(r.stderr).toMatch(/OFFLINE_DEMO_ASSET_REGISTRY_(BUNDLE|HASH)_INVALID/);
-    }
+    expect(run(`validateAssetRegistryBundle(${JSON.stringify(map)});`).stderr).toContain('OFFLINE_DEMO_ASSET_REGISTRY_BUNDLE_INVALID');
   });
 });

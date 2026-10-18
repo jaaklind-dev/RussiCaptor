@@ -40,6 +40,27 @@
   },
   "guardrailImpact": "Asset identity, authoritative image presentation and security isolation only. No changes to A-J/M-X writer/checkpoint/command semantics. Full runtime/security guardrails still mandatory.",
   "tests": "scripts/__tests__/OfflineDemoAssetRegistry-test.ts plus existing audited-bundle, build-policy, imaging-isolation and canonical equivalence suites",
+  "virtualCorrection": {
+    "baselineCommit": "5b22416afe8425c0f709490ddf375777cf638773",
+    "versions": {"expo":"57.0.4","metro":"0.84.4","expoMetroConfig":"57.0.3","expoCli":"57.0.6","reactNativeAssetsRegistry":"0.86.0"},
+    "actualRuntimeModuleId": "\u0000polyfill:assets-registry",
+    "actualRuntimeSourceSha256": "08d971df622a4b72fa1799ad924b850d6b014e0f9c5557822399a7ddccf92228",
+    "producer": "expo/node_modules/@expo/cli/build/src/start/server/metro/withMetroMultiPlatform.js",
+    "producerSha256": "953421680566e30d277f1e635c2b56ad60cde46b25a59752e574a7fcba1c0f47",
+    "observedError": "The previous physical-path-only correction called realpathSync on Expo's virtual ID",
+    "resolverGate": "Handle exact virtual ID before filesystem operations; reject all registry dependencies and unknown virtual origins/results; only exact approved image or hash-pinned framework importers may reach this registry",
+    "sourceVerification": [
+      "Freshly verify producer bytes/package metadata and extract/hash the actual source literal",
+      "Execute installed Expo withExtendedResolver and its real setVirtualModule writer over an in-memory Metro filesystem; hash actual emitted Buffer for both images",
+      "Require exactly one expected virtual ID and exact actual sourcesContent hash in final Gradle source map",
+      "Compare APK assets/index.android.bundle bytes against the same Gradle task's generated bundle",
+      "Require matching virtual identity in signed embedded build manifest and independently derived artifact evidence"
+    ],
+    "sourceHasRuntimeDependencies": false,
+    "sourceHasNetworkOrStorageAccess": false,
+    "frameworkConsumers": "Five exact, source-hash-pinned existing React Native/Expo asset consumers; no directory or generic node_modules permission added",
+    "tests": "scripts/__tests__/OfflineDemoExpoVirtualRegistry-test.ts uses actual installed Expo resolver and virtual-module generation, not a substituted physical resolution"
+  },
   "limitations": "Source/VM tests are not physical image-rendering acceptance. The actual signed APK must independently pass all artifact gates before installation.",
   "publicationAuthorization": "NOT_GRANTED"
 }
