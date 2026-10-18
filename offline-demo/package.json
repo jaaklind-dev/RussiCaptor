@@ -1,0 +1,16 @@
+{
+  "name": "russicaptor-offline-demo",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "verify": "node ../scripts/verify-offline-demo.mjs"
+  },
+  "dependencies": {
+    "expo": "57.0.4",
+    "expo-constants": "57.0.3",
+    "expo-sqlite": "57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.0"
+  }
+}
