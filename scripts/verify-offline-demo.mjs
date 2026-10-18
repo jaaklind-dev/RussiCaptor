@@ -3,21 +3,30 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import crypto from 'node:crypto';
 const require = createRequire(import.meta.url);
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const policy = require(path.join(repository, 'offline-demo/isolation-policy.cjs'));
 export function verifyDemoGraph(root = path.join(repository, 'offline-demo'), entry = 'index.js') {
-  const base = fs.realpathSync(root), visited = new Set();
+  const base = fs.realpathSync(root), visited = new Set(), sharedVisited = new Set();
   function visit(file) {
     const real = fs.realpathSync(file);
-    if (!real.startsWith(base + path.sep)) throw new Error('OFFLINE_DEMO_SOURCE_ESCAPE_FORBIDDEN');
+    const expected = policy.SHARED_SOURCES[path.relative(repository, real).split(path.sep).join('/')];
+    const shared = base === fs.realpathSync(path.join(repository, 'offline-demo')) && expected && crypto.createHash('sha256').update(fs.readFileSync(real)).digest('hex') === expected;
+    if (!real.startsWith(base + path.sep) && !shared) throw new Error('OFFLINE_DEMO_SOURCE_ESCAPE_FORBIDDEN');
     if (visited.has(real)) return;
     visited.add(real);
+    if (shared) sharedVisited.add(real);
     const text = fs.readFileSync(real, 'utf8');
     if (/https?:|SUPABASE|SERVICE_ROLE|access_token|refresh_token|eval\s*\(|new\s+Function/.test(text)) throw new Error('OFFLINE_DEMO_UNSAFE_SOURCE');
     const ast = ts.createSourceFile(real, text, ts.ScriptTarget.Latest, true, real.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
     function dependency(node) {
       let specifier;
+      if (ts.isImportDeclaration(node) && node.importClause?.isTypeOnly) {
+        const name = node.moduleSpecifier.text;
+        if (!(name.startsWith('.') || name.startsWith('@/models/') || ['@/services/VitalSignsService', '@/services/RuntimeSnapshotService'].includes(name))) throw new Error('OFFLINE_DEMO_TYPE_IMPORT_FORBIDDEN');
+        return; // Explicit type-only imports are erased; they cannot initialize a module.
+      }
       if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) specifier = node.moduleSpecifier;
       if (ts.isImportEqualsDeclaration(node)) throw new Error('OFFLINE_DEMO_DYNAMIC_IMPORT_FORBIDDEN');
       if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
@@ -40,15 +49,17 @@ export function verifyDemoGraph(root = path.join(repository, 'offline-demo'), en
     dependency(ast);
   }
   visit(path.join(base, entry));
-  return { status: 'PASS', applicationModules: visited.size, productionImports: 0 };
+  return { status: 'PASS', applicationModules: visited.size, auditedSharedPureModules: sharedVisited.size, productionImports: 0, productionServiceImports: 0 };
 }
 export function verifyOfflineDemo() {
   const config = require(path.join(repository,'offline-demo/app.config.cjs'))();
   const pkg = JSON.parse(fs.readFileSync(path.join(repository,'offline-demo/package.json'),'utf8'));
+  const buildPolicy = JSON.parse(fs.readFileSync(path.join(repository,'offline-demo/build-policy.json'),'utf8'));
   if (config.android.package !== policy.PACKAGE_ID || pkg.main !== 'index.js' || config.scheme ||
       config.plugins.includes('expo-router') || config.updates.enabled || config.extra.offlineDemo.productionAccess !== false ||
       !config.android.blockedPermissions.includes('android.permission.INTERNET') || config.android.permissions.length ||
-      config.extra.offlineDemo.distributable !== false || config.extra.offlineDemo.publicationAuthorization !== 'NOT_GRANTED') throw new Error('OFFLINE_DEMO_CONFIGURATION_INVALID');
+      config.extra.offlineDemo.distributable !== false || config.extra.offlineDemo.publicationAuthorization !== 'NOT_GRANTED' ||
+      config.version !== buildPolicy.applicationVersion || pkg.version !== config.version || config.android.versionCode !== buildPolicy.versionCode) throw new Error('OFFLINE_DEMO_CONFIGURATION_INVALID');
   const root = path.join(repository,'offline-demo');
   const source = fs.readFileSync(path.join(root,'index.js'),'utf8');
   if (!(source.indexOf('installOfflineNetworkBoundary(globalThis)') < source.indexOf("require('expo')"))) throw new Error('OFFLINE_DEMO_BOUNDARY_ORDER_INVALID');

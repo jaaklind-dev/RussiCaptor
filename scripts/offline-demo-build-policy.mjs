@@ -1,12 +1,12 @@
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { assertOfflineEnvironment } = require('../offline-demo/isolation-policy.cjs');
+const { assertOfflineEnvironment, SHARED_SOURCES } = require('../offline-demo/isolation-policy.cjs');
 export const EMBEDDED = 'assets/offline-demo-build.json';
 const productionCertificate = 'b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d30198980e59fcde96b';
 export function validatePolicy(policy, environment = {}) {
   assertOfflineEnvironment(environment);
   if (policy.schemaVersion !== 1 || policy.buildMode !== 'offline-demo' || policy.packageId !== 'com.jaaklind.RussiCaptor.demo' ||
-      policy.applicationVersion !== '0.1.0' || !Number.isSafeInteger(policy.versionCode) || policy.versionCode < 1 ||
+      policy.applicationVersion !== '0.2.0' || !Number.isSafeInteger(policy.versionCode) || policy.versionCode < 1 ||
       !/^[a-f0-9]{64}$/.test(policy.signingCertificateSha256) || policy.signingCertificateSha256 === productionCertificate ||
       policy.productionCompatibility !== 'NOT_APPLICABLE' || policy.distributable !== false ||
       policy.automaticPublication !== false || policy.publicationAuthorization !== 'NOT_GRANTED') throw new Error('OFFLINE_DEMO_BUILD_POLICY_INVALID');
@@ -27,7 +27,8 @@ export function validateBundleSources(sources) {
     const s = source.replaceAll('\\', '/');
     if (['\0polyfill:external-require', '\0polyfill:assets-registry'].includes(s)) continue;
     if (/supabase|expo-router|CloudSync|OperatorSession|RuntimeNativeLeaseHeartbeat|RuntimeCheckpoint|SupabaseService/i.test(s)) throw new Error('OFFLINE_DEMO_BUNDLE_PRODUCTION_MODULE');
-    if (!s.includes('/node_modules/') && !/^(?:\.\/|\/)?(?:index\.js|src\/(?:DemoApp\.tsx|DemoApplication\.tsx|DemoStore\.ts|networkBoundary\.ts))$/.test(s)) throw new Error('OFFLINE_DEMO_BUNDLE_SOURCE_ESCAPE');
+    const shared = Object.keys(SHARED_SOURCES).some(file => [file, `/${file}`, `../${file}`, `/../${file}`].includes(s));
+    if (!s.includes('/node_modules/') && !shared && !/^(?:\.\/|\/)?(?:index\.js|src\/(?:DemoApp\.tsx|DemoApplication\.tsx|DemoStore\.ts|networkBoundary\.ts|runtime\/(?:DemoDomain\.ts|DemoSession\.ts|DemoController\.ts|DemoRuntimeApplication\.tsx)))$/.test(s)) throw new Error('OFFLINE_DEMO_BUNDLE_SOURCE_ESCAPE');
   }
 }
 // Parse aapt's actual binary AndroidManifest.xml dump, not generated source XML.

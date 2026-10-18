@@ -7,12 +7,12 @@ function evaluate(expression: string) {
   return spawnSync(process.execPath, ['--input-type=module', '-e', `import {validatePolicy,validateArtifact,validateBundleSources,validateManifestDump} from './scripts/offline-demo-build-policy.mjs';const policy=${JSON.stringify(policy)};${expression}`], { cwd: root, encoding: 'utf8' });
 }
 const embedded = { ...policy, sourceCommit: 'a'.repeat(40), sourceDirty: false, buildTimestamp: '2026-10-18T12:00:00.000Z' };
-const actual = { packageId: policy.packageId, versionCode: 1, versionName: '0.1.0', certificate: policy.signingCertificateSha256,
+const actual = { packageId: policy.packageId, versionCode: policy.versionCode, versionName: policy.applicationVersion, certificate: policy.signingCertificateSha256,
   signatureVerified: true, debuggable: false, manifestIsolation: true, productionMarkersAbsent: true, bundledApplicationGraphVerified: true };
 describe('dedicated signed offline-demo build contract', () => {
   test('independent demo policy permits no migration dependency', () => {
     expect(evaluate('validatePolicy(policy);').status).toBe(0);
-    expect(policy).toMatchObject({ productionCompatibility: 'NOT_APPLICABLE', distributable: false, publicationAuthorization: 'NOT_GRANTED', versionCode: 1 });
+    expect(policy).toMatchObject({ productionCompatibility: 'NOT_APPLICABLE', distributable: false, publicationAuthorization: 'NOT_GRANTED', versionCode: 2 });
   });
   test.each([{ buildMode: 'canonical' }, { buildMode: 'upgrade-validation' }, { packageId: 'com.jaaklind.RussiCaptor' },
     { signingCertificateSha256: 'b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d30198980e59fcde96b' }, { distributable: true },
@@ -70,5 +70,25 @@ describe('dedicated signed offline-demo build contract', () => {
     const build = fs.readFileSync(path.join(root, 'scripts/build-offline-demo.mjs'), 'utf8');
     expect(build).toContain('EXPO_NO_DOTENV'); expect(build).not.toContain('verify-field-release-config');
     expect(build).not.toContain('build-field-release.mjs'); expect(build).not.toContain('supabase db');
+  });
+  test('demo runtime reuses only the six hash-pinned pure sources and cannot widen on source tampering', () => {
+    const { SHARED_SOURCES } = require('../../offline-demo/isolation-policy.cjs');
+    expect(Object.keys(SHARED_SOURCES)).toHaveLength(6);
+    jest.isolateModules(() => {
+      jest.doMock('expo/metro-config', () => ({ getDefaultConfig: () => ({ resolver: {} }) }));
+      const resolver = require('../../offline-demo/metro.config.cjs').resolver.resolveRequest;
+      const target = path.join(root, 'src/services/runtime/HemorrhagePatientProcess.ts');
+      const context = { originModulePath: path.join(root, 'offline-demo/src/runtime/DemoDomain.ts'), resolveRequest: () => ({ type: 'sourceFile', filePath: target }) };
+      expect(resolver(context, '../../../src/services/runtime/HemorrhagePatientProcess', 'android').filePath).toBe(target);
+      const original = fs.readFileSync.bind(fs); const spy = jest.spyOn(fs, 'readFileSync').mockImplementation(((file: any, ...args: any[]) =>
+        String(file) === target ? Buffer.from('require("production-side-effect")') : (original as any)(file, ...args)) as any);
+      expect(() => resolver(context, '../../../src/services/runtime/HemorrhagePatientProcess', 'android')).toThrow('OFFLINE_DEMO_SOURCE_ESCAPE_FORBIDDEN');
+      spy.mockRestore(); jest.dontMock('expo/metro-config');
+    });
+  });
+  test('new demo version metadata agrees without changing the canonical version', () => {
+    const config = require('../../offline-demo/app.config.cjs')(); const pkg = require('../../offline-demo/package.json');
+    expect(config.version).toBe(policy.applicationVersion); expect(config.android.versionCode).toBe(policy.versionCode); expect(pkg.version).toBe('0.2.0');
+    expect(require('../../app.json').expo.android.versionCode).toBe(181);
   });
 });
