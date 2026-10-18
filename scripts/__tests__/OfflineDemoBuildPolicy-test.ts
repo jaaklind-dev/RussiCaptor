@@ -12,7 +12,7 @@ const actual = { packageId: policy.packageId, versionCode: policy.versionCode, v
 describe('dedicated signed offline-demo build contract', () => {
   test('independent demo policy permits no migration dependency', () => {
     expect(evaluate('validatePolicy(policy);').status).toBe(0);
-    expect(policy).toMatchObject({ productionCompatibility: 'NOT_APPLICABLE', distributable: false, publicationAuthorization: 'NOT_GRANTED', versionCode: 4 });
+    expect(policy).toMatchObject({ productionCompatibility: 'NOT_APPLICABLE', distributable: false, publicationAuthorization: 'NOT_GRANTED', versionCode: 5 });
   });
   test.each([{ buildMode: 'canonical' }, { buildMode: 'upgrade-validation' }, { packageId: 'com.jaaklind.RussiCaptor' },
     { signingCertificateSha256: 'b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d30198980e59fcde96b' }, { distributable: true },
@@ -115,7 +115,7 @@ describe('dedicated signed offline-demo build contract', () => {
     });
   test('new demo version metadata agrees without changing the canonical version', () => {
     const config = require('../../offline-demo/app.config.cjs')(); const pkg = require('../../offline-demo/package.json');
-    expect(config.version).toBe(policy.applicationVersion); expect(config.android.versionCode).toBe(policy.versionCode); expect(pkg.version).toBe('0.2.2');
+    expect(config.version).toBe(policy.applicationVersion); expect(config.android.versionCode).toBe(policy.versionCode); expect(pkg.version).toBe('0.3.0');
     expect(require('../../app.json').expo.android.versionCode).toBe(181);
   });
 });
