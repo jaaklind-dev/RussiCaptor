@@ -2,10 +2,10 @@ const { assertOfflineEnvironment, PACKAGE_ID } = require('./isolation-policy.cjs
 module.exports = () => {
   assertOfflineEnvironment(process.env);
   return {
-    name: 'RussiCaptor DEMO', slug: 'russicaptor-offline-demo', version: '0.2.0',
+    name: 'RussiCaptor DEMO', slug: 'russicaptor-offline-demo', version: '0.2.1',
     platforms: ['android'], orientation: 'portrait', userInterfaceStyle: 'light',
     updates: { enabled: false },
-    android: { package: PACKAGE_ID, versionCode: 2, allowBackup: false, permissions: [],
+    android: { package: PACKAGE_ID, versionCode: 3, allowBackup: false, permissions: [],
       blockedPermissions: ['android.permission.INTERNET', 'android.permission.ACCESS_NETWORK_STATE',
         'android.permission.SYSTEM_ALERT_WINDOW', 'android.permission.CAMERA',
         'android.permission.RECORD_AUDIO', 'android.permission.READ_EXTERNAL_STORAGE',

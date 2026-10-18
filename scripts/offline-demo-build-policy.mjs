@@ -6,7 +6,7 @@ const productionCertificate = 'b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d301
 export function validatePolicy(policy, environment = {}) {
   assertOfflineEnvironment(environment);
   if (policy.schemaVersion !== 1 || policy.buildMode !== 'offline-demo' || policy.packageId !== 'com.jaaklind.RussiCaptor.demo' ||
-      policy.applicationVersion !== '0.2.0' || !Number.isSafeInteger(policy.versionCode) || policy.versionCode < 1 ||
+      policy.applicationVersion !== '0.2.1' || !Number.isSafeInteger(policy.versionCode) || policy.versionCode < 1 ||
       !/^[a-f0-9]{64}$/.test(policy.signingCertificateSha256) || policy.signingCertificateSha256 === productionCertificate ||
       policy.productionCompatibility !== 'NOT_APPLICABLE' || policy.distributable !== false ||
       policy.automaticPublication !== false || policy.publicationAuthorization !== 'NOT_GRANTED') throw new Error('OFFLINE_DEMO_BUILD_POLICY_INVALID');
