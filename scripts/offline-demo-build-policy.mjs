@@ -1,6 +1,21 @@
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
-const { assertOfflineEnvironment, SHARED_SOURCES } = require('../offline-demo/isolation-policy.cjs');
+const { assertOfflineEnvironment, SHARED_SOURCES, AUDITED_DEMO_SOURCES, assertAuditedDemoSource } = require('../offline-demo/isolation-policy.cjs');
+const demoRoot = fileURLToPath(new URL('../offline-demo/', import.meta.url));
+export function verifyAuditedDemoSources(root = demoRoot) {
+  for (const relative of Object.keys(AUDITED_DEMO_SOURCES)) {
+    assertAuditedDemoSource(relative, fs.readFileSync(path.join(root, relative)));
+  }
+  return { ...AUDITED_DEMO_SOURCES };
+}
+function validAuditedIdentities(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) &&
+    Object.keys(value).length === Object.keys(AUDITED_DEMO_SOURCES).length &&
+    Object.entries(AUDITED_DEMO_SOURCES).every(([file, hash]) => Object.hasOwn(value, file) && value[file] === hash);
+}
 export const EMBEDDED = 'assets/offline-demo-build.json';
 const productionCertificate = 'b6c51fff4d0df61569a423aa99df2ac5d5a92d3e897c1d30198980e59fcde96b';
 export function validatePolicy(policy, environment = {}) {
@@ -14,6 +29,10 @@ export function validatePolicy(policy, environment = {}) {
 }
 export function validateArtifact(policy, embedded, actual) {
   validatePolicy(policy);
+  verifyAuditedDemoSources();
+  if (!validAuditedIdentities(embedded.auditedDemoSources) || !validAuditedIdentities(actual.auditedDemoSources) || actual.auditedBundleContentsVerified !== true) {
+    throw new Error('OFFLINE_DEMO_EMBEDDED_MODULE_IDENTITY_INVALID');
+  }
   for (const key of Object.keys(policy)) if (embedded[key] !== policy[key]) throw new Error('OFFLINE_DEMO_EMBEDDED_IDENTITY_INVALID');
   if (!/^[a-f0-9]{40}$/.test(embedded.sourceCommit) || embedded.sourceDirty !== false || !Number.isFinite(Date.parse(embedded.buildTimestamp))) throw new Error('OFFLINE_DEMO_SOURCE_IDENTITY_INVALID');
   if (actual.packageId !== policy.packageId || actual.versionCode !== policy.versionCode || actual.versionName !== policy.applicationVersion ||
@@ -23,13 +42,36 @@ export function validateArtifact(policy, embedded, actual) {
 }
 export function validateBundleSources(sources) {
   if (!Array.isArray(sources) || !sources.length) throw new Error('OFFLINE_DEMO_BUNDLE_GRAPH_MISSING');
+  const audited = {};
   for (const source of sources) {
     const s = source.replaceAll('\\', '/');
     if (['\0polyfill:external-require', '\0polyfill:assets-registry'].includes(s)) continue;
     if (/supabase|expo-router|CloudSync|OperatorSession|RuntimeNativeLeaseHeartbeat|RuntimeCheckpoint|SupabaseService/i.test(s)) throw new Error('OFFLINE_DEMO_BUNDLE_PRODUCTION_MODULE');
+    const own = s.replace(/^(?:\.\/|\/)/, '');
+    if (Object.hasOwn(AUDITED_DEMO_SOURCES, own)) {
+      assertAuditedDemoSource(own, fs.readFileSync(path.join(demoRoot, own)));
+      audited[own] = AUDITED_DEMO_SOURCES[own];
+      continue;
+    }
     const shared = Object.keys(SHARED_SOURCES).some(file => [file, `/${file}`, `../${file}`, `/../${file}`].includes(s));
     if (!s.includes('/node_modules/') && !shared && !/^(?:\.\/|\/)?(?:index\.js|src\/(?:DemoApp\.tsx|DemoApplication\.tsx|DemoStore\.ts|DemoUpgrade\.ts|networkBoundary\.ts|runtime\/(?:DemoDomain\.ts|DemoSession\.ts|DemoController\.ts|DemoRuntimeApplication\.tsx)))$/.test(s)) throw new Error('OFFLINE_DEMO_BUNDLE_SOURCE_ESCAPE');
   }
+  return audited;
+}
+export function validateAuditedBundleSources(map) {
+  if (!map || !Array.isArray(map.sourcesContent) || !Array.isArray(map.sources) || map.sourcesContent.length !== map.sources.length) {
+    throw new Error('OFFLINE_DEMO_BUNDLE_CONTENT_MISSING');
+  }
+  const audited = validateBundleSources(map.sources);
+  if (!validAuditedIdentities(audited)) throw new Error('OFFLINE_DEMO_BUNDLE_AUDITED_MODULE_MISSING');
+  for (const [index, source] of map.sources.entries()) {
+    const own = source.replaceAll('\\', '/').replace(/^(?:\.\/|\/)/, '');
+    if (Object.hasOwn(AUDITED_DEMO_SOURCES, own)) {
+      if (typeof map.sourcesContent[index] !== 'string') throw new Error('OFFLINE_DEMO_BUNDLE_CONTENT_MISSING');
+      assertAuditedDemoSource(own, map.sourcesContent[index]);
+    }
+  }
+  return audited;
 }
 // Parse aapt's actual binary AndroidManifest.xml dump, not generated source XML.
 export function validateManifestDump(dump, badging) {

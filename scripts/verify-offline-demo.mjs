@@ -18,6 +18,8 @@ export function verifyDemoGraph(root = path.join(repository, 'offline-demo'), en
     visited.add(real);
     if (shared) sharedVisited.add(real);
     const text = fs.readFileSync(real, 'utf8');
+    const demoRelative = path.relative(base, real).split(path.sep).join('/');
+    if (Object.hasOwn(policy.AUDITED_DEMO_SOURCES, demoRelative)) policy.assertAuditedDemoSource(demoRelative, text);
     if (/https?:|SUPABASE|SERVICE_ROLE|access_token|refresh_token|eval\s*\(|new\s+Function/.test(text)) throw new Error('OFFLINE_DEMO_UNSAFE_SOURCE');
     const ast = ts.createSourceFile(real, text, ts.ScriptTarget.Latest, true, real.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
     function dependency(node) {

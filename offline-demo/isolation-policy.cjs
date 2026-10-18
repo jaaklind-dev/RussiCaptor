@@ -1,4 +1,17 @@
 const PACKAGE_ID = 'com.jaaklind.RussiCaptor.demo';
+// Exact reviewed demo-owned sources; never a directory grant.
+const AUDITED_DEMO_SOURCES = Object.freeze({
+  'src/runtime/DemoVitalsCard.tsx': 'fb3cb9a8c3162ee324303cc6507ebb9db1f22a28718187e8eae2b8eb21b97838',
+  'src/runtime/DemoTime.ts': '358fd31e2dadacbae8a198b7a61fb9efcb3e0498e9e6b34f319b6a5588f19e44',
+  'src/runtime/DemoLaboratoryCard.tsx': '797d48883696c71443c596f98efdb63e7da2a6b0c0e6383820a5e21fa2eb0b40',
+  'src/runtime/DemoLaboratory.ts': 'c4813c65ad8887c96074b910003989abb23ef76f9fb1929dafbe344748255af7',
+});
+function assertAuditedDemoSource(relative, bytes) {
+  if (!Object.hasOwn(AUDITED_DEMO_SOURCES, relative) ||
+      require('node:crypto').createHash('sha256').update(bytes).digest('hex') !== AUDITED_DEMO_SOURCES[relative]) {
+    throw new Error('OFFLINE_DEMO_AUDITED_SOURCE_HASH_INVALID');
+  }
+}
 // Exact reviewed pure engines/presentation only. A source change requires a fresh side-effect audit.
 const SHARED_SOURCES = Object.freeze({
   'src/services/runtime/HemorrhagePatientProcess.ts': '5ed38db24ccf079c2d49937e3552afe7ef6a78e9c961cbd1949eff88dc4e70b5',
@@ -32,4 +45,4 @@ function assertSpecifier(specifier) {
     throw new Error('OFFLINE_DEMO_IMPORT_FORBIDDEN');
   }
 }
-module.exports = { PACKAGE_ID, SHARED_SOURCES, SHARED_ALIASES, assertOfflineEnvironment, assertSpecifier };
+module.exports = { PACKAGE_ID, AUDITED_DEMO_SOURCES, assertAuditedDemoSource, SHARED_SOURCES, SHARED_ALIASES, assertOfflineEnvironment, assertSpecifier };

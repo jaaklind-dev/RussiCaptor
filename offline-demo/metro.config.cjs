@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { getDefaultConfig } = require('expo/metro-config');
-const { assertSpecifier, SHARED_SOURCES, SHARED_ALIASES } = require('./isolation-policy.cjs');
+const { assertSpecifier, SHARED_SOURCES, SHARED_ALIASES, AUDITED_DEMO_SOURCES, assertAuditedDemoSource } = require('./isolation-policy.cjs');
 const config = getDefaultConfig(__dirname);
 const appRoot = fs.realpathSync(__dirname);
 const modulesRoot = fs.realpathSync(path.resolve(__dirname, '../node_modules'));
@@ -27,6 +27,8 @@ config.resolver.resolveRequest = (context, specifier, platform) => {
   for (const file of result.type === 'sourceFile' ? [result.filePath] : result.type === 'assetFiles' ? result.filePaths : []) {
     if (file === virtualRegistry) continue;
     const resolved = fs.realpathSync(file);
+    const own = path.relative(appRoot, resolved).split(path.sep).join('/');
+    if (Object.hasOwn(AUDITED_DEMO_SOURCES, own)) assertAuditedDemoSource(own, fs.readFileSync(resolved));
     if (!resolved.startsWith(appRoot + path.sep) && !resolved.startsWith(modulesRoot + path.sep) && !shared(resolved)) {
       throw new Error('OFFLINE_DEMO_SOURCE_ESCAPE_FORBIDDEN');
     }
