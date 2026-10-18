@@ -2,6 +2,7 @@ import type { InstructorPatientCardModel } from "@/models/InstructorDashboard";
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { patientStatusLabel } from "@/localization/et";
+import { formatVitalSign } from "@/presentation/vitalSigns";
 
 const statusColors = {
   Stable: { border: "#2e7d32", background: "#e8f5e9", text: "#1b5e20" },
@@ -33,10 +34,10 @@ function InstructorPatientCardComponent({ patient, onPress }: {
       <Text numberOfLines={1} style={styles.owner}>CM: {patient.caseManagerName ?? "—"}</Text>
       <View style={styles.vitals}>
         <Text style={styles.vital}>AVPU {value(patient.avpu)}</Text>
-        <Text style={styles.vital}>SpO₂ {patient.pulseOxSignalQuality === "NO_SIGNAL" ? "signaal puudub" : patient.pulseOxSignalQuality === "POOR" ? "signaal ebausaldusväärne" : value(patient.spo2, "%")}</Text>
-        <Text style={styles.vital}>RR {value(patient.respiratoryRate)}</Text>
-        <Text style={styles.vital}>HR {value(patient.heartRate)}</Text>
-        <Text style={styles.vital}>SBP {value(patient.systolicBp)}</Text>
+        <Text style={styles.vital}>SpO₂ {patient.pulseOxSignalQuality === "NO_SIGNAL" ? "signaal puudub" : patient.pulseOxSignalQuality === "POOR" ? "signaal ebausaldusväärne" : `${formatVitalSign("spo2", patient.spo2)}%`}</Text>
+        <Text style={styles.vital}>RR {formatVitalSign("respiratoryRate", patient.respiratoryRate)}</Text>
+        <Text style={styles.vital}>HR {formatVitalSign("heartRate", patient.heartRate)}</Text>
+        <Text style={styles.vital}>SBP {formatVitalSign("systolicBp", patient.systolicBp)}</Text>
       </View>
       <Text style={styles.time}>Simulatsioon: {value(patient.simulationTimeSec, "s")}</Text>
       <Text style={styles.updated}>Uuendatud: {patient.lastUpdate ?? "—"}</Text>

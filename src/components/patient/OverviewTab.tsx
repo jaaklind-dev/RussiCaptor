@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { Patient } from "@/models/Patient";
 import type { TimelineEvent } from "@/models/TimelineEvent";
 import type { VitalSigns } from "@/models/VitalSigns";
+import { formatVitalSign } from "@/presentation/vitalSigns";
 import { patientHistoryDescriptionLabel, patientHistoryTitleLabel } from "./TimelinePresentation";
 
 type Props = {
@@ -58,14 +59,14 @@ export default function OverviewTab({
           <Text style={styles.empty}>Näidud puuduvad.</Text>
         ) : (
           <View style={styles.vitalsGrid}>
-            <Vital label="Pulss" value={`${latestVitals.heartRate ?? "–"} /min`} />
+            <Vital label="Pulss" value={`${formatVitalSign("heartRate", latestVitals.heartRate)} /min`} />
             <Vital
               label="Vererõhk"
-              value={`${latestVitals.systolicBloodPressure ?? "–"}/${latestVitals.diastolicBloodPressure ?? "–"} mmHg`}
+              value={`${formatVitalSign("systolicBp", latestVitals.systolicBloodPressure)}/${formatVitalSign("diastolicBp", latestVitals.diastolicBloodPressure)} mmHg`}
             />
-            <Vital label="Hingamine" value={`${latestVitals.respiratoryRate ?? "–"} /min`} />
-            <Vital label="SpO₂" value={`${latestVitals.oxygenSaturation ?? "–"} %`} />
-            <Vital label="Temperatuur" value={`${latestVitals.temperature ?? "–"} °C`} />
+            <Vital label="Hingamine" value={`${formatVitalSign("respiratoryRate", latestVitals.respiratoryRate)} /min`} />
+            <Vital label="SpO₂" value={`${formatVitalSign("spo2", latestVitals.oxygenSaturation)} %`} />
+            <Vital label="Temperatuur" value={`${formatVitalSign("temperature", latestVitals.temperature)} °C`} />
             <Vital label="GCS" value={`${latestVitals.gcs ?? "–"}`} />
           </View>
         )}

@@ -6,7 +6,8 @@ const SHARED_SOURCES = Object.freeze({
   'src/services/runtime/RespiratoryFailurePatientProcess.ts': '935010d592766f94faa3d88a46db7a2a6b971d0c7d615263075553899be1ce33',
   'src/services/runtime/vitals/VitalSignEngine.ts': 'b81c7b37937b865a4df5f7bd1a4e13418d35607fe20d364054d358392291a146',
   'src/services/runtime/vitals/VitalSignProjection.ts': '5ac639346815a892110e73b46656a02ac6e3dbaa6ec1a7cca2d4290c8158948a',
-  'src/components/patient/VitalsTab.tsx': '7b88d48170958efc956ed5ea2c4ebbfac30435bc755fa223fe8071f0ee3eafee',
+  'src/components/patient/VitalsTab.tsx': '0ecd9874b49dcade28179a95e9c775913bf4b7c49a74e7526be8895ae0206598',
+  'src/presentation/vitalSigns.ts': 'b756df51f94079d0b50ff2546e84b4336f84cf38574c7c466ce289dd823924e3',
 });
 const EXTERNALS = new Set(['expo', 'expo-constants', 'expo-sqlite/kv-store', 'react', 'react-native',
   'react/jsx-runtime', 'react/jsx-dev-runtime', 'react/compiler-runtime']);

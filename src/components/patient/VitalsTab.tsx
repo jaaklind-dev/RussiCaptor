@@ -4,6 +4,7 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-nativ
 import type { VitalSigns } from "@/models/VitalSigns";
 import type { VitalSignsInput } from "@/services/VitalSignsService";
 import type { CanonicalPatientRuntimeSnapshot } from "@/services/RuntimeSnapshotService";
+import { formatVitalSign, type VitalSignDisplayKey } from "../../presentation/vitalSigns";
 
 type Props = {
   measurements: VitalSigns[];
@@ -17,15 +18,16 @@ type Field = {
   label: string;
   unit: string;
   required?: boolean;
+  displayKey?: VitalSignDisplayKey;
 };
 
 const fields: Field[] = [
-  { key: "heartRate", label: "Pulss", unit: "/min", required: true },
-  { key: "systolicBloodPressure", label: "RR süstoolne", unit: "mmHg", required: true },
-  { key: "diastolicBloodPressure", label: "RR diastoolne", unit: "mmHg", required: true },
-  { key: "respiratoryRate", label: "Hingamissagedus", unit: "/min", required: true },
-  { key: "oxygenSaturation", label: "SpO₂", unit: "%", required: true },
-  { key: "temperature", label: "Temperatuur", unit: "°C", required: true },
+  { key: "heartRate", displayKey: "heartRate", label: "Pulss", unit: "/min", required: true },
+  { key: "systolicBloodPressure", displayKey: "systolicBp", label: "RR süstoolne", unit: "mmHg", required: true },
+  { key: "diastolicBloodPressure", displayKey: "diastolicBp", label: "RR diastoolne", unit: "mmHg", required: true },
+  { key: "respiratoryRate", displayKey: "respiratoryRate", label: "Hingamissagedus", unit: "/min", required: true },
+  { key: "oxygenSaturation", displayKey: "spo2", label: "SpO₂", unit: "%", required: true },
+  { key: "temperature", displayKey: "temperature", label: "Temperatuur", unit: "°C", required: true },
   { key: "gcs", label: "GCS", unit: "", required: true },
   { key: "bloodGlucose", label: "Veresuhkur", unit: "mmol/L" },
   { key: "etco2", label: "EtCO₂", unit: "mmHg" },
@@ -38,6 +40,10 @@ const manualVitalSignsEntryEnabled = false;
 
 function measurementValue(measurement: VitalSigns, field: Field): string {
   const value = measurement[field.key];
+  if (field.displayKey) {
+    const text = formatVitalSign(field.displayKey, value);
+    return text === "–" ? text : `${text}${field.unit ? ` ${field.unit}` : ""}`;
+  }
   return typeof value === "number" ? `${value}${field.unit ? ` ${field.unit}` : ""}` : "–";
 }
 
@@ -149,7 +155,7 @@ export default function VitalsTab({ measurements, readOnly = false, onRecord, ca
           <View key={measurement.id} style={styles.historyRow}>
             <Text style={styles.historyTime}>{measurementLabel(measurement)}</Text>
             <Text style={styles.historyValues}>
-              RR {measurement.systolicBloodPressure ?? "–"}/{measurement.diastolicBloodPressure ?? "–"} · HR {measurement.heartRate ?? "–"} · RR {measurement.respiratoryRate ?? "–"} · SpO₂ {measurement.oxygenSaturation ?? "–"}% · GCS {measurement.gcs ?? "–"}
+              RR {formatVitalSign("systolicBp", measurement.systolicBloodPressure)}/{formatVitalSign("diastolicBp", measurement.diastolicBloodPressure)} · HR {formatVitalSign("heartRate", measurement.heartRate)} · RR {formatVitalSign("respiratoryRate", measurement.respiratoryRate)} · SpO₂ {formatVitalSign("spo2", measurement.oxygenSaturation)}% · GCS {measurement.gcs ?? "–"}
             </Text>
           </View>
         ))}
@@ -167,11 +173,12 @@ function CanonicalRuntimeCard({ runtime }: Readonly<{ runtime: CanonicalPatientR
     <Text style={styles.title}>Hetkeseis</Text>
     <Text style={styles.timestamp}>Õppuse aeg T+{state.exerciseTimeSec}s</Text>
     <View style={styles.grid}>
-      <Vital label="Pulss" value={`${value(vitals.readings.heartRate.current)} /min`} />
-      <Vital label="Vererõhk" value={`${value(vitals.readings.systolicBp.current)}/${value(vitals.readings.diastolicBp.current)} mmHg`} />
+      <Vital label="Pulss" value={`${formatVitalSign("heartRate", vitals.readings.heartRate.current)} /min`} />
+      <Vital label="Vererõhk" value={`${formatVitalSign("systolicBp", vitals.readings.systolicBp.current)}/${formatVitalSign("diastolicBp", vitals.readings.diastolicBp.current)} mmHg`} />
       <Vital label="MAP" value={`${value(vitals.derived.meanArterialPressure)} mmHg`} />
-      <Vital label="Hingamissagedus" value={`${value(vitals.readings.respiratoryRate.current)} /min`} />
-      <Vital label="SpO₂" value={vitals.pulseOx?.signalQuality === "NO_SIGNAL" ? "Signaal puudub" : vitals.pulseOx?.signalQuality === "POOR" ? "Signaal ebausaldusväärne" : `${value(vitals.pulseOx?.measuredSpO2 ?? vitals.readings.spo2.current)} %`} />
+      <Vital label="Hingamissagedus" value={`${formatVitalSign("respiratoryRate", vitals.readings.respiratoryRate.current)} /min`} />
+      <Vital label="SpO₂" value={vitals.pulseOx?.signalQuality === "NO_SIGNAL" ? "Signaal puudub" : vitals.pulseOx?.signalQuality === "POOR" ? "Signaal ebausaldusväärne" : `${formatVitalSign("spo2", vitals.pulseOx?.measuredSpO2 ?? vitals.readings.spo2.current)} %`} />
+      <Vital label="Temperatuur" value={`${formatVitalSign("temperature", vitals.readings.temperature.current)} °C`} />
       <Vital label="GCS" value={`${value(vitals.readings.gcs.current)}`} />
       <Vital label="Kliiniline seisund" value={state.physiologicDecompensation?.clinicalState === "DEAD" ? "Surnud" : state.physiologicDecompensation?.clinicalState === "TERMINAL" ? "Terminaalne" : state.physiologicDecompensation?.clinicalState === "CRITICAL" ? "Kriitiline" : "Elus"} />
       <Vital label="Ajalooline verekaotus" value={`${value(hemorrhage?.cumulativeLossMl)} ml`} />

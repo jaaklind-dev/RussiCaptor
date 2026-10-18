@@ -71,9 +71,10 @@ describe('dedicated signed offline-demo build contract', () => {
     expect(build).toContain('EXPO_NO_DOTENV'); expect(build).not.toContain('verify-field-release-config');
     expect(build).not.toContain('build-field-release.mjs'); expect(build).not.toContain('supabase db');
   });
-  test('demo runtime reuses only the six hash-pinned pure sources and cannot widen on source tampering', () => {
+  test('demo runtime reuses only the seven reviewed hash-pinned pure sources and cannot widen on source tampering', () => {
     const { SHARED_SOURCES } = require('../../offline-demo/isolation-policy.cjs');
-    expect(Object.keys(SHARED_SOURCES)).toHaveLength(6);
+    expect(Object.keys(SHARED_SOURCES)).toHaveLength(7);
+    expect(SHARED_SOURCES['src/presentation/vitalSigns.ts']).toBe('b756df51f94079d0b50ff2546e84b4336f84cf38574c7c466ce289dd823924e3');
     jest.isolateModules(() => {
       jest.doMock('expo/metro-config', () => ({ getDefaultConfig: () => ({ resolver: {} }) }));
       const resolver = require('../../offline-demo/metro.config.cjs').resolver.resolveRequest;
@@ -86,6 +87,22 @@ describe('dedicated signed offline-demo build contract', () => {
       spy.mockRestore(); jest.dontMock('expo/metro-config');
     });
   });
+  test.each(['src/presentation/vitalSigns.ts', 'src/components/patient/VitalsTab.tsx'])(
+    'shared presentation remains fail-closed when %s is modified', relative => {
+      jest.isolateModules(() => {
+        jest.doMock('expo/metro-config', () => ({ getDefaultConfig: () => ({ resolver: {} }) }));
+        const resolver = require('../../offline-demo/metro.config.cjs').resolver.resolveRequest;
+        const target = path.join(root, relative);
+        const context = { originModulePath: path.join(root, 'offline-demo/src/runtime/DemoRuntimeApplication.tsx'),
+          resolveRequest: () => ({ type: 'sourceFile', filePath: target }) };
+        const original = fs.readFileSync.bind(fs);
+        const spy = jest.spyOn(fs, 'readFileSync').mockImplementation(((file: any, ...args: any[]) =>
+          String(file) === target ? Buffer.from('require("production-side-effect")') : (original as any)(file, ...args)) as any);
+        try {
+          expect(() => resolver(context, '../../../' + relative, 'android')).toThrow('OFFLINE_DEMO_SOURCE_ESCAPE_FORBIDDEN');
+        } finally { spy.mockRestore(); jest.dontMock('expo/metro-config'); }
+      });
+    });
   test('new demo version metadata agrees without changing the canonical version', () => {
     const config = require('../../offline-demo/app.config.cjs')(); const pkg = require('../../offline-demo/package.json');
     expect(config.version).toBe(policy.applicationVersion); expect(config.android.versionCode).toBe(policy.versionCode); expect(pkg.version).toBe('0.2.1');

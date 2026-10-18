@@ -1,5 +1,6 @@
 import type { InspectorClinicalStateModel } from "@/models/InstructorPatientInspector";
 import { StyleSheet, Text, View } from "react-native";
+import { formatVitalSign } from "@/presentation/vitalSigns";
 
 const show = (value: number | string | undefined, suffix = "") => value === undefined ? "—" : `${value}${suffix}`;
 
@@ -9,15 +10,15 @@ export function InspectorClinicalState({ state }: { state: InspectorClinicalStat
       <Text style={styles.title}>Praegune kliiniline seisund</Text>
       {!state.hasCanonicalRuntime ? <Text style={styles.pending}>Patsiendi andmeid laaditakse…</Text> : (
         <View style={styles.grid}>
-          <Text style={styles.vital}>HR {show(state.heartRate)}</Text>
-          <Text style={styles.vital}>RR {show(state.respiratoryRate)}</Text>
-          <Text style={styles.vital}>SpO₂ {state.pulseOxSignalQuality === "NO_SIGNAL" ? "signaal puudub" : state.pulseOxSignalQuality === "POOR" ? "signaal ebausaldusväärne" : show(state.spo2, "%")}</Text>
+          <Text style={styles.vital}>HR {formatVitalSign("heartRate", state.heartRate)}</Text>
+          <Text style={styles.vital}>RR {formatVitalSign("respiratoryRate", state.respiratoryRate)}</Text>
+          <Text style={styles.vital}>SpO₂ {state.pulseOxSignalQuality === "NO_SIGNAL" ? "signaal puudub" : state.pulseOxSignalQuality === "POOR" ? "signaal ebausaldusväärne" : `${formatVitalSign("spo2", state.spo2)}%`}</Text>
           <Text style={styles.vital}>Tegelik oxygenation {show(state.physiologicOxygenation, "%")}</Text>
           <Text style={styles.vital}>SpO₂ signaal {show(state.pulseOxSignalQuality)}</Text>
           <Text style={styles.vital}>Perfusioon {show(state.perfusionScore)}</Text>
-          <Text style={styles.vital}>BP {show(state.systolicBp)}/{show(state.diastolicBp)}</Text>
+          <Text style={styles.vital}>BP {formatVitalSign("systolicBp", state.systolicBp)}/{formatVitalSign("diastolicBp", state.diastolicBp)}</Text>
           <Text style={styles.vital}>MAP {show(state.map)}</Text>
-          <Text style={styles.vital}>Temp {show(state.temperature, "°C")}</Text>
+          <Text style={styles.vital}>Temp {formatVitalSign("temperature", state.temperature)}°C</Text>
           <Text style={styles.vital}>EtCO₂ {show(state.etco2)}</Text>
           <Text style={styles.vital}>AVPU {show(state.avpu)}</Text>
           <Text style={styles.vital}>GCS {show(state.gcs)}</Text>
