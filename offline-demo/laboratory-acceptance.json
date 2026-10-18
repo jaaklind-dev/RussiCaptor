@@ -1,0 +1,36 @@
+{
+  "scope": "Offline demo only; no canonical source, release, backend or device changes",
+  "guardrailStatement": "All RussiCaptor Runtime Regression Guardrails, including Laboratory Regression Guardrails LAB-G01 through LAB-G46, are mandatory acceptance gates for this work package. No guardrail is weakened, bypassed, deleted or threshold-relaxed.",
+  "impacts": ["UI K/L", "local command idempotency G", "local coherent persistence C/X", "sample-time and delayed laboratory release LAB-G01/02/03/06/07/08/13/15/17/22/38/39/43/45/46"],
+  "productionAuthority": "All canonical authority, reader, ownership, terminal and writer-fence contracts remain unchanged; this local capability grants no production role",
+  "fixture": "russicaptor.demo-laboratory@1.0.0",
+  "clinicalValidation": "NOT_VALIDATED",
+  "panel": "DEMO_TRAUMA_BASIC_V1",
+  "analytes": ["LAB_HB", "LAB_HCT", "LAB_LACTATE", "LAB_PH", "LAB_K", "LAB_NA", "LAB_GLUCOSE"],
+  "generator": "Unmodified generateNarvaLabPhysiology, dynamic values selected from ASTRUP/HEMATOLOGY/CLINICAL_CHEMISTRY",
+  "catalogSelector": "NARVA_POLYTRAUMA is a pure generator/catalog input, not a demo exercise package identity or production authorization",
+  "source": "Actual demo VitalSignEngine readings and HemorrhagePatientProcess clinical state frozen at order/collection time; generator's existing limited adult-trauma assumptions remain synthetic",
+  "orchestration": "Demo-only adapter. Production LaboratoryWorkflowRuntime is not imported because stableJson reaches runtime diagnostic tracing",
+  "delay": {"simulationSeconds": 30, "authoredForDemoOnly": true, "narvaFrozenDelaysChanged": false},
+  "repeatPolicy": "One panel per patient per session; UI explicitly says repeats are unavailable; stable semantic command IDs suppress duplicate gestures",
+  "limits": ["No separate physical specimen collection action", "No repeat panels", "No arbitrary analyte selection", "No blood bank/static/scenario panel expansion", "No lab order when fewer than 30 seconds remain before the existing 15 minute demo limit"],
+  "persistence": {
+    "key": "russicaptor.offline-demo.runtime.v2",
+    "newSchema": 3,
+    "oldSchema": 2,
+    "migration": "Add empty laboratory state to a valid v2 session on load. Preserve patient engines, clock, IDs, generation and ledger. Do not rewrite the old row just for loading; next supported local save writes v3 atomically",
+    "integrity": "Deterministically replay real patient engines, command ledger and laboratory release boundaries; require identical persisted samples, groups, results and laboratory events",
+    "incompatible": "RECOVERY_REQUIRED, explicit demo-only reset; no silent fabricated session",
+    "downgrade": "Old schema-2 demo cannot consume v3. Do not downgrade/uninstall/clear-data; next APK must have a higher versionCode"
+  },
+  "timeDisplay": {
+    "meaning": "Measurement exerciseMinute is the measurement's elapsed simulation timestamp in minutes, not an absolute date or age-since-measurement",
+    "demoCorrection": "DemoVitalsCard uses formatDemoDuration(patient.vitals.timestamp), preserving numerical measurements and engine time",
+    "canonicalImpact": "Shared canonical VitalsTab remains byte-for-byte unchanged and still prints raw fractional exerciseMinute",
+    "separateCanonicalPlan": ["Separately authorize pure duration formatter", "Convert exerciseMinute to seconds only at presentation", "Preserve existing absolute dates and numerical inputs", "Cover measurement card, history and canonical time subtitles", "Run canonical regressions and separately scoped physical acceptance"]
+  },
+  "physicalAcceptanceRequired": ["Build/sign a separately authorized higher-version demo APK", "Upgrade demo only alongside canonical; verify no INTERNET permission", "Airplane mode/Wi-Fi off", "Verify duration labels at 5/29/60/149 seconds", "One local lab order, pending before T+30, pause/resume and background delay", "CM/EXCON observe identical order/result IDs and seven values/units/ranges", "Restart pending and after result without catch-up or duplicate", "Reset pending, verify no stale result and preserved canonical session/Builder"],
+  "apkBuilt": false,
+  "physicalAcceptance": "BLOCKED",
+  "publicationAuthorization": "NOT_GRANTED"
+}

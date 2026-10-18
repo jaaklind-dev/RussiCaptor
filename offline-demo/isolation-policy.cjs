@@ -8,6 +8,16 @@ const SHARED_SOURCES = Object.freeze({
   'src/services/runtime/vitals/VitalSignProjection.ts': '5ac639346815a892110e73b46656a02ac6e3dbaa6ec1a7cca2d4290c8158948a',
   'src/components/patient/VitalsTab.tsx': '0ecd9874b49dcade28179a95e9c775913bf4b7c49a74e7526be8895ae0206598',
   'src/presentation/vitalSigns.ts': 'b756df51f94079d0b50ff2546e84b4336f84cf38574c7c466ce289dd823924e3',
+  'src/config/NarvaLaboratoryCatalog.ts': '34290278320da5d0a2955288d98d4c1927edf49c93b2bf18f7e86edd154b0348',
+  'src/utils/immutable.ts': 'b118e56a16b5c77fd3848fe98af861ec572d225b48e289fa06955b1daedfabf2',
+  'src/services/runtime/laboratory/NarvaLabPhysiologyV1Generator.ts': 'd02d807bd560d9be8fd31b638e3bd30b25692488ca128f6096967a20ec61273b',
+  'src/services/runtime/laboratory/NarvaLabPatientIdentity.ts': '0e5e5b6de553f98cf0ede4c7e8d9a4dc18a1327f1c851d5469c7fba02f0667f6',
+  'src/components/patient/LaboratoryResultPresentation.ts': 'e36fc1ac799ac5485099372ae90aea26eddfec9e887dd5e8c1b71af1f66947cd',
+});
+// Only these exact aliases in reviewed, hash-pinned pure dependencies. No general @/ service access.
+const SHARED_ALIASES = Object.freeze({
+  '@/config/NarvaLaboratoryCatalog': 'src/config/NarvaLaboratoryCatalog.ts',
+  '@/utils/immutable': 'src/utils/immutable.ts',
 });
 const EXTERNALS = new Set(['expo', 'expo-constants', 'expo-sqlite/kv-store', 'react', 'react-native',
   'react/jsx-runtime', 'react/jsx-dev-runtime', 'react/compiler-runtime']);
@@ -17,9 +27,9 @@ function assertOfflineEnvironment(env) {
   }
 }
 function assertSpecifier(specifier) {
-  if (typeof specifier !== 'string' || (!specifier.startsWith('.') && !EXTERNALS.has(specifier) &&
+  if (typeof specifier !== 'string' || (!specifier.startsWith('.') && !Object.hasOwn(SHARED_ALIASES, specifier) && !EXTERNALS.has(specifier) &&
       !/^@babel\/runtime\/helpers\/(?:esm\/)?[A-Za-z0-9_]+$/.test(specifier))) {
     throw new Error('OFFLINE_DEMO_IMPORT_FORBIDDEN');
   }
 }
-module.exports = { PACKAGE_ID, SHARED_SOURCES, assertOfflineEnvironment, assertSpecifier };
+module.exports = { PACKAGE_ID, SHARED_SOURCES, SHARED_ALIASES, assertOfflineEnvironment, assertSpecifier };

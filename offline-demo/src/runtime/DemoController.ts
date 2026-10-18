@@ -45,7 +45,8 @@ export class DemoController {
     if (!this.matches(binding)) return false;
     return this.store.control(kind);
   }
-  binder(command: DemoCommand) { if (this.disposed || !this.foreground) throw new Error('DEMO_COMMAND_NOT_READY'); return this.store.command(command); }
+  dispatch(command: DemoCommand) { if (this.disposed || !this.foreground) throw new Error('DEMO_COMMAND_NOT_READY'); return this.store.command(command); }
+  binder(command: DemoCommand) { return this.dispatch(command); }
   reset(sessionId?: string, generation?: number) {
     if (this.disposed) return false;
     const view = this.store.getSnapshot();

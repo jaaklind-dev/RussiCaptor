@@ -1,12 +1,16 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Alert, AppState, BackHandler, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
-import VitalsTab from '../../../src/components/patient/VitalsTab';
-import { DEMO_PATIENTS, DEMO_MAX_SECONDS, measurement } from './DemoDomain';
+import DemoVitalsCard from './DemoVitalsCard';
+import DemoLaboratoryCard from './DemoLaboratoryCard';
+import { DEMO_LAB_DELAY_SEC, DEMO_LAB_PANEL } from './DemoLaboratory';
+import { formatDemoDuration } from './DemoTime';
+import { DEMO_PATIENTS, DEMO_MAX_SECONDS } from './DemoDomain';
 import { DemoController } from './DemoController';
 import { DemoSessionStore, type DemoEvent, type DemoSession } from './DemoSession';
 const eventLabels: Record<DemoEvent['kind'], string> = { START: 'Demoõppus käivitatud', PAUSE: 'Simulatsioon peatatud',
   RESUME: 'Simulatsioon jätkatud', BACKGROUND: 'Taustale minekul peatatud', RECOVERY: 'Sessioon taastatud peatatud olekus',
-  BINDER_APPLIED: 'Vaagnavöö paigaldatud patsiendile A', LIMIT: '15 minuti demopiir saavutatud; taasta algseis' };
+  BINDER_APPLIED: 'Vaagnavöö paigaldatud patsiendile A', LAB_ORDERED: 'DEMO laboritellimus ja proov kinnitatud',
+  LAB_RESULTED: 'DEMO laboritulemus valmis', LIMIT: '15 minuti demopiir saavutatud; taasta algseis' };
 const lifecycleLabels = { READY: 'Valmis', RUNNING: 'Käib', PAUSED: 'Peatatud' };
 function Button({ label, onPress, disabled = false }: Readonly<{ label: string; onPress: () => void; disabled?: boolean }>) {
   return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress}
@@ -17,9 +21,12 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
   const [controller, setController] = useState<DemoController>();
   const [message, setMessage] = useState('');
   useEffect(() => {
-    const runtime = new DemoController(store, undefined, AppState.currentState === 'active'); setController(runtime);
+    const runtime = new DemoController(store, undefined, AppState.currentState === 'active');
+    let mounted = true;
+    // Publish the resource after effect setup; cleanup fences this callback during unmount/remount.
+    void Promise.resolve().then(() => { if (mounted) setController(runtime); });
     const listener = AppState.addEventListener('change', state => runtime.setForeground(state === 'active'));
-    return () => { listener.remove(); runtime.dispose(); };
+    return () => { mounted = false; listener.remove(); runtime.dispose(); };
   }, [store]);
   const perform = (operation: () => unknown) => { try { operation(); setMessage(''); } catch { setMessage('Toimingut ei tehtud. Kontrolli demo olekut või taasta algseis.'); } };
   const exit = () => {
@@ -49,10 +56,18 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
     if (!session || !controller) return;
     const latest = store.getSnapshot();
     if (latest.status !== 'READY' || latest.session.sessionId !== session.sessionId || latest.session.generation !== session.generation ||
-        latest.session.commands.length > 0) return;
+        latest.session.commands.some(c => c.type === 'APPLY_PELVIC_BINDER')) return;
     // One deterministic semantic action identity per session; rapid presses and stale handlers reuse it.
     perform(() => controller.binder({ id: `DEMO-CMD-${session.sessionId}:binder`, sessionId: session.sessionId,
       generation: session.generation, time: latest.session.time, patientId: 'DEMO-PT-A', type: 'APPLY_PELVIC_BINDER' }));
+  };
+  const laboratoryOrder = (patientId: DemoSession['selectedPatient']) => {
+    if (!session || !controller) return;
+    const latest = store.getSnapshot();
+    if (latest.status !== 'READY' || latest.session.sessionId !== session.sessionId || latest.session.generation !== session.generation ||
+        latest.session.mode !== 'CM' || latest.session.selectedPatient !== patientId || latest.session.laboratory.orders.some(o => o.patientId === patientId)) return;
+    perform(() => controller.dispatch({ id: `DEMO-CMD-${session.sessionId}:lab:${patientId}`, sessionId: session.sessionId,
+      generation: session.generation, time: latest.session.time, patientId, type: 'LAB_ORDER', panelId: DEMO_LAB_PANEL }));
   };
   const acceptanceExport = () => {
     if (!session) return;
@@ -75,7 +90,7 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
     <View style={styles.banner}><Text style={styles.bannerTitle} onLongPress={acceptanceExport}
       accessibilityHint="Hoia all, et eksportida piiratud kohalik DEMO vastuvõtutõend">DEMO · AINULT SÜNTEETILISED ANDMED</Text>
       <Text>Võrguühendust ega sisselogimist ei kasutata. Ei ole kliiniliselt valideeritud.</Text>
-      {session && <Text accessibilityLabel="Demo kell">{lifecycleLabels[session.lifecycle]} · T+{session.time} s · üks kohalik kell</Text>}
+      {session && <Text accessibilityLabel="Demo kell">{lifecycleLabels[session.lifecycle]} · T+{formatDemoDuration(session.time)} · üks kohalik kell</Text>}
     </View>
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.title}>RussiCaptor DEMO{session && session.mode !== 'home' ? ` · ${session.mode}` : ''}</Text>
@@ -89,7 +104,7 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
           <Button label="EXCON" onPress={() => perform(() => navigate('EXCON'))} />
         </View>
         {session.mode === 'home' ? <>
-          <Text>Kaks sünteetilist traumapatsienti, ühine kohalik mootor ja üks vaagnavöö toiming. Labor ja pildiuuringud ei ole selles etapis rakendatud.</Text>
+          <Text>Kaks sünteetilist traumapatsienti, ühine kohalik mootor, vaagnavöö ja kohalik labori põhipaneel. Pildiuuringud pole selles etapis rakendatud.</Text>
           <Button label="Alusta demoõppust" disabled={!controller || session.lifecycle !== 'READY'} onPress={() => perform(() => { if (control('START')) navigate('CM'); })} />
         </> : <>
           {session.mode === 'EXCON' && <>
@@ -109,10 +124,14 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
               <Text style={styles.heading}>{fixture.name} · {fixture.triage}</Text><Text>{fixture.presentation}</Text>
               <Text>Teadvus: GCS {patient.vitals.readings.gcs.current}, {({ ALERT: 'ärkvel', VOICE: 'reageerib häälele', PAIN: 'reageerib valule', UNRESPONSIVE: 'ei reageeri' })[patient.vitals.avpu]}. Veritsus {patient.hemorrhage.clinicalState.bleedingRateMlMin} ml/min.</Text>
               {patient.respiration && <Text>Hingamine: {({ STABLE: 'stabiilne', IMPROVING: 'paraneb', WORSENING: 'halveneb' })[patient.respiration.clinicalState.trend]} · hingamistöö {patient.respiration.clinicalState.workOfBreathing.toFixed(1)}/100 · väsimus {patient.respiration.clinicalState.fatigue.toFixed(1)}/100.</Text>}
-              {(session.mode === 'EXCON' || session.selectedPatient === fixture.id) && <VitalsTab readOnly onRecord={() => false} measurements={[measurement(patient, session.sessionId)]} />}
+              {(session.mode === 'EXCON' || session.selectedPatient === fixture.id) && <>
+                <DemoVitalsCard patient={patient} sessionId={session.sessionId} />
+                <DemoLaboratoryCard session={session} patientId={fixture.id} onOrder={() => laboratoryOrder(fixture.id)}
+                  disabled={!controller || session.lifecycle !== 'RUNNING' || session.time + DEMO_LAB_DELAY_SEC > DEMO_MAX_SECONDS || session.mode !== 'CM' || session.selectedPatient !== fixture.id} />
+              </>}
               {session.mode === 'CM' && fixture.id === 'DEMO-PT-A' && session.selectedPatient === fixture.id && <>
-                <Button label="Paigalda vaagnavöö (DEMO)" disabled={!controller || session.lifecycle !== 'RUNNING' || session.commands.length > 0} onPress={binder} />
-                {session.commands.length > 0 && <Text>Vaagnavöö paigaldatud. Verejooksu mõju arvestatakse olemasoleva mudeli järgmistes sammudes.</Text>}
+                <Button label="Paigalda vaagnavöö (DEMO)" disabled={!controller || session.lifecycle !== 'RUNNING' || session.commands.some(c => c.type === 'APPLY_PELVIC_BINDER')} onPress={binder} />
+                {session.commands.some(c => c.type === 'APPLY_PELVIC_BINDER') && <Text>Vaagnavöö paigaldatud. Verejooksu mõju arvestatakse olemasoleva mudeli järgmistes sammudes.</Text>}
               </>}
             </View>;
           })}
@@ -121,13 +140,13 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
       </>}
       <Button label="Taasta demo algseis" disabled={!controller} onPress={reset} />
       <Button label="Välju demost" onPress={exit} />
-      <Text>Taustale minek peatab simulatsiooni. Demoseanss kestab kuni 15 simulatsiooniminutit. Kliinilise hindamise, ravimite, labori ja piltide täielikku mootorit siin ei käivitata.</Text>
+      <Text>Taustale minek peatab simulatsiooni ja labori ooteaja. Demoseanss kestab kuni 15 simulatsiooniminutit. Labor kasutab piiratud sünteetilist mudelit; kliiniline valideerimine ja pildiuuringud ei kuulu sellesse demosse.</Text>
     </ScrollView>
   </View>;
 }
 function History({ session }: Readonly<{ session: DemoSession }>) {
   return <View style={styles.card}><Text style={styles.heading}>Kohalik sündmuste ajalugu</Text>
-    {session.events.length ? session.events.slice(-30).map(event => <Text key={event.id}>T+{event.time} s · {eventLabels[event.kind]}</Text>) : <Text>Sündmusi veel pole.</Text>}
+    {session.events.length ? session.events.slice(-30).map(event => <Text key={event.id}>T+{formatDemoDuration(event.time)} · {eventLabels[event.kind]}{event.commandId ? ` · ${event.commandId}` : ''}</Text>) : <Text>Sündmusi veel pole.</Text>}
   </View>;
 }
 const styles = StyleSheet.create({ root: { flex: 1, backgroundColor: '#fff' }, banner: { backgroundColor: '#ffd166', padding: 18, paddingTop: 48, gap: 5 },

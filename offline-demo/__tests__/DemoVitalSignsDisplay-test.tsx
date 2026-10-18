@@ -3,6 +3,8 @@ import { AppState } from 'react-native';
 import DemoRuntimeApplication from '../src/runtime/DemoRuntimeApplication';
 import { DemoSessionStore, DEMO_RUNTIME_KEY } from '../src/runtime/DemoSession';
 import VitalsTab from '../../src/components/patient/VitalsTab';
+import DemoVitalsCard from '../src/runtime/DemoVitalsCard';
+import { measurement } from '../src/runtime/DemoDomain';
 
 function content(node: TestRenderer.ReactTestRendererJSON | TestRenderer.ReactTestRendererJSON[] | string | null): string {
   if (node === null) return '';
@@ -12,7 +14,7 @@ function content(node: TestRenderer.ReactTestRendererJSON | TestRenderer.ReactTe
 }
 const button = (screen: TestRenderer.ReactTestRenderer, label: string) => screen.root.findAll(
   node => node.props.accessibilityLabel === label && typeof node.props.onPress === 'function')[0];
-test('real demo CM and EXCON reuse canonical vital presentation without rounding stored engine state', async () => {
+test('real demo CM and EXCON retain canonical numerical formatting through a demo time adapter without rounding engine state', async () => {
   Object.defineProperty(AppState, 'currentState', { value: 'active', configurable: true });
   const map = new Map<string, string>();
   const store = new DemoSessionStore({ getItemSync: key => map.get(key) ?? null,
@@ -29,16 +31,17 @@ test('real demo CM and EXCON reuse canonical vital presentation without rounding
   for (const mode of ['CM', 'EXCON', 'CM']) {
     await act(async () => button(screen, mode).props.onPress());
     const text = content(screen.toJSON());
-    for (const expected of ['96 /min', '104 mmHg', '66 mmHg', '36,8 °C']) expect(text).toContain(expected);
+    for (const expected of ['96 /min', '104 mmHg', '66 mmHg', '20 /min', '94 %', '36,8 °C']) expect(text).toContain(expected);
     expect(text).not.toContain('95.75'); expect(text).not.toContain('104.25');
-    const cards = screen.root.findAllByType(VitalsTab);
-    const thoracic = cards.find(card => card.props.measurements[0].patientId === 'DEMO-PT-B')!;
-    expect(thoracic.props.measurements[0].heartRate).toBe(95.75);
+    const cards = screen.root.findAllByType(DemoVitalsCard);
+    const thoracic = cards.find(card => card.props.patient.id === 'DEMO-PT-B')!;
+    const numeric = measurement(thoracic.props.patient, thoracic.props.sessionId);
+    expect(numeric.heartRate).toBe(95.75);
     // Mount the canonical component separately with the exact same numeric measurement.
     let canonical!: TestRenderer.ReactTestRenderer;
     await act(async () => { canonical = TestRenderer.create(<VitalsTab readOnly
-      measurements={thoracic.props.measurements} onRecord={() => false} />); });
-    expect(text).toContain(content(canonical.toJSON()));
+      measurements={[numeric]} onRecord={() => false} />); });
+    for (const expected of ['96 /min', '104 mmHg', '66 mmHg', '20 /min', '94 %', '36,8 °C']) expect(content(canonical.toJSON())).toContain(expected);
     await act(async () => canonical.unmount());
     expect(JSON.stringify(JSON.parse(map.get(DEMO_RUNTIME_KEY)!).patients)).toBe(engineBefore);
   }

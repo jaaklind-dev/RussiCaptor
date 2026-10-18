@@ -37,8 +37,9 @@ export function verifyDemoGraph(root = path.join(repository, 'offline-demo'), en
       if (specifier) {
         if (!ts.isStringLiteral(specifier)) throw new Error('OFFLINE_DEMO_DYNAMIC_IMPORT_FORBIDDEN');
         const name = specifier.text; policy.assertSpecifier(name);
-        if (name.startsWith('.')) {
-          const target = path.resolve(path.dirname(real), name);
+        if (name.startsWith('.') || Object.hasOwn(policy.SHARED_ALIASES, name)) {
+          const target = Object.hasOwn(policy.SHARED_ALIASES, name)
+            ? path.join(repository, policy.SHARED_ALIASES[name]) : path.resolve(path.dirname(real), name);
           const candidate = [target, target+'.ts', target+'.tsx', target+'.js', target+'.cjs'].find(p => fs.existsSync(p) && fs.statSync(p).isFile());
           if (!candidate) throw new Error('OFFLINE_DEMO_IMPORT_UNRESOLVED');
           visit(candidate);

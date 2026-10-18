@@ -71,9 +71,16 @@ describe('dedicated signed offline-demo build contract', () => {
     expect(build).toContain('EXPO_NO_DOTENV'); expect(build).not.toContain('verify-field-release-config');
     expect(build).not.toContain('build-field-release.mjs'); expect(build).not.toContain('supabase db');
   });
-  test('demo runtime reuses only the seven reviewed hash-pinned pure sources and cannot widen on source tampering', () => {
+  test('demo runtime reuses exactly the reviewed engine/presentation/laboratory pure sources and cannot widen on source tampering', () => {
     const { SHARED_SOURCES } = require('../../offline-demo/isolation-policy.cjs');
-    expect(Object.keys(SHARED_SOURCES)).toHaveLength(7);
+    expect(Object.keys(SHARED_SOURCES).sort()).toEqual([
+      'src/services/runtime/HemorrhagePatientProcess.ts', 'src/services/runtime/PleuralInjuryPatientProcess.ts',
+      'src/services/runtime/RespiratoryFailurePatientProcess.ts', 'src/services/runtime/vitals/VitalSignEngine.ts',
+      'src/services/runtime/vitals/VitalSignProjection.ts', 'src/components/patient/VitalsTab.tsx', 'src/presentation/vitalSigns.ts',
+      'src/config/NarvaLaboratoryCatalog.ts', 'src/utils/immutable.ts',
+      'src/services/runtime/laboratory/NarvaLabPhysiologyV1Generator.ts', 'src/services/runtime/laboratory/NarvaLabPatientIdentity.ts',
+      'src/components/patient/LaboratoryResultPresentation.ts',
+    ].sort());
     expect(SHARED_SOURCES['src/presentation/vitalSigns.ts']).toBe('b756df51f94079d0b50ff2546e84b4336f84cf38574c7c466ce289dd823924e3');
     jest.isolateModules(() => {
       jest.doMock('expo/metro-config', () => ({ getDefaultConfig: () => ({ resolver: {} }) }));
@@ -87,7 +94,10 @@ describe('dedicated signed offline-demo build contract', () => {
       spy.mockRestore(); jest.dontMock('expo/metro-config');
     });
   });
-  test.each(['src/presentation/vitalSigns.ts', 'src/components/patient/VitalsTab.tsx'])(
+  test.each(['src/presentation/vitalSigns.ts', 'src/components/patient/VitalsTab.tsx',
+    'src/config/NarvaLaboratoryCatalog.ts', 'src/utils/immutable.ts',
+    'src/services/runtime/laboratory/NarvaLabPhysiologyV1Generator.ts', 'src/services/runtime/laboratory/NarvaLabPatientIdentity.ts',
+    'src/components/patient/LaboratoryResultPresentation.ts'])(
     'shared presentation remains fail-closed when %s is modified', relative => {
       jest.isolateModules(() => {
         jest.doMock('expo/metro-config', () => ({ getDefaultConfig: () => ({ resolver: {} }) }));

@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { getDefaultConfig } = require('expo/metro-config');
-const { assertSpecifier, SHARED_SOURCES } = require('./isolation-policy.cjs');
+const { assertSpecifier, SHARED_SOURCES, SHARED_ALIASES } = require('./isolation-policy.cjs');
 const config = getDefaultConfig(__dirname);
 const appRoot = fs.realpathSync(__dirname);
 const modulesRoot = fs.realpathSync(path.resolve(__dirname, '../node_modules'));
@@ -22,7 +22,8 @@ config.resolver.resolveRequest = (context, specifier, platform) => {
   const virtualRegistry = '\0polyfill:assets-registry';
   const origin = context.originModulePath === virtualRegistry ? modulesRoot : fs.realpathSync(context.originModulePath);
   if (origin.startsWith(appRoot + path.sep) || shared(origin)) assertSpecifier(specifier);
-  const result = context.resolveRequest(context, specifier, platform);
+  const target = Object.hasOwn(SHARED_ALIASES, specifier) ? path.join(repository, SHARED_ALIASES[specifier]) : specifier;
+  const result = context.resolveRequest(context, target, platform);
   for (const file of result.type === 'sourceFile' ? [result.filePath] : result.type === 'assetFiles' ? result.filePaths : []) {
     if (file === virtualRegistry) continue;
     const resolved = fs.realpathSync(file);
