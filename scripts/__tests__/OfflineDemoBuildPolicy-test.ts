@@ -3,13 +3,13 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 const root = process.cwd();
 const policy = JSON.parse(fs.readFileSync(path.join(root, 'offline-demo/build-policy.json'), 'utf8'));
-const { AUDITED_DEMO_SOURCES, AUDITED_DEMO_ASSETS } = require('../../offline-demo/isolation-policy.cjs');
+const { AUDITED_DEMO_SOURCES, AUDITED_DEMO_ASSETS, ASSET_REGISTRY } = require('../../offline-demo/isolation-policy.cjs');
 function evaluate(expression: string) {
   return spawnSync(process.execPath, ['--input-type=module', '-e', `import {validatePolicy,validateArtifact,validateBundleSources,validateManifestDump} from './scripts/offline-demo-build-policy.mjs';const policy=${JSON.stringify(policy)};${expression}`], { cwd: root, encoding: 'utf8' });
 }
-const embedded = { ...policy, auditedDemoSources: AUDITED_DEMO_SOURCES, auditedDemoAssets:AUDITED_DEMO_ASSETS, sourceCommit: 'a'.repeat(40), sourceDirty: false, buildTimestamp: '2026-10-18T12:00:00.000Z' };
+const embedded = { ...policy, auditedDemoSources: AUDITED_DEMO_SOURCES, auditedDemoAssets:AUDITED_DEMO_ASSETS, assetRegistry:ASSET_REGISTRY, sourceCommit: 'a'.repeat(40), sourceDirty: false, buildTimestamp: '2026-10-18T12:00:00.000Z' };
 const actual = { packageId: policy.packageId, versionCode: policy.versionCode, versionName: policy.applicationVersion, certificate: policy.signingCertificateSha256,
-  signatureVerified: true, debuggable: false, manifestIsolation: true, productionMarkersAbsent: true, bundledApplicationGraphVerified: true, auditedDemoSources: AUDITED_DEMO_SOURCES, auditedBundleContentsVerified: true, auditedDemoAssets:AUDITED_DEMO_ASSETS };
+  signatureVerified: true, debuggable: false, manifestIsolation: true, productionMarkersAbsent: true, bundledApplicationGraphVerified: true, auditedDemoSources: AUDITED_DEMO_SOURCES, auditedBundleContentsVerified: true, auditedDemoAssets:AUDITED_DEMO_ASSETS,assetRegistry:ASSET_REGISTRY,assetRegistryBundleVerified:true };
 describe('dedicated signed offline-demo build contract', () => {
   test('independent demo policy permits no migration dependency', () => {
     expect(evaluate('validatePolicy(policy);').status).toBe(0);
@@ -28,12 +28,17 @@ describe('dedicated signed offline-demo build contract', () => {
     expect(evaluate(`validateArtifact(policy,${JSON.stringify(embedded)},${JSON.stringify(actual)});`).status).toBe(0);
   });
   test.each([{ certificate: '0'.repeat(64) }, { signatureVerified: false }, { debuggable: true }, { packageId: 'com.jaaklind.RussiCaptor' },
-    { versionCode: 181 }, { manifestIsolation: false }, { productionMarkersAbsent: false }, { bundledApplicationGraphVerified: false }, { auditedBundleContentsVerified: false }])('artifact mismatch fails closed %j', patch => {
+    { versionCode: 181 }, { manifestIsolation: false }, { productionMarkersAbsent: false }, { bundledApplicationGraphVerified: false }, { auditedBundleContentsVerified: false },
+    {assetRegistryBundleVerified:false},{assetRegistry:{}},{assetRegistry:{...ASSET_REGISTRY,sha256:'0'.repeat(64)}}])('artifact mismatch fails closed %j', patch => {
     expect(evaluate(`validateArtifact(policy,${JSON.stringify(embedded)},{...${JSON.stringify(actual)},...${JSON.stringify(patch)}});`).status).not.toBe(0);
   });
   test('sidecar edits cannot promote signed demo evidence', () => {
     expect(evaluate(`validateArtifact({...policy,distributable:true},${JSON.stringify(embedded)},${JSON.stringify(actual)});`).status).not.toBe(0);
     expect(evaluate(`validateArtifact(policy,{...${JSON.stringify(embedded)},buildMode:'canonical'},${JSON.stringify(actual)});`).status).not.toBe(0);
+  });
+  test.each([undefined,{}, {...ASSET_REGISTRY,version:'unreviewed'}, {...ASSET_REGISTRY,sha256:'0'.repeat(64)}])('embedded registry identity mismatch rejected %j',identity=>{
+    expect(evaluate(`validateArtifact(policy,{...${JSON.stringify(embedded)},assetRegistry:${JSON.stringify(identity)}},${JSON.stringify(actual)});`).stderr)
+      .toContain('OFFLINE_DEMO_ASSET_REGISTRY_IDENTITY_INVALID');
   });
   test.each([undefined, {}, { ...AUDITED_DEMO_SOURCES, 'src/runtime/DemoTime.ts': '0'.repeat(64) },
     { ...AUDITED_DEMO_SOURCES, 'src/runtime/Unknown.ts': '0'.repeat(64) }])('embedded or bundled module identity mismatch rejected %j', identities => {

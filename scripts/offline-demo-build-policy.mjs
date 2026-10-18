@@ -4,8 +4,28 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
-const { assertOfflineEnvironment, SHARED_SOURCES, AUDITED_DEMO_SOURCES, assertAuditedDemoSource, AUDITED_DEMO_ASSETS, assertAuditedDemoAsset } = require('../offline-demo/isolation-policy.cjs');
+const { assertOfflineEnvironment, SHARED_SOURCES, AUDITED_DEMO_SOURCES, assertAuditedDemoSource, AUDITED_DEMO_ASSETS, assertAuditedDemoAsset,
+  ASSET_REGISTRY, verifyAssetRegistry, assertAssetRegistryBytes } = require('../offline-demo/isolation-policy.cjs');
 const demoRoot = fileURLToPath(new URL('../offline-demo/', import.meta.url));
+export function verifyAuditedAssetRegistry() {
+  verifyAssetRegistry(path.join(demoRoot,'../node_modules'));
+  return {...ASSET_REGISTRY};
+}
+function validRegistryIdentity(value) {
+  return value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===Object.keys(ASSET_REGISTRY).length&&
+    Object.entries(ASSET_REGISTRY).every(([key,expected])=>value[key]===expected);
+}
+export function validateAssetRegistryBundle(map) {
+  if(!map||!Array.isArray(map.sources)||!Array.isArray(map.sourcesContent)||map.sources.length!==map.sourcesContent.length)
+    throw new Error('OFFLINE_DEMO_ASSET_REGISTRY_BUNDLE_INVALID');
+  const indices=map.sources.flatMap((source,index)=>{
+    const normalized=String(source).replaceAll('\\','/');
+    return normalized.endsWith('/node_modules/'+ASSET_REGISTRY.relativePath)||normalized==='node_modules/'+ASSET_REGISTRY.relativePath?[index]:[];
+  });
+  if(indices.length!==1||typeof map.sourcesContent[indices[0]]!=='string')throw new Error('OFFLINE_DEMO_ASSET_REGISTRY_BUNDLE_INVALID');
+  assertAssetRegistryBytes(map.sourcesContent[indices[0]]);
+  return verifyAuditedAssetRegistry();
+}
 export function verifyAuditedDemoSources(root = demoRoot) {
   for (const relative of Object.keys(AUDITED_DEMO_SOURCES)) {
     assertAuditedDemoSource(relative, fs.readFileSync(path.join(root, relative)));
@@ -45,6 +65,9 @@ export function validateArtifact(policy, embedded, actual) {
   validatePolicy(policy);
   verifyAuditedDemoSources();
   verifyAuditedDemoAssets();
+  verifyAuditedAssetRegistry();
+  if(!validRegistryIdentity(embedded.assetRegistry)||!validRegistryIdentity(actual.assetRegistry)||actual.assetRegistryBundleVerified!==true)
+    throw new Error('OFFLINE_DEMO_ASSET_REGISTRY_IDENTITY_INVALID');
   if(!validAssetIdentities(embedded.auditedDemoAssets)||!validAssetIdentities(actual.auditedDemoAssets))throw new Error('OFFLINE_DEMO_ASSET_IDENTITY_INVALID');
   if (!validAuditedIdentities(embedded.auditedDemoSources) || !validAuditedIdentities(actual.auditedDemoSources) || actual.auditedBundleContentsVerified !== true) {
     throw new Error('OFFLINE_DEMO_EMBEDDED_MODULE_IDENTITY_INVALID');

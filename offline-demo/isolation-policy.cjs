@@ -1,4 +1,28 @@
 const PACKAGE_ID = 'com.jaaklind.RussiCaptor.demo';
+// Metro-generated import only. This is not a general application external or @react-native/* grant.
+const ASSET_REGISTRY = Object.freeze({
+  specifier: '@react-native/assets-registry/registry', version: '0.86.0',
+  relativePath: '@react-native/assets-registry/registry.js',
+  sha256: '4edff3064f1d79e8a0dd866b9163e13fbb48bec4d3a832ad7673b076d799bd7c',
+  packageJsonSha256: '835ab65e7bed2b367029d1c07f3715ec87b5065ca44cc2bedf59976e80f42345',
+});
+function assertAssetRegistryBytes(bytes) {
+  if (require('node:crypto').createHash('sha256').update(bytes).digest('hex') !== ASSET_REGISTRY.sha256)
+    throw new Error('OFFLINE_DEMO_ASSET_REGISTRY_HASH_INVALID');
+}
+function verifyAssetRegistry(modulesRoot) {
+  const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+  const root=fs.realpathSync(modulesRoot),expected=path.join(root,ASSET_REGISTRY.relativePath);
+  if(fs.realpathSync(expected)!==expected)throw new Error('OFFLINE_DEMO_ASSET_REGISTRY_PATH_INVALID');
+  const metadata=fs.readFileSync(path.join(root,'@react-native/assets-registry/package.json'));
+  if(crypto.createHash('sha256').update(metadata).digest('hex')!==ASSET_REGISTRY.packageJsonSha256)
+    throw new Error('OFFLINE_DEMO_ASSET_REGISTRY_PACKAGE_INVALID');
+  const pkg=JSON.parse(metadata);
+  if(pkg.name!=='@react-native/assets-registry'||pkg.version!==ASSET_REGISTRY.version)
+    throw new Error('OFFLINE_DEMO_ASSET_REGISTRY_PACKAGE_INVALID');
+  assertAssetRegistryBytes(fs.readFileSync(expected));
+  return {...ASSET_REGISTRY,filePath:expected};
+}
 // Exact reviewed demo-owned sources; never a directory grant.
 const AUDITED_DEMO_SOURCES = Object.freeze({
   'src/runtime/DemoImaging.ts': '1b2b72b613f067875d10abe86af7231b38164e4ff491fe99b70f4d2680f9aee3',
@@ -59,4 +83,4 @@ function assertSpecifier(specifier) {
     throw new Error('OFFLINE_DEMO_IMPORT_FORBIDDEN');
   }
 }
-module.exports = { PACKAGE_ID, AUDITED_DEMO_SOURCES, AUDITED_DEMO_ASSETS, assertAuditedDemoAsset, assertAuditedDemoSource, SHARED_SOURCES, SHARED_ALIASES, assertOfflineEnvironment, assertSpecifier };
+module.exports = { PACKAGE_ID, ASSET_REGISTRY, assertAssetRegistryBytes, verifyAssetRegistry, AUDITED_DEMO_SOURCES, AUDITED_DEMO_ASSETS, assertAuditedDemoAsset, assertAuditedDemoSource, SHARED_SOURCES, SHARED_ALIASES, assertOfflineEnvironment, assertSpecifier };

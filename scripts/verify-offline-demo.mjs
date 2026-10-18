@@ -62,6 +62,8 @@ export function verifyDemoGraph(root = path.join(repository, 'offline-demo'), en
   return { status: 'PASS', applicationModules: visited.size, auditedSharedPureModules: sharedVisited.size, productionImports: 0, productionServiceImports: 0 };
 }
 export function verifyOfflineDemo() {
+  policy.verifyAssetRegistry(path.join(repository,'node_modules'));
+  const assetRegistry={...policy.ASSET_REGISTRY};
   const config = require(path.join(repository,'offline-demo/app.config.cjs'))();
   const pkg = JSON.parse(fs.readFileSync(path.join(repository,'offline-demo/package.json'),'utf8'));
   const buildPolicy = JSON.parse(fs.readFileSync(path.join(repository,'offline-demo/build-policy.json'),'utf8'));
@@ -73,7 +75,7 @@ export function verifyOfflineDemo() {
   const root = path.join(repository,'offline-demo');
   const source = fs.readFileSync(path.join(root,'index.js'),'utf8');
   if (!(source.indexOf('installOfflineNetworkBoundary(globalThis)') < source.indexOf("require('expo')"))) throw new Error('OFFLINE_DEMO_BOUNDARY_ORDER_INVALID');
-  return { ...verifyDemoGraph(), packageId: config.android.package, internetPermissionRequested: false,
+  return { ...verifyDemoGraph(), assetRegistry, packageId: config.android.package, internetPermissionRequested: false,
     nativeArtifactVerified: false, apkBuildPerformed: false, publicationAuthorization: 'NOT_GRANTED' };
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) console.log(JSON.stringify(verifyOfflineDemo()));

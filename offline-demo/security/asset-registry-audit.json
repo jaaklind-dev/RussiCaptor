@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-18",
+  "baselineCommit": "d71797c9ebab0609bbc240bafbf4893f26a536da",
+  "rootCause": {
+    "configuration": "@expo/metro-config/build/ExpoMetroConfig.js sets transformer.assetRegistryPath",
+    "transformation": "metro/src/Bundler/util.js generateAssetCodeFileAst emits require(assetRegistryPath).registerAsset(descriptor)",
+    "rejectedOrigin": "assets/imaging/pelvis-generated.jpg",
+    "rejectedSpecifier": "@react-native/assets-registry/registry",
+    "policy": "The custom demo resolver applied normal application import restrictions to the Metro-generated image module"
+  },
+  "dependency": {
+    "package": "@react-native/assets-registry",
+    "version": "0.86.0",
+    "resolvedFile": "node_modules/@react-native/assets-registry/registry.js",
+    "sha256": "4edff3064f1d79e8a0dd866b9163e13fbb48bec4d3a832ad7673b076d799bd7c",
+    "packageJsonSha256": "835ab65e7bed2b367029d1c07f3715ec87b5065ca44cc2bedf59976e80f42345",
+    "license": "MIT",
+    "directRuntimeDependencies": [],
+    "transitiveRuntimeDependencies": [],
+    "dynamicModuleResolution": false,
+    "moduleInitialization": "Allocate a private in-memory array and export registerAsset/getAssetByID",
+    "runtimeBehavior": "registerAsset appends supplied local metadata and returns a one-based numeric ID; getAssetByID reads that array",
+    "networkAccess": false,
+    "persistentStorageAccess": false,
+    "productionServiceReachability": false
+  },
+  "correction": {
+    "scope": "Build-time isolation policy only; no clinical, canonical or demo runtime changes",
+    "generatedImportPreconditions": [
+      "Origin is one of the two exact approved image paths and passes the existing SHA-256 check",
+      "Specifier exactly matches @react-native/assets-registry/registry",
+      "Resolved target is the exact audited registry file under the real installed node_modules root",
+      "Registry bytes and package metadata match reviewed SHA-256 values"
+    ],
+    "applicationExternalPermissionAdded": false,
+    "registryDependenciesAllowed": false,
+    "bundleVerification": "Exactly one registry source with exact source contents; pinned identity required in embedded and independently validated build evidence",
+    "unchanged": ["Image bytes and source pins", "Production import denylist", "INTERNET prohibition", "Supabase configuration prohibition", "Production deep-link prohibition", "Demo signing identity and non-distributable policy"]
+  },
+  "guardrailImpact": "Asset identity, authoritative image presentation and security isolation only. No changes to A-J/M-X writer/checkpoint/command semantics. Full runtime/security guardrails still mandatory.",
+  "tests": "scripts/__tests__/OfflineDemoAssetRegistry-test.ts plus existing audited-bundle, build-policy, imaging-isolation and canonical equivalence suites",
+  "limitations": "Source/VM tests are not physical image-rendering acceptance. The actual signed APK must independently pass all artifact gates before installation.",
+  "publicationAuthorization": "NOT_GRANTED"
+}
