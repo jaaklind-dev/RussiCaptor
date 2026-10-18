@@ -9,7 +9,7 @@ import { DemoController } from './DemoController';
 import { DemoSessionStore, type DemoEvent, type DemoSession } from './DemoSession';
 const eventLabels: Record<DemoEvent['kind'], string> = { START: 'Demoõppus käivitatud', PAUSE: 'Simulatsioon peatatud',
   RESUME: 'Simulatsioon jätkatud', BACKGROUND: 'Taustale minekul peatatud', RECOVERY: 'Sessioon taastatud peatatud olekus',
-  BINDER_APPLIED: 'Vaagnavöö paigaldatud patsiendile A', LAB_ORDERED: 'DEMO laboritellimus ja proov kinnitatud',
+  BINDER_APPLIED: 'Vaagnalahas paigaldatud patsiendile A', LAB_ORDERED: 'DEMO laboritellimus ja proov kinnitatud',
   LAB_RESULTED: 'DEMO laboritulemus valmis', LIMIT: '15 minuti demopiir saavutatud; taasta algseis' };
 const lifecycleLabels = { READY: 'Valmis', RUNNING: 'Käib', PAUSED: 'Peatatud' };
 function Button({ label, onPress, disabled = false }: Readonly<{ label: string; onPress: () => void; disabled?: boolean }>) {
@@ -104,7 +104,7 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
           <Button label="EXCON" onPress={() => perform(() => navigate('EXCON'))} />
         </View>
         {session.mode === 'home' ? <>
-          <Text>Kaks sünteetilist traumapatsienti, ühine kohalik mootor, vaagnavöö ja kohalik labori põhipaneel. Pildiuuringud pole selles etapis rakendatud.</Text>
+          <Text>Kaks sünteetilist traumapatsienti, ühine kohalik mootor, vaagnalahas ja kohalik labori põhipaneel. Pildiuuringud pole selles etapis rakendatud.</Text>
           <Button label="Alusta demoõppust" disabled={!controller || session.lifecycle !== 'READY'} onPress={() => perform(() => { if (control('START')) navigate('CM'); })} />
         </> : <>
           {session.mode === 'EXCON' && <>
@@ -130,8 +130,8 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
                   disabled={!controller || session.lifecycle !== 'RUNNING' || session.time + DEMO_LAB_DELAY_SEC > DEMO_MAX_SECONDS || session.mode !== 'CM' || session.selectedPatient !== fixture.id} />
               </>}
               {session.mode === 'CM' && fixture.id === 'DEMO-PT-A' && session.selectedPatient === fixture.id && <>
-                <Button label="Paigalda vaagnavöö (DEMO)" disabled={!controller || session.lifecycle !== 'RUNNING' || session.commands.some(c => c.type === 'APPLY_PELVIC_BINDER')} onPress={binder} />
-                {session.commands.some(c => c.type === 'APPLY_PELVIC_BINDER') && <Text>Vaagnavöö paigaldatud. Verejooksu mõju arvestatakse olemasoleva mudeli järgmistes sammudes.</Text>}
+                <Button label="Paigalda vaagnalahas (DEMO)" disabled={!controller || session.lifecycle !== 'RUNNING' || session.commands.some(c => c.type === 'APPLY_PELVIC_BINDER')} onPress={binder} />
+                {session.commands.some(c => c.type === 'APPLY_PELVIC_BINDER') && <Text>Vaagnalahas paigaldatud. Verejooksu mõju arvestatakse olemasoleva mudeli järgmistes sammudes.</Text>}
               </>}
             </View>;
           })}

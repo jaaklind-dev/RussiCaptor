@@ -20,15 +20,20 @@ describe('mounted interactive demo CM/EXCON with real domain state', () => {
   test('home starts one exercise, CM acts once, EXCON sees the same result and clock', async () => {
     const clear = jest.spyOn(global, 'clearInterval'); const { store } = fixture(); let screen!: TestRenderer.ReactTestRenderer;
     await act(async () => { screen = TestRenderer.create(<DemoRuntimeApplication store={store} onExit={jest.fn()} />); });
+    expect(JSON.stringify(screen.toJSON())).toContain('ühine kohalik mootor, vaagnalahas ja');
     await act(async () => button(screen, 'Alusta demoõppust').props.onPress());
     expect(state(store).mode).toBe('CM'); expect(JSON.stringify(screen.toJSON())).toContain('Sünteetiline patsient A');
     expect(JSON.stringify(screen.toJSON())).toContain('Sünteetiline patsient B');
-    const action = button(screen, 'Paigalda vaagnavöö (DEMO)').props.onPress;
+    const action = button(screen, 'Paigalda vaagnalahas (DEMO)').props.onPress;
     await act(async () => { action(); action(); action(); });
-    expect(state(store).commands).toHaveLength(1); expect(button(screen, 'Paigalda vaagnavöö (DEMO)').props.disabled).toBe(true);
+    expect(state(store).commands).toHaveLength(1); expect(button(screen, 'Paigalda vaagnalahas (DEMO)').props.disabled).toBe(true);
+    expect(state(store).commands[0]).toMatchObject({ id: `DEMO-CMD-${state(store).sessionId}:binder`, type: 'APPLY_PELVIC_BINDER' });
+    expect(JSON.stringify(screen.toJSON())).toContain('Vaagnalahas paigaldatud. Verejooksu mõju');
     await act(async () => jest.advanceTimersByTime(3000)); const time = state(store).time;
     await act(async () => button(screen, 'EXCON').props.onPress());
-    expect(state(store).time).toBe(time); expect(JSON.stringify(screen.toJSON())).toContain('Vaagnavöö paigaldatud patsiendile A');
+    expect(state(store).time).toBe(time); expect(JSON.stringify(screen.toJSON())).toContain('Vaagnalahas paigaldatud patsiendile A');
+    expect(state(store).events.some(event => event.kind === 'BINDER_APPLIED')).toBe(true);
+    expect(JSON.stringify(screen.toJSON()).toLocaleLowerCase('et')).not.toContain('vaagnavöö');
     expect(JSON.stringify(screen.toJSON())).toContain('DEMO · AINULT SÜNTEETILISED ANDMED');
     await act(async () => button(screen, 'Peata').props.onPress()); await act(async () => jest.advanceTimersByTime(20_000)); expect(state(store).time).toBe(time);
     await act(async () => button(screen, 'Jätka').props.onPress()); await act(async () => jest.advanceTimersByTime(1000)); expect(state(store).time).toBe(time + 1);
@@ -40,11 +45,11 @@ describe('mounted interactive demo CM/EXCON with real domain state', () => {
   test('patient selection, pause and mode changes do not bypass the local action guard', async () => {
     const { store } = fixture(); let screen!: TestRenderer.ReactTestRenderer;
     await act(async () => { screen = TestRenderer.create(<DemoRuntimeApplication store={store} onExit={jest.fn()} />); });
-    await act(async () => button(screen, 'CM').props.onPress()); expect(button(screen, 'Paigalda vaagnavöö (DEMO)').props.disabled).toBe(true);
+    await act(async () => button(screen, 'CM').props.onPress()); expect(button(screen, 'Paigalda vaagnalahas (DEMO)').props.disabled).toBe(true);
     await act(async () => button(screen, 'Avaleht').props.onPress()); await act(async () => button(screen, 'Alusta demoõppust').props.onPress());
-    const stale = button(screen, 'Paigalda vaagnavöö (DEMO)').props.onPress;
+    const stale = button(screen, 'Paigalda vaagnalahas (DEMO)').props.onPress;
     await act(async () => button(screen, 'Vali Sünteetiline patsient B').props.onPress());
-    expect(button(screen, 'Paigalda vaagnavöö (DEMO)')).toBeUndefined(); await act(async () => stale()); expect(state(store).commands).toHaveLength(0);
+    expect(button(screen, 'Paigalda vaagnalahas (DEMO)')).toBeUndefined(); await act(async () => stale()); expect(state(store).commands).toHaveLength(0);
     await act(async () => screen.unmount());
   });
   test('AppState background pauses, callbacks are removed and foreground requires manual resume', async () => {
@@ -88,7 +93,7 @@ describe('mounted interactive demo CM/EXCON with real domain state', () => {
     const { store } = fixture(); let screen!: TestRenderer.ReactTestRenderer;
     await act(async () => { screen = TestRenderer.create(<DemoRuntimeApplication store={store} onExit={jest.fn()} />); });
     await act(async () => button(screen, 'Alusta demoõppust').props.onPress());
-    const gesture = button(screen, 'Paigalda vaagnavöö (DEMO)').props.onPress;
+    const gesture = button(screen, 'Paigalda vaagnalahas (DEMO)').props.onPress;
     await act(async () => jest.advanceTimersByTime(2000)); await act(async () => gesture());
     expect(state(store).commands).toHaveLength(1); expect(state(store).commands[0].time).toBe(2);
     await act(async () => screen.unmount());

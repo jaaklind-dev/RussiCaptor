@@ -59,7 +59,8 @@ describe('mounted explicit demo upgrade and one-shot acceptance export', () => {
     const screen = await mount(); expect(mockMap.get(DEMO_RUNTIME_KEY)).toBe(before);
     expect(rendered(screen)).toContain('Olemasolev kehtiv 0.2.0 seanss säilib');
     await act(async () => button(screen, 'Selge, jätka demoga').props.onPress());
-    expect(mockMap.get(DEMO_RUNTIME_KEY)).toBe(before); expect(rendered(screen)).toContain('Vaagnavöö paigaldatud');
+    expect(mockMap.get(DEMO_RUNTIME_KEY)).toBe(before); expect(rendered(screen)).toContain('Vaagnalahas paigaldatud');
+    expect(rendered(screen).toLocaleLowerCase('et')).not.toContain('vaagnavöö');
     await act(async () => screen.unmount());
   });
   test('a previously running v2 session retains the normal paused recovery contract while notice is visible', async () => {

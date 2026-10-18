@@ -34,8 +34,8 @@ describe('mounted local CM/EXCON laboratory controls',()=>{
     const stale=button(screen,'Telli DEMO trauma põhipaneel').props.onPress;
     await act(async()=>button(screen,'Vali Sünteetiline patsient B').props.onPress());await act(async()=>stale());expect(state(store).commands).toHaveLength(0);
     await act(async()=>button(screen,'Vali Sünteetiline patsient A').props.onPress());await act(async()=>button(screen,'Telli DEMO trauma põhipaneel').props.onPress());
-    expect(button(screen,'Paigalda vaagnavöö (DEMO)').props.disabled).toBe(false);
-    await act(async()=>button(screen,'Paigalda vaagnavöö (DEMO)').props.onPress());expect(state(store).commands).toHaveLength(2);
+    expect(button(screen,'Paigalda vaagnalahas (DEMO)').props.disabled).toBe(false);
+    await act(async()=>button(screen,'Paigalda vaagnalahas (DEMO)').props.onPress());expect(state(store).commands).toHaveLength(2);
     await act(async()=>button(screen,'EXCON').props.onPress());await act(async()=>button(screen,'Peata').props.onPress());await act(async()=>button(screen,'CM').props.onPress());
     await act(async()=>button(screen,'Vali Sünteetiline patsient B').props.onPress());const paused=button(screen,'Telli DEMO trauma põhipaneel');expect(paused.props.disabled).toBe(true);
     await act(async()=>paused.props.onPress());expect(state(store).commands).toHaveLength(2);await act(async()=>screen.unmount());
