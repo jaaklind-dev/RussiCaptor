@@ -8,8 +8,8 @@ const app = JSON.parse(fs.readFileSync(path.resolve(root, "app.json"), "utf8")).
 
 describe("post-C11 field-release compatibility", () => {
   test("canonical Android version is above the prior signed distributable", () => {
-    expect(release.versionCode).toBeGreaterThan(179);
-    expect(release.minimumVersionCodeExclusive).toBeGreaterThanOrEqual(179);
+    expect(release.versionCode).toBeGreaterThan(180);
+    expect(release.minimumVersionCodeExclusive).toBeGreaterThanOrEqual(180);
     expect(app.android.versionCode).toBe(release.versionCode);
     expect(release.artifactFilename).toContain(`v${release.versionCode}.apk`);
   });
