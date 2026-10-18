@@ -380,6 +380,9 @@ useEffect(() => {
 {activeTab === "orders" && (
   <OrdersTab
     orders={orders}
+    imagingWorkflow={imagingWorkflow}
+    canPlaceImagingOrder={(order) => order.patientId === patient.id && order.exerciseId === exerciseId &&
+      findPatientById(order.patientId)?.status !== "Completed" && canCurrentCaseManagerEditPatient(order.patientId)}
     readOnly={isReadOnly}
     onPlaceOrder={(order) => {
       if (order.category === "imaging") {

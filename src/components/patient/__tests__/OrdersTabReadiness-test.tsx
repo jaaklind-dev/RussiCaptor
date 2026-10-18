@@ -12,6 +12,7 @@ import { submitImagingOrder } from '@/services/runtime/imaging/ImagingWorkflowCo
 import { InMemoryRuntimePatientCommandGateway } from '@/services/runtime/commands/InMemoryRuntimePatientCommandGateway';
 import { getRuntimeCommandReadinessDiagnostics } from '@/services/runtime/commands/RuntimeCommandReadinessDiagnostics';
 import { observeSharedWorkflowHead, resetSharedWorkflowConflictMetrics } from '@/services/sharedWorkflow/SharedWorkflowMutationService';
+import { resetImagingOrderReceipts } from '@/services/runtime/imaging/ImagingOrderPresentation';
 
 const ex = 'SYNTHETIC-EX', patient = 'SYNTHETIC-PT';
 const original = getCanonicalExerciseSnapshot();
@@ -20,7 +21,7 @@ const checkpoint = (revision = 17, time = 912) => ({ exerciseId: ex, checkpointR
   payload: { exerciseSession: { exerciseId: ex, lifecycleState: 'RUNNING', simulationTimeSec: time,
     speed: 1, version: 2, clockVersion: 2, clockInitializedAtSimulationTimeSec: 0 } } }) as RuntimeCheckpointEnvelope<SharedExerciseState>;
 const order = { id: 'ORDER', exerciseId: ex, patientId: patient, category: 'imaging', title: 'ChestXR',
-  status: 'available', visibility: 'available' } as Order;
+  status: 'available', visibility: 'available', workflow: { resultTargetId: 'IMG-001' } } as Order;
 let tree: renderer.ReactTestRenderer | undefined;
 let submit: jest.Mock;
 let log: jest.SpyInstance;
@@ -28,10 +29,11 @@ const send = () => submitImagingOrder(ex, patient, 'IMG-001', 'ONE-INTENT');
 const button = () => tree!.root.findAllByProps({ accessibilityLabel: 'Telli ChestXR' })
   .find(node => typeof node.props.onPress === 'function')!;
 const mount = async (onPlaceOrder: () => unknown = send, readOnly = false) => {
-  await act(async () => { tree = renderer.create(<OrdersTab orders={[order]} readOnly={readOnly}
+  await act(async () => { tree = renderer.create(<OrdersTab orders={[order]} readOnly={readOnly} imagingWorkflow={{ schemaVersion: 2, instances: [] }}
     onPlaceOrder={async () => { await onPlaceOrder(); }} />); });
 };
 beforeEach(() => {
+  resetImagingOrderReceipts();
   resetRuntimeReaderConvergence(); resetSharedWorkflowConflictMetrics();
   replaceCanonicalExerciseSnapshot(checkpoint().payload.exerciseSession as ReturnType<typeof getCanonicalExerciseSnapshot>);
   observeSharedWorkflowHead(ex, patient, 4, 'CM');

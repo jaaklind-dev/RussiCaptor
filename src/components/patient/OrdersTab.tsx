@@ -1,7 +1,11 @@
 import { Order } from "@/models/Order";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { getOrderStatusLabel } from "@/utils/status";
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { ImagingWorkflowSnapshot } from "@/models/ImagingWorkflow";
+import { imagingStatusLabel } from "@/localization/et";
+import { getImagingOrderReceiptVersion, imagingOrderPresentation,
+  subscribeToImagingOrderReceipts } from "@/services/runtime/imaging/ImagingOrderPresentation";
 import {
   getCanonicalExerciseSnapshot, getCanonicalExerciseSnapshotVersion, subscribeToCanonicalExerciseSnapshot,
 } from "@/repositories/ExerciseSessionRepository";
@@ -14,26 +18,67 @@ type Props = {
   orders: Order[];
   onPlaceOrder: (order: Order) => void | Promise<unknown>;
   readOnly?: boolean;
+  imagingWorkflow?: ImagingWorkflowSnapshot;
+  canPlaceImagingOrder?: (order: Order) => boolean;
 };
 
-export default function OrdersTab({ orders, onPlaceOrder, readOnly = false }: Props) {
+export default function OrdersTab({ orders, onPlaceOrder, readOnly = false, imagingWorkflow, canPlaceImagingOrder }: Props) {
   useSyncExternalStore(subscribeToRuntimeReaderConvergence, getRuntimeReaderConvergenceVersion, getRuntimeReaderConvergenceVersion);
   useSyncExternalStore(subscribeToCanonicalExerciseSnapshot, getCanonicalExerciseSnapshotVersion, getCanonicalExerciseSnapshotVersion);
+  useSyncExternalStore(subscribeToImagingOrderReceipts, getImagingOrderReceiptVersion, getImagingOrderReceiptVersion);
   const inFlight = useRef(false);
+  const mounted = useRef(true);
+  useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const latest = useRef({ orders, onPlaceOrder, readOnly, imagingWorkflow, canPlaceImagingOrder });
+  useLayoutEffect(() => {
+    latest.current = { orders, onPlaceOrder, readOnly, imagingWorkflow, canPlaceImagingOrder };
+  }, [orders, onPlaceOrder, readOnly, imagingWorkflow, canPlaceImagingOrder]);
   const [pending, setPending] = useState(false);
   const imagingReadiness = (order: Order) => runtimePatientCommandSubmissionReadiness(
     order.exerciseId, getCanonicalExerciseSnapshot().simulationTimeSec, "IMAGING_ORDER");
   const placeOrder = async (order: Order) => {
-    if (readOnly || inFlight.current || order.status !== "available" ||
-      (order.category === "imaging" && !imagingReadiness(order).ready)) return;
+    const current = latest.current;
+    if (!mounted.current || current.readOnly || inFlight.current) return;
+    if (order.category !== "imaging") {
+      if (order.status !== "available") return;
+    } else if (!canSubmitImaging(order)) return;
     inFlight.current = true;
     setPending(true);
     try {
-      await onPlaceOrder(order);
+      await current.onPlaceOrder(order);
     } finally {
       inFlight.current = false;
-      setPending(false);
+      if (mounted.current) setPending(false);
     }
+  };
+  const canSubmitImaging = (order: Order) => {
+    const current = latest.current;
+    const selected = current.orders.find(item => item.id === order.id && item.exerciseId === order.exerciseId &&
+      item.patientId === order.patientId && item.workflow.resultTargetId === order.workflow.resultTargetId);
+    const presentation = imagingOrderPresentation(order, current.imagingWorkflow);
+    return mounted.current && !current.readOnly && Boolean(selected) && presentation.available &&
+      !presentation.pending && current.canPlaceImagingOrder?.(order) !== false && imagingReadiness(order).ready;
+  };
+  const requestOrder = (order: Order) => {
+    if (order.category !== "imaging") { void placeOrder(order); return; }
+    if (inFlight.current || !canSubmitImaging(order)) return;
+    const offered = imagingOrderPresentation(order, latest.current.imagingWorkflow);
+    if (!offered.repeat) { void placeOrder(order); return; }
+    const intent = Object.freeze({ ...order, workflow: Object.freeze({ ...order.workflow }) });
+    // Reserve the interaction while the dialog is open, not just during RPC.
+    inFlight.current = true; setPending(true);
+    let settled = false;
+    const settle = (confirmed: boolean) => {
+      if (settled) return;
+      settled = true; inFlight.current = false;
+      if (mounted.current) setPending(false);
+      if (confirmed && canSubmitImaging(intent) &&
+        imagingOrderPresentation(intent, latest.current.imagingWorkflow).latestCommandId === offered.latestCommandId) void placeOrder(intent);
+    };
+    Alert.alert("Korda pildiuuringut?", "Kordustellimus loob uue pildiuuringu taotluse. Varasem tulemus säilib.", [
+      { text: "Loobu", style: "cancel", onPress: () => settle(false) },
+      { text: "Telli kordusuuring", onPress: () => settle(true) },
+    ], { cancelable: true, onDismiss: () => settle(false) });
   };
   return (
     <View style={styles.card}>
@@ -48,29 +93,39 @@ export default function OrdersTab({ orders, onPlaceOrder, readOnly = false }: Pr
       ) : (
         orders.map((order) => {
           const readiness = order.category === "imaging" ? imagingReadiness(order) : { ready: true };
+          const imaging = order.category === "imaging" ? imagingOrderPresentation(order, imagingWorkflow) : undefined;
+          const disabled = pending || !readiness.ready || Boolean(imaging &&
+            (!imaging.available || imaging.pending || canPlaceImagingOrder?.(order) === false));
+          const statusLabel = imaging ? !imaging.available ? "Ootan kinnitatud olekut"
+            : imaging.status === "NOT_ORDERED" ? "Tellimata"
+            : imaging.status === "PENDING" ? "Tellimus vastu võetud · ootan kinnitust"
+              : imagingStatusLabel(imaging.status) : getOrderStatusLabel(order.status);
           return (
             <View key={order.id} style={styles.row}>
               <View>
                 <Text style={styles.orderTitle}>{order.title}</Text>
                 <Text style={styles.meta}>
-                  {order.category} · {getOrderStatusLabel(order.status)}
+                  {order.category} · {statusLabel}
                 </Text>
-                {order.status === "available" && !readiness.ready && !readOnly && (
+                {(imaging || order.status === "available") && !readiness.ready && !readOnly && (
                   <Text accessibilityRole="alert" style={styles.readOnly}>
                     {readiness.reason ?? "Pilditellimus ootab õppuse andmete sünkroonimist. Tellimust ei saadetud."}
                   </Text>
                 )}
+                {imaging && !imaging.available && !readOnly && (
+                  <Text accessibilityRole="alert" style={styles.readOnly}>Ootan pildiuuringute kinnitatud andmeid. Tellimust ei saadetud.</Text>
+                )}
               </View>
 
-              {order.status === "available" && !readOnly && (
+              {(imaging || order.status === "available") && !readOnly && (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Telli ${order.title}`}
-                  disabled={pending || !readiness.ready}
-                  style={[styles.button, (pending || !readiness.ready) && styles.disabled]}
-                  onPress={() => { void placeOrder(order); }}
+                  accessibilityLabel={`${imaging?.repeat ? "Telli kordusuuring" : "Telli"} ${order.title}`}
+                  disabled={disabled}
+                  style={[styles.button, disabled && styles.disabled]}
+                  onPress={() => requestOrder(order)}
                 >
-                  <Text style={styles.buttonText}>Telli</Text>
+                  <Text style={styles.buttonText}>{imaging?.repeat ? "Telli kordusuuring" : "Telli"}</Text>
                 </Pressable>
               )}
             </View>
