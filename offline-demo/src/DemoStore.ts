@@ -6,7 +6,7 @@ export const SYNTHETIC_PATIENT = Object.freeze({ id: 'DEMO-PATIENT-001', name: '
   triage: 'P2', location: 'DEMO vastuvõtt', presentation: 'Sünteetiline näidispatsient. Kliinilisi toiminguid selles versioonis ei tehta.',
   vitals: Object.freeze({ heartRate: 80, systolic: 120, diastolic: 80, respiratoryRate: 16, oxygenSaturation: 98 }) });
 const initial = (generation: number): DemoSnapshot => Object.freeze({ schemaVersion: 1, generation, screen: 'home', visits: 0 });
-function valid(value: unknown): value is DemoSnapshot {
+export function validDemoSnapshot(value: unknown): value is DemoSnapshot {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
   return Object.keys(v).sort().join(',') === 'generation,schemaVersion,screen,visits' && v.schemaVersion === 1 &&
@@ -20,7 +20,7 @@ export class DemoStore {
   constructor(private readonly storage: DemoStorage) {
     const raw = storage.getItemSync(DEMO_STORAGE_KEY);
     if (raw !== null) {
-      try { const parsed: unknown = JSON.parse(raw); if (!valid(parsed)) throw new Error(); this.snapshot = Object.freeze(parsed); }
+      try { const parsed: unknown = JSON.parse(raw); if (!validDemoSnapshot(parsed)) throw new Error(); this.snapshot = Object.freeze(parsed); }
       catch { throw new Error('OFFLINE_DEMO_STATE_INVALID'); }
     }
   }
@@ -38,7 +38,7 @@ export class DemoStore {
     this.persist(next); return true;
   }
   private persist(next: DemoSnapshot): void {
-    if (!valid(next)) throw new Error('OFFLINE_DEMO_STATE_INVALID');
+    if (!validDemoSnapshot(next)) throw new Error('OFFLINE_DEMO_STATE_INVALID');
     try { this.storage.setItemSync(DEMO_STORAGE_KEY, JSON.stringify(next)); }
     catch { throw new Error('OFFLINE_DEMO_STORAGE_UNAVAILABLE'); }
     this.snapshot = Object.freeze(next); this.listeners.forEach(listener => listener());

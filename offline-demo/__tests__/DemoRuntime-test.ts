@@ -1,4 +1,4 @@
-import { DemoSessionStore, DEMO_RUNTIME_KEY, type DemoCommand, restoreSession } from '../src/runtime/DemoSession';
+import { DemoSessionStore, DEMO_RUNTIME_KEY, DEMO_RESET_RECEIPT_KEY, type DemoCommand, restoreSession } from '../src/runtime/DemoSession';
 import { DemoController, type DemoScheduler } from '../src/runtime/DemoController';
 import { DEMO_FIXTURE, DEMO_MAX_SECONDS, DEMO_PATIENTS, initialPatients } from '../src/runtime/DemoDomain';
 import { tickHemorrhagePatientProcess } from '../../src/services/runtime/HemorrhagePatientProcess';
@@ -157,7 +157,7 @@ describe('real shared-domain offline demo runtime (engines are not mocked)', () 
   test('repeated reset touches only the versioned demo runtime key and preserves other namespaces', () => {
     const { store, storage, map } = fixture(); for (let i = 0; i < 3; i++) { const s = session(store); store.reset(s.sessionId, s.generation); }
     expect(session(store).generation).toBe(3); expect(session(store).patients).toEqual(initialPatients());
-    expect(storage.setItemSync.mock.calls.every(([key]) => key === DEMO_RUNTIME_KEY)).toBe(true);
+    expect(storage.setItemSync.mock.calls.every(([key]) => [DEMO_RUNTIME_KEY, DEMO_RESET_RECEIPT_KEY].includes(key))).toBe(true);
     expect(map.get('canonical-private')).toBe('DO_NOT_TOUCH'); expect(map.get('russicaptor.demo.builder.draft')).toBe('KEEP'); expect(map.get(DEMO_STORAGE_KEY)).toBe('LEGACY_DEMO_KEEP');
   });
   test('all returned engine structures and ledgers are immutable', () => {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Alert, AppState, BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, AppState, BackHandler, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import VitalsTab from '../../../src/components/patient/VitalsTab';
 import { DEMO_PATIENTS, DEMO_MAX_SECONDS, measurement } from './DemoDomain';
 import { DemoController } from './DemoController';
@@ -54,8 +54,26 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
     perform(() => controller.binder({ id: `DEMO-CMD-${session.sessionId}:binder`, sessionId: session.sessionId,
       generation: session.generation, time: latest.session.time, patientId: 'DEMO-PT-A', type: 'APPLY_PELVIC_BINDER' }));
   };
+  const acceptanceExport = () => {
+    if (!session) return;
+    const binding = { sessionId: session.sessionId, generation: session.generation };
+    Alert.alert('Ekspordi DEMO vastuvõtutõend?',
+      'Ainult kohalik seansi ID, põlvkond, aeg, käsu ID ja arv, töötlemise kinnitus ning reset’i üleminek. Patsiendiandmeid ega kogu salvestust ei ekspordita. Jagamiskoha valid ise.',
+      [{ text: 'Loobu', style: 'cancel' }, { text: 'Ekspordi', onPress: () => {
+        try {
+          const report = store.acceptanceReport(binding);
+          const message = JSON.stringify(report, null, 2);
+          Alert.alert('DEMO vastuvõtutõend · salvestatud rida', message,
+            [{ text: 'Sulge', style: 'cancel' }, { text: 'Jaga tõendit', onPress: () => {
+              void Share.share({ title: 'RussiCaptor DEMO vastuvõtutõend', message })
+                .catch(() => setMessage('Demo vastuvõtutõendi jagamine ei õnnestunud.'));
+            } }]);
+        } catch { setMessage('Salvestatud demo vastuvõtutõendit ei saanud kinnitada. Tõendit ei eksporditud.'); }
+      } }]);
+  };
   return <View style={styles.root}>
-    <View style={styles.banner}><Text style={styles.bannerTitle}>DEMO · AINULT SÜNTEETILISED ANDMED</Text>
+    <View style={styles.banner}><Text style={styles.bannerTitle} onLongPress={acceptanceExport}
+      accessibilityHint="Hoia all, et eksportida piiratud kohalik DEMO vastuvõtutõend">DEMO · AINULT SÜNTEETILISED ANDMED</Text>
       <Text>Võrguühendust ega sisselogimist ei kasutata. Ei ole kliiniliselt valideeritud.</Text>
       {session && <Text accessibilityLabel="Demo kell">{lifecycleLabels[session.lifecycle]} · T+{session.time} s · üks kohalik kell</Text>}
     </View>

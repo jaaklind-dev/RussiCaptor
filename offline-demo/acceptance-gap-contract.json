@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "scope": "Offline demo only; no canonical source, engine, release configuration or backend changes",
+  "guardrailImpact": {
+    "classes": ["G exactly-once local effect", "K authoritative presentation", "L native activation", "O non-destructive legacy compatibility", "X restart determinism", "Z physical acceptance boundary"],
+    "execution": "Full regression plus all runtime/persistence/multi-device guardrail groups; canonical release and security tests remain mandatory",
+    "productionAuthorityImpact": "NONE",
+    "engineChanges": "NONE"
+  },
+  "legacyPolicy": {
+    "database": "russicaptor-offline-demo-v1.db",
+    "oldKey": "russicaptor.offline-demo.session.v1",
+    "oldSchema": "schemaVersion=1, generation, screen, visits",
+    "runtimeKey": "russicaptor.offline-demo.runtime.v2",
+    "runtimeSchema": "Unchanged schemaVersion=2; existing valid sessions preserved",
+    "acknowledgementKey": "russicaptor.offline-demo.upgrade-notice.v1",
+    "behavior": "One-time retained-legacy explanation before mounting the runtime UI; explicit acknowledgement; no counter migration and no legacy deletion",
+    "corruptLegacy": "Bounded unrecognized-format explanation, no raw value; preserve bytes",
+    "storageFailure": "Fail closed to a fixed retry view; never falsely acknowledge",
+    "restartAndReset": "Acknowledgement is separate from runtime; reset never clears it",
+    "detectionBoundary": "Detect retained legacy data, not installation history. If legacy data is absent, no reliable inference of an earlier installed version is possible; no historical state or migration is invented."
+  },
+  "diagnosticPolicy": {
+    "entry": "Long press persistent DEMO banner; confirm export; view bounded JSON preview; optional native share only after a second explicit action",
+    "clinicalControls": "No permanent clinical diagnostic buttons or production routes",
+    "distributionBoundary": "Existing standalone offline-demo build remains distributable=false and publicationAuthorization=NOT_GRANTED",
+    "source": "One actual persisted demo runtime row; validate complete existing schema and real domain reconstruction; do not substitute UI/in-memory command list",
+    "fields": ["schemaVersion", "kind", "source", "sessionId", "generation", "simulationTimeSec", "lifecycle", "commandCount", "commands.id", "commands.type", "commands.simulationTimeSec", "commands.processingStatus", "resetTransition"],
+    "processingStatusMeaning": "APPLIED_EVENT_VERIFIED is a diagnostic classification from a validated persisted command and matching BINDER_APPLIED event/effect, not an invented stored/server lifecycle field",
+    "maximumCommands": 1,
+    "forbidden": ["Patient identifiers and clinical data", "Full runtime snapshot", "Storage paths", "Database files", "Account identity", "Credentials", "Raw exception messages"],
+    "errors": "Fixed DEMO_ACCEPTANCE_UNAVAILABLE; no raw error, logging or network fallback",
+    "neverSavedSession": "No persisted proof is fabricated; user first uses a supported save-producing navigation/action",
+    "sharing": "No automatic share or upload. For physical acceptance inspect the local preview or choose an explicitly approved local evidence destination. Do not publish."
+  },
+  "resetReceipt": {
+    "key": "russicaptor.offline-demo.acceptance.reset.v1",
+    "source": "Validated actual persisted row before and after a successful supported reset",
+    "fields": ["schemaVersion", "fromSessionId", "toSessionId", "fromGeneration", "toGeneration", "fromTimeSec", "toTimeSec"],
+    "invariants": "New session identity, generation+1, new time zero; receipt must bind to current persisted identity/generation",
+    "atomicityBoundary": "Runtime reset remains one primary atomic SQLite upsert. Receipt is a secondary best-effort write, not an atomic multi-row claim. Missing/interrupted/stale receipt explicitly yields NOT_AVAILABLE; it cannot undo runtime reset or fabricate successful transition proof.",
+    "unknownPriorState": "Corrupt or never-persisted prior runtime may be safely reset, but no verified before/after receipt is claimed"
+  },
+  "futurePhysicalProcedure": [
+    "Separately authorize a new signed demo APK with versionCode greater than installed 2; proposed next candidate 3 requires availability verification and consistent metadata update before build",
+    "In-place upgrade only the demo; preserve canonical APK 181, existing valid v2 runtime and retained v1 key",
+    "With retained v1 data confirm one-time explanation, acknowledge, restart and confirm no repeated notice",
+    "Verify existing v2 state is retained; no claim that the old counter was migrated",
+    "Offline, open a supported demo mode so a row exists; long-press DEMO banner and confirm preview; capture actual persisted ID/count/generation/time/status",
+    "If session has no command, perform one supported binder action; otherwise reuse its existing accepted command; never duplicate solely for evidence",
+    "Pause and capture persisted commandCount=1, actual command ID and APPLIED_EVENT_VERIFIED; restart and compare",
+    "Capture pre-reset evidence, use supported reset confirmation, preview persisted count=0/time=0/generation+1 and PERSISTED_BEFORE_AND_AFTER transition",
+    "Restart; verify same reset generation and receipt; no upgrade notice retrigger and no stale updates",
+    "If receipt is NOT_AVAILABLE, report the exact evidence gap; do not fabricate proof or reset repeatedly without a scoped plan",
+    "Restore original network state and verify canonical coexistence with read-only UI; preserve evidence locally"
+  ],
+  "currentTask": {"apkBuilt": false, "apkInstalled": false, "physicalAcceptance": "BLOCKED", "publicationAuthorized": false}
+}

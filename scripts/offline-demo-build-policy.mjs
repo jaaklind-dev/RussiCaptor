@@ -28,7 +28,7 @@ export function validateBundleSources(sources) {
     if (['\0polyfill:external-require', '\0polyfill:assets-registry'].includes(s)) continue;
     if (/supabase|expo-router|CloudSync|OperatorSession|RuntimeNativeLeaseHeartbeat|RuntimeCheckpoint|SupabaseService/i.test(s)) throw new Error('OFFLINE_DEMO_BUNDLE_PRODUCTION_MODULE');
     const shared = Object.keys(SHARED_SOURCES).some(file => [file, `/${file}`, `../${file}`, `/../${file}`].includes(s));
-    if (!s.includes('/node_modules/') && !shared && !/^(?:\.\/|\/)?(?:index\.js|src\/(?:DemoApp\.tsx|DemoApplication\.tsx|DemoStore\.ts|networkBoundary\.ts|runtime\/(?:DemoDomain\.ts|DemoSession\.ts|DemoController\.ts|DemoRuntimeApplication\.tsx)))$/.test(s)) throw new Error('OFFLINE_DEMO_BUNDLE_SOURCE_ESCAPE');
+    if (!s.includes('/node_modules/') && !shared && !/^(?:\.\/|\/)?(?:index\.js|src\/(?:DemoApp\.tsx|DemoApplication\.tsx|DemoStore\.ts|DemoUpgrade\.ts|networkBoundary\.ts|runtime\/(?:DemoDomain\.ts|DemoSession\.ts|DemoController\.ts|DemoRuntimeApplication\.tsx)))$/.test(s)) throw new Error('OFFLINE_DEMO_BUNDLE_SOURCE_ESCAPE');
   }
 }
 // Parse aapt's actual binary AndroidManifest.xml dump, not generated source XML.

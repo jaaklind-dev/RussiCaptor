@@ -1,5 +1,6 @@
 import { advancePatients, applyBinder, DEMO_FIXTURE, DEMO_MAX_SECONDS, initialPatients, type DemoPatient } from './DemoDomain';
 export const DEMO_RUNTIME_KEY = 'russicaptor.offline-demo.runtime.v2';
+export const DEMO_RESET_RECEIPT_KEY = 'russicaptor.offline-demo.acceptance.reset.v1';
 export type DemoCommand = Readonly<{ id: string; sessionId: string; generation: number; time: number; patientId: 'DEMO-PT-A'; type: 'APPLY_PELVIC_BINDER' }>;
 export type DemoEvent = Readonly<{ id: number; time: number; kind: 'START' | 'PAUSE' | 'RESUME' | 'BACKGROUND' | 'RECOVERY' | 'BINDER_APPLIED' | 'LIMIT'; commandId?: string }>;
 export type DemoSession = { schemaVersion: 2; fixture: typeof DEMO_FIXTURE; sessionId: string; generation: number;
@@ -18,6 +19,25 @@ function keys(value: unknown, expected: string): boolean {
   return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).sort().join(',') === expected.split(',').sort().join(',');
 }
 const safeInt = (n: unknown, max = Number.MAX_SAFE_INTEGER - 1): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 && n <= max;
+type ResetReceipt = { schemaVersion: 1; fromSessionId: string; toSessionId: string; fromGeneration: number; toGeneration: number;
+  fromTimeSec: number; toTimeSec: 0 };
+export type DemoAcceptanceReport = Readonly<{
+  schemaVersion: 1; kind: 'OFFLINE_DEMO_ACCEPTANCE'; source: 'PERSISTED_DEMO_ROW'; sessionId: string;
+  generation: number; simulationTimeSec: number; lifecycle: DemoSession['lifecycle']; commandCount: number;
+  commands: ReadonlyArray<Readonly<{ id: string; type: 'APPLY_PELVIC_BINDER'; simulationTimeSec: number; processingStatus: 'APPLIED_EVENT_VERIFIED' }>>;
+  resetTransition: Readonly<{ status: 'NOT_AVAILABLE' } | { status: 'PERSISTED_BEFORE_AND_AFTER'; fromGeneration: number;
+    toGeneration: number; fromSimulationTimeSec: number; toSimulationTimeSec: 0 }>;
+}>;
+function resetReceipt(raw: string): ResetReceipt {
+  if (raw.length > 1024) throw new Error('DEMO_ACCEPTANCE_UNAVAILABLE');
+  const r: ResetReceipt = JSON.parse(raw);
+  if (!keys(r, 'schemaVersion,fromSessionId,toSessionId,fromGeneration,toGeneration,fromTimeSec,toTimeSec') || r.schemaVersion !== 1 ||
+      typeof r.fromSessionId !== 'string' || typeof r.toSessionId !== 'string' ||
+      !/^DEMO-LOCAL-[a-z0-9-]{1,100}$/.test(r.fromSessionId) || !/^DEMO-LOCAL-[a-z0-9-]{1,100}$/.test(r.toSessionId) ||
+      r.fromSessionId === r.toSessionId || !safeInt(r.fromGeneration) || !safeInt(r.toGeneration) ||
+      r.toGeneration !== r.fromGeneration + 1 || !safeInt(r.fromTimeSec, DEMO_MAX_SECONDS) || r.toTimeSec !== 0) throw new Error('DEMO_ACCEPTANCE_UNAVAILABLE');
+  return r;
+}
 export function validCommand(value: unknown): value is DemoCommand {
   if (!keys(value, 'id,sessionId,generation,time,patientId,type')) return false;
   const c = value as DemoCommand;
@@ -132,6 +152,28 @@ export class DemoSessionStore {
     next.commands.push({ id: value.id, sessionId: value.sessionId, generation: value.generation, time: value.time,
       patientId: value.patientId, type: value.type }); this.event(next, 'BINDER_APPLIED', value.id); this.save(next); return 'ACCEPTED';
   }
+  /** Read-only, whitelisted evidence from the real committed row, never the rendered/in-memory command list. */
+  acceptanceReport(binding: Pick<DemoSession, 'sessionId' | 'generation'>): DemoAcceptanceReport {
+    try {
+      if (!this.current(binding.sessionId, binding.generation)) throw new Error();
+      const raw = this.storage.getItemSync(DEMO_RUNTIME_KEY);
+      if (raw === null) throw new Error(); // A never-saved fresh session is not persisted evidence.
+      const s = restoreSession(raw);
+      if (s.sessionId !== binding.sessionId || s.generation !== binding.generation ||
+          s.commands.some(c => c.id !== `DEMO-CMD-${s.sessionId}:binder`)) throw new Error();
+      const receiptRaw = this.storage.getItemSync(DEMO_RESET_RECEIPT_KEY);
+      const receipt = receiptRaw === null ? undefined : resetReceipt(receiptRaw);
+      const transition: DemoAcceptanceReport['resetTransition'] = receipt?.toSessionId === s.sessionId && receipt.toGeneration === s.generation
+        ? { status: 'PERSISTED_BEFORE_AND_AFTER', fromGeneration: receipt.fromGeneration, toGeneration: receipt.toGeneration,
+          fromSimulationTimeSec: receipt.fromTimeSec, toSimulationTimeSec: receipt.toTimeSec }
+        : { status: 'NOT_AVAILABLE' };
+      if (this.storage.getItemSync(DEMO_RUNTIME_KEY) !== raw) throw new Error();
+      return freeze({ schemaVersion: 1, kind: 'OFFLINE_DEMO_ACCEPTANCE', source: 'PERSISTED_DEMO_ROW', sessionId: s.sessionId,
+        generation: s.generation, simulationTimeSec: s.time, lifecycle: s.lifecycle, commandCount: s.commands.length,
+        commands: s.commands.map(c => ({ id: c.id, type: c.type, simulationTimeSec: c.time, processingStatus: 'APPLIED_EVENT_VERIFIED' })),
+        resetTransition: transition });
+    } catch { throw new Error('DEMO_ACCEPTANCE_UNAVAILABLE'); }
+  }
   reset(sessionId?: string, generation?: number): boolean {
     if (this.view.status === 'READY' && !this.current(sessionId ?? '', generation ?? -1)) return false;
     if ((sessionId !== undefined || generation !== undefined) &&
@@ -139,6 +181,26 @@ export class DemoSessionStore {
     if (this.generation >= Number.MAX_SAFE_INTEGER - 1) throw new Error('DEMO_GENERATION_LIMIT');
     const id = this.idFactory();
     if (this.view.status === 'READY' && id === this.view.session.sessionId) throw new Error('DEMO_SESSION_ID_COLLISION');
-    this.save(freshSession(id, this.generation + 1)); return true;
+    let before: DemoSession | undefined;
+    try {
+      const raw = this.storage.getItemSync(DEMO_RUNTIME_KEY);
+      if (raw !== null) {
+        const persisted = restoreSession(raw);
+        if (persisted.sessionId === this.identity?.sessionId && persisted.generation === this.generation) before = persisted;
+      }
+    } catch { /* Reset may recover a corrupt session, but cannot claim a verified previous generation. */ }
+    this.save(freshSession(id, this.generation + 1));
+    // Diagnostic receipt is secondary: its failure cannot undo or corrupt a successful runtime reset.
+    // A crash before this write leaves NOT_AVAILABLE evidence, never a fabricated successful transition.
+    if (before) try {
+      const raw = this.storage.getItemSync(DEMO_RUNTIME_KEY);
+      const after = raw === null ? undefined : restoreSession(raw);
+      if (after?.sessionId === id && after.generation === before.generation + 1 && after.time === 0) {
+        const receipt: ResetReceipt = { schemaVersion: 1, fromSessionId: before.sessionId, toSessionId: after.sessionId,
+          fromGeneration: before.generation, toGeneration: after.generation, fromTimeSec: before.time, toTimeSec: 0 };
+        this.storage.setItemSync(DEMO_RESET_RECEIPT_KEY, JSON.stringify(receipt));
+      }
+    } catch { /* Export reports a missing/stale receipt explicitly. No clinical or raw error data is logged. */ }
+    return true;
   }
 }
