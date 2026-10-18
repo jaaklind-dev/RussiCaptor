@@ -10,6 +10,7 @@ import { stableJson, stableJsonAsync } from "@/utils/stableJson";
 import { sha256Text, sha256TextAsync } from "@/utils/sha256";
 import { BoundedObsoleteGenerationGate, createBoundedFrameYield, LatestGenerationPipeline } from "../LatestGenerationPipeline";
 import { createRuntimeCheckpointDelta } from "../RuntimeCheckpointDeltaService";
+import { measurePairedPerformance, monotonicNowMs, PAIRED_PERFORMANCE_PLAN, requirePerformanceAdvantage } from "../../../../../test/benchmarks/pairedPerformance";
 
 function fixture(pkg: ExercisePackage) {
   return structuredClone(packagePatientDatasetRegistry.resolve(pkg.patientDatasetId).patients[0].runtimeFixture!);
@@ -108,9 +109,9 @@ describe("WP-44B canonical persistence performance", () => {
       packageVersion: pkg.packageVersion, packageHash: pkg.packageHash, definitionHash: pkg.manifest.definitionHash,
       moduleCompositionHash: moduleCompositionHash(pkg.definition.clinicalModuleComposition?.modules ?? pkg.requiredClinicalModules ?? []) };
 
-    const captureStarted = performance.now();
+    const captureStarted = monotonicNowMs();
     const artifact = canonicalRuntimePersistenceService.capture(engine, provenance);
-    const captureMs = performance.now() - captureStarted;
+    const captureMs = monotonicNowMs() - captureStarted;
     const asyncArtifact = await canonicalRuntimePersistenceService.captureAsync(
       engine,
       provenance,
@@ -119,15 +120,15 @@ describe("WP-44B canonical persistence performance", () => {
     expect(asyncArtifact).toEqual(artifact);
     const secondPatientId = "PT-WP44B-PERF-2";
     const secondArtifact = canonicalRuntimePersistenceService.capture(engine, { ...provenance, patientId: secondPatientId });
-    const canonicalStarted = performance.now();
+    const canonicalStarted = monotonicNowMs();
     const canonical = stableJson(artifact.payload);
-    const canonicalizationAndSerializationMs = performance.now() - canonicalStarted;
-    const hashStarted = performance.now();
+    const canonicalizationAndSerializationMs = monotonicNowMs() - canonicalStarted;
+    const hashStarted = monotonicNowMs();
     sha256Text(canonical);
-    const hashMs = performance.now() - hashStarted;
-    const plainSerializationStarted = performance.now();
+    const hashMs = monotonicNowMs() - hashStarted;
+    const plainSerializationStarted = monotonicNowMs();
     JSON.stringify(artifact.payload);
-    const plainSerializationMs = performance.now() - plainSerializationStarted;
+    const plainSerializationMs = monotonicNowMs() - plainSerializationStarted;
     const state: SharedExerciseState = {
       exerciseSession: { exerciseId: provenance.exerciseId, lifecycleState: "RUNNING",
         simulationTimeSec: artifact.capturedAtSimulationTimeSec, startedAtSimulationSec: 0 } as never,
@@ -143,17 +144,25 @@ describe("WP-44B canonical persistence performance", () => {
     // A clone models the pre-optimization path: it has identical bytes but no
     // in-process immutable validation proof, so its Runtime payload is hashed
     // again while the whole checkpoint is prepared.
-    const beforeStarted = performance.now();
-    const before = createRuntimeCheckpoint({ ...state, persistedRuntimeStates: state.persistedRuntimeStates!.map(item => structuredClone(item)) }, 1);
-    const beforeMs = performance.now() - beforeStarted;
-
-    let timerFiredAt = 0; const timerStarted = performance.now();
-    const timer = new Promise<void>(resolve => setTimeout(() => { timerFiredAt = performance.now(); resolve(); }, 0));
-    const afterStarted = performance.now();
-    const after = createRuntimeCheckpoint(state, 1);
-    const afterMs = performance.now() - afterStarted;
-    await timer;
-    const timerDelayMs = timerFiredAt - timerStarted;
+    const measurement = await measurePairedPerformance(
+      () => createRuntimeCheckpoint({ ...state, persistedRuntimeStates: state.persistedRuntimeStates!.map(item => structuredClone(item)) }, 1),
+      () => createRuntimeCheckpoint(state, 1),
+      (reference, optimized) => {
+        expect(optimized).toEqual(reference);
+        expect(optimized.payloadHash).toBe(reference.payloadHash);
+      },
+    );
+    // Print all samples BEFORE assertions so an unfavorable distribution is
+    // retained instead of disappearing behind a failed comparison.
+    console.info("WP44B_PERSISTENCE_BENCHMARK", JSON.stringify({
+      clock: "process.hrtime.bigint", plan: PAIRED_PERFORMANCE_PLAN,
+      warmup: measurement.warmup, samples: measurement.samples, summary: measurement.summary,
+    }));
+    const before = measurement.lastReference; const after = measurement.lastOptimized;
+    const beforeMs = measurement.summary.reference.median;
+    const afterMs = measurement.summary.optimized.median;
+    const timerDelayMs = Math.max(measurement.summary.maximumTimerDelayMs,
+      ...measurement.warmup.map(sample => sample.optimizedTimerDelayMs));
     const payloadBytes = new TextEncoder().encode(JSON.stringify(after.payload)).byteLength;
     const sectionBytes = Object.fromEntries(Object.entries(after.payload).map(([key, value]) => [
       key,
@@ -161,14 +170,14 @@ describe("WP-44B canonical persistence performance", () => {
     ]));
     const nextState = { ...state, exerciseSession: { ...state.exerciseSession, simulationTimeSec: artifact.capturedAtSimulationTimeSec + 1 } } as SharedExerciseState;
     const nextCheckpoint = createRuntimeCheckpoint(nextState, 2);
-    const deltaStarted = performance.now();
+    const deltaStarted = monotonicNowMs();
     const representativeDelta = createRuntimeCheckpointDelta(after, nextCheckpoint);
-    const deltaMs = performance.now() - deltaStarted;
+    const deltaMs = monotonicNowMs() - deltaStarted;
     const deltaBytes = new TextEncoder().encode(JSON.stringify(representativeDelta)).byteLength;
 
     expect(after).toEqual(before);
     expect(after.payloadHash).toBe(before.payloadHash);
-    expect(afterMs).toBeLessThan(beforeMs);
+    requirePerformanceAdvantage(measurement.summary);
     // Hosted CI scheduler jitter can add a few milliseconds after the synchronous
     // checkpoint completes; keep the bound tight while avoiding false failures.
     expect(timerDelayMs).toBeLessThan(300);
@@ -194,5 +203,5 @@ describe("WP-44B canonical persistence performance", () => {
     expect(payloadBytes).toBeLessThan(2_100_000);
     expect(deltaBytes).toBeLessThan(payloadBytes / 100);
     expect(deltaMs).toBeLessThan(250);
-  });
+  }, 30_000); // Fixed repeated workload; individual timer/delta bounds are unchanged.
 });
