@@ -107,24 +107,24 @@ describe("safe predeployment candidate and fail-closed canonical release", () =>
     expect(config("predeployment-candidate", { ...missing, RUSSICAPTOR_MIGRATION_PROJECT_REF: projectRef }).status).not.toBe(0);
   });
 
-  test("artifact, output directory and manifest are separated; candidate retains exact version 181", () => {
+  test("artifact, output directory and manifest are separated; candidate retains exact version 182", () => {
     const candidate = evaluate("policy.buildPlan(input, { RUSSICAPTOR_RELEASE_VARIANT: 'predeployment-candidate' })", descriptor);
     const canonical = evaluate("policy.buildPlan(input, {})", descriptor);
-    expect(candidate.versionCode).toBe(181);
+    expect(candidate.versionCode).toBe(182);
     expect(candidate.artifactFilename).not.toBe(canonical.artifactFilename);
     expect(candidate.outputDirectory).not.toBe(canonical.outputDirectory);
     expect(candidate.manifestFilename).not.toBe(canonical.manifestFilename);
   });
 
   test.each(["canonical", "predeployment-candidate"])("%s forbids harness and version override", mode => {
-    for (const extra of [{ RUSSICAPTOR_ENABLE_SHARED_WORKFLOW_VALIDATION_HARNESS: "1" }, { RUSSICAPTOR_RELEASE_VERSION_CODE: "181" }]) {
+    for (const extra of [{ RUSSICAPTOR_ENABLE_SHARED_WORKFLOW_VALIDATION_HARNESS: "1" }, { RUSSICAPTOR_RELEASE_VERSION_CODE: "182" }]) {
       expect(invoke("policy.buildPlan(input.descriptor, input.env)", { descriptor, env: { RUSSICAPTOR_RELEASE_VARIANT: mode, ...extra } }).status).not.toBe(0);
     }
   });
 
   test("legacy validation variants remain non-distributable and require a higher version", () => {
     expect(invoke("policy.buildPlan(input, { RUSSICAPTOR_RELEASE_VARIANT: 'upgrade-validation' })", descriptor).status).not.toBe(0);
-    expect(evaluate("policy.buildPlan(input, { RUSSICAPTOR_RELEASE_VARIANT: 'rollback-validation', RUSSICAPTOR_RELEASE_VERSION_CODE: '182' })", descriptor).versionCode).toBe(182);
+    expect(evaluate("policy.buildPlan(input, { RUSSICAPTOR_RELEASE_VARIANT: 'rollback-validation', RUSSICAPTOR_RELEASE_VERSION_CODE: '183' })", descriptor).versionCode).toBe(183);
   });
 
   test("contradictory or missing verification results cannot assign distributable true", () => {
@@ -154,7 +154,7 @@ describe("signed artifact evidence cannot be promoted by sidecar edits", () => {
   const artifactInput = (mode = "predeployment-candidate") => {
     const embedded = evidenceFixture(mode, complete);
     const actual = { signatureVerified: true, signingCertificateSha256: descriptor.signingCertificateSha256,
-      packageId: descriptor.packageId, versionCode: 181, applicationVersion: "1.2.0", debuggable: false,
+      packageId: descriptor.packageId, versionCode: 182, applicationVersion: "1.2.1", debuggable: false,
       devOverlay: false, artifactSha256: "b".repeat(64), artifactSizeBytes: 1234 };
     const metadata = { ...embedded, signingCertificateSha256: actual.signingCertificateSha256,
       artifactSha256: actual.artifactSha256, artifactSizeBytes: actual.artifactSizeBytes,
@@ -181,7 +181,7 @@ describe("signed artifact evidence cannot be promoted by sidecar edits", () => {
 
   test("signature, pinned signer, APK hash, version and package mismatches all fail closed", () => {
     for (const change of [{ signatureVerified: false }, { signingCertificateSha256: "c".repeat(64) },
-      { artifactSha256: "d".repeat(64) }, { versionCode: 182 }, { packageId: "wrong.package" }, { debuggable: true }, { devOverlay: true }]) {
+      { artifactSha256: "d".repeat(64) }, { versionCode: 183 }, { packageId: "wrong.package" }, { debuggable: true }, { devOverlay: true }]) {
       const input = artifactInput();
       Object.assign(input.actual, change);
       expect(verify(input).status).not.toBe(0);
