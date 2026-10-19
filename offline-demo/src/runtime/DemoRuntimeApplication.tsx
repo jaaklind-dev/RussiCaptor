@@ -19,7 +19,7 @@ function Button({ label, onPress, disabled = false }: Readonly<{ label: string; 
   return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress}
     style={[styles.button, disabled && styles.disabled]}><Text style={styles.buttonText}>{label}</Text></Pressable>;
 }
-export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ store: DemoSessionStore; onExit: () => void }>) {
+export default function DemoRuntimeApplication({ store, onExit, onBuilder }: Readonly<{ store: DemoSessionStore; onExit: () => void; onBuilder?: () => void }>) {
   const view = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const [controller, setController] = useState<DemoController>();
   const [message, setMessage] = useState('');
@@ -116,6 +116,7 @@ export default function DemoRuntimeApplication({ store, onExit }: Readonly<{ sto
           <Button label="EXCON" onPress={() => perform(() => navigate('EXCON'))} />
         </View>
         {session.mode === 'home' ? <>
+          {onBuilder && <Button label="Ava kohalik DEMO Builder" onPress={() => { controller?.setForeground(false); onBuilder(); }} />}
           <Text>Kaks sünteetilist traumapatsienti, ühine kohalik mootor, vaagnalahas ja kohalik labori põhipaneel. Kohalikud pildiuuringud kasutavad selgelt märgistatud õppematerjali.</Text>
           <Button label="Alusta demoõppust" disabled={!controller || session.lifecycle !== 'READY'} onPress={() => perform(() => { if (control('START')) navigate('CM'); })} />
         </> : <>

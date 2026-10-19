@@ -6,6 +6,7 @@ import DemoRuntimeApplication from './runtime/DemoRuntimeApplication';
 import { DemoSessionStore } from './runtime/DemoSession';
 import { DEMO_DATABASE } from './DemoStore';
 import { DemoUpgradeNotice } from './DemoUpgrade';
+import DemoBuilderEntry from './builder/DemoBuilderEntry';
 export function assertDemoIdentity(config: typeof Constants.expoConfig): void {
   const identity = config?.extra?.offlineDemo;
   if (config?.android?.package !== 'com.jaaklind.RussiCaptor.demo' || config.scheme || config?.updates?.enabled !== false ||
@@ -16,6 +17,7 @@ export function assertDemoIdentity(config: typeof Constants.expoConfig): void {
   }
 }
 export default function DemoApp() {
+  const [builderOpen, setBuilderOpen] = useState(false);
   const [bootstrap] = useState(() => {
     try {
       assertDemoIdentity(Constants.expoConfig);
@@ -40,5 +42,6 @@ export default function DemoApp() {
     </>}
     <Pressable accessibilityRole="button" accessibilityLabel="Välju demost" onPress={() => BackHandler.exitApp()}><Text>Välju demost</Text></Pressable>
   </View>;
-  return <DemoRuntimeApplication store={bootstrap.store} onExit={() => BackHandler.exitApp()} />;
+  if (builderOpen) return <DemoBuilderEntry onExit={() => setBuilderOpen(false)}/>;
+  return <DemoRuntimeApplication store={bootstrap.store} onExit={() => BackHandler.exitApp()} onBuilder={() => setBuilderOpen(true)} />;
 }

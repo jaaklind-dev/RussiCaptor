@@ -7,7 +7,10 @@ const root = process.cwd();
 const { AUDITED_DEMO_SOURCES, assertAuditedDemoSource } = require('../../offline-demo/isolation-policy.cjs');
 const files = ['src/runtime/DemoVitalsCard.tsx', 'src/runtime/DemoTime.ts',
   'src/runtime/DemoLaboratoryCard.tsx', 'src/runtime/DemoLaboratory.ts',
-  'src/runtime/DemoImaging.ts','src/runtime/DemoImagingCard.tsx','assets/imaging/manifest.json'];
+  'src/runtime/DemoImaging.ts','src/runtime/DemoImagingCard.tsx','assets/imaging/manifest.json',
+  'src/builder/DemoBuilderCapabilities.ts','src/builder/DemoBuilderDraft.ts',
+  'src/builder/DemoBuilderValidation.ts','src/builder/DemoBuilderStore.ts',
+  'src/builder/DemoBuilderApplication.tsx','src/builder/DemoBuilderEntry.tsx'];
 function evaluate(code: string) {
   return spawnSync(process.execPath, ['--input-type=module', '-e',
     `import {validateBundleSources,verifyAuditedDemoSources,validateAuditedBundleSources} from './scripts/offline-demo-build-policy.mjs';${code}`], { cwd: root, encoding: 'utf8' });

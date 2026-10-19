@@ -67,6 +67,12 @@ function verifyAssetRegistry(modulesRoot) {
 }
 // Exact reviewed demo-owned sources; never a directory grant.
 const AUDITED_DEMO_SOURCES = Object.freeze({
+  'src/builder/DemoBuilderCapabilities.ts': '03242f51bbe874518a1b2bb8c69d9d18b20c5ed2673b88d096ebd9b8c841d0da',
+  'src/builder/DemoBuilderDraft.ts': '26ea1942f3705851d7f890c27f90d7e3f8407cc8d42fca2a1cdc0d0b7bd57a77',
+  'src/builder/DemoBuilderValidation.ts': '9d1b589ed799394cd2a904a5f2aa3eb9421483ffa387e6f73f60098aeef38b35',
+  'src/builder/DemoBuilderStore.ts': 'ece718399bafba8ce71c84b1a85c445edd68f85af13efa96ca4a27ed1425b6ae',
+  'src/builder/DemoBuilderApplication.tsx': '98f19a7b07b5e26e4109166eb34f6673ef0bdf2035db24dab032664edb268209',
+  'src/builder/DemoBuilderEntry.tsx': '35dcb9adea61fecaf4f5c5e0bfd39a748b2891503c27a2503bc3ee08a1e5ab62',
   'src/runtime/DemoImaging.ts': '1b2b72b613f067875d10abe86af7231b38164e4ff491fe99b70f4d2680f9aee3',
   'src/runtime/DemoImagingCard.tsx': '2836ee7e771e805b1813a0529266d4a17f792e482d1ddea0230d55e971c36f4a',
   'assets/imaging/manifest.json': '130b7ebe540d7da602056f01cfc7af36cb19b9d6e320152a260ce6b229e9d51b',
