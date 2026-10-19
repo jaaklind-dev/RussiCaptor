@@ -36,7 +36,18 @@ export type SharedWorkflowConflictMetrics = Readonly<{
 }>;
 
 export interface SharedWorkflowGateway {
-  submit(request: SharedWorkflowMutationRequest): Promise<SharedWorkflowMutationResult>;
+  submit(request: SharedWorkflowMutationRequest, observer?: SharedWorkflowRpcObserver, guard?: SharedWorkflowSubmissionGuard): Promise<SharedWorkflowMutationResult>;
+}
+export type SharedWorkflowSubmissionGuard = Readonly<{ operatorId: string; valid(): boolean; negativeTest?: true }>;
+
+/** Optional acceptance-only projection; never includes RPC parameters or raw errors. */
+export type SharedWorkflowRpcObserver = (event: Readonly<{
+  phase: "LOCAL" | "SUBMITTED" | "RESPONSE" | "TRANSPORT_UNKNOWN"; attempt: number;
+  httpStatus: number | null; serverErrorCode: string | null;
+  status: SharedWorkflowMutationStatus | null; revision: number | null; ownerUserId?: string;
+}>) => void;
+function observeRpc(observer: SharedWorkflowRpcObserver | undefined, event: Parameters<SharedWorkflowRpcObserver>[0]): void {
+  try { observer?.(event); } catch { /* Diagnostics cannot affect normal command semantics. */ }
 }
 
 const emptyMetrics = (): SharedWorkflowConflictMetrics => ({ ownershipConflicts: 0, staleWriteRejections: 0,
@@ -82,11 +93,12 @@ export function observeSharedWorkflowHead(exerciseId: string,patientId: string,r
   patientHeads.set(key(exerciseId,patientId),Object.freeze({revision,ownerUserId})); publish();
 }
 
-export async function submitSharedWorkflowMutation(request: SharedWorkflowMutationRequest): Promise<SharedWorkflowMutationResult> {
+export async function submitSharedWorkflowMutation(request: SharedWorkflowMutationRequest, observer?: SharedWorkflowRpcObserver, guard?: SharedWorkflowSubmissionGuard): Promise<SharedWorkflowMutationResult> {
   if (!online) return Object.freeze({ status: "RECONNECT_REQUIRED", revision: request.expectedRevision,
     ownerUserId: request.expectedOwnerUserId });
   const activeGateway = gateway ?? supabaseSharedWorkflowGateway;
-  const result = await activeGateway.submit(request);
+  const result = await activeGateway.submit(request, observer, guard);
+  if (guard && (guard.negativeTest || !guard.valid())) return result;
   const patientKey=key(request.exerciseId,request.patientId);
   if (result.status === "APPLIED" || result.status === "IDEMPOTENT") {
     const previous = getSharedWorkflowHead(request.exerciseId,request.patientId);
@@ -121,24 +133,53 @@ export function classifySharedWorkflowError(message: string): SharedWorkflowMuta
 }
 
 export const supabaseSharedWorkflowGateway: SharedWorkflowGateway = {
-  async submit(request) {
+  async submit(request, observer, guard) {
     if (!supabase) return Object.freeze({ status: "UNAVAILABLE", revision: request.expectedRevision });
     const { data: session } = await supabase.auth.getSession();
     if (!session.session || session.session.user.is_anonymous) return Object.freeze({ status: "UNAVAILABLE", revision: request.expectedRevision });
+    if (guard && (!guard.valid() || session.session.user.id !== guard.operatorId)) {
+      observeRpc(observer, { phase: "LOCAL", attempt: 0, httpStatus: null, serverErrorCode: null, status: "AUTHORIZATION_DENIED", revision: null });
+      return Object.freeze({ status: "AUTHORIZATION_DENIED", revision: request.expectedRevision });
+    }
     const parameters = {
       p_exercise_id: request.exerciseId, p_patient_id: request.patientId, p_command_id: request.commandId,
       p_mutation_kind: request.kind, p_expected_revision: request.expectedRevision,
       p_expected_owner_user_id: request.expectedOwnerUserId ?? null,
       p_next_owner_user_id: request.nextOwnerUserId ?? null, p_state: request.state,
     };
-    let response = await supabase.rpc("apply_shared_workflow_patient_mutation", parameters);
+    const send = async (attempt: number) => {
+      if (guard && !guard.valid()) {
+        observeRpc(observer, { phase: "LOCAL", attempt, httpStatus: null, serverErrorCode: null, status: "AUTHORIZATION_DENIED", revision: null });
+        throw new Error("VALIDATION_BINDING_CHANGED");
+      }
+      observeRpc(observer, { phase: "SUBMITTED", attempt, httpStatus: null, serverErrorCode: null, status: null, revision: null });
+      try {
+        const call = supabase!.rpc("apply_shared_workflow_patient_mutation", parameters);
+        const response = await (guard?.negativeTest ? call.retry(false) : call);
+        const row = (Array.isArray(response.data) ? response.data[0] : response.data) as { status?: string; revision?: number; owner_user_id?: string } | null;
+        const known = ["APPLIED", "IDEMPOTENT", "STALE_VERSION", "OWNERSHIP_CHANGED", "NOT_OWNER", "ALREADY_OWNED", "COMPLETION_FENCED", "EXERCISE_COMPLETED", "AUTHORIZATION_DENIED", "RECONNECT_REQUIRED", "UNAVAILABLE"];
+        const hasHttpResponse = Number.isInteger(response.status) && response.status >= 100 && response.status <= 599;
+        observeRpc(observer, { phase: hasHttpResponse ? "RESPONSE" : "TRANSPORT_UNKNOWN", attempt,
+          httpStatus: hasHttpResponse ? response.status : null,
+          serverErrorCode: response.error?.code && /^(?:[A-Z0-9]{5}|PGRST\d{3})$/.test(response.error.code) ? response.error.code : null,
+          status: response.error ? classifySharedWorkflowError(`${response.error.message} ${response.error.code}`)
+            : known.includes(row?.status ?? "") ? row!.status as SharedWorkflowMutationStatus : "UNAVAILABLE",
+          revision: Number.isSafeInteger(Number(row?.revision)) && row?.revision != null ? Number(row.revision) : null,
+          ownerUserId: typeof row?.owner_user_id === "string" && /^[a-f0-9-]{36}$/i.test(row.owner_user_id) ? row.owner_user_id : undefined });
+        return response;
+      } catch (error) {
+        observeRpc(observer, { phase: "TRANSPORT_UNKNOWN", attempt, httpStatus: null, serverErrorCode: null, status: "UNAVAILABLE", revision: null });
+        throw error;
+      }
+    };
+    let response = await send(1);
     const firstErrorStatus = response.error
       ? classifySharedWorkflowError(`${response.error.message} ${response.error.code}`)
       : undefined;
-    if (response.error && firstErrorStatus === "UNAVAILABLE") {
+    if (response.error && firstErrorStatus === "UNAVAILABLE" && !guard?.negativeTest) {
       // An ambiguous transport failure may have occurred after commit. Retry
       // the exact command ID once; the server ledger makes this deterministic.
-      response = await supabase.rpc("apply_shared_workflow_patient_mutation", parameters);
+      response = await send(2);
     }
     const {data,error}=response;
     if (error) return Object.freeze({ status: classifySharedWorkflowError(`${error.message} ${error.code}`),

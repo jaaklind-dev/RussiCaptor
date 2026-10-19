@@ -1,70 +1,95 @@
-import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { assignPatientToMeConflictSafe, releasePatientConflictSafe } from "@/services/AssignmentRepository";
-import {
-  prepareSameBaseMutableMutation,
-  prepareStaleFormerOwnerMutation,
-  submitPreparedPhysicalValidationMutation,
-  type PreparedPhysicalValidationMutation,
-} from "@/services/sharedWorkflow/PhysicalValidationHarnessService";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Alert, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
+import { releasePatientConflictSafe } from "@/services/AssignmentRepository";
+import { armPhysicalValidationHarness, disarmPhysicalValidationHarness, getPhysicalValidationEvidence, isPhysicalValidationContextArmed,
+  prepareValidationClaim, prepareSameBaseAppendPair, prepareSameBaseMutableMutation, prepareStaleFormerOwnerMutation,
+  canArmPhysicalValidationHarness, getPreparedValidationAvailability, subscribePhysicalValidationContext,
+  submitNegativePhysicalValidationMutation, submitPreparedPhysicalValidationMutation, type PreparedPhysicalValidationMutation } from "@/services/sharedWorkflow/PhysicalValidationHarnessService";
 import { getSharedWorkflowOperationalState, subscribeToSharedWorkflowConflicts } from "@/services/sharedWorkflow/SharedWorkflowMutationService";
 
 const patientId = "PT-PELVIC-001";
-
+function HarnessAction({ label, disabled, onPress }: Readonly<{ label: string; disabled: boolean; onPress(): void }>) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled}
+    style={[styles.button, disabled && styles.disabled]} onPress={() => { if (!disabled) onPress(); }}>
+    <Text style={styles.buttonText}>{label}</Text>
+  </Pressable>;
+}
 export default function SharedWorkflowValidationCard({ readOnly = false }: Readonly<{ readOnly?: boolean }>) {
   const [workflow, setWorkflow] = useState(getSharedWorkflowOperationalState);
-  useEffect(() => subscribeToSharedWorkflowConflicts(() => setWorkflow(getSharedWorkflowOperationalState())), []);
-  const [prepared, setPrepared] = useState<PreparedPhysicalValidationMutation>();
-  const [message, setMessage] = useState("Valideerimisrada on valmis.");
-  const [pending, setPending] = useState(false);
-
+  const [prepared, setPrepared] = useState<readonly PreparedPhysicalValidationMutation[]>([]);
+  const [message, setMessage] = useState("Armeeri ainult lubatud tehniline TEST-õppus."), [pending, setPending] = useState(false);
+  const [evidence, setEvidence] = useState(getPhysicalValidationEvidence);
+  const [, refresh] = useState(0);
+  const readOnlyRef = useRef(readOnly);
+  useLayoutEffect(() => { readOnlyRef.current = readOnly; }, [readOnly]);
+  const busy = useRef(false), mounted = useRef(true);
+  useEffect(() => { mounted.current = true; const update = () => {
+    setWorkflow(getSharedWorkflowOperationalState()); setEvidence(getPhysicalValidationEvidence());
+    refresh(value => value + 1);
+  }; const stop = subscribeToSharedWorkflowConflicts(update), stopContext = subscribePhysicalValidationContext(update);
+  return () => { mounted.current = false; stop(); stopContext(); disarmPhysicalValidationHarness(); }; }, []);
   const run = async (operation: () => Promise<{ message: string }>) => {
-    if (readOnly) { setMessage("Õppus on lõpetatud. Muudatusi ei saa enam teha."); return; }
-    setPending(true);
-    try { setMessage((await operation()).message); } finally { setPending(false); }
+    if (!mounted.current || readOnlyRef.current || busy.current) return;
+    busy.current = true; setPending(true);
+    try { const outcome = await operation(); if (mounted.current) setMessage(outcome.message); }
+    catch { if (mounted.current) setMessage("Vastus on ebaselge. Säilita käsu ID; uut käsku ei looda."); }
+    finally { busy.current = false; if (mounted.current) { setPending(false); setEvidence(getPhysicalValidationEvidence()); } }
   };
-  const stage = (kind: "stale" | "mutable") => {
-    const next = kind === "stale"
-      ? prepareStaleFormerOwnerMutation(patientId)
-      : prepareSameBaseMutableMutation(patientId);
-    if (!next) { setMessage("Proovi saab valmistada ainult patsiendi praegune omanik."); return; }
-    setPrepared(next);
-    setMessage(`Valmis: ${next.kind}, alusversioon ${next.expectedRevision}.`);
+  const arm = (client: "Samsung-A" | "Samsung-B") => {
+    if (readOnlyRef.current || busy.current || !canArmPhysicalValidationHarness()) return;
+    const exerciseId = getCanonicalExerciseSnapshot().exerciseId;
+    Alert.alert("Ainult lubatud TEST", `${exerciseId} · ${client}. Kinnita eraldi volitatud runtime-continuity TEST. See ei anna õigusi.`, [
+      { text: "Loobu", style: "cancel" }, { text: "Kinnitan TEST", onPress: () => {
+        if (!mounted.current || readOnlyRef.current || busy.current || getCanonicalExerciseSnapshot().exerciseId !== exerciseId) return;
+        setPrepared([]); setMessage(armPhysicalValidationHarness(client) ? "TEST-kontekst seotud. Valmista käsk." : "Armeerimine keelatud: kontrolli build’i, paketti, CM-scope’i ja ühendust.");
+        setEvidence(getPhysicalValidationEvidence());
+      } },
+    ]);
   };
-
+  const stage = (kind: "claim" | "stale" | "append" | "mutable") => {
+    if (readOnlyRef.current || busy.current || !isPhysicalValidationContextArmed()) return;
+    const one = kind === "claim" ? prepareValidationClaim : kind === "stale" ? prepareStaleFormerOwnerMutation : prepareSameBaseMutableMutation;
+    const next = kind === "append" ? prepareSameBaseAppendPair(patientId) : (() => { const p = one(patientId); return p ? [p] : undefined; })();
+    setPrepared(next ?? []); setMessage(next ? "Valmiskäsud ei ole veel saadetud." : "Ettevalmistus keelatud: TEST-kontekst, omanik või autoriteetne alus puudub.");
+  };
+  const send = (p: PreparedPhysicalValidationMutation, negative = false) => {
+    if (!mounted.current || readOnlyRef.current || busy.current) return;
+    const availability = getPreparedValidationAvailability(p);
+    if (!(negative ? availability.negative : availability.normal)) return;
+    if (!negative) { void run(() => submitPreparedPhysicalValidationMutation(p)); return; }
+    Alert.alert("Negatiivne TEST-käsk", `${p.commandId} · alus ${p.expectedRevision}. Saadan muutumatu aegunud MUTABLE-käsu ÜKS KORD, et tõendada serveri CAS-tagasilükkamist. Korduskatseid ei tehta. Ootamatu vastus nõuab STOP-i.`, [
+      { text: "Loobu", style: "cancel" }, { text: "Kinnitan negatiivse TEST-i", onPress: () => {
+        if (!mounted.current || readOnlyRef.current || busy.current || !getPreparedValidationAvailability(p).negative) return;
+        void run(() => submitNegativePhysicalValidationMutation(p));
+      } },
+    ]);
+  };
+  const disabled = pending || readOnly;
   return <View style={styles.card}>
     <Text style={styles.title}>Ainult validation-build: jagatud töövoo race-test</Text>
-    <Text style={styles.description}>Kasutab tavapärast autentitud kliendi RPC/CAS rada. Canonical release’is seda kaarti ei ole.</Text>
-    <Text style={styles.message}>Workflow Realtime: {workflow.realtimeLifecycle} · hüdreeritud: {workflow.online ? "jah" : "ei"}</Text>
-    {readOnly && <Text accessibilityRole="alert" style={styles.terminal}>Õppus on lõpetatud · ainult lugemiseks</Text>}
-    <Pressable accessibilityLabel="Validation simultaneous claim" disabled={pending || readOnly} style={[styles.primary, readOnly && styles.disabled]} onPress={() => void run(() => assignPatientToMeConflictSafe(patientId))}>
-      <Text style={styles.primaryText}>Saada samaaegne CLAIM</Text>
-    </Pressable>
-    <Pressable accessibilityLabel="Validation release patient" disabled={pending || readOnly} style={[styles.secondary, readOnly && styles.disabled]} onPress={() => void run(() => releasePatientConflictSafe(patientId))}>
-      <Text style={styles.secondaryText}>Vabasta patsient puhtaks CLAIM-testiks</Text>
-    </Pressable>
-    <Pressable accessibilityLabel="Prepare stale former owner mutation" disabled={pending || readOnly} style={[styles.secondary, readOnly && styles.disabled]} onPress={() => stage("stale")}>
-      <Text style={styles.secondaryText}>Valmista aegunud omaniku mutatsioon</Text>
-    </Pressable>
-    <Pressable accessibilityLabel="Prepare same base mutable mutation" disabled={pending || readOnly} style={[styles.secondary, readOnly && styles.disabled]} onPress={() => stage("mutable")}>
-      <Text style={styles.secondaryText}>Valmista sama alusversiooni MUTABLE</Text>
-    </Pressable>
-    <Pressable accessibilityLabel="Submit prepared validation mutation" disabled={pending || !prepared || readOnly} style={[styles.primary, (!prepared || readOnly) && styles.disabled]} onPress={() => prepared && void run(() => submitPreparedPhysicalValidationMutation(prepared))}>
-      <Text style={styles.primaryText}>Saada valmismutatsioon</Text>
-    </Pressable>
-    <Text accessibilityRole="alert" style={styles.message}>{message}</Text>
+    <Text>Üks auditeeritav TEST-kontekst; tavaline autentitud RPC/CAS. Canonical release’is seda kaarti ei ole.</Text>
+    <Text>Workflow Realtime: {workflow.realtimeLifecycle} · hüdreeritud: {workflow.online ? "jah" : "ei"}</Text>
+    {readOnly && <Text accessibilityRole="alert">Õppus on lõpetatud · ainult lugemiseks</Text>}
+    <HarnessAction label="Armeeri TEST: Samsung-A" onPress={() => arm("Samsung-A")} disabled={disabled || !canArmPhysicalValidationHarness()} />
+    <HarnessAction label="Armeeri TEST: Samsung-B" onPress={() => arm("Samsung-B")} disabled={disabled || !canArmPhysicalValidationHarness()} />
+    <HarnessAction label="Valmista samaaegne CLAIM" onPress={() => stage("claim")} disabled={disabled || !isPhysicalValidationContextArmed() || !workflow.online} />
+    <HarnessAction label="Vabasta patsient puhtaks CLAIM-testiks" onPress={() => {
+      if (!isPhysicalValidationContextArmed()) { setMessage("Armeeri TEST kõigepealt."); return; }
+      void run(() => releasePatientConflictSafe(patientId));
+    }} disabled={disabled || !isPhysicalValidationContextArmed() || !workflow.online} />
+    <HarnessAction label="Valmista aegunud omaniku mutatsioon" onPress={() => stage("stale")} disabled={disabled || !isPhysicalValidationContextArmed() || !workflow.online} />
+    <HarnessAction label="Valmista sama baasiga APPEND-paar" onPress={() => stage("append")} disabled={disabled || !isPhysicalValidationContextArmed() || !workflow.online} />
+    <HarnessAction label="Valmista sama alusversiooni MUTABLE" onPress={() => stage("mutable")} disabled={disabled || !isPhysicalValidationContextArmed() || !workflow.online} />
+    {prepared.map((p, i) => <View key={p.commandId}>
+      <Text selectable>{p.kind} · {p.commandId} · {p.exerciseId} · {p.patientId} · alus {p.expectedRevision}</Text>
+      <HarnessAction label={`Saada valmiskäsk ${i + 1}`} onPress={() => send(p)} disabled={disabled || !getPreparedValidationAvailability(p).normal} />
+      <HarnessAction label={`Negatiivne TEST-käsk ${i + 1}`} onPress={() => send(p, true)} disabled={disabled || !getPreparedValidationAvailability(p).negative} />
+    </View>)}
+    <Text accessibilityRole="alert">{message}</Text>
+    <Text selectable>{JSON.stringify(evidence, null, 2)}</Text>
+    <HarnessAction label="Jaga piiratud valideerimistõendit" disabled={disabled} onPress={() => void Share.share({ title: "WP-NEXT-03 TEST", message: JSON.stringify(getPhysicalValidationEvidence(), null, 2) })} />
   </View>;
 }
-
-const styles = StyleSheet.create({
-  card: { width: "100%", maxWidth: 560, marginTop: 20, padding: 16, borderRadius: 12, borderWidth: 2, borderColor: "#B54708", backgroundColor: "#FFFAEB", gap: 10 },
-  title: { color: "#7A2E0E", fontSize: 17, fontWeight: "700" },
-  description: { color: "#7A2E0E", fontSize: 14 },
-  primary: { padding: 13, alignItems: "center", borderRadius: 8, backgroundColor: "#B54708" },
-  primaryText: { color: "#fff", fontWeight: "700" },
-  secondary: { padding: 12, alignItems: "center", borderRadius: 8, borderWidth: 1, borderColor: "#B54708" },
-  secondaryText: { color: "#7A2E0E", fontWeight: "700", textAlign: "center" },
-  disabled: { opacity: 0.45 },
-  terminal: { color: "#B42318", fontSize: 14, fontWeight: "700" },
-  message: { color: "#475467", fontSize: 14 },
-});
+const styles = StyleSheet.create({ card: { width: "100%", maxWidth: 560, marginTop: 20, padding: 16, gap: 12, borderWidth: 2, borderColor: "#B54708", backgroundColor: "#FFFAEB" },
+  title: { fontWeight: "700", fontSize: 17 }, button: { minHeight: 48, padding: 14, backgroundColor: "#7A2E0E", borderRadius: 8 }, buttonText: { color: "white", fontWeight: "800" }, disabled: { opacity: 0.4 } });

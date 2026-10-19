@@ -1,5 +1,10 @@
 import fs from "fs";
 import path from "path";
+import React from "react";
+import TestRenderer, { act } from "react-test-renderer";
+import { Alert } from "react-native";
+import SharedWorkflowValidationCard from "@/components/dashboard/SharedWorkflowValidationCard";
+import * as harness from "../PhysicalValidationHarnessService";
 
 import { InMemorySharedWorkflowGateway } from "../InMemorySharedWorkflowGateway";
 import {
@@ -106,15 +111,32 @@ describe("WP-NARVA-07K terminal shared-workflow immutability", () => {
     expect(migration).toMatch(/if found then[\s\S]*'IDEMPOTENT'::text/);
   });
 
-  it("fences the validation card from authoritative completed lifecycle", () => {
+  it("fences the validation card from authoritative completed lifecycle", async () => {
     const dashboard = fs.readFileSync(path.resolve(process.cwd(), "src/app/dashboard.tsx"), "utf8");
     const card = fs.readFileSync(path.resolve(process.cwd(), "src/components/dashboard/SharedWorkflowValidationCard.tsx"), "utf8");
     const patient = fs.readFileSync(path.resolve(process.cwd(), "src/app/patient/[id].tsx"), "utf8");
     const scan = fs.readFileSync(path.resolve(process.cwd(), "src/app/scan.tsx"), "utf8");
     expect(dashboard).toMatch(/readOnly=\{canonicalExercise\.lifecycleState === "COMPLETED"\}/);
     expect(dashboard).toContain('canonicalExercise.lifecycleState !== "CANCELLED" && <SharedWorkflowValidationCard');
-    expect(card).toMatch(/disabled=\{pending \|\| readOnly\}/);
-    expect(card).toMatch(/disabled=\{pending \|\| !prepared \|\| readOnly\}/);
+    const armEligibility = jest.spyOn(harness, "canArmPhysicalValidationHarness").mockReturnValue(true);
+    const arm = jest.spyOn(harness, "armPhysicalValidationHarness"), send = jest.spyOn(harness, "submitPreparedPhysicalValidationMutation");
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    let rendered!: TestRenderer.ReactTestRenderer;
+    try {
+      await act(async () => { rendered = TestRenderer.create(React.createElement(SharedWorkflowValidationCard)); });
+      const buttons = () => rendered.root.findAll(n => n.props.accessibilityRole === "button" && typeof n.props.onPress === "function");
+      const before = buttons();
+      expect(before.length).toBeGreaterThan(0);
+      expect(before.some(n => !n.props.disabled)).toBe(true);
+      await act(async () => rendered.update(React.createElement(SharedWorkflowValidationCard, { readOnly: true })));
+      const controls = buttons();
+      expect(controls.every(n => n.props.disabled)).toBe(true);
+      await act(async () => controls.forEach(n => n.props.onPress()));
+      expect(arm).not.toHaveBeenCalled(); expect(send).not.toHaveBeenCalled(); expect(alert).not.toHaveBeenCalled();
+    } finally {
+      if (rendered) await act(async () => rendered.unmount());
+      armEligibility.mockRestore(); arm.mockRestore(); send.mockRestore(); alert.mockRestore();
+    }
     expect(card).toContain("Õppus on lõpetatud · ainult lugemiseks");
     expect(patient).toMatch(/isExerciseTerminal \|\| isCompleted \|\| !canCurrentCaseManagerEditPatient/);
     expect(scan).toMatch(/disabled=\{pending \|\| readOnly\}/);
