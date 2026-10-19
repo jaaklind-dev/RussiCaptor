@@ -9,7 +9,8 @@ function evaluate(expression: string) {
 }
 const embedded = { ...policy, auditedDemoSources: AUDITED_DEMO_SOURCES, auditedDemoAssets:AUDITED_DEMO_ASSETS, assetRegistry:ASSET_REGISTRY,virtualAssetRegistry:VIRTUAL_ASSET_REGISTRY, sourceCommit: 'a'.repeat(40), sourceDirty: false, buildTimestamp: '2026-10-18T12:00:00.000Z' };
 const actual = { packageId: policy.packageId, versionCode: policy.versionCode, versionName: policy.applicationVersion, certificate: policy.signingCertificateSha256,
-  signatureVerified: true, debuggable: false, manifestIsolation: true, productionMarkersAbsent: true, bundledApplicationGraphVerified: true, auditedDemoSources: AUDITED_DEMO_SOURCES, auditedBundleContentsVerified: true, auditedDemoAssets:AUDITED_DEMO_ASSETS,assetRegistry:ASSET_REGISTRY,assetRegistryBundleVerified:true,virtualAssetRegistry:VIRTUAL_ASSET_REGISTRY,packagedBundleVerified:true,bundleSha256:'a'.repeat(64) };
+  signatureVerified: true, debuggable: false, manifestIsolation: true, productionMarkersAbsent: true, bundledApplicationGraphVerified: true, auditedDemoSources: AUDITED_DEMO_SOURCES, auditedBundleContentsVerified: true, auditedDemoAssets:AUDITED_DEMO_ASSETS,assetRegistry:ASSET_REGISTRY,assetRegistryBundleVerified:true,virtualAssetRegistry:VIRTUAL_ASSET_REGISTRY,packagedBundleVerified:true,bundleSha256:'a'.repeat(64),
+  imagingDataVerification:{sourceSha256:AUDITED_DEMO_SOURCES['assets/imaging/manifest.json'],dataSha256:'b'.repeat(64),compilerInputSha256:'c'.repeat(64)} };
 describe('dedicated signed offline-demo build contract', () => {
   test('independent demo policy permits no migration dependency', () => {
     expect(evaluate('validatePolicy(policy);').status).toBe(0);
@@ -29,6 +30,7 @@ describe('dedicated signed offline-demo build contract', () => {
   });
   test.each([{ certificate: '0'.repeat(64) }, { signatureVerified: false }, { debuggable: true }, { packageId: 'com.jaaklind.RussiCaptor' },
     { versionCode: 181 }, { manifestIsolation: false }, { productionMarkersAbsent: false }, { bundledApplicationGraphVerified: false }, { auditedBundleContentsVerified: false },
+    {imagingDataVerification:null},{imagingDataVerification:{}},
     {assetRegistryBundleVerified:false},{assetRegistry:{}},{assetRegistry:{...ASSET_REGISTRY,sha256:'0'.repeat(64)}}])('artifact mismatch fails closed %j', patch => {
     expect(evaluate(`validateArtifact(policy,${JSON.stringify(embedded)},{...${JSON.stringify(actual)},...${JSON.stringify(patch)}});`).status).not.toBe(0);
   });

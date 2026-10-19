@@ -75,6 +75,9 @@ export function validateArtifact(policy, embedded, actual) {
   verifyAuditedDemoAssets();
   verifyAuditedAssetRegistry();
   verifyAuditedVirtualRegistry();
+  const data=actual.imagingDataVerification;
+  if(!data || data.sourceSha256!==AUDITED_DEMO_SOURCES['assets/imaging/manifest.json'] ||
+    !/^[a-f0-9]{64}$/.test(data.dataSha256||'') || !/^[a-f0-9]{64}$/.test(data.compilerInputSha256||''))throw new Error('OFFLINE_DEMO_IMAGING_DATA_EVIDENCE_INVALID');
   if(!validVirtualIdentity(embedded.virtualAssetRegistry)||!validVirtualIdentity(actual.virtualAssetRegistry)||
     actual.packagedBundleVerified!==true||!/^([a-f0-9]{64})$/.test(actual.bundleSha256||''))throw new Error('OFFLINE_DEMO_VIRTUAL_REGISTRY_IDENTITY_INVALID');
   if(!validRegistryIdentity(embedded.assetRegistry)||!validRegistryIdentity(actual.assetRegistry)||actual.assetRegistryBundleVerified!==true)
@@ -96,6 +99,7 @@ export function validateBundleSources(sources) {
   for (const source of sources) {
     const s = source.replaceAll('\\', '/');
     if (['\0polyfill:external-require', '\0polyfill:assets-registry'].includes(s)) continue;
+    if (s.includes('\0')) throw new Error('OFFLINE_DEMO_BUNDLE_SOURCE_ESCAPE');
     if (/supabase|expo-router|CloudSync|OperatorSession|RuntimeNativeLeaseHeartbeat|RuntimeCheckpoint|SupabaseService/i.test(s)) throw new Error('OFFLINE_DEMO_BUNDLE_PRODUCTION_MODULE');
     const own = s.replace(/^(?:\.\/|\/)/, '');
     if(Object.hasOwn(AUDITED_DEMO_ASSETS,own)){assertAuditedDemoAsset(own,fs.readFileSync(path.join(demoRoot,own)));continue;}
@@ -114,7 +118,13 @@ export function validateAuditedBundleSources(map) {
     throw new Error('OFFLINE_DEMO_BUNDLE_CONTENT_MISSING');
   }
   const audited = validateBundleSources(map.sources);
-  if (!validAuditedIdentities(audited)) throw new Error('OFFLINE_DEMO_BUNDLE_AUDITED_MODULE_MISSING');
+  // Metro embeds this exact JSON document as data, without a source-map module.
+  // Its actual compiler input is verified separately, never inferred from this map.
+  for (const file of Object.keys(AUDITED_DEMO_SOURCES).filter(file=>file!=='assets/imaging/manifest.json')) {
+    if (audited[file] !== AUDITED_DEMO_SOURCES[file]) throw new Error('OFFLINE_DEMO_BUNDLE_AUDITED_MODULE_MISSING');
+  }
+  assertAuditedDemoSource('assets/imaging/manifest.json',fs.readFileSync(path.join(demoRoot,'assets/imaging/manifest.json')));
+  audited['assets/imaging/manifest.json']=AUDITED_DEMO_SOURCES['assets/imaging/manifest.json'];
   for (const [index, source] of map.sources.entries()) {
     const own = source.replaceAll('\\', '/').replace(/^(?:\.\/|\/)/, '');
     if (Object.hasOwn(AUDITED_DEMO_SOURCES, own)) {

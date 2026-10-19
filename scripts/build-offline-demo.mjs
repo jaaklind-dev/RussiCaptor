@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { demoKey, alias, loadDemoPassword, signingFingerprint } from './demo-signing.mjs';
 import { validatePolicy, validateArtifact, validateAuditedBundleSources, validateManifestDump, verifyAuditedDemoSources, verifyAuditedDemoAssets, validatePackagedDemoAssets,
@@ -10,6 +11,8 @@ import { validatePolicy, validateArtifact, validateAuditedBundleSources, validat
 import { verifyOfflineDemo } from './verify-offline-demo.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const app = path.join(root, 'offline-demo');
+const require = createRequire(import.meta.url);
+const imagingData = require('./lib/offline-demo-imaging-data.cjs');
 const policy = JSON.parse(fs.readFileSync(path.join(app, 'build-policy.json'), 'utf8'));
 validatePolicy(policy, process.env);
 verifyOfflineDemo();
@@ -25,8 +28,10 @@ if (signingFingerprint(password) !== policy.signingCertificateSha256) throw new 
 env.DEMO_KEY_PASSWORD = password;
 env.DEMO_KEYSTORE = demoKey;
 env.DEMO_KEY_ALIAS = alias;
+env.DEMO_HERMESC = path.join(path.dirname(require.resolve('hermes-compiler/package.json',{paths:[require.resolve('react-native/package.json')]})), 'hermesc/osx-bin/hermesc');
 run(path.join(root, 'node_modules/.bin/expo'), ['prebuild', '--clean', '--platform', 'android', '--no-install']);
 const native = path.join(app, 'android');
+env.DEMO_HERMES_EVIDENCE_DIR = path.join(native,'app/build/offline-demo-compiler-evidence');
 const gradleFile = path.join(native, 'app/build.gradle');
 let gradle = fs.readFileSync(gradleFile, 'utf8');
 const marker = '    signingConfigs {\n        debug {';
@@ -35,11 +40,16 @@ gradle = gradle.replace(marker, `    signingConfigs {\n        offlineDemo {\n  
 const offset = gradle.indexOf('        release {');
 if (!gradle.slice(offset).includes('signingConfig signingConfigs.debug')) throw new Error('OFFLINE_DEMO_RELEASE_TEMPLATE_CHANGED');
 gradle = gradle.slice(0, offset) + gradle.slice(offset).replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.offlineDemo');
+if (!gradle.includes("findProperty('android.enablePngCrunchInReleaseBuilds')") || !gradle.includes('crunchPngs enablePngCrunchInRelease.toBoolean()')) throw new Error('OFFLINE_DEMO_PNG_TEMPLATE_CHANGED');
+gradle += `\nreact { hermesCommand = ${JSON.stringify(path.join(root,'scripts/lib/offline-demo-hermes-wrapper.cjs'))} }\n`;
 fs.writeFileSync(gradleFile, gradle);
-fs.appendFileSync(path.join(native, 'gradle.properties'), '\nEX_DEV_CLIENT_NETWORK_INSPECTOR=false\n');
+fs.appendFileSync(path.join(native, 'gradle.properties'), '\nEX_DEV_CLIENT_NETWORK_INSPECTOR=false\nandroid.enablePngCrunchInReleaseBuilds=false\n');
 const evidenceFile = path.join(native, 'app/src/main', EMBEDDED);
 fs.mkdirSync(path.dirname(evidenceFile), { recursive: true });
 fs.writeFileSync(evidenceFile, JSON.stringify(evidence));
+const imagingBytes = fs.readFileSync(path.join(app,imagingData.relative));
+imagingData.verifySource(imagingBytes);
+fs.writeFileSync(path.join(native,'app/src/main/assets/offline-demo-imaging.json'),imagingBytes);
 console.log('OFFLINE_DEMO_NATIVE_BUILD_STARTED');
 try {
   console.log(run(path.join(native, 'gradlew'), [':app:assembleRelease', '--no-daemon', '--max-workers=2', '-PreactNativeArchitectures=arm64-v8a', '-Porg.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m'], native));
@@ -56,11 +66,18 @@ const manifestDump = run(path.join(tools, 'aapt'), ['dump', 'xmltree', apk, 'And
 const cert = run(path.join(tools, 'apksigner'), ['verify', '--verbose', '--print-certs', apk]);
 const match = /package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'/.exec(badging);
 const embedded = JSON.parse(run('unzip', ['-p', apk, EMBEDDED]));
+const packagedImagingBytes = run('unzip',['-p',apk,'assets/offline-demo-imaging.json'],app,true);
+const compilerCode = fs.readFileSync(path.join(env.DEMO_HERMES_EVIDENCE_DIR,'verified-metro-input.js'),'utf8');
+const imagingDataVerification = imagingData.verifyPackagedData(packagedImagingBytes,imagingBytes,compilerCode);
+const recordedData = JSON.parse(fs.readFileSync(path.join(env.DEMO_HERMES_EVIDENCE_DIR,'imaging-data.json'),'utf8'));
+const {outputSha256,...recordedInput}=recordedData;
+if(JSON.stringify(recordedInput)!==JSON.stringify(imagingDataVerification))throw new Error('OFFLINE_DEMO_COMPILER_EVIDENCE_MISMATCH');
 const map = JSON.parse(fs.readFileSync(path.join(native, 'app/build/generated/sourcemaps/react/release/index.android.bundle.map'), 'utf8'));
 const auditedDemoSources = validateAuditedBundleSources(map);
 const virtualAssetRegistry=validateAssetRegistryBundle(map);
 const bundleSha256=validatePackagedBundle(run('unzip',['-p',apk,'assets/index.android.bundle'],app,true),
   fs.readFileSync(path.join(native,'app/build/generated/assets/react/release/index.android.bundle')));
+if(outputSha256!==bundleSha256)throw new Error('OFFLINE_DEMO_COMPILER_OUTPUT_MISMATCH');
 const entries = run('unzip', ['-Z1', apk]).trim().split('\n');
 const imageEntries=[];
 for (const entry of entries.filter(e => !e.endsWith('/'))) {
@@ -74,7 +91,7 @@ const actual = { packageId: match?.[1], versionCode: Number(match?.[2]), version
   debuggable: badging.includes('application-debuggable'), manifestIsolation: validateManifestDump(manifestDump, badging),
   productionMarkersAbsent: true, bundledApplicationGraphVerified: true, auditedDemoSources, auditedBundleContentsVerified: true,
   auditedDemoAssets:validatePackagedDemoAssets(imageEntries),assetRegistry:verifyAuditedAssetRegistry(),virtualAssetRegistry,
-  assetRegistryBundleVerified:true,packagedBundleVerified:true,bundleSha256 };
+  assetRegistryBundleVerified:true,packagedBundleVerified:true,bundleSha256,imagingDataVerification };
 validateArtifact(policy, embedded, actual);
 const output = path.join(app, 'dist');
 fs.mkdirSync(output, { recursive: true });
@@ -86,4 +103,6 @@ const result = { ...evidence, artifactFilename: filename, artifactSha256: crypto
   ...actual, buildValidity: 'PASS', signingVerification: 'PASS', physicalAcceptance: 'NOT_TESTED', architectures: ['arm64-v8a'], moduleCount: map.sources.length };
 for (const [file, content] of [['offline-demo-manifest.json', JSON.stringify(result, null, 2)], ['AndroidManifest.aapt.txt', manifestDump],
   ['apk-badging.txt', badging], ['signature.txt', cert], ['bundle-sources.json', JSON.stringify(map.sources, null, 2)]]) fs.writeFileSync(path.join(output, file), content + '\n');
+fs.copyFileSync(path.join(env.DEMO_HERMES_EVIDENCE_DIR,'verified-metro-input.js'),path.join(output,'verified-metro-input.js'));
+fs.writeFileSync(path.join(output,'imaging-data-verification.json'),JSON.stringify(imagingDataVerification,null,2)+'\n');
 console.log(JSON.stringify({ status: 'PASS', artifact: target, sha256: result.artifactSha256, certificate: actual.certificate }));

@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url);
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const policy = require(path.join(repository, 'offline-demo/isolation-policy.cjs'));
 const {verifyGeneratedVirtualRegistry}=require('./lib/offline-demo-expo-registry-probe.cjs');
+const {verifySource:verifyImagingData}=require('./lib/offline-demo-imaging-data.cjs');
 export function verifyDemoGraph(root = path.join(repository, 'offline-demo'), entry = 'index.js') {
   const base = fs.realpathSync(root), visited = new Set(), sharedVisited = new Set();
   function visit(file) {
@@ -26,8 +27,9 @@ export function verifyDemoGraph(root = path.join(repository, 'offline-demo'), en
     if (Object.hasOwn(policy.AUDITED_DEMO_SOURCES, demoRelative)) policy.assertAuditedDemoSource(demoRelative, text);
     // Only this exact hash-pinned JSON data document may carry source/license URLs. It cannot execute code.
     if(demoRelative==='assets/imaging/manifest.json') {
-      policy.assertAuditedDemoSource(demoRelative,text);JSON.parse(text);return;
+      policy.assertAuditedDemoSource(demoRelative,text);verifyImagingData(text);return;
     }
+    if(real.endsWith('.json'))throw new Error('OFFLINE_DEMO_JSON_DATA_FORBIDDEN');
     if (/https?:|SUPABASE|SERVICE_ROLE|access_token|refresh_token|eval\s*\(|new\s+Function/.test(text)) throw new Error('OFFLINE_DEMO_UNSAFE_SOURCE');
     const ast = ts.createSourceFile(real, text, ts.ScriptTarget.Latest, true, real.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
     function dependency(node) {
