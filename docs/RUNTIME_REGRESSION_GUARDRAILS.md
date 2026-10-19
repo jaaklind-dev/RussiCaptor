@@ -50,6 +50,23 @@ Feature code must use the shared authority, intent-time, ownership-classificatio
 
 Exact paths and group membership are maintained in the executable manifest. A missing referenced test or incomplete A–Z/H01–H20/CHK-G01–CHK-G12/WF-CAN-G01–WF-CAN-G12/CM-HEAD-G01–CM-HEAD-G12/READINESS-G01–READINESS-G12/TRANS-G01–TRANS-G24/PATCOMP-G01–PATCOMP-G24/PROC-G01–PROC-G42/Q-G01–Q-G10/SRC-G01–SRC-G30/IMG-G01–IMG-G45/IMG-ASSET-G01–IMG-ASSET-G16/IMG-AUTH-G01–IMG-AUTH-G16/LAB-G01–LAB-G46 catalog fails `RuntimeRegressionGuardrailsManifest-test.ts`.
 
+## Mandatory server writer authorization security suite
+
+The historical A–Z catalog is closed and unchanged. Server writer authorization
+is an additional named security suite, not a new A–Z identifier:
+`npm run test:writer-authorization`. It is also selected by the existing
+runtime/all guardrail groups, ordinary full Jest regression, dedicated CI and
+the Android release workflow. None of these routes can skip a missing test or
+failed local SQL migration.
+
+`scripts/__tests__/ServerWriterAuthorization-test.ts` runs real isolated
+PostgreSQL authorization and catalog checks through
+`scripts/test-writer-authorization.mjs`: CM-only acquisition, expired-lease
+replacement, heartbeat, checkpoint/clock publication and materialization
+acknowledgement are denied; scoped EXCON retains integrity-checked, fenced
+PENDING recovery. PLATFORM_ADMIN alone grants no writer authority. Historical
+writer-generation, ownership, CAS and clinical guardrails remain mandatory.
+
 ## Scoped CM reader workflow-head guardrails
 
 Canonical workflow-head creation remains writer-owned. An ordinary exercise-scoped CM consumes validated reader state and may submit durable intent, but never acquires writer authority as an implicit readiness side effect.

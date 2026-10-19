@@ -37,6 +37,7 @@
     "read-excel-file": "^9.3.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
     "@types/jest": "29.5.14",
     "@types/react": "~19.2.2",
     "eslint": "^9.39.5",
@@ -54,6 +55,7 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
+    "test:writer-authorization": "jest --runInBand --runTestsByPath scripts/__tests__/ServerWriterAuthorization-test.ts",
     "test:guardrails": "node scripts/run-runtime-guardrails.mjs all",
     "test:runtime-guardrails": "node scripts/run-runtime-guardrails.mjs runtime",
     "test:multi-device-guardrails": "node scripts/run-runtime-guardrails.mjs multi-device",

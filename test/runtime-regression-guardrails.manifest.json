@@ -449,6 +449,7 @@
       "src/modules/massiveTransfusion/__tests__/MtpCalciumReplacement-test.ts"
     ],
     "runtime": [
+      "scripts/__tests__/ServerWriterAuthorization-test.ts",
       "src/services/ui/__tests__/ProductionRouteLoop-test.ts",
       "src/components/__tests__/ModeDiscoveryRecovery-test.tsx",
       "src/services/runtime/persistence/__tests__/RuntimeCmReaderReadinessReconciliation-test.ts",

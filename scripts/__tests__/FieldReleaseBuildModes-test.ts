@@ -3,10 +3,19 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 const root = process.cwd();
 const descriptor = JSON.parse(fs.readFileSync(path.join(root, "release/field-release.json"), "utf8"));
 const required = descriptor.requiredSupabaseMigrations.map((item: { remoteVersion: string }) => item.remoteVersion);
+// Local source provenance is NOT a deployed production migration count.
+// The existing release gate must still match every file to the actual HEAD.
+const committedSourceFiles = execFileSync('git', ['ls-tree', '-r', '--name-only', 'HEAD', '--', 'supabase/migrations'],
+  { cwd: root, encoding: 'utf8' }).trim().split('\n').filter(file => file.endsWith('.sql')).sort();
+const expectedSourceLedger = committedSourceFiles.map(file => ({
+  filename: path.basename(file),
+  sha256: createHash('sha256').update(execFileSync('git', ['show', `HEAD:${file}`], { cwd: root })).digest('hex'),
+}));
 const project = "fimcsrivizpliiuoqopv";
 const missingVersion = "20261016065854";
 const complete = { RUSSICAPTOR_MIGRATION_PROJECT_REF: project, RUSSICAPTOR_DEPLOYED_MIGRATIONS: required.join(",") };
@@ -42,12 +51,20 @@ function evidenceFixture(mode: string, env: Record<string, string>) {
 }
 
 describe("safe predeployment candidate and fail-closed canonical release", () => {
-  test("canonical complete migration evidence passes and validates 53 committed migrations", () => {
+  test("complete declared backend evidence validates the exact committed local source ledger", () => {
     const result = config("canonical", complete);
     expect(result.status).toBe(0);
     const verified = JSON.parse(result.stdout);
     expect(verified.compatibility.status).toBe("PASS");
-    expect(verified.integrity).toMatchObject({ status: "PASS", count: 53 });
+    expect(verified.integrity).toMatchObject({ status: "PASS", count: committedSourceFiles.length });
+    expect(verified.integrity.migrations.map((item: { filename: string; sha256: string }) => ({
+      filename: item.filename, sha256: item.sha256,
+    }))).toEqual(expectedSourceLedger);
+    expect(fs.readdirSync(path.join(root, 'supabase/migrations')).filter(file => file.endsWith('.sql')).sort())
+      .toEqual(expectedSourceLedger.map(item => item.filename));
+    // This fixture asserts only descriptor-declared backend prerequisites;
+    // it is not evidence that every local source migration is deployed.
+    expect(verified.compatibility.deployedVersions).toEqual(required);
   });
 
   test("canonical missing migrations fails before compilation", () => {

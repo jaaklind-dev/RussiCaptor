@@ -31,6 +31,8 @@ jobs:
           distribution: temurin
           java-version: 17
       - run: npm ci
+      - name: Require server writer authorization security suite
+        run: npm run test:writer-authorization
       - name: Verify release and backend prerequisites
         env:
           RUSSICAPTOR_REQUIRE_REMOTE_MIGRATIONS: "1"
