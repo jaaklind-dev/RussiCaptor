@@ -1,0 +1,71 @@
+WP-NARVA-10B10 measurement protocol
+
+Scope: test-only instrumentation. No runtime implementation or acceptance-fixture
+change. The normative Runtime guardrail catalog delegates the exact performance
+checks to RuntimeLargeCheckpointRestore-test.ts. Its existing maximum of all
+serializer and inner/outer SHA onSlice reports must remain strictly below250ms.
+
+The original boundary is preserved as that exact family of callback intervals,
+not relabelled as entire restore duration or a comprehensive UI-blocking metric.
+Serialization and SHA callbacks are recorded separately, then concatenated in
+their original order. No sample is removed, averaged, capped or rounded for
+assertions. Nonfinite, negative and empty sample sets also fail closed.
+The existing runtime yieldEvery128/maxSlice8/characters8192/blocks16 and the
+first test's microtask yield function remain unchanged. The fixture generator,
+6000 rows, ascending1.8/3/4/8/12/16MiB matrix and deterministic content remain.
+
+Timing source: process.hrtime.bigint minus a test-module-local origin, converted
+to milliseconds without rounding. During each test body only, performance.now is
+bound to this function so the unchanged runtime helpers use the actual clock.
+The prior property descriptor is restored in finally, including rejection paths.
+Date.now and Jest's RN Date.now-based performance mock cannot supply the samples.
+
+Per invocation: exactly FIRST ascending matrix then REPEAT ascending matrix.
+No discarded or unmeasured warm-up. FIRST is the first measured async pass in this
+test, not a pristine application/Android cold start: imports and the synchronous
+reference work still precede it. REPEAT is explicitly warmed in the same process;
+every maximum and integrity assertion applies to both. No retry-on-failure.
+
+Whole-phase elapsed boundaries, all using hrtime:
+fixtureMs: representativePayload call through completion.
+referenceSerializationMs: legacy stableJson call through completion.
+serializationMs: stableJsonAsync invocation through fulfilled result, including
+native discovery, cooperative yields and final joining.
+hashMs: sha256TextAsync invocation through digest result, including inner yields.
+referenceHashMs: synchronous reference SHA invocation through completion.
+checkpointSetupMs: checkpoint fixture construction and createRuntimeCheckpoint.
+cloneMs: structuredClone of the fresh checkpoint (forces fresh identity validation).
+validationMs: isValidRuntimeCheckpointAsync invocation through result with the
+original setTimeout(0) yield. This is validation, not full restore.
+canonicalRestoreMs: restoreRuntimeCheckpointCanonicalRepresentation invocation
+through complete returned checkpoint, including verification and parse/restore.
+
+Setup/reference/copy phases are diagnostic, not silently added to the original
+onSlice maximum. Whole-phase elapsed values are not substituted for that maximum.
+Final join/digest are included in the whole-phase observations but not silently
+inserted into the historical callback contract. Callback phases overlap within
+SHA, so their durations cannot be summed to infer total time.
+
+The independent validation limits remain exactly: validation<5000ms, timerTicks>5,
+maximum timer gap<250ms. Timer window is unchanged: starts immediately before
+validation, ends after its following timer turn. Added canonical restore occurs
+after that timer window and is reported separately, not used to relax its gates.
+The complete restored checkpoint must equal the source; identity, revision, clock
+and hash validity assertions remain in force. Performance never replaces integrity.
+
+Every phase duration is logged on completion, even rejection. Every successful
+workload's raw slice arrays, fixture hash, byte length, phase times and runtime
+information are logged before its assertions. JSON logs retain original precision.
+
+Negative tests: strict250 boundary and outlier rejection; actual deliberately
+slow serializer; slow fixture measured by unchanged runtime callbacks; corrupt
+hash/text/identity; incomplete fast restore. Deliberate CPU work belongs only to
+negative tests and cannot warm or replace the acceptance fixture.
+
+Validation protocol for this change is bounded: two fresh targeted invocations,
+one integrity/security batch, one all-guardrail invocation and one full regression.
+Later required guardrail/full runs exercise the benchmark as normal coverage;
+none is a repeat-until-PASS response to a failure. Any mandatory failure stops work.
+OS/JIT/GC variability remains possible: a >250ms observation still fails. This
+clock correction does not retroactively convert the historical283ms failure toPASS
+or establish its original cause. Physical WP-NEXT-03/04 acceptance remains blocked.

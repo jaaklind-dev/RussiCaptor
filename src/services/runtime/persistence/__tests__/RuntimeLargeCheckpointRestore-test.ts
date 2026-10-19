@@ -1,7 +1,10 @@
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { sha256Text, sha256TextAsync } from "@/utils/sha256";
 import { stableJson, stableJsonAsync } from "@/utils/stableJson";
-import { createRuntimeCheckpoint, isValidRuntimeCheckpointAsync } from "../RuntimeCheckpointAuthorityService";
+import { createRuntimeCheckpoint, getRuntimeCheckpointCanonicalRepresentation, isValidRuntimeCheckpointAsync,
+  restoreRuntimeCheckpointCanonicalRepresentation } from "../RuntimeCheckpointAuthorityService";
+import { assertCompleteRestore, assertOriginalSliceLimit, logSample, monotonicNow, phase,
+  withMonotonicClock } from "../../../../../test/performance/CheckpointBenchmark";
 
 jest.setTimeout(120_000);
 
@@ -50,68 +53,89 @@ function checkpointState(targetBytes: number): SharedExerciseState {
 
 describe("WP-NARVA-10B10 large checkpoint restore", () => {
   test("canonical JSON and hash remain deterministic from 1.8 MB through 16 MB", async () => {
-    const profile: Record<string, number>[] = [];
-    for (const targetMb of [1.8, 3, 4, 8, 12, 16]) {
-      const payload = representativePayload(Math.floor(targetMb * MB));
-      const canonical = stableJson(payload);
-      const slices: number[] = [];
-      const started = performance.now();
-      const yieldingCanonical = await stableJsonAsync(payload, {
-        yieldEvery: 128,
-        maxSliceMs: 8,
-        yieldControl: async () => Promise.resolve(),
-        onSlice: duration => slices.push(duration),
-        traceCategory: "RUNTIME_PAYLOAD",
-        objectTraversal: "NATIVE_JSON_SHAPE_TRIE",
-      });
-      const canonicalMs = performance.now() - started;
-      const hashStarted = performance.now();
-      const yieldingHash = await sha256TextAsync(yieldingCanonical, {
-        charactersPerSlice: 8_192,
-        blocksPerSlice: 16,
-        maxSliceMs: 8,
-        yieldControl: async () => Promise.resolve(),
-        onSlice: duration => slices.push(duration),
-        traceCategory: "RUNTIME_PAYLOAD",
-      });
-      const hashMs = performance.now() - hashStarted;
-      expect(yieldingCanonical).toBe(canonical);
-      expect(yieldingHash).toBe(sha256Text(canonical));
-      expect(Math.max(...slices)).toBeLessThan(250);
-      profile.push({ targetMb, bytes: canonical.length, canonicalMs: Number(canonicalMs.toFixed(2)),
-        hashMs: Number(hashMs.toFixed(2)), maxSliceMs: Number(Math.max(...slices).toFixed(2)) });
-    }
-    console.info("WP_NARVA_10B10_SIZE_PROFILE", JSON.stringify(profile));
+    await withMonotonicClock(async () => {
+      // Fixed protocol: original ascending matrix first, then one explicit repeat.
+      // No unmeasured warm-up. FIRST is not an Android/app cold-start measurement:
+      // module initialization and the original synchronous reference precede it.
+      for (const pass of ["FIRST", "REPEAT"] as const) {
+        for (const targetMb of [1.8, 3, 4, 8, 12, 16]) {
+          const record: Record<string, unknown> = { operation: "CANONICAL_SERIALIZATION_AND_SHA", pass, targetMb };
+          const payload = await phase("fixtureMs", () => representativePayload(Math.floor(targetMb * MB)), record);
+          const canonical = await phase("referenceSerializationMs", () => stableJson(payload), record);
+          const serializationSlices: number[] = [], hashSlices: number[] = [];
+          const yieldingCanonical = await phase("serializationMs", () => stableJsonAsync(payload, {
+            yieldEvery: 128,
+            maxSliceMs: 8,
+            yieldControl: async () => Promise.resolve(),
+            onSlice: duration => serializationSlices.push(duration),
+            traceCategory: "RUNTIME_PAYLOAD",
+            objectTraversal: "NATIVE_JSON_SHAPE_TRIE",
+          }), record);
+          const yieldingHash = await phase("hashMs", () => sha256TextAsync(yieldingCanonical, {
+            charactersPerSlice: 8_192,
+            blocksPerSlice: 16,
+            maxSliceMs: 8,
+            yieldControl: async () => Promise.resolve(),
+            onSlice: duration => hashSlices.push(duration),
+            traceCategory: "RUNTIME_PAYLOAD",
+          }), record);
+          const referenceHash = await phase("referenceHashMs", () => sha256Text(canonical), record);
+          const slices = [...serializationSlices, ...hashSlices];
+          // Log EVERY duration before the integrity and performance assertions.
+          logSample({ ...record, fixtureId: "WP_NARVA_10B10_6000_EVENT_ROWS_V1", fixtureHash: referenceHash,
+            bytes: canonical.length, serializationSlices, hashSlices,
+            originalMaximumSliceMs: Math.max(...slices) });
+          expect(yieldingCanonical).toBe(canonical);
+          expect(yieldingHash).toBe(referenceHash);
+          assertOriginalSliceLimit(slices);
+        }
+      }
+    });
   });
 
   test("a deserialized three-megabyte active checkpoint validates without starving timers", async () => {
-    const checkpoint = structuredClone(createRuntimeCheckpoint(checkpointState(3 * MB), 26));
-    const serializedBytes = stableJson(checkpoint.payload).length;
-    let timerTicks = 0;
-    let maxTimerLagMs = 0;
-    let lastTimerAt = performance.now();
-    const timer = setInterval(() => {
-      const now = performance.now();
-      maxTimerLagMs = Math.max(maxTimerLagMs, now - lastTimerAt);
-      lastTimerAt = now;
-      timerTicks += 1;
-    }, 1);
-    const started = performance.now();
-    const valid = await isValidRuntimeCheckpointAsync(checkpoint, () => new Promise(resolve => setTimeout(resolve, 0)));
-    const restoreMs = performance.now() - started;
-    await new Promise(resolve => setTimeout(resolve, 0));
-    clearInterval(timer);
-    console.info("WP_NARVA_10B10_RESTORE_PROFILE", JSON.stringify({ serializedBytes,
-      restoreMs: Number(restoreMs.toFixed(2)), timerTicks, maxTimerLagMs: Number(maxTimerLagMs.toFixed(2)) }));
-    expect(valid).toBe(true);
-    expect(checkpoint.checkpointRevision).toBe(26);
-    expect("simulationTimeSec" in checkpoint.payload.exerciseSession
-      ? checkpoint.payload.exerciseSession.simulationTimeSec
-      : checkpoint.payload.exerciseSession.currentMinute * 60).toBe(2_622);
-    expect(serializedBytes).toBeGreaterThan(2.7 * MB);
-    expect(serializedBytes).toBeLessThan(3.4 * MB);
-    expect(restoreMs).toBeLessThan(5_000);
-    expect(timerTicks).toBeGreaterThan(5);
-    expect(maxTimerLagMs).toBeLessThan(250);
+    await withMonotonicClock(async () => {
+      for (const pass of ["FIRST", "REPEAT"] as const) {
+        const record: Record<string, unknown> = { operation: "CHECKPOINT_VALIDATION_AND_CANONICAL_RESTORE", pass };
+        const source = await phase("checkpointSetupMs", () => createRuntimeCheckpoint(checkpointState(3 * MB), 26), record);
+        const checkpoint = await phase("cloneMs", () => structuredClone(source), record);
+        const serializedBytes = (await phase("referenceSerializationMs", () => stableJson(checkpoint.payload), record)).length;
+        let timerTicks = 0;
+        let maxTimerLagMs = 0;
+        let lastTimerAt = monotonicNow();
+        const timerGaps: number[] = [];
+        const timer = setInterval(() => {
+          const now = monotonicNow();
+          maxTimerLagMs = Math.max(maxTimerLagMs, now - lastTimerAt);
+          timerGaps.push(now - lastTimerAt);
+          lastTimerAt = now;
+          timerTicks += 1;
+        }, 1);
+        let valid: boolean;
+        try {
+          valid = await phase("validationMs", () => isValidRuntimeCheckpointAsync(checkpoint,
+            () => new Promise(resolve => setTimeout(resolve, 0))), record);
+          await new Promise(resolve => setTimeout(resolve, 0));
+        } finally { clearInterval(timer); }
+        // Additional observation only: actual canonical-v1 verification, parse and
+        // restore. It is NOT substituted for the original validation/timer gates.
+        const representation = getRuntimeCheckpointCanonicalRepresentation(source)!;
+        const restored = await phase("canonicalRestoreMs", () => restoreRuntimeCheckpointCanonicalRepresentation(
+          representation, () => new Promise(resolve => setTimeout(resolve, 0))), record);
+        logSample({ ...record, serializedBytes, timerTicks, maxTimerLagMs, timerGaps });
+        expect(valid).toBe(true);
+        expect(checkpoint.checkpointRevision).toBe(26);
+        expect("simulationTimeSec" in checkpoint.payload.exerciseSession
+          ? checkpoint.payload.exerciseSession.simulationTimeSec
+          : checkpoint.payload.exerciseSession.currentMinute * 60).toBe(2_622);
+        expect(serializedBytes).toBeGreaterThan(2.7 * MB);
+        expect(serializedBytes).toBeLessThan(3.4 * MB);
+        expect(record.validationMs).toBeLessThan(5_000);
+        expect(timerTicks).toBeGreaterThan(5);
+        expect(maxTimerLagMs).toBeLessThan(250);
+        assertCompleteRestore(source, restored);
+        expect(await isValidRuntimeCheckpointAsync(restored, async () => Promise.resolve())).toBe(true);
+      }
+    });
   });
 });
