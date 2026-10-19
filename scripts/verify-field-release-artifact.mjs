@@ -3,6 +3,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { EMBEDDED_EVIDENCE_PATH, localMigrationIntegrity, sha256, verifyArtifactEvidence } from "./field-release-policy.mjs";
+import acceptanceProfile from './canonical-acceptance-profile.cjs';
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const [manifestArgument, ...flags] = process.argv.slice(2);
@@ -27,6 +28,13 @@ const actual = {
   artifactSha256: sha256(bytes), artifactSizeBytes: bytes.byteLength,
 };
 verifyArtifactEvidence(descriptor, metadata, embedded, actual, flags.includes("--require-canonical"));
+const bundle = execFileSync('unzip', ['-p', artifact, 'assets/index.android.bundle'], { maxBuffer: 100 * 1024 * 1024 });
+acceptanceProfile.verifyBundle(bundle, embedded.releaseVariant);
+const auditBytes = execFileSync('unzip', ['-p', artifact, 'assets/russicaptor-acceptance-audit.json']);
+const audit = JSON.parse(auditBytes);
+if (sha256(auditBytes) !== metadata.acceptanceBundleAuditSha256 || audit.bundleSha256 !== sha256(bundle)) throw new Error('Acceptance audit/artifact mismatch.');
+if (JSON.stringify(audit.acceptanceSources) !== JSON.stringify(acceptanceProfile.verifySources(root, embedded.acceptanceBundleProfile.profile === 'canonical'))) throw new Error('Signed source profile differs from committed source.');
+if (!Array.isArray(audit.sources) || !audit.sources.length || (embedded.acceptanceBundleProfile.profile === 'canonical' && audit.sources.some(source => acceptanceProfile.forbidden.some(name => source.includes(`/${name}.`))))) throw new Error('Signed source graph violates canonical exclusion.');
 if (JSON.stringify(localMigrationIntegrity(root, descriptor)) !== JSON.stringify(embedded.localMigrationIntegrity)) throw new Error("Artifact local migrations differ from committed source.");
 if (flags.includes("--require-canonical")) {
   // Fresh compatibility verification is mandatory, regardless of sidecar/env flags.

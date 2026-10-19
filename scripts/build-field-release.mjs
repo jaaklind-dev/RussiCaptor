@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { buildPlan, buildEvidence, EMBEDDED_EVIDENCE_PATH, verifyArtifactEvidence } from "./field-release-policy.mjs";
+import acceptanceProfile from "./canonical-acceptance-profile.cjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 process.env.ANDROID_HOME ||= path.join(process.env.HOME, "Library/Android/sdk");
@@ -26,6 +27,9 @@ const modeArguments = process.argv.slice(2).filter(arg => arg.startsWith("--mode
 if (modeArguments.length > 1 || modeArguments.length !== process.argv.length - 2) throw new Error("Invalid build arguments.");
 const plan = buildPlan(manifest, process.env, modeArguments[0]?.slice("--mode=".length));
 const { mode: releaseVariant, versionCode: buildVersionCode, artifactFilename } = plan;
+const output = path.join(root, plan.outputDirectory);
+if ([artifactFilename, plan.manifestFilename, `${artifactFilename}.sha256`].some(file => fs.existsSync(path.join(output, file)))) throw new Error('Refusing to overwrite an existing release artifact.');
+const acceptanceSources = acceptanceProfile.verifySources(root, !releaseVariant.endsWith('-validation'));
 const verification = JSON.parse(run(process.execPath, ["scripts/verify-field-release-config.mjs", `--mode=${releaseVariant}`, "--json"], { capture: true }));
 if (verification.configuration !== "PASS") throw new Error("Release verification failed closed.");
 run(process.execPath, ["scripts/builder-verify-published.mjs"]);
@@ -61,6 +65,7 @@ const gitSha = run("git", ["rev-parse", "HEAD"], { capture: true }).trim();
 const buildTimestamp = new Date().toISOString();
 const evidence = buildEvidence(manifest, plan, verification.compatibility, verification.integrity, { gitSha, buildTimestamp, sourceDirty });
 Object.assign(process.env, {
+  RUSSICAPTOR_RELEASE_VARIANT: releaseVariant,
   NODE_ENV: "production",
   EXPO_PUBLIC_RELEASE_ENVIRONMENT: "production",
   EXPO_PUBLIC_BUILD_GIT_SHA: gitSha,
@@ -78,10 +83,25 @@ run(process.execPath, ["scripts/configure-field-release-native.mjs"]);
 const evidencePath = path.join(root, "android/app/src/main", EMBEDDED_EVIDENCE_PATH);
 fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
 fs.writeFileSync(evidencePath, `${JSON.stringify(evidence)}\n`);
+// Produce and audit the real Metro/Hermes outputs before packaging. The audit
+// itself is then covered by the APK signature, not just a mutable sidecar.
+run(path.join(root, "android/gradlew"), [":app:createBundleReleaseJsAndAssets", "--no-daemon"], { cwd: path.join(root, "android") });
+const generatedBundlePath = path.join(root, 'android/app/build/generated/assets/react/release/index.android.bundle');
+const generatedBundle = fs.readFileSync(generatedBundlePath);
+const acceptanceBundle = acceptanceProfile.verifyBundle(generatedBundle, releaseVariant);
+if (plan.sharedWorkflowValidationHarness && !acceptanceBundle.markers.filter(m => ['SW-VALIDATION-', 'NEGATIVE_TEST', 'VALIDATION_BINDING_CHANGED'].includes(m.marker)).every(m => m.present)) throw new Error('Validation harness missing from actual bundle.');
+const mapPath = path.join(root, 'android/app/build/generated/sourcemaps/react/release/index.android.bundle.map');
+if (!fs.existsSync(mapPath)) throw new Error('Actual Metro source map required for acceptance graph verification.');
+const sourceMap = JSON.parse(fs.readFileSync(mapPath, 'utf8'));
+const mapSources = map => [...(map.sources ?? []), ...(map.sections ?? []).flatMap(s => mapSources(s.map))];
+const sources = mapSources(sourceMap).map(source => source.replace(/^.*?(?=node_modules\/|src\/|release\/canonical-profile\/)/, ''));
+if (!sources.length) throw new Error('Empty Metro source graph.');
+if (!releaseVariant.endsWith('-validation') && sources.some(source => acceptanceProfile.forbidden.some(name => source.includes(`/${name}.`)))) throw new Error('Acceptance-only module remains in canonical source graph.');
+const signedAudit = { ...acceptanceBundle, acceptanceSources, sources, sourceMapSha256: acceptanceProfile.sha(fs.readFileSync(mapPath)) };
+fs.writeFileSync(path.join(path.dirname(evidencePath), 'russicaptor-acceptance-audit.json'), JSON.stringify(signedAudit));
 run(path.join(root, "android/gradlew"), [":app:assembleRelease", "--no-daemon"], { cwd: path.join(root, "android") });
 const sourceApk = path.join(root, "android/app/build/outputs/apk/release/app-release.apk");
 if (!fs.existsSync(sourceApk)) throw new Error(`APK not produced at ${sourceApk}`);
-const output = path.join(root, plan.outputDirectory);
 fs.mkdirSync(output, { recursive: true });
 const artifact = path.join(output, artifactFilename);
 fs.copyFileSync(sourceApk, artifact);
@@ -101,6 +121,10 @@ const fingerprint = /certificate SHA-256 digest: ([0-9a-f]+)/i.exec(certificate)
 if (!fingerprint) throw new Error("Signing fingerprint unavailable.");
 if (fingerprint.toLowerCase() !== manifest.signingCertificateSha256) throw new Error("APK signer does not match the canonical production signer.");
 const artifactBytes = fs.readFileSync(artifact);
+const bundle = execFileSync('unzip', ['-p', artifact, 'assets/index.android.bundle'], { maxBuffer: 100 * 1024 * 1024 });
+const signedAuditBytes = execFileSync('unzip', ['-p', artifact, 'assets/russicaptor-acceptance-audit.json']);
+if (acceptanceProfile.sha(bundle) !== signedAudit.bundleSha256 || JSON.stringify(JSON.parse(signedAuditBytes)) !== JSON.stringify(signedAudit)) throw new Error('Packaged bundle/signed acceptance audit mismatch.');
+fs.writeFileSync(path.join(output, 'acceptance-bundle-audit.json'), signedAuditBytes);
 const permissions = [...badging.matchAll(/uses-permission: name='([^']+)'/g)].map(match => match[1]);
 const minSdk = /sdkVersion:'([^']+)'/.exec(badging)?.[1];
 const targetSdk = /targetSdkVersion:'([^']+)'/.exec(badging)?.[1];
@@ -115,6 +139,7 @@ const generated = {
   artifactSha256: crypto.createHash("sha256").update(artifactBytes).digest("hex"),
   artifactSizeBytes: artifactBytes.byteLength,
   debuggable: false,
+  acceptanceBundleAuditSha256: acceptanceProfile.sha(fs.readFileSync(path.join(output, 'acceptance-bundle-audit.json'))),
   permissions,
   minSdk,
   targetSdk,

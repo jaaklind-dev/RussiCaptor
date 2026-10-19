@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import acceptanceProfile from "./canonical-acceptance-profile.cjs";
 
 export const PRODUCTION_PROJECT_REF = "fimcsrivizpliiuoqopv";
 export const EMBEDDED_EVIDENCE_PATH = "assets/russicaptor-build-evidence.json";
@@ -98,6 +100,7 @@ export function buildEvidence(descriptor, plan, compatibility, integrity, proven
     versionCode: plan.versionCode, artifactFilename: plan.artifactFilename,
     gitSha: provenance.gitSha, buildTimestamp: provenance.buildTimestamp, sourceDirty: provenance.sourceDirty,
     sharedWorkflowValidationHarness: plan.sharedWorkflowValidationHarness,
+    acceptanceBundleProfile: acceptanceProfile.evidence(fileURLToPath(new URL('../', import.meta.url)), plan.mode),
     localMigrationIntegrity: integrity,
     productionCompatibility: checked.status,
     productionMigrationEvidence: checked,

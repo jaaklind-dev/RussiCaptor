@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "canonicalRpc": {
+    "path": "release/canonical-profile/SharedWorkflowMutationService.ts",
+    "origin": "bdd36aa067a0a02a4fdcf7ef5e149f5f835ee21f:src/services/sharedWorkflow/SharedWorkflowMutationService.ts",
+    "sha256": "856b816391742220dc87920d36f2d17a9991758d48d9c943aca41d8eb8b15d2f"
+  },
+  "sources": [
+    {
+      "path": "src/app/_layout.tsx",
+      "sourceSha256": "0437e40ce6555a1dc4a2c099568d49cf96bccec6795610454fac76f97d410418",
+      "canonicalSha256": "4f14a9a7031f4c9532b08be33d0f47ec4bdd463a5f9399ab39b32826b2f0a7ad"
+    },
+    {
+      "path": "src/app/dashboard.tsx",
+      "sourceSha256": "e9daa20d60ab4991527a48503685d4e160f5d0139a91d6b63536850b49b95c8b",
+      "canonicalSha256": "677247009bf9f9c0ab08402e754712bfe24bdf22d7be3945c8b6d9b279ab6fe3"
+    },
+    {
+      "path": "src/app/excon/diagnostics.tsx",
+      "sourceSha256": "7d0b32cf839cb49a8dc4ee2623117b01229eacee1905902f794dfa52f707a20d",
+      "canonicalSha256": "e21b90911462382ee715291b00e3d76aadc4f0fbde5f6ed3c799a6864975d54d"
+    },
+    {
+      "path": "src/components/excon/ExerciseControlsCard.tsx",
+      "sourceSha256": "daf716740a0f280b56d00b7ace078b860545d5e9cde21d17d809e820f99b506e",
+      "canonicalSha256": "ff3ad3f3efedd0123c6f86397d4da616805243f9cb48508825fd013d456e00ba"
+    },
+    {
+      "path": "src/components/excon/NarvaIroScenarioControlsCard.tsx",
+      "sourceSha256": "978f57814619a7a2e5b796ad3fd973492f1f17e403e4ca79f4a8e532ec8b4f6b",
+      "canonicalSha256": "a9f20e0ceba55fb50b565d7bb84a0cbafc9f72edd223c8a6701d8774ebc5ac2f"
+    },
+    {
+      "path": "src/components/patient/LaboratoryWorkflowCard.tsx",
+      "sourceSha256": "5969e4ad49d8a1a6d7ffb1c25db0029a744b0d2103ae66f34e77057e1f867341",
+      "canonicalSha256": "52f3b567c230edc035e86e92e2c7b7a70a3a559ed52494fbd2e1acd83759f85b"
+    },
+    {
+      "path": "src/services/AssessmentRuntimeDebugService.ts",
+      "sourceSha256": "8351ababbab34491077c92ad32fe19d75f8c99bdb5f0b3e5fd036b5f1cd3c359",
+      "canonicalSha256": "b6c5d37f83c355d3091f07b7e053cba1542e88763ff07c9c4e54430e2d7acde9"
+    },
+    {
+      "path": "src/services/AssignmentRepository.ts",
+      "sourceSha256": "bbdbb5e8b0d40b4d39aa4aa6954f94731ab0ddf58e014ab72dc15eb940d5ef75",
+      "canonicalSha256": "79e8a785556947015510194cb2645faa71fab78bb1af7336451d7eb0aa2f30a2"
+    },
+    {
+      "path": "src/services/CloudSyncService.ts",
+      "sourceSha256": "303cacf9ab1fa302c5f0fa5677129ce220d2548ce9271b863ea23f9feabfb5dd",
+      "canonicalSha256": "43d96fb15bb6e52ab3981d1ad2075627151e23052d6baba8887093404dae334e"
+    },
+    {
+      "path": "src/services/ResourceRuntimeDebugService.ts",
+      "sourceSha256": "d44e4288e5d3152bbc5a5f1f29f88780d54ad50a1b090a1597e3e4bca9e0c2fb",
+      "canonicalSha256": "f5d8d7a18a6bdf86dd82bd363f1dc47903b0b2efc91910efea03ef270433c507"
+    },
+    {
+      "path": "src/services/RuntimeCheckpointSyncService.ts",
+      "sourceSha256": "27a2ba1003ec950239eda42aa7879ad03f44318ab9b78767cb402637f233ed4f",
+      "canonicalSha256": "c3541996c7d571495777b1b8eeafcc030aecdd51bf7191339d98e23857a49bae"
+    },
+    {
+      "path": "src/services/ScenarioEngine.ts",
+      "sourceSha256": "4419811281866d7a3ddbf8feec1f884e7609c7d528ebcccc0092e2b7242025f8",
+      "canonicalSha256": "4127d57af15ddeb838cf7b285bd3b79f4fcf8a7833c6c915d1f687c56fcece76"
+    },
+    {
+      "path": "src/services/StatePersistenceService.ts",
+      "sourceSha256": "470eb38282d0022836226794fcc9a4de477c7f9bff52feb7fa63dfefe382f914",
+      "canonicalSha256": "5f97cbda9cc1583d18caaf7319108745d55d1b72020f6022e33886a342b709b8"
+    },
+    {
+      "path": "src/services/SupabaseService.ts",
+      "sourceSha256": "712ecd82e35f79e9421612105837fafc2ff188f4d9a81a375df8542516830eff",
+      "canonicalSha256": "5635faa34b7cce781fbb2915ae670cd5060b4a1d8e4652d88f8f783f6884e827"
+    },
+    {
+      "path": "src/services/runtime/assessment/ClinicalAssessmentEngine.ts",
+      "sourceSha256": "ecbfd8dfc0993d2eaeeb039d0a3d01b87138018984c6e7bd0a31d9a48a048734",
+      "canonicalSha256": "4f32378fc95a9271530d45bf2a0ea434ff0742946e88688e2051ed4de9994a1f"
+    },
+    {
+      "path": "src/services/runtime/exercise/ClinicalReferenceRuntimeService.ts",
+      "sourceSha256": "e9a48087f1a8e150a3ddc6477b00d168a7ac9b8c968b7ce69717c4dd619e8139",
+      "canonicalSha256": "1e9a4abbeaab5cda9edcc8f7c27c6b6ab63d5ca3aec1bec84deb9fa4f30f4ca8"
+    },
+    {
+      "path": "src/services/runtime/exercise/ExerciseControlCommandHandler.ts",
+      "sourceSha256": "1617a87fa24f8bdb4467e629e8426c4c36d268c90be5a259e3e1454d203a3add",
+      "canonicalSha256": "8e7106c3ba10e82876ea2ac144ec5a7f1fc570a9b58aa30906e2c267d55ad97a"
+    },
+    {
+      "path": "src/services/runtime/exercise/ExerciseControlSubmission.ts",
+      "sourceSha256": "8c186732dbbf22e5f70b9ffcf19ee369372499cfcc0d11a702f59b8ae118a71a",
+      "canonicalSha256": "05a0558e5d9d6821cbd1c29f52b1a2bbc1fecef65c316b648068e4d4cc981b24"
+    },
+    {
+      "path": "src/services/runtime/persistence/CanonicalRuntimePersistenceService.ts",
+      "sourceSha256": "6f0e7e2e467cd2ec365da2b98b5f10d9a5e06bf18d251edccc48d573a45205ea",
+      "canonicalSha256": "c1f482ca698c7ea4ec21fa8db19611d075e30325c9de07a87bdcfb8aa06be94f"
+    },
+    {
+      "path": "src/services/runtime/persistence/RuntimeCheckpointAuthorityService.ts",
+      "sourceSha256": "4a5efdc3914809bbee91c1a03b5100dd37962431d551184130ddd3613c7643a0",
+      "canonicalSha256": "40769ec43d0ce908ea8757403ec1021751652405e7acdf4aa65f4f5e04f58d87"
+    },
+    {
+      "path": "src/services/runtime/persistence/RuntimeCheckpointDeltaService.ts",
+      "sourceSha256": "0b3c56a1a1b42b66091fad52bb78eb7d3f1f082dc9d8bf1af78d6a16379bd3ae",
+      "canonicalSha256": "644626404abd5e206123b0dca3cc57b20831d79679dbf979c441db7ad911b871"
+    },
+    {
+      "path": "src/services/runtime/persistence/RuntimeCheckpointHydrationService.ts",
+      "sourceSha256": "18788e630d3210a4fdc0279fd4797be72698470aeb493732d45345d246c18a2a",
+      "canonicalSha256": "f16e138512209ea103afcfdb7dfd93cb6fcac645c07bcc7b45eab62f40c74608"
+    },
+    {
+      "path": "src/services/runtime/persistence/RuntimeCheckpointPublicationService.ts",
+      "sourceSha256": "1f63be297eefe110c06b522becd3d2f40c55699d8c9f7c0d637b1a072be23161",
+      "canonicalSha256": "e9f719c2a233476a8227949fc34ba40d14e0451beef27178b122bc8b7e2ea0b6"
+    },
+    {
+      "path": "src/services/runtime/persistence/RuntimeCheckpointRepository.ts",
+      "sourceSha256": "e82dbcd180bf7448e5c5c506d85dd9869f50839cc0c5e65a41d60e5c28666c03",
+      "canonicalSha256": "c43014a96b82c512b00d873aa9fc6403391605888b57d2f377c3a854d047e327"
+    },
+    {
+      "path": "src/services/runtime/persistence/RuntimeNativeLeaseHeartbeatController.ts",
+      "sourceSha256": "36bf13e315ec4e77ca033c2073834b0f373397587fbda39d9a7e84719be60470",
+      "canonicalSha256": "7f2651c718a145d6911c5afa8dbc6ffaa84a573762d5aacec93dc6582eb9b374"
+    },
+    {
+      "path": "src/services/runtime/persistence/RuntimeReaderConvergenceService.ts",
+      "sourceSha256": "611b342879bf1f267a8881231ecc83e25aa6b7aec97c5c86e585c41f4f08d854",
+      "canonicalSha256": "9ae7ced6da3bb637338a54e81233e56f53b6f17c88f52502b9033808dc8da5ae"
+    },
+    {
+      "path": "src/services/sharedWorkflow/SharedWorkflowMutationService.ts",
+      "sourceSha256": "7499d92c42338f8e5b92320486b6fef6b831aa21881f443b382247319d47092c",
+      "canonicalSha256": "856b816391742220dc87920d36f2d17a9991758d48d9c943aca41d8eb8b15d2f"
+    },
+    {
+      "path": "src/utils/sha256.ts",
+      "sourceSha256": "df4e23e6006d655e0c941787f0bfd8e7656b3081a1e0321b186260faceb55d02",
+      "canonicalSha256": "25054558bcf7fbcbf6591f744d9b552625b75532404cd3e6efab869551f056bc"
+    },
+    {
+      "path": "src/utils/stableJson.ts",
+      "sourceSha256": "d503bdc24d727c7435d652d3acd95c0c104b9d9f605cde3416c1919fc77f0c03",
+      "canonicalSha256": "dd5cbe92e80115bf132ba51cdc1a254524c60b293bea8af295041e83fcbcae81"
+    }
+  ]
+}
