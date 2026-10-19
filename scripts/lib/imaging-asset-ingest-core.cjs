@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const { Buffer } = require("node:buffer");
 const fs = require("node:fs");
 const path = require("node:path");
 

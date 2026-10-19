@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Buffer } from "node:buffer";
 import { createClient } from "@supabase/supabase-js";
 
 const exerciseId = process.env.RUSSICAPTOR_CANONICAL_DERIVATION_EXERCISE_ID;

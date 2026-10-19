@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { Buffer } from "node:buffer";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
