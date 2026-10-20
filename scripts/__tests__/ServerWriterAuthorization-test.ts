@@ -6,6 +6,19 @@ const root = process.cwd();
 const migration = '20261019171013_runtime_writer_controller_authorization.sql';
 
 describe('server runtime controller authorization', () => {
+  test('CLI machine-output parser rejects ambiguous success and verifies independent database state', () => {
+    const result=spawnSync(process.execPath,[path.join(root,'scripts/test-qualification-cli-output.mjs')],{cwd:root,encoding:'utf8',timeout:10000});
+    expect({status:result.status,stderr:result.stderr}).toEqual({status:0,stderr:''});
+    expect(JSON.parse(result.stdout.trim()).passed).toBe(13);
+  });
+  test('native qualification configuration fails closed without production configuration', () => {
+    const result=spawnSync(process.execPath,[path.join(root,'scripts/test-native-qualification-project.mjs')],{
+      cwd:root,encoding:'utf8',timeout:10000,
+    });
+    expect({status:result.status,stderr:result.stderr}).toEqual({status:0,stderr:''});
+    const summary=JSON.parse(result.stdout.trim());
+    expect(summary.passed).toBe(12);
+  });
   test('security suite is mandatory without extending the historical A-Z catalog', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(root, 'test/runtime-regression-guardrails.manifest.json'), 'utf8'));
     expect(manifest.guardrails.map((item: { id: string }) => item.id))
@@ -42,5 +55,16 @@ describe('server runtime controller authorization', () => {
     expect(sql).toContain("set search_path = ''");
     expect(sql).toContain('from public, anon, authenticated');
     expect(sql).not.toMatch(/\b(?:drop|disable)\s+trigger|\b(?:create|alter|drop)\s+policy|disable\s+row\s+level/i);
+  });
+
+  test('migration55 is exactly three finite revocations; no DML, defaults, functions or RLS changes', () => {
+    const files = fs.readdirSync(path.join(root, 'supabase/migrations')).filter(f => f.endsWith('_runtime_critical_table_privileges.sql'));
+    expect(files).toHaveLength(1);
+    const sql = fs.readFileSync(path.join(root, 'supabase/migrations', files[0]), 'utf8').replace(/--[^\n]*/g, '');
+    expect(sql.trim().split(';').filter(s => s.trim())).toEqual([
+      'revoke truncate, trigger on table public.runtime_writer_leases from public, anon, authenticated',
+      '\nrevoke truncate, trigger on table public.runtime_checkpoints from public, anon, authenticated',
+      '\nrevoke truncate, trigger on table public.exercise_states from public, anon, authenticated',
+    ]);
   });
 });

@@ -8,6 +8,10 @@ import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { runCases } from './test-writer-authorization.mjs';
 import { qualifyHistoricalPrivileges } from './qualify-writer-historical-privileges.mjs';
+import { privilegeSnapshot, assertPrivilegeOnlyChange, qualifyRuntimeTablePrivileges } from './qualify-runtime-table-privileges.mjs';
+import { qualifyPrivilegeTransactions } from './qualify-runtime-privilege-transactions.mjs';
+import { stageQualificationProject, validateQualificationProject, assertLocalConnection, cliEnvironment } from './native-qualification-project.mjs';
+import { parseDbPushResult } from './qualification-cli-output.mjs';
 
 // No URL or TCP connection is accepted. Only the private socket of a disposable
 // cluster created for this qualification may be used; no production credentials.
@@ -32,16 +36,42 @@ const migrationHash = createHash('sha256').update(sql).digest('hex');
 const cli = process.env.WRITER_AUTH_SUPABASE_CLI;
 assert.ok(cli && path.isAbsolute(cli), 'explicit reviewed Supabase CLI required');
 const execute = promisify(execFile);
-const migrate = async () => {
-  const url = new URL(`postgresql://${encodeURIComponent(config.user)}@localhost:5432/${config.database}`);
+const migration55 = process.env.WRITER_AUTH_NATIVE_MIGRATION55 === '1';
+// Stage the exact historical source through 54, so the real CLI stops at 54
+// before separately qualifying 55. No migration SQL is edited or synthesized.
+const stage54 = stageQualificationProject(root, path.dirname(socket), 54);
+const stage55 = migration55 ? stageQualificationProject(root, path.dirname(socket), 55) : undefined;
+let verifiedServer;
+const migrate = async (project = stage54, port = 5432) => {
+  assertLocalConnection({ ...config, port }, socket, verifiedServer);
+  validateQualificationProject(project);
+  const url = new URL(`postgresql://${encodeURIComponent(config.user)}@localhost:${port}/${config.database}`);
   url.searchParams.set('host', socket);
-  const result = await execute(cli, ['db', 'push', '--db-url', url.href, '--skip-vault', '--yes', '--workdir', root],
-    { env: { ...process.env, DO_NOT_TRACK: '1' }, timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
-  console.log(JSON.stringify({ migrationMechanism: 'supabase db push --db-url <private UNIX socket> --skip-vault', ...result }));
+  url.searchParams.set('sslmode', 'disable');
+  let result;
+  try {
+    result = await execute(cli, ['db', 'push', '--db-url', url.href, '--skip-vault', '--yes', '--output-format', 'json', '--workdir', project.directory],
+      { cwd: project.directory, env: cliEnvironment(process.env), timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+  } catch(error) {
+    console.log(JSON.stringify({cliProcess:{stdout:error.stdout,stderr:error.stderr,exitCode:error.code,signal:error.signal}}));
+    throw error;
+  }
+  console.log(JSON.stringify({ migrationMechanism: 'supabase db push --db-url <private UNIX socket> --skip-vault --output-format json', exitCode:0, ...result }));
+  return {...result,exitCode:0,parsed:parseDbPushResult({...result,exitCode:0})};
 };
 try {
   await client.connect();
   const version = (await query("select version(),current_setting('server_version_num') version_num,inet_server_addr() address,current_database() database")).rows[0];
+  verifiedServer = version;
+  assertLocalConnection(config, socket, verifiedServer);
+  // Let the actual supported CLI parse the disposable configuration before any
+  // schema/bootstrap SQL. Explicit db-url never selects a linked/cloud project.
+  const checkUrl = new URL(`postgresql://postgres@localhost:5432/${config.database}`);
+  checkUrl.searchParams.set('host',socket); checkUrl.searchParams.set('sslmode','disable');
+  const configCheck = await execute(cli,['migration','list','--db-url',checkUrl.href,'--workdir',stage54.directory],
+    { cwd: stage54.directory, env: cliEnvironment(process.env), timeout: 30000, maxBuffer: 1024*1024 });
+  console.log(JSON.stringify({ nativeConfig: 'PASS', isolatedProject: stage54.directory, cliConfigValidation: configCheck,
+    migration55Stage: stage55?.directory, inheritedCredentials: false }));
   console.log(JSON.stringify({ version, migrationHash, cli }));
   assert.equal(version.version_num, '170006');
   assert.equal(version.address, null);
@@ -70,10 +100,11 @@ try {
   `);
   await db.exec(fs.readFileSync(path.join(root, 'supabase/schema.sql'), 'utf8'));
   const files = fs.readdirSync(path.join(root, 'supabase/migrations')).filter(f => f.endsWith('.sql')).sort();
-  assert.equal(files.length, 54);
-  assert.equal(files.at(-1), candidate);
+  assert.ok(files.length === 54 || files.length === 55);
+  if (migration55) assert.equal(files.length, 55);
+  assert.equal(files[53], candidate);
   // Reconstruct 1-53, including their ledger, BEFORE creating upgrade fixtures.
-  for (const file of files.slice(0, -1)) {
+  for (const file of files.slice(0, 53)) {
     await query('begin');
     try {
       const text = fs.readFileSync(path.join(root, 'supabase/migrations', file), 'utf8');
@@ -166,6 +197,25 @@ try {
     assert.equal(definitions.length, 2);
     for (let i = 0; i < 2; i++) assert.notEqual(definitions[i].definition, oldDefinitions[i].definition);
   });
+  if (migration55) {
+    assert.notEqual(process.env.WRITER_AUTH_NATIVE_PRIVILEGES, '1', 'historical privilege experiment is separate from actual migration55');
+    const before55 = await privilegeSnapshot(query);
+    const file55 = files[54];
+    const sql55 = fs.readFileSync(path.join(root, 'supabase/migrations', file55), 'utf8');
+    console.log(JSON.stringify({ migration55: file55, sha256: createHash('sha256').update(sql55).digest('hex'), before55Acl: before55.grants }));
+    await qualifyPrivilegeTransactions({ query, socket, version: file55.split('_')[0],
+      migrate: (project, port) => migrate(project ?? stage55, port) });
+    const after55 = await privilegeSnapshot(query);
+    assertPrivilegeOnlyChange(before55, after55);
+    await query('begin');
+    try { await query(sql55); await query('commit'); } catch (error) { await query('rollback'); throw error; }
+    assert.deepEqual(await privilegeSnapshot(query), after55, 'repeat REVOKE changed state');
+    const ledger = (await query('select version from supabase_migrations.schema_migrations order by version')).rows.map(r => r.version);
+    assert.deepEqual(ledger, files.map(f => f.split('_')[0]));
+    assert.deepEqual(await snapshot(), before, 'combined upgrade changed pre-54 fixtures');
+    await qualifyRuntimeTablePrivileges({ query, setCmIdentity: () => identity(cm) });
+    results.push({ name: 'real CLI 53-to-54-to-55, exact ACL delta, immutable data and repeatability', status: 'PASS' });
+  }
   const legacy = fixtures.find(f => f.kind === 'CM');
   await identity(cm);
   await query('set role authenticated');

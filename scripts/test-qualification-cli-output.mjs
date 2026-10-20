@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import {parseDbPushResult,assertDbPushDatabaseState} from './qualification-cli-output.mjs';
+const file='20261020070931_runtime_critical_table_privileges.sql';
+const apply={upToDate:false,dryRun:false,migrations:[file],roles:[],seeds:[],message:'Finished supabase db push.'};
+const noop={...apply,upToDate:true,migrations:[],message:'Remote database is up to date.'};
+const capture=x=>({stdout:JSON.stringify(x),stderr:'Connecting to remote database...\n',exitCode:0});
+const results=[];
+const pass=(name,action)=>{action();results.push({name,status:'PASS'});};
+pass('valid machine-readable success',()=>assert.equal(parseDbPushResult(capture(apply)).kind,'applied'));
+pass('valid machine-readable no-op',()=>assert.equal(parseDbPushResult(capture(noop)).kind,'noop'));
+pass('unexpected text rejected',()=>assert.throws(()=>parseDbPushResult({...capture(noop),stdout:'Remote database is up to date.\n'}),/CLI_OUTPUT_NOT_JSON/));
+pass('malformed JSON rejected',()=>assert.throws(()=>parseDbPushResult({...capture(noop),stdout:'{' }),/CLI_OUTPUT_NOT_JSON/));
+pass('empty output rejected',()=>assert.throws(()=>parseDbPushResult({...capture(noop),stdout:''}),/CLI_OUTPUT_EMPTY/));
+pass('nonzero exit rejected even with valid success JSON',()=>assert.throws(()=>parseDbPushResult({...capture(apply),exitCode:1}),/CLI_PROCESS_FAILED/));
+pass('missing expected field rejected',()=>{const value={...noop};delete value.roles;assert.throws(()=>parseDbPushResult(capture(value)),/CLI_OUTPUT_SCHEMA/);});
+const before=['54'],after=['54','20261020070931'];
+pass('success independently agrees with ledger/schema',()=>assertDbPushDatabaseState(parseDbPushResult(capture(apply)),{previousLedger:before,ledger:after,expectedLedger:after,schemaMatches:true}));
+pass('conflicting no-op and database rejected',()=>assert.throws(()=>assertDbPushDatabaseState(parseDbPushResult(capture(noop)),{previousLedger:before,ledger:after,expectedLedger:after,schemaMatches:true}),/CLI_NOOP_DATABASE_CONFLICT/));
+pass('migration ledger mismatch rejected',()=>assert.throws(()=>assertDbPushDatabaseState(parseDbPushResult(capture(apply)),{previousLedger:before,ledger:before,expectedLedger:after,schemaMatches:true}),/CLI_DATABASE_LEDGER_MISMATCH/));
+pass('partially applied schema rejected despite successful output',()=>assert.throws(()=>assertDbPushDatabaseState(parseDbPushResult(capture(apply)),{previousLedger:before,ledger:after,expectedLedger:after,schemaMatches:false}),/CLI_DATABASE_SCHEMA_MISMATCH/));
+pass('repeat invocation independently verifies no-op',()=>assertDbPushDatabaseState(parseDbPushResult(capture(noop)),{previousLedger:after,ledger:after,expectedLedger:after,schemaMatches:true}));
+pass('unexpected fields and conflicting output rejected',()=>{
+  assert.throws(()=>parseDbPushResult(capture({...noop,error:'synthetic'})),/CLI_OUTPUT_SCHEMA/);
+  assert.throws(()=>parseDbPushResult(capture({...noop,migrations:[file]})),/CLI_NOOP_CONFLICT/);
+});
+console.log(JSON.stringify({results,passed:results.length}));

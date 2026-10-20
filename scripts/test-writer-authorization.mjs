@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { privilegeSnapshot, assertPrivilegeOnlyChange, qualifyRuntimeTablePrivileges } from './qualify-runtime-table-privileges.mjs';
 
 // Only an in-memory PostgreSQL instance is constructed. No connection string,
 // Supabase client, remote endpoint, or production identity is accepted.
@@ -52,9 +53,15 @@ try {
   });
   for (const file of migrations) {
     const correction = file.endsWith('_runtime_writer_controller_authorization.sql');
+    const privileges = file.endsWith('_runtime_critical_table_privileges.sql');
+    const beforePrivileges = privileges ? await privilegeSnapshot(query) : undefined;
     const before = correction ? await catalog() : undefined;
     try { await db.exec(fs.readFileSync(path.join(root, 'supabase/migrations', file), 'utf8')); }
     catch (error) { throw new Error(`LOCAL_MIGRATION_FAILED:${file}:${error.message}`, { cause: error }); }
+    if (beforePrivileges) {
+      assertPrivilegeOnlyChange(beforePrivileges, await privilegeSnapshot(query));
+      results.push({ name: 'migration55 changes only the twelve excess table grants', status: 'PASS' });
+    }
     if (before) {
       const after = await catalog();
       assert.deepEqual(after.policies, before.policies);
@@ -73,6 +80,9 @@ try {
     await assert.rejects(action, error => expected.test(error.message));
   });
   await runCases({ db, query, pass, deny });
+  await qualifyRuntimeTablePrivileges({ query, setCmIdentity: () => query(
+    "select set_config('request.jwt.claim.sub',$1,false),set_config('request.jwt.claims',$2,false)",
+    ['10000000-0000-0000-0000-000000000001', JSON.stringify({ sub: '10000000-0000-0000-0000-000000000001', role: 'authenticated', is_anonymous: false })]) });
   console.log(JSON.stringify({ results, passed: results.length }));
 } catch (error) {
   console.error(JSON.stringify({ results, failure: error.message, code: error.code }));
@@ -272,6 +282,32 @@ export async function runCases({ db, query, pass, deny, fixtureReady = false }) 
       const changed = (await asUser(CM, () => query(`select * from public.apply_shared_workflow_patient_mutation(
         $1,$2,'CM-UPDATE','MUTABLE',1,$3,$3,$4)`, [id, 'PT-001', CM, { patient: { id: 'PT-001', location: 'ED' } }]))).rows[0];
       assert.equal(changed.status, 'APPLIED');
+    });
+    await pass('CM same-base APPEND, clinical command and release survive privilege removal', async () => {
+      for (const command of ['CM-APPEND-A','CM-APPEND-B']) {
+        const appended = (await asUser(CM, () => query(`select * from public.apply_shared_workflow_patient_mutation(
+          $1,'PT-001',$2,'APPEND',2,$3,$3,$4)`, [id, command, CM, { notes: [{ id: command, text: 'Synthetic' }] }]))).rows[0];
+        assert.equal(appended.status, 'APPLIED');
+      }
+      const head = (await query("select * from public.shared_workflow_patient_states where exercise_id=$1 and patient_id='PT-001'", [id])).rows[0];
+      assert.equal(Number(head.revision),4); assert.equal(head.state.notes.length,2);
+      const submitted = (await asUser(CM, () => query(`select * from public.submit_runtime_patient_command(
+        $1,'PT-001','CM-CLINICAL','MTP',4,0,'{}')`, [id]))).rows[0];
+      assert.equal(submitted.status,'APPLIED');
+      const released = (await asUser(CM, () => query(`select * from public.apply_shared_workflow_patient_mutation(
+        $1,'PT-001','CM-RELEASE','RELEASE',5,$2,null,$3)`, [id, CM, head.state]))).rows[0];
+      assert.equal(released.status,'APPLIED'); assert.equal(released.owner_user_id,null);
+    });
+    await pass('trusted administrative listing, scoped grant and revoke retain their SQL contract', async () => {
+      await db.exec('set role service_role');
+      try {
+        const listed = await query('select exercise_id from public.exercise_states where exercise_id=$1', [id]);
+        assert.equal(listed.rows[0].exercise_id,id);
+        const granted = (await query("select * from public.trusted_admin_grant_exercise_role($1,$2,'CM',$3,null)", [ADMIN,id,ADMIN])).rows[0];
+        assert.equal(granted.status,'ACTIVE'); assert.equal(granted.scope_id,id);
+        const revoked = (await query('select * from public.trusted_admin_revoke_exercise_role($1,$2,$3)', [granted.id,id,ADMIN])).rows[0];
+        assert.equal(revoked.status,'REVOKED');
+      } finally { await db.exec('reset role'); }
     });
   }
   {
