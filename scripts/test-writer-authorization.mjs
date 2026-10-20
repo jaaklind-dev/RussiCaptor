@@ -7,11 +7,12 @@ import { createHash } from 'node:crypto';
 
 // Only an in-memory PostgreSQL instance is constructed. No connection string,
 // Supabase client, remote endpoint, or production identity is accepted.
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 const require = createRequire(import.meta.url);
 const modulePath = process.env.WRITER_AUTH_PGLITE_MODULE || '@electric-sql/pglite';
 const { PGlite } = require(modulePath);
 const { pgcrypto } = require(path.join(path.dirname(require.resolve(modulePath)), 'contrib/pgcrypto.cjs'));
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const db = new PGlite({ extensions: { pgcrypto } });
 const results = [];
 const query = (sql, params = []) => db.query(sql, params);
@@ -79,9 +80,10 @@ try {
 } finally {
   await db.close();
 }
+}
 
-async function runCases({ db, query, pass, deny }) {
-  await db.exec(fs.readFileSync(path.join(root, 'supabase/tests/runtime_writer_authorization_test.sql'), 'utf8'));
+export async function runCases({ db, query, pass, deny, fixtureReady = false }) {
+  if (!fixtureReady) await db.exec(fs.readFileSync(path.join(root, 'supabase/tests/runtime_writer_authorization_test.sql'), 'utf8'));
   const CM = '10000000-0000-0000-0000-000000000001';
   const A = '10000000-0000-0000-0000-000000000002';
   const B = '10000000-0000-0000-0000-000000000003';
@@ -217,6 +219,18 @@ async function runCases({ db, query, pass, deny }) {
     });
     await pass('EXCON projection allowed', () => projection(A, id, lease));
     const commandSequence = await seedCommand(id);
+    for (const [name, leaseId, instance] of [
+      ['NULL lease', null, 'writer-a'],
+      ['NULL instance', lease.lease_id, null],
+      ['both NULL', null, null],
+      ['empty instance', lease.lease_id, ''],
+      ['wrong lease', 'ffffffff-ffff-ffff-ffff-ffffffffffff', 'writer-a'],
+      ['wrong instance', lease.lease_id, 'writer-not-current'],
+    ]) {
+      await deniedUnchanged(`EXCON materialization rejects ${name}`, id, () => asUser(A, () => query(
+        "select public.record_runtime_patient_command_result($1,$2,$3,$4,'MATERIALIZED','{}')",
+        [id, commandSequence, leaseId, instance])), /STALE_WRITER/);
+    }
     await pass('EXCON materialization acknowledgement allowed', async () => {
       await asUser(A, () => query("select public.record_runtime_patient_command_result($1,$2,$3,'writer-a','MATERIALIZED','{}')", [id, commandSequence, lease.lease_id]));
       assert.equal((await query('select status from public.runtime_patient_commands where command_sequence=$1', [commandSequence])).rows[0].status, 'MATERIALIZED');
@@ -258,6 +272,35 @@ async function runCases({ db, query, pass, deny }) {
       const changed = (await asUser(CM, () => query(`select * from public.apply_shared_workflow_patient_mutation(
         $1,$2,'CM-UPDATE','MUTABLE',1,$3,$3,$4)`, [id, 'PT-001', CM, { patient: { id: 'PT-001', location: 'ED' } }]))).rows[0];
       assert.equal(changed.status, 'APPLIED');
+    });
+  }
+  {
+    // Same authenticated controller, different writer generation: role/user
+    // equality must not let the former instance acknowledge commands.
+    const id = await fixture(), previous = await acquire(A, id);
+    await publish(A, id, previous);
+    const commandSequence = await seedCommand(id);
+    const current = (await takeover(A, id, previous)).rows[0];
+    for (const [name, leaseId, instance] of [
+      ['previous lease and instance', previous.lease_id, 'writer-a'],
+      ['current lease and previous instance', current.lease_id, 'writer-a'],
+      ['previous lease and current instance', previous.lease_id, 'writer-b'],
+      ['NULL lease after takeover', null, 'writer-b'],
+      ['NULL instance after takeover', current.lease_id, null],
+      ['both NULL after takeover', null, null],
+    ]) {
+      await deniedUnchanged(`same-user generation rejects ${name}`, id, () => asUser(A, () => query(
+        "select public.record_runtime_patient_command_result($1,$2,$3,$4,'MATERIALIZED','{}')",
+        [id, commandSequence, leaseId, instance])), /STALE_WRITER/);
+    }
+    await pass('same-user current generation materializes once', async () => {
+      const args = [id, commandSequence, current.lease_id, 'writer-b'];
+      const sql = "select public.record_runtime_patient_command_result($1,$2,$3,$4,'MATERIALIZED','{}')";
+      await asUser(A, () => query(sql, args));
+      const first = await fingerprint(id);
+      await asUser(A, () => query(sql, args));
+      assert.deepEqual(await fingerprint(id), first);
+      assert.equal(first.commands[0].status, 'MATERIALIZED');
     });
   }
   {

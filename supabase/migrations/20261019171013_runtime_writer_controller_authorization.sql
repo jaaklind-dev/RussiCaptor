@@ -34,12 +34,18 @@ begin
   if not public.has_authorization_permission('EXCON_EXERCISE_CONTROL',p_exercise_id) then
     raise exception 'AUTHORIZATION_DENIED' using errcode='42501';
   end if;
+  -- A controller permission is not proof of possession of this writer lease.
+  -- Reject absent identities before comparing them (SQL <> NULL is UNKNOWN).
+  if p_lease_id is null or p_writer_instance_id is null or length(p_writer_instance_id)=0 then
+    raise exception 'STALE_WRITER' using errcode='42501';
+  end if;
   if p_status not in ('MATERIALIZED','REJECTED') or p_result is null then
     raise exception 'INVALID_RUNTIME_COMMAND_RESULT' using errcode='22023';
   end if;
   select * into v_lease from public.runtime_writer_leases where exercise_id=p_exercise_id for update;
-  if not found or v_lease.lease_id<>p_lease_id or v_lease.writer_instance_id<>p_writer_instance_id
-    or v_lease.writer_user_id<>(select auth.uid()) or v_lease.released_at is not null
+  if not found or v_lease.lease_id is distinct from p_lease_id
+    or v_lease.writer_instance_id is distinct from p_writer_instance_id
+    or v_lease.writer_user_id is distinct from (select auth.uid()) or v_lease.released_at is not null
     or v_lease.expires_at<=clock_timestamp() then
     raise exception 'STALE_WRITER' using errcode='42501';
   end if;
