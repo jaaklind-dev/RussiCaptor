@@ -12,7 +12,7 @@ jest.mock("@/repositories/ExerciseSessionRepository", () => ({ getCanonicalExerc
 jest.mock("../ActiveExercisePackageService", () => ({ activeExercisePackageService: { getActive: jest.fn() } }));
 jest.mock("../ExercisePreparationService", () => ({ captureCompletedExerciseArchive: jest.fn(() => ({ exerciseId: "OLD" })) }));
 jest.mock("../CompletedExerciseArchiveService", () => ({ storeCompletedExerciseArchive: jest.fn() }));
-jest.mock("@/services/admin/PlatformAdminExerciseCreation", () => ({ createExerciseWithExistingBootstrap: jest.fn() }));
+jest.mock("@/services/admin/PlatformAdminExerciseCreation", () => ({ createExerciseWithExistingBootstrap: jest.fn(), getAdminExerciseCreationPhase: jest.fn(() => "IDLE") }));
 const snapshot = { exerciseId: "OLD", version: 2, lifecycleState: "COMPLETED" };
 const token = { id: "TOKEN", user_id: "ACTOR", status: "ACTIVE", consumed_exercise_id: null, expires_at: "2099-01-01T00:00:00Z" };
 let query: Record<string, jest.Mock>;

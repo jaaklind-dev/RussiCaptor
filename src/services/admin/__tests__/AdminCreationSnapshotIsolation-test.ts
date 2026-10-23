@@ -19,6 +19,7 @@ import { getRuntimePatientCommandCursor, restoreRuntimePatientCommandCursor } fr
 import { shouldPreservePendingInitialExercise, resetInitialExercisePublicationFenceForTests } from "@/services/exercise/InitialExercisePublicationFence";
 import { getCompletedExerciseArchives, restoreCompletedExerciseArchives,
   type CompletedExerciseArchive } from "@/services/exercise/CompletedExerciseArchiveService";
+import { createExerciseCreationJournal } from "@/services/exercise/ExerciseCreationJournal";
 jest.mock("@/services/SupabaseService", () => ({ supabase: undefined,
   synchronizeRealtimeAuthorization: jest.fn(async () => false) }));
 
@@ -83,6 +84,31 @@ describe("Admin detached creation snapshot isolation", () => {
     clearActiveClinicalReferenceRuntime(); restorePatientMaterialization();
   });
   test("clean previous runtime", async () => { runtime(); await success(); });
+  test("process restart and remounted operation recover the exact bootstrap/request after lost ACK", async () => {
+    const data = new Map<string, string>();
+    const storage = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v); }, removeItem: (k: string) => { data.delete(k); } };
+    const d = { ...dependencies(), journal: createExerciseCreationJournal(() => storage) };
+    (d.acknowledge as jest.Mock).mockRejectedValueOnce(new Error("ADMIN_EXERCISE_DURABLE_ACK_TIMEOUT"));
+    await expect(createAdminExercise(user, identity, op, d)).rejects.toThrow();
+    const firstRequest = (d.allocateIdentity as jest.Mock).mock.calls[0][0];
+    resetAdminExerciseCreationAttemptsForTests();
+    const restarted = { ...d, journal: createExerciseCreationJournal(() => storage) };
+    await expect(createAdminExercise(user, identity, "NEW-REMOUNTED-UI-OP", restarted)).resolves.toBe(newId);
+    expect(d.grantBootstrap).toHaveBeenCalledTimes(1);
+    expect(d.allocateIdentity).toHaveBeenLastCalledWith(firstRequest);
+    expect(d.acknowledge).toHaveBeenLastCalledWith(expect.objectContaining({ operationId: op, bootstrapAuthorizationId: "LOCAL-BOOT" }));
+    expect(data.size).toBe(0);
+  });
+  test("forward precondition is not repeated when rolling back a failed notification", async () => {
+    const before = createSharedExerciseProjection(); const d = dependencies();
+    const guard = jest.fn(() => { expect(getCanonicalExerciseSnapshot().exerciseId).toBe(oldId); });
+    const notify = jest.fn(() => { throw new Error("AFTER_REPLACEMENT"); });
+    await expect(createAdminExercise(user, identity, op, { ...d, beforeLocalActivation: guard, finishLocalActivation: notify })).rejects.toThrow();
+    expect(guard).toHaveBeenCalledTimes(1); expect(createSharedExerciseProjection()).toEqual(before);
+    expect(getAdminExerciseCreationDiagnostic(op)).toMatchObject({ stage: "LOCAL_ACTIVATION", durableConfirmed: true });
+    await expect(createAdminExercise(user, identity, op, { ...d, beforeLocalActivation: guard })).resolves.toBe(newId);
+    expect(d.acknowledge).toHaveBeenCalledTimes(1);
+  });
   test("no previous runtime", async () => { session(4328); await success(); });
   test("completed previous exercise", async () => { runtime(); session(0, "COMPLETED"); await success(); });
   test("stale previous runtime clock", async () => { runtime(10); session(20); await success(); });

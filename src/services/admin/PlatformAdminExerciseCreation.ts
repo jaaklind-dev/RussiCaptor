@@ -23,6 +23,7 @@ import {
   beginInitialExercisePublication,
   finishInitialExercisePublication,
 } from "@/services/exercise/InitialExercisePublicationFence";
+import { exerciseCreationJournal, type CreationJournal, type CreationReceipt } from "@/services/exercise/ExerciseCreationJournal";
 
 type PreparationResult = Readonly<{ ok: true; exerciseId: string; exercisePackage: ExercisePackage;
   projection?: SharedExerciseState }> | Readonly<{ ok: false; message: string }>;
@@ -36,6 +37,11 @@ export type AdminExerciseCreationDependencies = Readonly<{
   captureLocalState: () => SharedExerciseState;
   currentExerciseId?: () => string;
   restoreLocalState: (state: SharedExerciseState) => void;
+  /** Forward activation only. Rollback must restore the captured projection
+   * without re-running a precondition that the forward replacement invalidates. */
+  beforeLocalActivation?: () => void;
+  journal?: CreationJournal;
+  purpose?: "ADMIN" | "CREATE";
   commitPackageSelection?: (identity: AdminPackageIdentity) => void;
   finishLocalActivation?: () => void;
   /** Preparation returns a detached projection and never mutates the live store. */
@@ -50,6 +56,8 @@ export type AdminExerciseCreationDependencies = Readonly<{
 const defaultDependencies: AdminExerciseCreationDependencies = Object.freeze({
   resolvePackage: identity => exercisePackageRegistry.get(identity.packageId, identity.packageVersion),
   detachedPreparation: true,
+  journal: exerciseCreationJournal,
+  purpose: "ADMIN",
   grantBootstrap: grantExerciseBootstrap,
   allocateIdentity: allocateServerExerciseIdentity,
   revokeBootstrap: revokeUnusedExerciseBootstrap,
@@ -123,6 +131,7 @@ type CreationAttempt = {
   acknowledgement?: InitialExercisePublicationAcknowledgement;
   diagnostic?: AdminCreationDiagnostic;
   rollbackPending?: boolean;
+  receipt?: CreationReceipt;
 };
 
 const attempts = new Map<string, CreationAttempt>();
@@ -177,6 +186,7 @@ async function runCreationAttempt(
       attempt.phase = "CREATING_BOOTSTRAP";
       stage = "BOOTSTRAP_AUTHORIZATION";
       attempt.bootstrap ??= await dependencies.grantBootstrap(userId);
+      if (attempt.receipt) dependencies.journal!.bind(attempt.receipt, attempt.bootstrap);
       // Retain the exact token/request binding even after a lost allocation ACK.
       // Replacing a token on retry would create a second reservation or conflict.
       attempt.allocationStarted = true;
@@ -252,12 +262,14 @@ async function runCreationAttempt(
       // Capture a fresh local-only rollback projection at the synchronous
       // replacement boundary, not before the asynchronous server operation.
       attempt.beforeState = dependencies.captureLocalState();
+      dependencies.beforeLocalActivation?.();
       activationStarted = true;
       dependencies.restoreLocalState(prepared.projection);
       dependencies.commitPackageSelection?.(identity);
       dependencies.finishLocalActivation?.();
     }
     attempt.phase = "SUCCEEDED";
+    if (attempt.receipt) dependencies.journal!.complete(attempt.receipt);
     return prepared.exerciseId;
   } catch (error) {
     if (fenceActive) finishInitialExercisePublication(attempt.operationId);
@@ -308,12 +320,21 @@ export async function createAdminExercise(
     console.warn("ADMIN_EXERCISE_CREATION_FAILED", diagnostic);
     throw new AdminExerciseCreationError(diagnostic, error instanceof Error ? error.message : undefined);
   }
+  const requested = attempts.get(operationId);
+  if (requested && requested.key !== attemptKey(userId, identity)) throw new Error("Õppuse loomise identiteet ei vasta valitud paketile.");
+  if (requested?.phase === "SUCCEEDED" && requested.prepared) return requested.prepared.exerciseId;
+  const receipt = dependencies.journal?.begin({ userId, ...identity,
+    packageHash: selected.packageHash, purpose: dependencies.purpose ?? "ADMIN" }, operationId);
+  // A remounted UI may offer a new operation ID. An unresolved durable journal
+  // always wins; never replace an ambiguous server commit with a fresh token.
+  operationId = receipt?.operationId ?? operationId;
   const key = attemptKey(userId, identity);
   const existing = attempts.get(operationId);
   if (existing && existing.key !== key) throw new Error("Õppuse loomise identiteet ei vasta valitud paketile.");
   if (existing?.phase === "SUCCEEDED" && existing.prepared) return existing.prepared.exerciseId;
   if (existing?.inFlight) return existing.inFlight;
-  const attempt = existing ?? { operationId, allocationRequestId: exerciseAllocationRequestId(userId, operationId), key, phase: "IDLE" as const };
+  const attempt = existing ?? { operationId, allocationRequestId: exerciseAllocationRequestId(userId, operationId), key, phase: "IDLE" as const,
+    receipt, bootstrap: receipt?.bootstrap };
   attempts.set(operationId, attempt);
   const task = runCreationAttempt(attempt, userId, identity, selected, dependencies)
     .finally(() => { if (attempt.inFlight === task) attempt.inFlight = undefined; });
@@ -330,8 +351,9 @@ export function createExerciseWithExistingBootstrap(
 ): Promise<string> {
   return createAdminExercise(userId, identity, operationId, {
     ...defaultDependencies,
+    purpose: "CREATE",
     grantBootstrap: bootstrap,
     allocateIdentity: request => allocateServerExerciseIdentity({ ...request, purpose: "CREATE" }),
-    restoreLocalState: state => { beforeActivation(); defaultDependencies.restoreLocalState(state); },
+    beforeLocalActivation: beforeActivation,
   });
 }
