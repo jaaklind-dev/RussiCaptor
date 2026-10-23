@@ -76,6 +76,7 @@ describe("ADMIN-PREP detached Admin creation", () => {
     const restore = jest.fn();
     const revoke = jest.fn().mockResolvedValue(undefined);
     const deps: AdminExerciseCreationDependencies = {
+      allocateIdentity: async () => "EX-NEW-C",
       resolvePackage: () => pkg,
       grantBootstrap: async () => grant,
       revokeBootstrap: revoke,
@@ -86,7 +87,8 @@ describe("ADMIN-PREP detached Admin creation", () => {
     };
     await expect(createAdminExercise("ADMIN", identity, "ADMIN-CREATE-NEW-C", deps)).rejects.toThrow("Õppuse loomine ei õnnestunud");
     expect(restore).toHaveBeenCalledWith(expect.objectContaining({ exerciseSession: before }));
-    expect(revoke).toHaveBeenCalledWith(grant.id, "ADMIN");
+    // A committed reservation (or lost ACK) must retain its exact token binding.
+    expect(revoke).not.toHaveBeenCalled();
     expect(getCanonicalExerciseSnapshot()).toEqual(before);
     expect(discardAdminExerciseCreationOperation("ADMIN-CREATE-NEW-C")).toBe(true);
   });
@@ -104,6 +106,7 @@ describe("ADMIN-PREP detached Admin creation", () => {
     let release!: () => void;
     const restore = jest.fn();
     const deps: AdminExerciseCreationDependencies = {
+      allocateIdentity: async () => "EX-NEW-D",
       resolvePackage: () => pkg,
       grantBootstrap: async () => grant,
       revokeBootstrap: async () => undefined,

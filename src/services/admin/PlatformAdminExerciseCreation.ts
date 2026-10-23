@@ -13,6 +13,8 @@ import {
 import { notifySync } from "@/services/SyncService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { stopClockRunner } from "@/services/ClockRunner";
+import { allocateServerExerciseIdentity, newExerciseAllocationRequestId, exerciseAllocationRequestId,
+  type ExerciseIdentityRequest } from "@/services/exercise/ServerExerciseIdentity";
 import {
   acknowledgeInitialExercisePublication,
   type InitialExercisePublicationAcknowledgement,
@@ -28,6 +30,7 @@ type PreparationResult = Readonly<{ ok: true; exerciseId: string; exercisePackag
 export type AdminExerciseCreationDependencies = Readonly<{
   resolvePackage: (identity: AdminPackageIdentity) => ExercisePackage | undefined;
   grantBootstrap: (userId: string) => Promise<ExerciseBootstrapAuthorization>;
+  allocateIdentity: (request: ExerciseIdentityRequest) => Promise<string>;
   revokeBootstrap: (bootstrapId: string, userId: string) => Promise<void>;
   prepare: (identity: AdminPackageIdentity, operationId: string, exerciseId: string) => PreparationResult;
   captureLocalState: () => SharedExerciseState;
@@ -48,6 +51,7 @@ const defaultDependencies: AdminExerciseCreationDependencies = Object.freeze({
   resolvePackage: identity => exercisePackageRegistry.get(identity.packageId, identity.packageVersion),
   detachedPreparation: true,
   grantBootstrap: grantExerciseBootstrap,
+  allocateIdentity: allocateServerExerciseIdentity,
   revokeBootstrap: revokeUnusedExerciseBootstrap,
   prepare: (identity, operationId, exerciseId) => {
     const pkg = exercisePackageRegistry.get(identity.packageId, identity.packageVersion);
@@ -106,6 +110,8 @@ function failureDiagnostic(stage: AdminCreationFailureStage, error: unknown,
 
 type CreationAttempt = {
   operationId: string;
+  allocationRequestId: string;
+  allocationStarted?: boolean;
   key: string;
   phase: AdminExerciseCreationPhase;
   inFlight?: Promise<string>;
@@ -120,11 +126,9 @@ type CreationAttempt = {
 };
 
 const attempts = new Map<string, CreationAttempt>();
-let operationSequence = 0;
 
 export function createAdminExerciseOperationId(): string {
-  operationSequence += 1;
-  return `ADMIN-CREATE-${Date.now()}-${operationSequence}`;
+  return `ADMIN-CREATE-${newExerciseAllocationRequestId()}`;
 }
 
 export function getAdminExerciseCreationPhase(operationId: string): AdminExerciseCreationPhase {
@@ -136,7 +140,6 @@ export function getAdminExerciseCreationDiagnostic(operationId: string): AdminCr
 
 export function resetAdminExerciseCreationAttemptsForTests(): void {
   attempts.clear();
-  operationSequence = 0;
 }
 
 export function discardAdminExerciseCreationOperation(operationId: string): boolean {
@@ -145,10 +148,6 @@ export function discardAdminExerciseCreationOperation(operationId: string): bool
   finishInitialExercisePublication(operationId);
   attempts.delete(operationId);
   return true;
-}
-
-function provisionalExerciseId(operationId: string): string {
-  return `EX-${operationId.replace(/^ADMIN-CREATE-/, "")}`;
 }
 
 function attemptKey(userId: string, identity: AdminPackageIdentity): string {
@@ -175,11 +174,16 @@ async function runCreationAttempt(
     if (!attempt.prepared) {
       attempt.phase = "CAPTURING_PREVIOUS_PROJECTION";
       if (!dependencies.detachedPreparation) attempt.beforeState = dependencies.captureLocalState();
-      attempt.provisionalExerciseId = provisionalExerciseId(attempt.operationId);
-      attempt.phase = "PROVISIONAL_CREATED";
       attempt.phase = "CREATING_BOOTSTRAP";
       stage = "BOOTSTRAP_AUTHORIZATION";
-      attempt.bootstrap = await dependencies.grantBootstrap(userId);
+      attempt.bootstrap ??= await dependencies.grantBootstrap(userId);
+      // Retain the exact token/request binding even after a lost allocation ACK.
+      // Replacing a token on retry would create a second reservation or conflict.
+      attempt.allocationStarted = true;
+      attempt.provisionalExerciseId ??= await dependencies.allocateIdentity({
+        requestId: attempt.allocationRequestId, bootstrapId: attempt.bootstrap.id, purpose: "ADMIN",
+      });
+      attempt.phase = "PROVISIONAL_CREATED";
       attempt.phase = "PACKAGE_PREPARING";
       stage = "LOCAL_PREPARATION";
       const result = dependencies.prepare({ packageId: selected.packageId, packageVersion: selected.packageVersion },
@@ -189,13 +193,13 @@ async function runCreationAttempt(
       if (dependencies.detachedPreparation && !result.projection) {
         throw new Error("ADMIN_EXERCISE_PROJECTION_MISMATCH");
       }
-      if (result.projection && result.exerciseId !== attempt.provisionalExerciseId) {
-        throw new Error("ADMIN_EXERCISE_CREATE_IDENTITY_MISMATCH");
-      }
       if (result.exercisePackage.packageId !== selected.packageId
         || result.exercisePackage.packageVersion !== selected.packageVersion
         || result.exercisePackage.packageHash !== selected.packageHash) {
         throw new Error("Loodud õppuse paketisidumine ei vasta valitud paketile.");
+      }
+      if (result.exerciseId !== attempt.provisionalExerciseId) {
+        throw new Error("ADMIN_EXERCISE_CREATE_IDENTITY_MISMATCH");
       }
       attempt.prepared = result;
       attempt.provisionalState = result.projection ?? dependencies.captureLocalState();
@@ -233,7 +237,9 @@ async function runCreationAttempt(
       attempt.phase = "VERIFYING_DISCOVERY";
       if (acknowledgement.exerciseId !== prepared.exerciseId
         || acknowledgement.packageId !== selected.packageId
-        || acknowledgement.packageVersion !== selected.packageVersion) {
+        || acknowledgement.packageVersion !== selected.packageVersion
+        || acknowledgement.revision !== 1
+        || acknowledgement.bootstrapAuthorizationId !== attempt.bootstrap.id) {
         throw new Error("ADMIN_EXERCISE_CREATE_ACK_MISMATCH");
       }
       attempt.acknowledgement = acknowledgement;
@@ -266,7 +272,7 @@ async function runCreationAttempt(
         attempt.rollbackPending = false;
       } catch (caught) { rollbackError = caught; }
     }
-    if (attempt.bootstrap && !attempt.acknowledgement) {
+    if (attempt.bootstrap && !attempt.acknowledgement && !attempt.allocationStarted) {
       try {
         await dependencies.revokeBootstrap(attempt.bootstrap.id, userId);
         attempt.bootstrap = undefined;
@@ -307,10 +313,25 @@ export async function createAdminExercise(
   if (existing && existing.key !== key) throw new Error("Õppuse loomise identiteet ei vasta valitud paketile.");
   if (existing?.phase === "SUCCEEDED" && existing.prepared) return existing.prepared.exerciseId;
   if (existing?.inFlight) return existing.inFlight;
-  const attempt = existing ?? { operationId, key, phase: "IDLE" as const };
+  const attempt = existing ?? { operationId, allocationRequestId: exerciseAllocationRequestId(userId, operationId), key, phase: "IDLE" as const };
   attempts.set(operationId, attempt);
   const task = runCreationAttempt(attempt, userId, identity, selected, dependencies)
     .finally(() => { if (attempt.inFlight === task) attempt.inFlight = undefined; });
   attempt.inFlight = task;
   return task;
+}
+
+/** Shared detached creation path; ordinary callers supply an existing authority,
+ * never invoke the platform-admin grant endpoint or fall back to a local ID. */
+export function createExerciseWithExistingBootstrap(
+  userId: string, identity: AdminPackageIdentity, operationId: string,
+  bootstrap: () => Promise<ExerciseBootstrapAuthorization>,
+  beforeActivation: () => void,
+): Promise<string> {
+  return createAdminExercise(userId, identity, operationId, {
+    ...defaultDependencies,
+    grantBootstrap: bootstrap,
+    allocateIdentity: request => allocateServerExerciseIdentity({ ...request, purpose: "CREATE" }),
+    restoreLocalState: state => { beforeActivation(); defaultDependencies.restoreLocalState(state); },
+  });
 }

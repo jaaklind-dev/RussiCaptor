@@ -42,6 +42,7 @@ function runtime(clock = 0, id = oldId) {
 function dependencies(): AdminExerciseCreationDependencies {
   return {
     detachedPreparation: true,
+    allocateIdentity: jest.fn(async () => newId),
     resolvePackage: () => pkg,
     captureLocalState: jest.fn(captureAdminExerciseProjection),
     currentExerciseId: () => getCanonicalExerciseSnapshot().exerciseId,

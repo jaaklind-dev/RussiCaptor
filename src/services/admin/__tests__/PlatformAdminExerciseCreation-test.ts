@@ -16,6 +16,7 @@ describe("platform-admin exercise creation", () => {
       exerciseId, revision: 1, packageId, packageVersion, bootstrapAuthorizationId: "BOOT-1",
     });
   const localDependencies = {
+    allocateIdentity: async () => "EX-ADMIN-1",
     captureLocalState: () => localState,
     restoreLocalState: () => undefined,
   };

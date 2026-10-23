@@ -20,6 +20,7 @@ export type ExercisePreparationFailureCode = "ACTIVE_EXERCISE" | "NO_ACTIVE_PACK
 export type ExercisePreparationCommand = Readonly<{ commandId: string; currentExerciseId: string; newExerciseId: string; expectedVersion: number; issuedBy: "Exercise Controller" }>;
 export type ExercisePreparationResult = Readonly<{ ok: true; exerciseId: string; exercisePackage: ExercisePackage } | { ok: false; code: ExercisePreparationFailureCode; message: string }>;
 type Dependencies = Readonly<{
+  allocatedOnly?: boolean;
   snapshot: typeof getCanonicalExerciseSnapshot; activePackage: typeof activeExercisePackageService.getActive;
   compatibility: typeof exercisePackageValidator.compatibility; bind(exerciseId: string, pkg: ExercisePackage): ExercisePackage; unbind(exerciseId: string): void;
   reset(command: ExerciseResetCommand): ReturnType<typeof executeExerciseReset>; capture(): ReturnType<typeof captureCompletedExerciseArchive>; archive: typeof storeCompletedExerciseArchive;
@@ -90,6 +91,7 @@ export class ExercisePreparationService {
     else if (command.currentExerciseId !== current.exerciseId || command.expectedVersion !== current.version) result = failure("VERSION_CONFLICT");
     else if (current.lifecycleState === "RUNNING" || current.lifecycleState === "PAUSED") result = failure("ACTIVE_EXERCISE");
     else if (current.lifecycleState !== "COMPLETED" && !(current.lifecycleState === "READY" && current.exerciseId === "demo")) result = failure("INVALID_EXERCISE_STATE");
+    else if (this.dependencies.allocatedOnly) result = failure("UNAUTHORIZED");
     else {
       const pkg = this.dependencies.activePackage();
       if (!pkg) result = failure("NO_ACTIVE_PACKAGE");
@@ -117,4 +119,5 @@ export class ExercisePreparationService {
   }
 }
 
-export const exercisePreparationService = new ExercisePreparationService({ snapshot: getCanonicalExerciseSnapshot, activePackage: () => activeExercisePackageService.getActive(), compatibility: pkg => exercisePackageValidator.compatibility(pkg), bind: (id, pkg) => exercisePackageLoader.bind(id, pkg), unbind: id => exercisePackageLoader.unbind(id), reset: command => executeExerciseReset(command, { notify: false }), capture: captureCompletedExerciseArchive, archive: storeCompletedExerciseArchive, plan: (id, pkg) => createPatientMaterializationPlan(id, pkg, packagePatientDatasetRegistry), install: (plan, pkg) => { installPatientMaterialization(plan); installPackageImagingDefinitions(plan, pkg); installPackageQuestions(plan, pkg); }, clear: clearPreparedExerciseWorkingData, publish: () => notifySync("local") });
+/** Legacy local test primitive is not an operational creation authority. */
+export const exercisePreparationService = new ExercisePreparationService({ allocatedOnly: true, snapshot: getCanonicalExerciseSnapshot, activePackage: () => activeExercisePackageService.getActive(), compatibility: pkg => exercisePackageValidator.compatibility(pkg), bind: (id, pkg) => exercisePackageLoader.bind(id, pkg), unbind: id => exercisePackageLoader.unbind(id), reset: command => executeExerciseReset(command, { notify: false }), capture: captureCompletedExerciseArchive, archive: storeCompletedExerciseArchive, plan: (id, pkg) => createPatientMaterializationPlan(id, pkg, packagePatientDatasetRegistry), install: (plan, pkg) => { installPatientMaterialization(plan); installPackageImagingDefinitions(plan, pkg); installPackageQuestions(plan, pkg); }, clear: clearPreparedExerciseWorkingData, publish: () => notifySync("local") });

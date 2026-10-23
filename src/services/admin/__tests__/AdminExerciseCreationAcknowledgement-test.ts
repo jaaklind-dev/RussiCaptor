@@ -42,6 +42,7 @@ function dependencies(overrides: Partial<AdminExerciseCreationDependencies> = {}
     .mockReturnValueOnce(provisionalState);
   return {
     resolvePackage: () => AIRWAY_EXERCISE_PACKAGE,
+    allocateIdentity: jest.fn().mockResolvedValue("EX-ACK-1"),
     grantBootstrap: jest.fn().mockResolvedValue(bootstrap),
     revokeBootstrap: jest.fn().mockResolvedValue(undefined),
     prepare: jest.fn().mockReturnValue({ ok: true, exerciseId: "EX-ACK-1", exercisePackage: AIRWAY_EXERCISE_PACKAGE }),
@@ -56,6 +57,30 @@ describe("Admin exercise durable publication acknowledgement", () => {
   beforeEach(() => {
     resetAdminExerciseCreationAttemptsForTests();
     resetInitialExercisePublicationFenceForTests();
+  });
+
+  test("lost allocation ACK retries the exact request and token without preparing a partial exercise", async () => {
+    const allocateIdentity = jest.fn().mockRejectedValueOnce(new Error("EXERCISE_ALLOCATION_UNAVAILABLE"))
+      .mockResolvedValueOnce("EX-ACK-1");
+    const deps = dependencies({ allocateIdentity });
+    await expect(createAdminExercise("USER-1", identity, "LOST-ALLOCATION", deps)).rejects.toThrow();
+    expect(deps.prepare).not.toHaveBeenCalled();
+    expect(deps.acknowledge).not.toHaveBeenCalled();
+    expect(deps.revokeBootstrap).not.toHaveBeenCalled();
+    await expect(createAdminExercise("USER-1", identity, "LOST-ALLOCATION", deps)).resolves.toBe("EX-ACK-1");
+    expect(allocateIdentity.mock.calls[0]).toEqual(allocateIdentity.mock.calls[1]);
+    expect(deps.grantBootstrap).toHaveBeenCalledTimes(1);
+  });
+  test.each([{ revision: 2 }, { bootstrapAuthorizationId: "ANOTHER-TOKEN" }])("rejects mismatched durable ACK %p", async mismatch => {
+    const deps = dependencies({ acknowledge: jest.fn().mockResolvedValue({ ...durableAck, ...mismatch }) });
+    await expect(createAdminExercise("USER-1", identity, "BAD-ACK", deps)).rejects.toThrow();
+    expect(getAdminExerciseCreationPhase("BAD-ACK")).toBe("FAILED");
+  });
+  test("detached preparation cannot substitute a caller-selected ID", async () => {
+    const deps = dependencies({ prepare: jest.fn().mockReturnValue({ ok: true,
+      exerciseId: "HISTORICAL-ID", exercisePackage: AIRWAY_EXERCISE_PACKAGE }) });
+    await expect(createAdminExercise("USER-1", identity, "SUBSTITUTION", deps)).rejects.toThrow();
+    expect(deps.acknowledge).not.toHaveBeenCalled();
   });
 
   test("ADMIN-CREATE-ACK-01 UI orchestration does not succeed before durable backend ACK", async () => {
@@ -136,7 +161,8 @@ describe("Admin exercise durable publication acknowledgement", () => {
     await createAdminExercise("USER-1", identity, "OP-10", deps).catch(() => undefined);
     await expect(createAdminExercise("USER-1", identity, "OP-10", deps)).resolves.toBe("EX-ACK-1");
     expect(deps.prepare).toHaveBeenCalledTimes(1);
-    expect(deps.grantBootstrap).toHaveBeenCalledTimes(2);
+    expect(deps.grantBootstrap).toHaveBeenCalledTimes(1);
+    expect(deps.allocateIdentity).toHaveBeenCalledTimes(1);
     expect(acknowledge).toHaveBeenCalledTimes(2);
   });
 
@@ -182,10 +208,11 @@ describe("Admin exercise durable publication acknowledgement", () => {
     expect(source).not.toContain("activateWithResult(\"russicaptor.narva-trauma\"");
   });
 
-  test("ADMIN-DIRECT-PUB-16 failed provisional attempt revokes the exact unused bootstrap", async () => {
+  test("ADMIN-DIRECT-PUB-16 failed allocated attempt preserves its exact bootstrap binding", async () => {
     const deps = dependencies({ acknowledge: jest.fn().mockRejectedValue(new Error("ADMIN_EXERCISE_INITIAL_INSERT_FAILED")) });
     await expect(createAdminExercise("USER-1", identity, "OP-16", deps)).rejects.toThrow("Õppuse loomine ei õnnestunud");
-    expect(deps.revokeBootstrap).toHaveBeenCalledWith("BOOT-ACK-1", "USER-1");
+    expect(deps.revokeBootstrap).not.toHaveBeenCalled();
+    expect(deps.allocateIdentity).toHaveBeenCalledWith(expect.objectContaining({ bootstrapId: "BOOT-ACK-1" }));
   });
 
   test("ADMIN-DIRECT-PUB-17 successful creation never revokes a consumed bootstrap", async () => {
@@ -204,14 +231,16 @@ describe("Admin exercise durable publication acknowledgement", () => {
     expect(acknowledge).toHaveBeenCalledTimes(2);
   });
 
-  test("ADMIN-DIRECT-PUB-19 retry after revoked unused grant obtains a fresh grant but reuses exercise identity", async () => {
+  test("ADMIN-DIRECT-PUB-19 retry cannot rebind an allocated identity to a fresh grant", async () => {
     const acknowledge = jest.fn().mockRejectedValueOnce(new Error("ADMIN_EXERCISE_INITIAL_INSERT_FAILED"))
       .mockResolvedValueOnce(durableAck);
     const deps = dependencies({ acknowledge });
     await createAdminExercise("USER-1", identity, "OP-19", deps).catch(() => undefined);
     await expect(createAdminExercise("USER-1", identity, "OP-19", deps)).resolves.toBe("EX-ACK-1");
     expect(deps.prepare).toHaveBeenCalledTimes(1);
-    expect(deps.grantBootstrap).toHaveBeenCalledTimes(2);
+    expect(deps.grantBootstrap).toHaveBeenCalledTimes(1);
+    expect(deps.allocateIdentity).toHaveBeenCalledTimes(1);
+    expect(deps.revokeBootstrap).not.toHaveBeenCalled();
     expect(acknowledge.mock.calls.map(call => call[0].exerciseId)).toEqual(["EX-ACK-1", "EX-ACK-1"]);
   });
 

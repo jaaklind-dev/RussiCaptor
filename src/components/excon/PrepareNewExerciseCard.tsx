@@ -1,6 +1,7 @@
 import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
 import { activeExercisePackageService } from "@/services/exercise/ActiveExercisePackageService";
-import { createExercisePreparationCommand, exercisePreparationService } from "@/services/exercise/ExercisePreparationService";
+import { prepareAllocatedExercise } from "@/services/exercise/AllocatedExercisePreparation";
+import { createAdminExerciseOperationId } from "@/services/admin/PlatformAdminExerciseCreation";
 import { router } from "expo-router";
 import { useRef, useState, useSyncExternalStore } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -26,12 +27,18 @@ export default function PrepareNewExerciseCard({ snapshot, onPrepared }: { snaps
   useSyncExternalStore(listener => activeExercisePackageService.subscribe(listener), () => activeExercisePackageService.getVersion(), () => activeExercisePackageService.getVersion());
   const activePackage = activeExercisePackageService.getActive(); const pending = useRef(false);
   const [submitting, setSubmitting] = useState(false); const [error, setError] = useState<string>();
+  const operation = useRef<string | undefined>(undefined);
   if (!canPrepareNewExercise(snapshot.lifecycleState, snapshot.exerciseId)) return null;
-  const prepare = () => {
+  const prepare = async () => {
     if (pending.current) return; pending.current = true; setSubmitting(true); setError(undefined);
-    const result = exercisePreparationService.prepare(createExercisePreparationCommand());
-    if (!result.ok) setError(result.message); pending.current = false; setSubmitting(false);
-    if (result.ok) onPrepared?.();
+    operation.current ??= createAdminExerciseOperationId();
+    try {
+      await prepareAllocatedExercise(operation.current);
+      operation.current = undefined;
+      onPrepared?.();
+    } catch {
+      setError("Õppuse loomine ei õnnestunud. Kontrolli loomisluba ja proovi sama toimingut uuesti.");
+    } finally { pending.current = false; setSubmitting(false); }
   };
   return <View style={styles.card} testID="prepare-new-exercise-card"><Text style={styles.title}>Järgmine õppus</Text>
     {activePackage ? <><Text style={styles.package}>{exercisePackageNameLabel(activePackage.metadata.name)}</Text><Text style={styles.meta}>Versioon {activePackage.packageVersion}</Text>
