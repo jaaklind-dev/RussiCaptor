@@ -68,8 +68,8 @@
     },
     {
       "path": "src/services/StatePersistenceService.ts",
-      "sourceSha256": "470eb38282d0022836226794fcc9a4de477c7f9bff52feb7fa63dfefe382f914",
-      "canonicalSha256": "5f97cbda9cc1583d18caaf7319108745d55d1b72020f6022e33886a342b709b8"
+      "sourceSha256": "d0ff8879d15dc93c812c92f1a36ac9d5912fd813d00c1b21713dd36ef292f09b",
+      "canonicalSha256": "a7478586bfea28689801460ae42f7f0bef1474e0adb72caa1929205f2662c0aa"
     },
     {
       "path": "src/services/SupabaseService.ts",

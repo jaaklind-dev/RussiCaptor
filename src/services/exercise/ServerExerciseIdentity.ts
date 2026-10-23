@@ -1,6 +1,7 @@
 import * as Crypto from "expo-crypto";
 import { supabase } from "@/services/SupabaseService";
 import { sha256Text } from "@/utils/sha256";
+import { assertExerciseNotHistoricallyQuarantined } from "./HistoricalExerciseQuarantine";
 
 export type ExerciseIdentityPurpose = "CREATE" | "ADMIN" | "BUILDER" | "PACKAGE" | "CLONE" | "RESTORE_AS_NEW";
 export type ExerciseIdentityRequest = Readonly<{ requestId: string; bootstrapId: string; purpose: ExerciseIdentityPurpose }>;
@@ -28,5 +29,6 @@ export async function allocateServerExerciseIdentity(input: ExerciseIdentityRequ
   if (typeof data !== "string" || !data.startsWith("EX-") || !uuid.test(data.slice(3))) {
     throw new Error("EXERCISE_ALLOCATION_INVALID_RESPONSE");
   }
+  assertExerciseNotHistoricallyQuarantined(data);
   return data;
 }

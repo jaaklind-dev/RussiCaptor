@@ -2,12 +2,14 @@ import type { ExerciseSession } from "@/models/ExerciseSession";
 import type { CanonicalExerciseSnapshot } from "@/models/exercise/CanonicalExerciseSnapshot";
 import { getCurrentExercise } from "@/repositories/ExerciseRepository";
 import { immutableClone, type DeepReadonly } from "@/utils/immutable";
+import { assertExerciseNotHistoricallyQuarantined } from "@/services/exercise/HistoricalExerciseQuarantine";
 
 let snapshot: CanonicalExerciseSnapshot = { exerciseId: getCurrentExercise().id, lifecycleState: "READY", simulationTimeSec: 0, speed: 1, version: 0, clockVersion: 2, clockInitializedAtSimulationTimeSec: 0 };
 const listeners = new Set<() => void>();
 let snapshotVersion = 0;
 
 function publishSnapshot(next: CanonicalExerciseSnapshot): void {
+  assertExerciseNotHistoricallyQuarantined(next.exerciseId);
   snapshot = immutableClone(next) as CanonicalExerciseSnapshot;
   snapshotVersion += 1;
   listeners.forEach(listener => listener());

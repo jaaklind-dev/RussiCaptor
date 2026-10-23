@@ -2,6 +2,7 @@ import { Exercise } from "@/models/Exercise";
 import { DEFAULT_EXERCISE_PACKAGE } from "@/services/exercise/CanonicalExercisePackages";
 import type { ExercisePackage } from "@/models/exercise/ExercisePackage";
 import { exercisePackageLoader } from "@/services/exercise/ExercisePackageService";
+import { assertExerciseNotHistoricallyQuarantined } from "@/services/exercise/HistoricalExerciseQuarantine";
 
 const currentExercise: Exercise = {
 
@@ -24,6 +25,7 @@ export function getCurrentExercise(): Exercise {
 }
 
 export function installCurrentExercise(id: string, name: string, exercisePackage?: ExercisePackage): void {
+  assertExerciseNotHistoricallyQuarantined(id);
   const currentPackage = exercisePackageLoader.getBound(id);
   const selectedPackage = exercisePackage
     ? exercisePackageLoader.load(exercisePackage)

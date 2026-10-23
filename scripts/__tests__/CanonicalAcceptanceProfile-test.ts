@@ -19,6 +19,15 @@ describe('canonical build-time acceptance exclusion', () => {
       expect(() => profile.transformSource(root, path.join(root, item.path), source + '\n', true)).toThrow('source hash changed');
     }
   });
+  test('canonical exclusion preserves every historical-quarantine assertion', () => {
+    const name = 'src/services/StatePersistenceService.ts';
+    const source = fs.readFileSync(path.join(root, name), 'utf8');
+    const result = profile.transformSource(root, path.join(root, name), source, true);
+    expect(result).toContain('HistoricalExerciseQuarantine');
+    expect((result.match(/assertExerciseNotHistoricallyQuarantined\(/g) ?? []).length)
+      .toBe((source.match(/assertExerciseNotHistoricallyQuarantined\(/g) ?? []).length);
+    expect(result).toContain('assertExerciseNotHistoricallyQuarantined(checkpoint.exerciseId)');
+  });
   test('canonical RPC body is the exact accepted APK182 baseline, not a rewritten security policy', () => {
     const expected = execFileSync('git', ['show', policy.canonicalRpc.origin], { encoding: 'utf8' });
     expect(fs.readFileSync(path.join(root, policy.canonicalRpc.path), 'utf8')).toBe(expected);

@@ -1,4 +1,5 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { assertExerciseNotHistoricallyQuarantined } from "@/services/exercise/HistoricalExerciseQuarantine";
 
 import { clinicalDataProvider, dataProvider } from "@/providers/ProviderFactory";
 import { getCanonicalExerciseSnapshot, restoreExerciseSession } from "@/repositories/ExerciseSessionRepository";
@@ -305,6 +306,7 @@ function isReaderRuntimeHydrationInProgress(exerciseId: string): boolean {
 }
 
 export function restoreRemoteExerciseIdentity(restored: SharedExerciseState): void {
+  assertExerciseNotHistoricallyQuarantined(restored.exerciseSession.exerciseId);
   // During clean startup the shared exercise row is discovery identity only.
   // Until checkpoint authority is resolved, no previously restored live Runtime
   // may be combined with that projection, even when the exercise ID matches.
@@ -455,6 +457,7 @@ export async function restoreSharedExerciseStateAsync(
 }
 
 function restoreSharedExerciseCollections(restored: SharedExerciseState, stopClock = true, restoreArchives = true): void {
+  assertExerciseNotHistoricallyQuarantined(restored.exerciseSession.exerciseId);
   if (stopClock) stopClockRunner();
   restoreInstalledWorkbook(restored.installedWorkbook);
   restoreExerciseIdentity(restored, restoreArchives);
@@ -531,6 +534,7 @@ export async function loadPersistedState(): Promise<void> {
     if (restored.version !== STATE_VERSION) {
       return;
     }
+    assertExerciseNotHistoricallyQuarantined(restored.exerciseSession.exerciseId);
 
     const endRestore = startRuntimeWorkTrace("STARTUP_LOCAL_STATE_RESTORE", {
       patientCount: restored.patients.length,
@@ -544,6 +548,7 @@ export async function loadPersistedState(): Promise<void> {
         restored.runtimeCheckpointCanonical,
         () => new Promise(resolve => setTimeout(resolve, 0)),
       );
+      assertExerciseNotHistoricallyQuarantined(checkpoint.exerciseId);
       await localRuntimeCheckpointStore.restoreAsync(checkpoint, () => new Promise(resolve => setTimeout(resolve, 0)));
     }
     // Legacy local checkpoint payloads remain preserved in the snapshot, but
