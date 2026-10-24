@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "versionCode": 185,
+  "minimumInstalledVersionCodeExclusive": 184,
+  "baseCommit": "7e9fc57fc0df03f7fd0bdd5876d593d719ba279e",
+  "quarantineImplementationCommit": "71f09e5ad2a5aee10d4bd93ac36c9f998c5c4207",
+  "historicalPlanSha256": "397176eed1468916266d35b288d041d922ff47f817a3c9d2d1f3ec2cba173566",
+  "scope": "exact historical identity denial before local hydration and operational identity installation; no recovery hash exception",
+  "runtimeSourceChangedFromQualifiedBase": false,
+  "guardrailImpact": ["persistence", "multi-device", "A-C", "M-U", "X"],
+  "requiredLocalGates": ["exact quarantine 29", "writer/publication 22", "full Jest", "all guardrails", "persistence performance", "runtime hardening", "TypeScript", "ESLint", "release bundle audit"],
+  "requiredPhysicalGate": "separately authorized data-preserving Samsung update and isolated cold/offline/reconnect recovery acceptance",
+  "physicalAcceptancePerformed": false,
+  "productionPublicationAuthorized": false,
+  "rev5AmendmentApproved": false
+}

@@ -1,4 +1,5 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { getCurrentCaseManager } from "@/services/CurrentUserService";
 import { createSharedExerciseSnapshot, loadPersistedState, restoreSharedExerciseState, restoreSharedExerciseStateAsync } from "@/services/StatePersistenceService";
 import { getCanonicalExerciseSnapshot } from "@/repositories/ExerciseSessionRepository";
 import { createRuntimeCheckpoint, localRuntimeCheckpointStore } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
@@ -28,7 +29,7 @@ beforeEach(() => { warnings = jest.spyOn(console, "warn").mockImplementation(() 
 afterEach(() => { warnings.mockRestore(); jest.clearAllMocks(); setRuntimeWriterAuthorityState("UNRESOLVED"); clearCompletedExerciseArchives(); });
 function cached(id: string) {
   const state = createSharedExerciseSnapshot();
-  return { ...state, version: 1, savedAt: "2026-01-01T00:00:00Z", exerciseSession: { ...state.exerciseSession, exerciseId: id }, patients: [] };
+  return { ...state, version: 1, savedAt: "2026-01-01T00:00:00Z", currentCaseManager: getCurrentCaseManager(), exerciseSession: { ...state.exerciseSession, exerciseId: id }, patients: [] };
 }
 async function rejectDisk(value: unknown) {
   const before = getCanonicalExerciseSnapshot(); mockDisk = JSON.stringify(value);

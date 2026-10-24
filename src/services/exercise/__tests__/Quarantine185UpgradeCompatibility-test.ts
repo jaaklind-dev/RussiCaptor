@@ -1,0 +1,16 @@
+import * as FileSystem from 'expo-file-system/legacy';
+import {getCurrentCaseManager} from '@/services/CurrentUserService';
+import {createSharedExerciseSnapshot,loadPersistedState} from '@/services/StatePersistenceService';
+import {getCanonicalExerciseSnapshot} from '@/repositories/ExerciseSessionRepository';
+import {createRuntimeCheckpoint,getRuntimeCheckpointCanonicalRepresentation,localRuntimeCheckpointStore} from '@/services/runtime/persistence/RuntimeCheckpointAuthorityService';
+import {setRuntimeWriterAuthorityState} from '@/services/runtime/persistence/RuntimeWriterAuthorityState';
+let mockDisk='';
+jest.mock('@/services/SupabaseService',()=>({supabase:undefined}));
+jest.mock('expo-file-system/legacy',()=>({documentDirectory:'synthetic://upgrade/',getInfoAsync:jest.fn(async()=>({exists:true})),readAsStringAsync:jest.fn(async()=>mockDisk),writeAsStringAsync:jest.fn(),moveAsync:jest.fn()}));
+let warn:jest.SpyInstance;
+beforeEach(()=>{warn=jest.spyOn(console,'warn').mockImplementation(()=>undefined);localRuntimeCheckpointStore.restore(undefined);setRuntimeWriterAuthorityState('UNRESOLVED');});
+afterEach(()=>{warn.mockRestore();jest.clearAllMocks();localRuntimeCheckpointStore.restore(undefined);setRuntimeWriterAuthorityState('UNRESOLVED');});
+function legacy(id:string){const x=createSharedExerciseSnapshot();return{...x,version:1,savedAt:'2026-01-01T00:00:00Z',currentCaseManager:getCurrentCaseManager(),exerciseSession:{...x.exerciseSession,exerciseId:id,lifecycleState:'READY' as const},patients:[]};}
+test('version1 non-quarantined persisted file hydrates without rewriting bytes',async()=>{const x=legacy('SYNTHETIC185-LEGACY');mockDisk=JSON.stringify(x);const original=mockDisk;await loadPersistedState();expect(getCanonicalExerciseSnapshot().exerciseId).toBe(x.exerciseSession.exerciseId);expect(mockDisk).toBe(original);expect(warn).not.toHaveBeenCalled();expect(FileSystem.writeAsStringAsync).not.toHaveBeenCalled();expect(FileSystem.moveAsync).not.toHaveBeenCalled();});
+test('version1 canonical checkpoint retains identity and hashes without file rewrite',async()=>{const x=legacy('SYNTHETIC185-CANONICAL');const cp=createRuntimeCheckpoint(x,1);const canonical=getRuntimeCheckpointCanonicalRepresentation(cp);expect(canonical).toBeDefined();mockDisk=JSON.stringify({...x,runtimeCheckpointCanonical:canonical});const original=mockDisk;await loadPersistedState();expect(getCanonicalExerciseSnapshot().exerciseId).toBe(x.exerciseSession.exerciseId);expect(localRuntimeCheckpointStore.get()).toMatchObject({exerciseId:cp.exerciseId,payloadHash:cp.payloadHash,provenanceHash:cp.provenanceHash,checkpointRevision:cp.checkpointRevision});expect(mockDisk).toBe(original);expect(warn).not.toHaveBeenCalled();});
+test('historical version1 bytes are preserved while hydration is rejected before mutation',async()=>{mockDisk=JSON.stringify(legacy('TEST-WF-PROD-20261011-01'));const original=mockDisk,before=getCanonicalExerciseSnapshot();await loadPersistedState();expect(getCanonicalExerciseSnapshot()).toEqual(before);expect(localRuntimeCheckpointStore.get()).toBeUndefined();expect(mockDisk).toBe(original);expect(warn).toHaveBeenCalled();expect(FileSystem.writeAsStringAsync).not.toHaveBeenCalled();expect(FileSystem.moveAsync).not.toHaveBeenCalled();});
