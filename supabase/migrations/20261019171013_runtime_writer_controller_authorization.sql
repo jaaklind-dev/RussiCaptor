@@ -31,6 +31,7 @@ create or replace function public.record_runtime_patient_command_result(
 returns void language plpgsql security definer set search_path='' as $$
 declare v_lease public.runtime_writer_leases%rowtype;
 begin
+  PERFORM rc_history.assert_operational_id(p_exercise_id);
   if not public.has_authorization_permission('EXCON_EXERCISE_CONTROL',p_exercise_id) then
     raise exception 'AUTHORIZATION_DENIED' using errcode='42501';
   end if;
