@@ -26,7 +26,7 @@ export default function HistoricalInputNegativeScreen() {
     <Text style={{ fontSize: 26, fontWeight: "800" }}>H4 C3 — piiratud negatiivne seadmetest</Text>
     <Text>DIAGNOSTIC 187. Ei ole operatiivseks kasutuseks. Käivitub ainult eraldi vajutusega. Automaatset kordust pole.</Text>
     <Text>Täpne andmevaba offline-tulemus ja neli ajaloolist identiteeti. Olemasolevad kaitsed jäävad muutmata. Privaatset salvestust ei asendata; tootmispäringuid, rolli ega õppust ei looda.</Text>
-    <Text>Identiteediga seotud projektsiooniproovid ei ole ajalooliste checkpoint-payload'ide koopiad.</Text>
+    <Text>Identiteediga seotud projektsiooniproovid ei ole ajalooliste checkpoint-andmete koopiad.</Text>
     {unavailable && <Text accessibilityRole="alert">Eeltingimus: {unavailable}</Text>}
     <Pressable accessibilityRole="button" accessibilityLabel="Käivita üks H4 C3 negatiivne katse" disabled={pending || Boolean(unavailable) || Boolean(result)} onPress={() => void execute()} style={{ padding: 20, backgroundColor: unavailable || pending || result ? "#777" : "#005BBB" }}>
       <Text style={{ color: "white", fontWeight: "700" }}>{pending ? "Kontrollin…" : "Käivita üks H4 C3 negatiivne katse"}</Text>
