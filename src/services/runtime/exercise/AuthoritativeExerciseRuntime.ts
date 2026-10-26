@@ -8,6 +8,7 @@ import type { ExerciseDefinition } from "@/models/exercise/ExerciseDefinition";
 import type { ExercisePackage } from "@/models/exercise/ExercisePackage";
 import { getExercisePackage } from "@/services/exercise/ExercisePackageService";
 import { prepareActiveClinicalReferenceRuntime } from "./ClinicalReferenceRuntimeService";
+import { checkpointDiagnostic } from "@/services/runtime/persistence/CheckpointPublicationDiagnostics";
 
 const transition: Record<Exclude<ExerciseControlCommand["commandType"], "SET_EXERCISE_SPEED">, { state: ExerciseLifecycleState; event: ExerciseControlEventType }> = {
   START_EXERCISE: { state: "RUNNING", event: "ExerciseStarted" }, PAUSE_EXERCISE: { state: "PAUSED", event: "ExercisePaused" },
@@ -27,6 +28,7 @@ export class AuthoritativeExerciseRuntime implements ExerciseRuntimeOwner {
       speed: command.commandType === "SET_EXERCISE_SPEED" ? command.payload!.speed! : previous.speed,
       version: previous.version + 1, lastCommandId: command.commandId, updatedAtWallClock: command.issuedAtWallClock };
     replaceCanonicalExerciseSnapshot(next);
+    checkpointDiagnostic('RUNTIME_CONTROL_APPLIED',{exerciseId:this.exerciseId,lifecycleState:next.lifecycleState,simulationTimeSec:next.simulationTimeSec,revision:next.version});
     if (next.lifecycleState === "RUNNING") startClockRunner(); else stopClockRunner();
     notifySync("local");
     return { snapshot: getCanonicalExerciseSnapshot(), eventType };

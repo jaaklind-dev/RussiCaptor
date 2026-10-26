@@ -9,7 +9,9 @@ import type { ClinicalScenarioEngine } from "@/services/ScenarioEngine";
 import { sha256Text } from "@/utils/sha256";
 import { stableJson, stableJsonHashAsync } from "@/utils/stableJson";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
-import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { startRuntimeWorkTrace as baseStartRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { checkpointDiagnosticWork } from "./CheckpointPublicationDiagnostics";
+const startRuntimeWorkTrace: typeof baseStartRuntimeWorkTrace = (operation, detail={}) => { const original=baseStartRuntimeWorkTrace(operation,detail), diagnostic=checkpointDiagnosticWork(operation,detail); return result=>{original(result);diagnostic(result);}; };
 
 const capturedCanonicalArtifacts = new WeakSet<object>();
 // A checkpoint validator may establish that a deserialized artifact's exact

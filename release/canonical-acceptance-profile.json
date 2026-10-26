@@ -58,8 +58,8 @@
     },
     {
       "path": "src/services/RuntimeCheckpointSyncService.ts",
-      "sourceSha256": "27a2ba1003ec950239eda42aa7879ad03f44318ab9b78767cb402637f233ed4f",
-      "canonicalSha256": "c3541996c7d571495777b1b8eeafcc030aecdd51bf7191339d98e23857a49bae"
+      "sourceSha256": "1d6a98c86965c6f7a1871ad441b4f4a7f85d67cd041dea9f220f75a0d4b7e0d5",
+      "canonicalSha256": "f269933e9bc42bffac796f5a9891fefa2b21cf79bc683884c32dff55ea721de9"
     },
     {
       "path": "src/services/ScenarioEngine.ts",
@@ -68,8 +68,8 @@
     },
     {
       "path": "src/services/StatePersistenceService.ts",
-      "sourceSha256": "d0ff8879d15dc93c812c92f1a36ac9d5912fd813d00c1b21713dd36ef292f09b",
-      "canonicalSha256": "a7478586bfea28689801460ae42f7f0bef1474e0adb72caa1929205f2662c0aa"
+      "sourceSha256": "e92292d7f47958e751ff601a0d1857c96c79b8b6e13ee625180e36a6114a817f",
+      "canonicalSha256": "5530e089071d74eeaead9520360571c98edd865abfd2f0f7c717af4914e12511"
     },
     {
       "path": "src/services/SupabaseService.ts",
@@ -83,8 +83,8 @@
     },
     {
       "path": "src/services/runtime/exercise/ClinicalReferenceRuntimeService.ts",
-      "sourceSha256": "e9a48087f1a8e150a3ddc6477b00d168a7ac9b8c968b7ce69717c4dd619e8139",
-      "canonicalSha256": "1e9a4abbeaab5cda9edcc8f7c27c6b6ab63d5ca3aec1bec84deb9fa4f30f4ca8"
+      "sourceSha256": "50739397801aa70e20439da46daf21a2b5ce8cf5ce8d1aaf9404f0608e409838",
+      "canonicalSha256": "d5ba8c3bda7f926db5986dc2056c845b1fe2d1fb9e605ccccbff0ae08a740144"
     },
     {
       "path": "src/services/runtime/exercise/ExerciseControlCommandHandler.ts",
@@ -98,18 +98,18 @@
     },
     {
       "path": "src/services/runtime/persistence/CanonicalRuntimePersistenceService.ts",
-      "sourceSha256": "6f0e7e2e467cd2ec365da2b98b5f10d9a5e06bf18d251edccc48d573a45205ea",
-      "canonicalSha256": "c1f482ca698c7ea4ec21fa8db19611d075e30325c9de07a87bdcfb8aa06be94f"
+      "sourceSha256": "0cc92b264dc7ca2398a0c6e161d63191adf3f52488fa0884c13f58eeaab40eee",
+      "canonicalSha256": "edfccec0e4ae908fca5480698cc0055a54ae97e1f7c2ee6868f366337d1ce7e1"
     },
     {
       "path": "src/services/runtime/persistence/RuntimeCheckpointAuthorityService.ts",
-      "sourceSha256": "4a5efdc3914809bbee91c1a03b5100dd37962431d551184130ddd3613c7643a0",
-      "canonicalSha256": "40769ec43d0ce908ea8757403ec1021751652405e7acdf4aa65f4f5e04f58d87"
+      "sourceSha256": "2b672f4b6d358d21ea87a1634be83de7f6f892ff26eb1ae2c0e53d6b6b89035d",
+      "canonicalSha256": "b0460115b15cc5282cef225a29981336e6820239d271f647b790b069872fe630"
     },
     {
       "path": "src/services/runtime/persistence/RuntimeCheckpointDeltaService.ts",
-      "sourceSha256": "0b3c56a1a1b42b66091fad52bb78eb7d3f1f082dc9d8bf1af78d6a16379bd3ae",
-      "canonicalSha256": "644626404abd5e206123b0dca3cc57b20831d79679dbf979c441db7ad911b871"
+      "sourceSha256": "fcbd608c7edff20260f525fdf1cd62568d3394829d01014f082638c92c630e22",
+      "canonicalSha256": "95a4313da4026eb97934d0d05ed7c77b190d8d15cefae13f907af0f735b9dcd2"
     },
     {
       "path": "src/services/runtime/persistence/RuntimeCheckpointHydrationService.ts",
@@ -118,13 +118,13 @@
     },
     {
       "path": "src/services/runtime/persistence/RuntimeCheckpointPublicationService.ts",
-      "sourceSha256": "1f63be297eefe110c06b522becd3d2f40c55699d8c9f7c0d637b1a072be23161",
-      "canonicalSha256": "e9f719c2a233476a8227949fc34ba40d14e0451beef27178b122bc8b7e2ea0b6"
+      "sourceSha256": "1bb44314a470ef92549e44107bac647c62f24dd11ccb39b21d1cdf3245537ca4",
+      "canonicalSha256": "f8fb4efd9c1c4eadb1a535b16ebf17ac1930686557dc56c18b1da56325cd5416"
     },
     {
       "path": "src/services/runtime/persistence/RuntimeCheckpointRepository.ts",
-      "sourceSha256": "e82dbcd180bf7448e5c5c506d85dd9869f50839cc0c5e65a41d60e5c28666c03",
-      "canonicalSha256": "c43014a96b82c512b00d873aa9fc6403391605888b57d2f377c3a854d047e327"
+      "sourceSha256": "7cf69912e4e2da8856dc5456df624df4a3983a228f4818c9bb233d6b3c8f115b",
+      "canonicalSha256": "d90b463a2267e6a4b95a5aa13eb4be275e4228967e089e29f9d298b00327e9cb"
     },
     {
       "path": "src/services/runtime/persistence/RuntimeNativeLeaseHeartbeatController.ts",
@@ -143,8 +143,8 @@
     },
     {
       "path": "src/utils/sha256.ts",
-      "sourceSha256": "df4e23e6006d655e0c941787f0bfd8e7656b3081a1e0321b186260faceb55d02",
-      "canonicalSha256": "25054558bcf7fbcbf6591f744d9b552625b75532404cd3e6efab869551f056bc"
+      "sourceSha256": "64cf57f422ce7014601e3b0fd5e0351b7d6ac683dc91e3b2ecd217bc8913feec",
+      "canonicalSha256": "c5b64216fd7bc4997dbfb3aabb2a610b50160e29c216fa11d82f6bdcfe29b8f4"
     },
     {
       "path": "src/utils/stableJson.ts",

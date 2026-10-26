@@ -10,7 +10,9 @@ import { sha256Text, sha256TextNative } from "@/utils/sha256";
 import { stableJson, stableJsonHashAsync } from "@/utils/stableJson";
 import { isCapturedCanonicalRuntimeArtifact, markCheckpointValidatedRuntimeArtifacts } from "@/services/runtime/persistence/CanonicalRuntimePersistenceService";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
-import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { startRuntimeWorkTrace as baseStartRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { checkpointDiagnosticWork } from "./CheckpointPublicationDiagnostics";
+const startRuntimeWorkTrace: typeof baseStartRuntimeWorkTrace = (operation, detail={}) => { const original=baseStartRuntimeWorkTrace(operation,detail), diagnostic=checkpointDiagnosticWork(operation,detail); return result=>{original(result);diagnostic(result);}; };
 
 const validatedImmutableCheckpoints = new WeakSet<object>();
 const canonicalRepresentationByCheckpoint = new WeakMap<object, RuntimeCheckpointCanonicalRepresentation>();

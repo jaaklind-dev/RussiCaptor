@@ -15,7 +15,10 @@ import {
   RuntimeCheckpointDeltaBuildCancelledError,
   type RuntimeCheckpointDelta,
 } from "@/services/runtime/persistence/RuntimeCheckpointDeltaService";
-import { startRuntimeWorkTrace, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { startRuntimeWorkTrace as baseStartRuntimeWorkTrace, traceRuntimeLeaseLifecycle as baseTraceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
+import { checkpointDiagnostic, checkpointDiagnosticWork, checkpointDiagnosticError } from "@/services/runtime/persistence/CheckpointPublicationDiagnostics";
+const startRuntimeWorkTrace: typeof baseStartRuntimeWorkTrace = (operation, detail={}) => { const original=baseStartRuntimeWorkTrace(operation,detail), diagnostic=checkpointDiagnosticWork(operation,detail); return result=>{original(result);diagnostic(result);}; };
+const traceRuntimeLeaseLifecycle: typeof baseTraceRuntimeLeaseLifecycle = (event,input) => {baseTraceRuntimeLeaseLifecycle(event,input);checkpointDiagnostic(event,{...input.detail,generation:input.generation});};
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import {
   getRuntimeCheckpointCanonicalRepresentation,
@@ -360,6 +363,7 @@ export class SupabaseRuntimeCheckpointRepository implements RuntimeCheckpointRep
     endResponseProcess({ rpcName, errorPresent: Boolean(error), responseRows: Array.isArray(data) ? data.length : data == null ? 0 : 1 });
     if (error) {
       const diagnostic = code(error.message);
+      checkpointDiagnostic('PUBLICATION_RPC_ERROR',{rpcName,code:diagnostic,...checkpointDiagnosticError(error)});
       return { status: diagnostic === "STALE_WRITER" ? "STALE_CHECKPOINT_WRITER" : diagnostic === "CHECKPOINT_REVISION_CONFLICT" ? "REVISION_CONFLICT" : "AUTHORITY_UNAVAILABLE", code: diagnostic as never };
     }
     const row = Array.isArray(data) ? data[0] : data;
