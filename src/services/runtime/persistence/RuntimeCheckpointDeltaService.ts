@@ -3,9 +3,7 @@ import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { isValidRuntimeCheckpoint, isValidRuntimeCheckpointAsync } from "@/services/runtime/persistence/RuntimeCheckpointAuthorityService";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { stableJson } from "@/utils/stableJson";
-import { startRuntimeWorkTrace as baseStartRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
-import { checkpointDiagnosticWork } from "./CheckpointPublicationDiagnostics";
-const startRuntimeWorkTrace: typeof baseStartRuntimeWorkTrace = (operation, detail={}) => { const original=baseStartRuntimeWorkTrace(operation,detail), diagnostic=checkpointDiagnosticWork(operation,detail); return result=>{original(result);diagnostic(result);}; };
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 
 export const RUNTIME_CHECKPOINT_DELTA_VERSION = 1 as const;
 export const MAX_RUNTIME_CHECKPOINT_DELTA_CHAIN = 8;

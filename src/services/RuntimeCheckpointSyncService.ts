@@ -31,10 +31,7 @@ import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/Run
 import { parseRuntimeCheckpointMetadata, RuntimeCheckpointMetadataCoordinator } from "@/services/runtime/persistence/RuntimeCheckpointMetadataCoordinator";
 import { loadRuntimeCheckpointWithCache } from "@/services/runtime/persistence/RuntimeCheckpointHydrationService";
 import { isSharedWorkflowValidationHarnessEnabled } from "@/config/SharedWorkflowValidationHarness";
-import { getRuntimeLeaseLifecycleTrace, nextRuntimeLeaseTraceLabel, startRuntimeWorkTrace as baseStartRuntimeWorkTrace, traceRuntimeLeaseLifecycle as baseTraceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
-import { checkpointDiagnostic, checkpointDiagnosticWork, checkpointDiagnosticError } from "@/services/runtime/persistence/CheckpointPublicationDiagnostics";
-const startRuntimeWorkTrace: typeof baseStartRuntimeWorkTrace = (operation, detail={}) => { const original=baseStartRuntimeWorkTrace(operation,detail), diagnostic=checkpointDiagnosticWork(operation,detail); return result=>{original(result);diagnostic(result);}; };
-const traceRuntimeLeaseLifecycle: typeof baseTraceRuntimeLeaseLifecycle = (event,input) => {baseTraceRuntimeLeaseLifecycle(event,input);checkpointDiagnostic(event,{...input.detail,generation:input.generation});};
+import { getRuntimeLeaseLifecycleTrace, nextRuntimeLeaseTraceLabel, startRuntimeWorkTrace, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { getNativeLeaseHeartbeatDiagnostic, isNativeLeaseHeartbeatAvailable } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeat";
 import { RuntimeNativeLeaseHeartbeatController, type NativeLeaseHeartbeatSession } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeatController";
 import {
@@ -478,7 +475,6 @@ export async function resolveRuntimeAuthSession(auth: RuntimeAuthStartup) {
 }
 
 function setStatus(value: Status): void {
-  checkpointDiagnostic('WRITER_AUTHORITY_STATUS',{...value,leasePresent:Boolean(lease)});
   status=value;
   setRuntimeWriterAuthorityState(isOperatorSignOutDraining() ? "READER" : value.state === "WRITER" ? "WRITER" : value.state === "ACQUIRING" ? "ACQUIRING" : value.state === "READER" ? "READER" : value.state === "CONFLICT" ? "CONFLICT" : value.state === "OFFLINE" ? "OFFLINE" : "UNRESOLVED", lease?.leaseId);
   recordRenewalDiagnostic("AUTHORITY_TRANSITION", value.state);
@@ -1362,10 +1358,8 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     resolveTerminalPublication?.();resolveTerminalPublication=undefined;
   };
   const schedulePublicationRetry=()=>{
-    checkpointDiagnostic('PUBLICATION_RETRY_GATE',{stopped:generationStopped(),dirty:publicationDirty,inFlight:publishInFlight,leasePresent:Boolean(lease),state:status.state,queued:Boolean(publicationRetryTimer)});
     if(isOperatorSignOutDraining()||generationStopped()||publicationRetryTimer||!publicationDirty||!lease||status.state!=="WRITER")return;
-    checkpointDiagnostic('PUBLICATION_RETRY_SCHEDULED',{delayMs:ROUTINE_CHECKPOINT_PUBLICATION_MS,remoteRevision});
-    publicationRetryTimer=setTimeout(()=>{checkpointDiagnostic('PUBLICATION_RETRY_CALLBACK',{remoteRevision});publicationRetryTimer=undefined;requestPublish();},ROUTINE_CHECKPOINT_PUBLICATION_MS);
+    publicationRetryTimer=setTimeout(()=>{publicationRetryTimer=undefined;requestPublish();},ROUTINE_CHECKPOINT_PUBLICATION_MS);
   };
   const runPublish=async()=>{
     publishInFlight=true;
@@ -1472,20 +1466,18 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         else if(publicationResultRevokesWriter(result.state)) { endPublish({ outcome: result.state });rejectCanonicalCommandCommitWaiters("CANONICAL_COMMAND_WRITER_AUTHORITY_LOST"); releaseRuntimeOwner("PUBLICATION_AUTHORITY_LOST"); lease=undefined; stopClockRunner(); setStatus({state:"CONFLICT",code:result.code}); return; }
         else { endPublish({ outcome: result.state }); publicationDirty=true;setStatus({state:"WRITER",code:result.code,revision:remoteRevision});schedulePublicationRetry(); }
       } while(publishQueued);
-    } catch (error) {
-      checkpointDiagnostic('PUBLICATION_LOOP_EXCEPTION',checkpointDiagnosticError(error));
+    } catch {
       publicationDirty=true;schedulePublicationRetry();
     } finally { activePublicationPriority=undefined;publishInFlight=false;if(publicationDirty&&terminalIntentGeneration===undefined)schedulePublicationRetry(); }
   };
   const publishNow=()=>{
     if(generationStopped())return;
     if(routinePublishTimer){clearTimeout(routinePublishTimer);routinePublishTimer=undefined;}
-    if(publishInFlight){checkpointDiagnostic('PUBLICATION_QUEUE_COALESCED',{remoteRevision,dirty:publicationDirty});publishQueued=true;return;}
+    if(publishInFlight){publishQueued=true;return;}
     const task=runPublish();
     publicationBarrier=task.then(()=>undefined,()=>undefined);
   };
   const requestPublish=()=>{
-    checkpointDiagnostic('PUBLICATION_REQUEST_GATE',{stopped:generationStopped(),state:status.state,leasePresent:Boolean(lease),inFlight:publishInFlight,queued:publishQueued,dirty:publicationDirty,remoteRevision,checkpointRevision:getLocalRuntimeCheckpoint()?.checkpointRevision});
     if(generationStopped()||isOperatorSignOutDraining())return;
     const checkpoint=getLocalRuntimeCheckpoint();
     if(!checkpoint||isIdenticalCheckpointPayload(lastPublishedCheckpoint,checkpoint))return;

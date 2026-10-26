@@ -12,9 +12,7 @@ import { canonicalRuntimePersistenceService, moduleCompositionHash } from "@/ser
 import { registerExerciseClockTarget } from "@/services/runtime/exercise/ExerciseClockTargetRegistry";
 import { createScenarioEngineExerciseClockTarget } from "@/services/runtime/exercise/ScenarioEngineExerciseClockTarget";
 import type { PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
-import { startRuntimeWorkTrace as baseStartRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
-import { checkpointDiagnosticWork } from "@/services/runtime/persistence/CheckpointPublicationDiagnostics";
-const startRuntimeWorkTrace: typeof baseStartRuntimeWorkTrace = (operation, detail={}) => { const original=baseStartRuntimeWorkTrace(operation,detail), diagnostic=checkpointDiagnosticWork(operation,detail); return result=>{original(result);diagnostic(result);}; };
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { RuntimeCheckpointClockMismatchError } from
   "@/services/runtime/persistence/RuntimeTerminalClockReconciliation";
 import { clearPatientTransportRuntime, preparePatientTransportRuntime } from "./PatientTransportRuntimeService";

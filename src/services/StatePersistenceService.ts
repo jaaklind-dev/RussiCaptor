@@ -44,10 +44,7 @@ import { setRuntimePersistenceFailure } from "@/services/runtime/persistence/Run
 import { BoundedObsoleteGenerationGate, LatestGenerationPipeline, yieldToEventLoop, type PipelineYield } from "@/services/runtime/persistence/LatestGenerationPipeline";
 import { capturePatientTransportRuntime, preparePatientTransportRuntime } from "@/services/runtime/exercise/PatientTransportRuntimeService";
 import { compactActiveExerciseState } from "@/services/runtime/persistence/ActiveCheckpointCompaction";
-import { startRuntimeWorkTrace as baseStartRuntimeWorkTrace, traceRuntimeLeaseLifecycle as baseTraceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
-import { checkpointDiagnostic, checkpointDiagnosticWork, checkpointDiagnosticError } from "@/services/runtime/persistence/CheckpointPublicationDiagnostics";
-const startRuntimeWorkTrace: typeof baseStartRuntimeWorkTrace = (operation, detail={}) => { const original=baseStartRuntimeWorkTrace(operation,detail), diagnostic=checkpointDiagnosticWork(operation,detail); return result=>{original(result);diagnostic(result);}; };
-const traceRuntimeLeaseLifecycle: typeof baseTraceRuntimeLeaseLifecycle = (event,input) => {baseTraceRuntimeLeaseLifecycle(event,input);checkpointDiagnostic(event,{...input.detail,generation:input.generation});};
+import { startRuntimeWorkTrace, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { RuntimeCheckpointClockMismatchError, terminalClockReconciliationDecision } from
   "@/services/runtime/persistence/RuntimeTerminalClockReconciliation";
 import {
@@ -757,7 +754,6 @@ export function startStatePersistence(): () => void {
       };
       pendingSnapshot = snapshot;
       setLocalSaveStatus({ state: "saving", savedAt: localSaveStatus.savedAt });
-      checkpointDiagnostic('CHECKPOINT_PREPARED',{exerciseId:shared.exerciseSession.exerciseId,generation,checkpointRevision:preparedCheckpoint?.checkpointRevision,lifecycleState:'lifecycleState' in shared.exerciseSession?shared.exerciseSession.lifecycleState:shared.exerciseSession.state});
       checkpointPreparedListeners.forEach(listener => listener());
       await yieldForGeneration();
       void flushLatestSnapshot();
@@ -799,7 +795,6 @@ export function startStatePersistence(): () => void {
       }
       // A partially restored active Runtime must never be persisted. The
       // authority resolver may still replace it with a valid remote checkpoint.
-      checkpointDiagnostic('CHECKPOINT_CAPTURE_REJECTED',{generation,...checkpointDiagnosticError(error)});
       setLocalSaveStatus({ state: "error", savedAt: localSaveStatus.savedAt });
       console.warn("Exercise state snapshot was rejected.", error);
     }

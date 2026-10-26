@@ -1,4 +1,3 @@
-import { checkpointDiagnostic } from "./CheckpointPublicationDiagnostics";
 export type PipelineYield = () => Promise<void>;
 
 /**
@@ -79,7 +78,6 @@ export class LatestGenerationPipeline {
 
   request(): number {
     this.desiredGeneration += 1;
-    checkpointDiagnostic('CAPTURE_QUEUE_REQUEST',{desiredGeneration:this.desiredGeneration,completedGeneration:this.completedGeneration,active:this.active});
     if (this.active) this.peakPending = 1;
     if (!this.active) void this.run();
     return this.desiredGeneration;
@@ -100,10 +98,8 @@ export class LatestGenerationPipeline {
     try {
       while (this.completedGeneration < this.desiredGeneration) {
         const generation = this.desiredGeneration;
-        checkpointDiagnostic('CAPTURE_QUEUE_DISPATCH',{generation});
         await this.yieldControl();
         await this.prepare(generation, this.yieldControl);
-        checkpointDiagnostic('CAPTURE_QUEUE_SETTLED',{generation});
         this.completedGeneration = generation;
       }
     } finally {

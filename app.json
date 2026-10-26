@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "RussiCaptor H4-DIAG187",
+    "name": "RussiCaptor",
     "slug": "RussiCaptor",
-    "version": "1.2.1-h4diag1",
+    "version": "1.2.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "russicaptor",
@@ -20,7 +20,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.jaaklind.RussiCaptor",
-      "versionCode": 187,
+      "versionCode": 188,
       "allowBackup": false,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW"

@@ -1,6 +1,4 @@
-import { startRuntimeWorkTrace as baseStartRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
-import { checkpointDiagnosticWork } from "@/services/runtime/persistence/CheckpointPublicationDiagnostics";
-const startRuntimeWorkTrace: typeof baseStartRuntimeWorkTrace = (operation, detail={}) => { const original=baseStartRuntimeWorkTrace(operation,detail), diagnostic=checkpointDiagnosticWork(operation,detail); return result=>{original(result);diagnostic(result);}; };
+import { startRuntimeWorkTrace } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import * as Crypto from "expo-crypto";
 
 const SHA256_CONSTANTS = new Uint32Array([

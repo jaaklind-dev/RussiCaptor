@@ -2,9 +2,7 @@ import type { RuntimeCheckpointEnvelope, RuntimeWriterLease } from "@/models/Run
 import type { SharedExerciseState } from "@/models/SharedExerciseState";
 import { loadCheckpointFreshness, type RuntimeCheckpointFreshness, type RuntimeCheckpointPublicationControl, type RuntimeCheckpointRepository } from "./RuntimeCheckpointRepository";
 import { RuntimeCheckpointDeltaBuildCancelledError } from "./RuntimeCheckpointDeltaService";
-import { traceRuntimeLeaseLifecycle as baseTraceRuntimeLeaseLifecycle } from "./RuntimeLeaseLifecycleTrace";
-import { checkpointDiagnostic } from "./CheckpointPublicationDiagnostics";
-const traceRuntimeLeaseLifecycle: typeof baseTraceRuntimeLeaseLifecycle = (event,input) => {baseTraceRuntimeLeaseLifecycle(event,input);checkpointDiagnostic(event,{...input.detail,generation:input.generation});};
+import { traceRuntimeLeaseLifecycle } from "./RuntimeLeaseLifecycleTrace";
 
 export type RuntimeCheckpointPublicationTerminal = Readonly<
   | { state: "PUBLISHED"; checkpoint: RuntimeCheckpointEnvelope<SharedExerciseState>; reconciled: boolean }
@@ -93,9 +91,7 @@ export async function publishRuntimeCheckpointTerminal(
       // Local cooperative preparation is allowed to take longer than the RPC
       // transport deadline. Start the transport clock only once the request is
       // irreversibly submitted; before that the generation guard can cancel it.
-      checkpointDiagnostic('PUBLICATION_WAIT_SUBMISSION',{checkpointRevision:checkpoint.checkpointRevision,expectedRevision});
       await Promise.race([submitted, publish.then(() => undefined)]);
-      checkpointDiagnostic('PUBLICATION_SUBMISSION_WAIT_ENDED',{checkpointRevision:checkpoint.checkpointRevision,expectedRevision});
       rpc = settled ? { ok: true, value: await publish } : await bounded(publish, timeoutMs);
     } else {
       rpc = await bounded(repository.publish(lease, expectedRevision, checkpoint, baseCheckpoint), timeoutMs);
