@@ -1,0 +1,12 @@
+import React from "react";
+import TestRenderer, {act} from "react-test-renderer";
+import {Text} from "react-native";
+import Screen from "@/app/admin/h4-c3-negative";
+let mockAdmin=false;const mockRun=jest.fn();
+jest.mock("expo-router",()=>({router:{back:jest.fn()}}));
+jest.mock("@/hooks/useOperatorSession",()=>({useOperatorSession:()=>({state:"AUTHENTICATED"})}));
+jest.mock("@/services/authorization/OperatorSessionService",()=>({hasPlatformAdminAuthority:()=>mockAdmin}));
+jest.mock("../HistoricalInputProbe",()=>({h4ProbeAvailability:()=>undefined,runHistoricalInputProbe:()=>mockRun()}));
+const mount=async()=>{let screen!:TestRenderer.ReactTestRenderer;await act(async()=>{screen=TestRenderer.create(<Screen/>);});return screen;};
+test("existing admin required; no automatic execution",async()=>{mockAdmin=false;const screen=await mount();expect(screen.root.findAllByType(Text)[0].props.children).toContain("Olemasolev administraatori");expect(mockRun).not.toHaveBeenCalled();});
+test("explicit control only; single in-flight gesture",async()=>{mockAdmin=true;let finish!:(x:unknown)=>void;mockRun.mockImplementation(()=>new Promise(r=>{finish=r;}));const screen=await mount();expect(mockRun).not.toHaveBeenCalled();const label="Käivita üks H4 C3 negatiivne katse";await act(async()=>{screen.root.findByProps({accessibilityLabel:label}).props.onPress();});expect(mockRun).toHaveBeenCalledTimes(1);expect(screen.root.findByProps({accessibilityLabel:label}).props.disabled).toBe(true);await act(async()=>{finish({status:"PASS",cases:[]});});expect(screen.root.findByProps({accessibilityLabel:label}).props.disabled).toBe(true);});

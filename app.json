@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "RussiCaptor CP-DIAG186",
+    "name": "RussiCaptor H4-DIAG187",
     "slug": "RussiCaptor",
-    "version": "1.2.1-cpdiag1",
+    "version": "1.2.1-h4diag1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "russicaptor",
@@ -20,7 +20,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.jaaklind.RussiCaptor",
-      "versionCode": 186,
+      "versionCode": 187,
       "allowBackup": false,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW"
