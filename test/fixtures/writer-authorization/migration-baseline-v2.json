@@ -1,0 +1,237 @@
+{
+  "schemaVersion": 2,
+  "id": "RC-CI-ACCEPTED-MIGRATION-BASELINE-V2",
+  "baseCommit": "01e50bd8c0be57f4c9b1484268052039831c4d47",
+  "supersedes": "native-qualification-project.mjs inline 54/55 inventory and unsafe migration54 hash",
+  "trustedSource": {
+    "artifact": "bootstrap-history-guard-fix-v2-2026-10-25/PATCH-MANIFEST.json",
+    "sha256": "d5910f83033ff299ea3951972c1ca0619e44053083b48baf092faca7d94ed74b"
+  },
+  "schemaSha256": "faa7c909033cd32a57c1ec6344baeb22c14aa8b19a0fe59eb58b5e81cf958694",
+  "entries": [
+    {
+      "file": "202607270001_module_import_foundation.sql",
+      "sha256": "7966470bb0b315b69d351e81d045493d2aa248b3dda07c5f0f4d01e2554f064c"
+    },
+    {
+      "file": "202607270002_import_run_rollback.sql",
+      "sha256": "c3b7ea35b742b181fae834541eb30fd336db0015bbbe3ef33a118ce51f7c486c"
+    },
+    {
+      "file": "202607270003_exercise_self_binding.sql",
+      "sha256": "d96c673a2d579054b640afee240ad4317b0d1673201504513c5ea9f4ba2206d5"
+    },
+    {
+      "file": "202608120001_authorization_foundation.sql",
+      "sha256": "9912bb83827956cb6f620c3c805822a6869a2e8d307a4265b6c35a5a135ff9a7"
+    },
+    {
+      "file": "202608120002_instructor_evaluation_foundation.sql",
+      "sha256": "1e45d00cc7ee9ede2f930be0c354e05402bda0ac05381c72d69cb9d9121bbb91"
+    },
+    {
+      "file": "202608120003_runtime_checkpoint_authority.sql",
+      "sha256": "3791738053ed77e6a0405b7b04746e55cea7dcead632fb1f1e098660c689db9b"
+    },
+    {
+      "file": "202608140001_runtime_missing_recovery.sql",
+      "sha256": "e374e86e5fab6c6a21848add9d62370887c1a137fd57b7bd59deb0f1e8afaca1"
+    },
+    {
+      "file": "202608140002_runtime_recovery_acceptance_fixture.sql",
+      "sha256": "da2a018d901f52f491692fd88596bc85b9d1ac9d98335868b5e86dcc565e5ece"
+    },
+    {
+      "file": "202608190001_runtime_checkpoint_egress_hardening.sql",
+      "sha256": "c42ab0244228cbffc70d3c02f25b45611bf3dd3762daf9b2d470101a1fba2fc8"
+    },
+    {
+      "file": "20260826190508_runtime_checkpoint_metadata_realtime.sql",
+      "sha256": "9b32314384f69d39843fed414e7e397fc5a565a62c077645d66210ca1c7a146b"
+    },
+    {
+      "file": "20260828083146_runtime_checkpoint_delta_hydration.sql",
+      "sha256": "d4187e19db00de6e1f97fd64cb894cae31dbd9a913e2ad3d56191aaf77d0c995"
+    },
+    {
+      "file": "20260828113258_runtime_checkpoint_delta_byte_budget.sql",
+      "sha256": "714464b9cffccef0bfd9698cc6ec8c4638c6b09bff5166ea803475f8f7a30fc1"
+    },
+    {
+      "file": "20260829124632_production_operator_identity_authorization.sql",
+      "sha256": "d4e9e06e6ccf6e0273377dbd50bcfee57dbc917b6fdf47851ba2f26726bbf0e0"
+    },
+    {
+      "file": "20260829124829_production_operator_identity_authorization_hardening.sql",
+      "sha256": "25589c3c1e56903e4831e58eb7e3c51ccaabaacb80265dcf2aba43b957fb4081"
+    },
+    {
+      "file": "20260829135717_conflict_safe_multi_cm_shared_workflow.sql",
+      "sha256": "c75121ab01278c27c480b3eeb57a9b8eed33c3b57b032b13491567968c88df76"
+    },
+    {
+      "file": "20260901071320_stale_checkpoint_expired_lease_recovery.sql",
+      "sha256": "f5f834b2babe6de38c344efbd7b22039d471c4e092062fccbcaddd02c036a836"
+    },
+    {
+      "file": "20260901071552_stale_checkpoint_payload_envelope_fix.sql",
+      "sha256": "5b291ab0b41261a19eb03d906528330a8c41307c60f9bca856677d8de6e3fa48"
+    },
+    {
+      "file": "20260906063421_package_projection_divergence_recovery.sql",
+      "sha256": "a52b35f7c351d1ebc3a62cddc0b9dd599dd2857982fd091a7cc9b74cfd0e92ea"
+    },
+    {
+      "file": "20260907162401_narva_multicm_terminal_convergence.sql",
+      "sha256": "7476588cbef844d99457f491d29e801d3881ebe4f51637433823153f4018504b"
+    },
+    {
+      "file": "20260907163503_narva_terminal_projection_fence.sql",
+      "sha256": "f679003494697ad25a6fa855fd1cd0c993cda403de810eb42f87e7308bb76c99"
+    },
+    {
+      "file": "20260908042246_qualify_terminal_completion_sql.sql",
+      "sha256": "9f8e8ebbdfd7de49ebe24818f19d1c5a17d7952f70d35930bdcc7994e96b66a7"
+    },
+    {
+      "file": "20260908091942_qualify_runtime_patient_command_sql.sql",
+      "sha256": "ace4ed42e5f46acb89f9f98b28298b143c6b31b9dd5c2fec0a25acd12ece4475"
+    },
+    {
+      "file": "20260909060818_fence_shared_workflow_mutations_after_completion.sql",
+      "sha256": "42978f44a1ec7baea663931612ae75974704dfc29e65b75b386509aeb8093aea"
+    },
+    {
+      "file": "20260909123746_add_transport_runtime_patient_command.sql",
+      "sha256": "261e83e4de754aac129f54579ccf96188e8307c05397932b85e7a1dc46065e0a"
+    },
+    {
+      "file": "20260910090650_large_terminal_checkpoint_timeout.sql",
+      "sha256": "a1a516379b85dcc48a155a155a19be2f5d5118939b920cc09dc7cba9ec1f17e9"
+    },
+    {
+      "file": "20260912085404_narva_iro_scenario_controls.sql",
+      "sha256": "92cc8cd54775eaf5eab80042443fc04940215493ad81c5a2a9d1fe05025532ea"
+    },
+    {
+      "file": "20260913125501_persisted_canonical_checkpoint.sql",
+      "sha256": "598ac8c8118725e1da19bcef31f1ad2c96fc9430aa873ba558f8bec2c7d5f3d0"
+    },
+    {
+      "file": "20260913125805_legacy_canonical_checkpoint_derivation.sql",
+      "sha256": "960bda078c63331b9c1ed9906236e6de94832e960a765edc99866ff575151e98"
+    },
+    {
+      "file": "20260913130247_preserve_json_numeric_lexemes_in_legacy_derivation.sql",
+      "sha256": "f62f87f95397891f8bffd39a8755b7661c1934dfc71d88b2393e5adcb552f352"
+    },
+    {
+      "file": "20260913135054_decouple_canonical_checkpoint_publication.sql",
+      "sha256": "0fcc20b6678bf8322b1b05e4473730b60351f2d6fcf327f2cab1a89b67e76c83"
+    },
+    {
+      "file": "20260915102524_trusted_admin_exercise_role_provisioning.sql",
+      "sha256": "59865b9d0510746babae66618eff7215d16a69f79e09976399e3b74578e1a0eb"
+    },
+    {
+      "file": "20260915111642_initialize_shared_workflow_patient_heads.sql",
+      "sha256": "d67a85f9914f49803fab929d21b97890b4bf8715fcb736ae9cef89218c09dedc"
+    },
+    {
+      "file": "20260915165109_narva_laboratory_runtime_commands.sql",
+      "sha256": "bb46b40e2734114d80a494435b4b3ae057636806a8c9fbd65d76e8119ad61dd5"
+    },
+    {
+      "file": "20260916054932_fresh_exercise_bootstrap_authorization.sql",
+      "sha256": "fcc1fd83d380a64e31d7632fd0fe9c5cf980dfd42bfbe1e3d49c8623c7e5749e"
+    },
+    {
+      "file": "20260916055132_harden_fresh_exercise_bootstrap_authorization.sql",
+      "sha256": "9fdfd99775c0adf0e8f362513f07dfff92423a8542215b248936b9f75ba48189"
+    },
+    {
+      "file": "20260916080629_allow_bootstrap_insert_claim.sql",
+      "sha256": "72acb6419d7953eaffc4d8cad59c1b14440f1a08c7a47229230038178893473d"
+    },
+    {
+      "file": "20260916080939_separate_bootstrap_insert_authority.sql",
+      "sha256": "b1d5c9254bc384d034ad7b93f207736d64a0eabb7edd169f0c419d1321c8d338"
+    },
+    {
+      "file": "20260916084829_fix_bootstrap_insert_authorization_helper.sql",
+      "sha256": "a234427d123100741fb3b177302a06de8dd866b29f4f527a8680a703b094262f"
+    },
+    {
+      "file": "20260918145252_large_canonical_checkpoint_publication_timeout.sql",
+      "sha256": "9a4b8a9213bd0464d7ca8b404088fcf0fd4fe19aaf575fd644ed0b88378c2888"
+    },
+    {
+      "file": "20260928043420_add_imaging_runtime_patient_command.sql",
+      "sha256": "53998d103eff56f36b6826fe3ede9a40298dd2c81def8dd07de299aa585a7bfd"
+    },
+    {
+      "file": "20260928043446_add_endotracheal_intubation_runtime_patient_command.sql",
+      "sha256": "b1b411031e5bd3903ad3e5bbc71cdaf14b776cef5236bb02320395d609acdf39"
+    },
+    {
+      "file": "20260928043507_add_patient_complete_runtime_patient_command.sql",
+      "sha256": "48553387691c2a3884375b29a7345ab20e8c66baa0d55fbb74b77780f416c371"
+    },
+    {
+      "file": "20260928043528_add_patient_location_transfer_runtime_patient_command.sql",
+      "sha256": "5bfc19e82927c8208cc2d9d21fb662acfb933ca260d9c3f00d3c6fb494a260a4"
+    },
+    {
+      "file": "20261004111720_user_exercise_admin_v1.sql",
+      "sha256": "252c1c2f258fb5e8398a2d42534e04bf52d5f80da8c2040843ff0f00e370c089"
+    },
+    {
+      "file": "20261004111830_user_exercise_admin_v1_hardening.sql",
+      "sha256": "1c16ae51bba0f114028b9ed111165a02b290bd3e99970ac4d18f3928e4a56af0"
+    },
+    {
+      "file": "20261006103300_recover_pending_completion_takeover.sql",
+      "sha256": "f989593262f5f3ce88dc5fe970593d13b5e7024ddad70e4867e2a5fd7de93912"
+    },
+    {
+      "file": "20261007174526_refuse_consumed_bootstrap_revocation.sql",
+      "sha256": "31bf3812d5c4f904114a0cda8aa75249e71bcb0a65bf3a5e80cd2b58d30ff2bd"
+    },
+    {
+      "file": "20261007191214_allow_bootstrap_revocation_audit.sql",
+      "sha256": "b400e1f795c87a5ed0f34f941e5607845a2ad6b3b542cbed3e9c3040204b6021"
+    },
+    {
+      "file": "20261010051206_platform_admin_break_glass_recovery.sql",
+      "sha256": "2cb0b00f137514dd72366e37bda1cc49fa613fadc9cb95fbf08055b2b4423c7a"
+    },
+    {
+      "file": "20261010110021_builder_lab_package_binding.sql",
+      "sha256": "1789bdb706d0cb4f2fb84d962c00a5dbf3e7caf59f148ef9f4f37e98d651ed50"
+    },
+    {
+      "file": "20261011090155_exercise_state_server_writer_fence.sql",
+      "sha256": "dafe26bea87ce54bf5e7d0648c3cd5bba980cb7bdcb20a48448f652fa80a83e4"
+    },
+    {
+      "file": "20261012102900_atomic_active_writer_takeover.sql",
+      "sha256": "2ff443e6a8db6284dc87d65005f0b32d60dcff553b33649a1a7370306de32e31"
+    },
+    {
+      "file": "20261016065854_ready_exercise_cancellation.sql",
+      "sha256": "03c77fb38ab10a49dbf59aa8e295c222b09868f910764536204dc81d20aa57ec"
+    },
+    {
+      "file": "20261019171013_runtime_writer_controller_authorization.sql",
+      "sha256": "7317bd8d1675ed4bacfa3f67cae53c468eeaf5cb7d9acca10b68477618996250"
+    },
+    {
+      "file": "20261020070931_runtime_critical_table_privileges.sql",
+      "sha256": "1a0cb02b1775b09729cca7e02ac37cc0cf8ab660ba7e8b00ad79955bd68f7b58"
+    },
+    {
+      "file": "20261025162559_preserve_consumed_bootstrap_history.sql",
+      "sha256": "48240c3e054b630d17ca5abeab49f651eb62e8580225afb84c439176614c3f5d"
+    }
+  ]
+}

@@ -5,6 +5,9 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { privilegeSnapshot, assertPrivilegeOnlyChange, qualifyRuntimeTablePrivileges } from './qualify-runtime-table-privileges.mjs';
+import { verifyMigrationInventory } from './qualification-migration-baseline.mjs';
+import { installCIHistoricalBaseline, registerCIFixtureIdentity } from './ci-historical-protection-baseline.mjs';
+import { qualifyCIHistoricalProtection } from './test-ci-historical-protection.mjs';
 
 // Only an in-memory PostgreSQL instance is constructed. No connection string,
 // Supabase client, remote endpoint, or production identity is accepted.
@@ -42,7 +45,8 @@ try {
     alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
   `);
   await db.exec(fs.readFileSync(path.join(root, 'supabase/schema.sql'), 'utf8'));
-  const migrations = fs.readdirSync(path.join(root, 'supabase/migrations')).filter(f => f.endsWith('.sql')).sort();
+  const entries = verifyMigrationInventory(root);
+  const migrations = entries.map(entry => entry.file);
   const catalog = async () => ({
     functions: (await query(`select p.proname,pg_get_function_identity_arguments(p.oid) as args,
       pg_get_functiondef(p.oid) as definition from pg_proc p join pg_namespace n on n.oid=p.pronamespace
@@ -52,6 +56,10 @@ try {
       from pg_trigger t join pg_class c on c.oid=t.tgrelid where not t.tgisinternal order by c.relname,t.tgname`)).rows,
   });
   for (const file of migrations) {
+    if (file === migrations[53]) {
+      await installCIHistoricalBaseline(db);
+      results.push({name:'exact accepted historical-protection prerequisites installed before54',status:'PASS'});
+    }
     const correction = file.endsWith('_runtime_writer_controller_authorization.sql');
     const privileges = file.endsWith('_runtime_critical_table_privileges.sql');
     const beforePrivileges = privileges ? await privilegeSnapshot(query) : undefined;
@@ -79,7 +87,8 @@ try {
   const deny = async (name, action, expected) => pass(name, async () => {
     await assert.rejects(action, error => expected.test(error.message));
   });
-  await runCases({ db, query, pass, deny });
+  await runCases({ db, query, pass, deny, registerFixtureIdentity: id => registerCIFixtureIdentity(query,id) });
+  await qualifyCIHistoricalProtection({db,query,pass});
   await qualifyRuntimeTablePrivileges({ query, setCmIdentity: () => query(
     "select set_config('request.jwt.claim.sub',$1,false),set_config('request.jwt.claims',$2,false)",
     ['10000000-0000-0000-0000-000000000001', JSON.stringify({ sub: '10000000-0000-0000-0000-000000000001', role: 'authenticated', is_anonymous: false })]) });
@@ -92,7 +101,7 @@ try {
 }
 }
 
-export async function runCases({ db, query, pass, deny, fixtureReady = false }) {
+export async function runCases({ db, query, pass, deny, fixtureReady = false, registerFixtureIdentity }) {
   if (!fixtureReady) await db.exec(fs.readFileSync(path.join(root, 'supabase/tests/runtime_writer_authorization_test.sql'), 'utf8'));
   const CM = '10000000-0000-0000-0000-000000000001';
   const A = '10000000-0000-0000-0000-000000000002';
@@ -121,6 +130,7 @@ export async function runCases({ db, query, pass, deny, fixtureReady = false }) 
   let sequence = 0;
   async function fixture() {
     const id = `EX-WRITER-AUTH-${++sequence}`;
+    if (registerFixtureIdentity) await registerFixtureIdentity(id);
     for (const [user, role] of [[CM, 'CM'], [A, 'EXCON'], [B, 'EXCON']]) {
       await query(`insert into public.authorization_role_assignments
         (user_id,role,scope_type,scope_id,status,issued_by) values($1,$2,'EXERCISE',$3,'ACTIVE',$1)`, [user, role, id]);
@@ -248,6 +258,7 @@ export async function runCases({ db, query, pass, deny, fixtureReady = false }) 
     await deniedUnchanged('invalid canonical hash remains rejected', id, () => asUser(A, () => query(
       'select * from public.publish_runtime_checkpoint_canonical_payload($1,$2,1,$3,2,1,$4,$5,1,$6)',
       [lease.lease_id, 'writer-a', id, '0'.repeat(64), provenance, JSON.stringify(state(id))])), /CANONICAL_CHECKPOINT_HASH_INVALID/);
+    if (registerFixtureIdentity) await registerFixtureIdentity('EX-UNASSIGNED');
     await deniedUnchanged('wrong exercise scope denied', id, () => acquire(A, 'EX-UNASSIGNED'), /AUTHORIZATION_DENIED|EXERCISE_NOT_FOUND|EXERCISE_TERMINAL/);
     await deniedUnchanged('stale checkpoint revision denied', id, () => publish(A, id, lease, 1), /CHECKPOINT_REVISION_CONFLICT/);
     const before = (await query('select writer_generation from public.runtime_writer_leases where exercise_id=$1', [id])).rows[0];
@@ -262,7 +273,10 @@ export async function runCases({ db, query, pass, deny, fixtureReady = false }) 
     await publish(A, id, lease);
     if (status === 'revoked') await query(`update public.authorization_role_assignments set status='REVOKED',revoked_at=now(),revoked_by=$1 where user_id=$1 and scope_id=$2`, [A, id]);
     if (status === 'expired') await query(`update public.authorization_role_assignments set issued_at=now()-interval '2 hours',expires_at=now()-interval '1 hour' where user_id=$1 and scope_id=$2`, [A, id]);
-    if (status === 'wrong-scope') await query(`update public.authorization_role_assignments set scope_id=$2 where user_id=$1 and scope_id=$3`, [A, `${id}-OTHER`, id]);
+    if (status === 'wrong-scope') {
+      if (registerFixtureIdentity) await registerFixtureIdentity(`${id}-OTHER`);
+      await query(`update public.authorization_role_assignments set scope_id=$2 where user_id=$1 and scope_id=$3`, [A, `${id}-OTHER`, id]);
+    }
     await deniedUnchanged(`${status} EXCON acquisition denied`, id, () => acquire(A, id, 'writer-a', 1));
     await deniedUnchanged(`${status} EXCON heartbeat denied`, id, () => renew(A, lease));
     await deniedUnchanged(`${status} EXCON checkpoint denied`, id, () => publish(A, id, lease, 2));

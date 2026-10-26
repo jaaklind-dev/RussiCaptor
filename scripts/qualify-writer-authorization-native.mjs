@@ -12,6 +12,7 @@ import { privilegeSnapshot, assertPrivilegeOnlyChange, qualifyRuntimeTablePrivil
 import { qualifyPrivilegeTransactions } from './qualify-runtime-privilege-transactions.mjs';
 import { stageQualificationProject, validateQualificationProject, assertLocalConnection, cliEnvironment } from './native-qualification-project.mjs';
 import { parseDbPushResult } from './qualification-cli-output.mjs';
+import { verifyMigrationInventory } from './qualification-migration-baseline.mjs';
 
 // No URL or TCP connection is accepted. Only the private socket of a disposable
 // cluster created for this qualification may be used; no production credentials.
@@ -99,9 +100,7 @@ try {
     create table supabase_migrations.schema_migrations(version text primary key,statements text[],name text);
   `);
   await db.exec(fs.readFileSync(path.join(root, 'supabase/schema.sql'), 'utf8'));
-  const files = fs.readdirSync(path.join(root, 'supabase/migrations')).filter(f => f.endsWith('.sql')).sort();
-  assert.ok(files.length === 54 || files.length === 55);
-  if (migration55) assert.equal(files.length, 55);
+  const files = verifyMigrationInventory(root).map(entry => entry.file);
   assert.equal(files[53], candidate);
   // Reconstruct 1-53, including their ledger, BEFORE creating upgrade fixtures.
   for (const file of files.slice(0, 53)) {

@@ -1,0 +1,229 @@
+{
+  "schemaVersion": 1,
+  "id": "RC-CI-HISTORICAL-PROTECTION-BASELINE-V1",
+  "scope": "Synthetic disposable CI prerequisite only; no production data or operational migration.",
+  "source": {
+    "artifact": "bootstrap-history-guard-fix-v2-2026-10-25/IMMEDIATE-BEFORE-FULL-CAS.json",
+    "sha256": "b91f161b6dd4e4b0868cfa86d37730c393d1a6e70e5b4561a2587b05deb86524",
+    "observedAt": "2026-10-25T16:44:34.295Z"
+  },
+  "functions": [
+    {
+      "acl": "{rc_identity_owner=X/rc_identity_owner,postgres=X/rc_identity_owner}",
+      "owner": "rc_identity_owner",
+      "config": [
+        "search_path=\"\""
+      ],
+      "signature": "rc_history.assert_operational_id(text)",
+      "definition": "CREATE OR REPLACE FUNCTION rc_history.assert_operational_id(p_id text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$DECLARE s text;BEGIN\n IF p_id IS NULL THEN RETURN;END IF;\n SELECT state INTO s FROM rc_history.identities WHERE exercise_id=p_id FOR UPDATE;\n IF NOT FOUND THEN RAISE EXCEPTION 'UNKNOWN_IDENTITY_NOT_REGISTERED' USING ERRCODE='42501';END IF;IF s<>'ACTIVE_ID' THEN RAISE EXCEPTION 'HISTORICAL_ID_RESERVED' USING ERRCODE='42501';END IF;\n END$function$\n",
+      "security_definer": true,
+      "sha256": "fddbbb35d77a791f982b62a8156cec5d277b4d94bbd338e3142ae1b5a3c55b93"
+    },
+    {
+      "acl": "{rc_identity_owner=X/rc_identity_owner}",
+      "owner": "rc_identity_owner",
+      "config": [
+        "search_path=\"\""
+      ],
+      "signature": "rc_history.guard_runtime()",
+      "definition": "CREATE OR REPLACE FUNCTION rc_history.guard_runtime()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n DECLARE d jsonb; id text; oldid text; s text;\n BEGIN\n d:=CASE WHEN TG_OP='DELETE' THEN to_jsonb(OLD) ELSE to_jsonb(NEW) END;\n IF TG_TABLE_NAME='authorization_role_assignments' AND d->>'scope_type'<>'EXERCISE' AND (TG_OP<>'UPDATE' OR to_jsonb(OLD)->>'scope_type'<>'EXERCISE') THEN RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;END IF;\n id:=coalesce(d->>'exercise_id',d->>'scope_id',d->>'consumed_exercise_id');\n IF id IS NULL AND TG_OP='UPDATE' AND TG_TABLE_NAME='authorization_role_assignments' THEN id:=to_jsonb(OLD)->>'scope_id';END IF;\n IF id IS NULL THEN RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;END IF;\n IF TG_OP='UPDATE' THEN oldid:=coalesce(to_jsonb(OLD)->>'exercise_id',to_jsonb(OLD)->>'scope_id',to_jsonb(OLD)->>'consumed_exercise_id');IF oldid IS NOT NULL AND oldid IS DISTINCT FROM id THEN\n IF TG_TABLE_NAME<>'authorization_role_assignments' THEN RAISE EXCEPTION 'IDENTITY_RENAME_FORBIDDEN' USING ERRCODE='42501';END IF;\n PERFORM 1 FROM rc_history.identities WHERE exercise_id IN(oldid,id) ORDER BY exercise_id FOR UPDATE;\n IF EXISTS(SELECT 1 FROM rc_history.identities WHERE exercise_id=oldid AND state<>'ACTIVE_ID') THEN RAISE EXCEPTION 'HISTORICAL_ID_RESERVED' USING ERRCODE='42501';END IF;\n END IF;END IF;\n IF NOT EXISTS(SELECT 1 FROM rc_history.identities WHERE exercise_id=id) THEN RAISE EXCEPTION 'UNKNOWN_IDENTITY_NOT_REGISTERED' USING ERRCODE='42501';END IF;\n SELECT state INTO STRICT s FROM rc_history.identities WHERE exercise_id=id FOR UPDATE;\n IF TG_OP='DELETE' THEN\n   IF true THEN RAISE EXCEPTION 'ARCHIVE_DELETE_NOT_READY' USING ERRCODE='42501';END IF;\n ELSE IF s<>'ACTIVE_ID' THEN RAISE EXCEPTION 'HISTORICAL_ID_RESERVED' USING ERRCODE='42501';END IF;\n END IF;\n RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;\n END$function$\n",
+      "security_definer": true,
+      "sha256": "ce4ab6c02b3ea5858b8643938b8ec4aa9a344c852d135f4aebb1a3e0bba83262"
+    },
+    {
+      "acl": "{rc_identity_owner=X/rc_identity_owner}",
+      "owner": "rc_identity_owner",
+      "config": [
+        "search_path=\"\""
+      ],
+      "signature": "rc_history.immutable_identity()",
+      "definition": "CREATE OR REPLACE FUNCTION rc_history.immutable_identity()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$BEGIN\n IF TG_OP='DELETE' OR NEW.exercise_id IS DISTINCT FROM OLD.exercise_id OR NEW.created_at IS DISTINCT FROM OLD.created_at OR (OLD.state<>'ACTIVE_ID' AND (NEW.state NOT IN ('ARCHIVED_ID','FORENSIC_ID') OR OLD.binding IS NOT NULL)) THEN RAISE EXCEPTION 'IDENTITY_IMMUTABLE' USING ERRCODE='42501';END IF;RETURN NEW;END$function$\n",
+      "security_definer": false,
+      "sha256": "cb95c69a74b477f78e62d4a63c4bb80c5dc08caf0f9b82bff8d4fa1735e0b017"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "signature": "public.trusted_admin_grant_exercise_bootstrap(uuid,uuid,timestamp with time zone,text)",
+      "definition": "CREATE OR REPLACE FUNCTION public.trusted_admin_grant_exercise_bootstrap(p_user_id uuid, p_issued_by uuid, p_expires_at timestamp with time zone, p_purpose text DEFAULT 'FRESH_EXERCISE_BOOTSTRAP'::text)\n RETURNS public.exercise_bootstrap_authorizations\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_authorization public.exercise_bootstrap_authorizations%rowtype;\n  v_now timestamptz := clock_timestamp();\n  v_purpose text := btrim(coalesce(p_purpose, ''));\nbegin\n  if p_user_id is null or p_issued_by is null then\n    raise exception 'INVALID_USER_IDENTIFIER' using errcode = '22023';\n  end if;\n  if p_expires_at is null\n    or p_expires_at <= v_now\n    or p_expires_at > v_now + interval '15 minutes' then\n    raise exception 'INVALID_BOOTSTRAP_EXPIRY' using errcode = '22023';\n  end if;\n  if length(v_purpose) not between 1 and 160 then\n    raise exception 'INVALID_BOOTSTRAP_PURPOSE' using errcode = '22023';\n  end if;\n  if not exists (\n    select 1\n    from auth.users as target_user\n    join public.operator_profiles as target_profile\n      on target_profile.user_id = target_user.id\n    where target_user.id = p_user_id\n      and not target_user.is_anonymous\n      and (target_user.banned_until is null or target_user.banned_until <= v_now)\n      and target_profile.status = 'ACTIVE'\n  ) then\n    raise exception 'TARGET_OPERATOR_NOT_ACTIVE' using errcode = '22023';\n  end if;\n  if not exists (\n    select 1\n    from auth.users as issuer\n    where issuer.id = p_issued_by\n      and not issuer.is_anonymous\n      and (issuer.banned_until is null or issuer.banned_until <= v_now)\n  ) then\n    raise exception 'INVALID_ISSUER' using errcode = '22023';\n  end if;\n\n  perform pg_catalog.pg_advisory_xact_lock(\n    pg_catalog.hashtextextended('EXERCISE_BOOTSTRAP' || E'\\n' || p_user_id::text, 0)\n  );\n\n  update public.exercise_bootstrap_authorizations\n  set status = 'REVOKED',\n      revoked_at = v_now,\n      revoked_by = p_issued_by\n  where user_id = p_user_id\n    and status = 'ACTIVE'\n    and expires_at <= v_now;\n\n  select bootstrap.*\n  into v_authorization\n  from public.exercise_bootstrap_authorizations as bootstrap\n  where bootstrap.user_id = p_user_id\n    and bootstrap.status = 'ACTIVE'\n  for update;\n\n  if found then\n    if v_authorization.expires_at is distinct from p_expires_at\n      or v_authorization.purpose is distinct from v_purpose then\n      raise exception 'ACTIVE_BOOTSTRAP_CONFLICT' using errcode = '23505';\n    end if;\n    return v_authorization;\n  end if;\n\n  insert into public.exercise_bootstrap_authorizations (\n    user_id,\n    status,\n    purpose,\n    issued_at,\n    expires_at,\n    issued_by\n  ) values (\n    p_user_id,\n    'ACTIVE',\n    v_purpose,\n    v_now,\n    p_expires_at,\n    p_issued_by\n  )\n  returning * into v_authorization;\n\n  return v_authorization;\nend;\n$function$\n",
+      "security_definer": true,
+      "sha256": "19feb454782a5eaf2ce6cd6e3a015827892b579fd8d5b1115cae4cb5ad6dc023"
+    }
+  ],
+  "triggers": [
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.authorization_role_assignments",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.authorization_role_assignments FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.exercise_bootstrap_authorizations",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.exercise_bootstrap_authorizations FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.exercise_state_publication_operations",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.exercise_state_publication_operations FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.exercise_states",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.exercise_states FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.runtime_checkpoint_canonical_artifacts",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_checkpoint_canonical_artifacts FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.runtime_checkpoint_deltas",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_checkpoint_deltas FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.runtime_checkpoint_notifications",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_checkpoint_notifications FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.runtime_checkpoints",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_checkpoints FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.runtime_completion_requests",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_completion_requests FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.runtime_patient_command_notifications",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_patient_command_notifications FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.runtime_patient_commands",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_patient_commands FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.runtime_writer_leases",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_writer_leases FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.shared_workflow_commands",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.shared_workflow_commands FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.shared_workflow_notifications",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.shared_workflow_notifications FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "a0_historical_identity_guard",
+      "enabled": "O",
+      "relation": "public.shared_workflow_patient_states",
+      "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.shared_workflow_patient_states FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+    },
+    {
+      "name": "identity_immutable",
+      "enabled": "O",
+      "relation": "rc_history.identities",
+      "definition": "CREATE TRIGGER identity_immutable BEFORE DELETE OR UPDATE ON rc_history.identities FOR EACH ROW EXECUTE FUNCTION rc_history.immutable_identity()"
+    }
+  ],
+  "identityTable": {
+    "acl": null,
+    "rls": true,
+    "kind": "r",
+    "name": "identities",
+    "owner": "rc_identity_owner",
+    "schema": "rc_history",
+    "force_rls": true
+  },
+  "identityColumns": [
+    {
+      "acl": null,
+      "name": "exercise_id",
+      "type": "text",
+      "schema": "rc_history",
+      "not_null": true,
+      "position": 1,
+      "relation": "identities",
+      "default_expression": null
+    },
+    {
+      "acl": null,
+      "name": "state",
+      "type": "text",
+      "schema": "rc_history",
+      "not_null": true,
+      "position": 2,
+      "relation": "identities",
+      "default_expression": null
+    },
+    {
+      "acl": null,
+      "name": "binding",
+      "type": "text",
+      "schema": "rc_history",
+      "not_null": false,
+      "position": 3,
+      "relation": "identities",
+      "default_expression": null
+    },
+    {
+      "acl": null,
+      "name": "source_digest",
+      "type": "text",
+      "schema": "rc_history",
+      "not_null": false,
+      "position": 4,
+      "relation": "identities",
+      "default_expression": null
+    },
+    {
+      "acl": null,
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "schema": "rc_history",
+      "not_null": true,
+      "position": 5,
+      "relation": "identities",
+      "default_expression": "clock_timestamp()"
+    }
+  ],
+  "identityPolicies": [
+    {
+      "name": "internal_identity_owner",
+      "roles": [
+        "rc_identity_owner"
+      ],
+      "command": "*",
+      "relation": "rc_history.identities",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    }
+  ],
+  "limitation": "Only the dependencies used by this CI chain are reproduced, with synthetic registry rows. This is not a complete production clone or a new clean-install production contract."
+}
