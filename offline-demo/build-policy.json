@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "buildMode": "offline-demo",
+  "packageId": "com.jaaklind.RussiCaptor.demo",
+  "applicationVersion": "0.5.0",
+  "versionCode": 7,
+  "signingCertificateSha256": "34a79501ae4abf9f6e4ee8e02e98d4b1b88d4c955cf8bbd31b6bfecaf90fb3ca",
+  "productionCompatibility": "NOT_APPLICABLE",
+  "distributable": false,
+  "automaticPublication": false,
+  "publicationAuthorization": "NOT_GRANTED"
+}

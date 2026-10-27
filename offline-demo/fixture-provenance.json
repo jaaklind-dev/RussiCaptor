@@ -1,0 +1,26 @@
+{
+  "fixture": "russicaptor.demo-trauma-pair@1.0.0",
+  "synthetic": true,
+  "clinicalValidation": "NOT_VALIDATED",
+  "triageSource": "Authored P1 demonstration labels, not an automatic triage assessment",
+  "patients": {
+    "DEMO-PT-A": {
+      "scenario": "Pelvic trauma",
+      "configurationSource": "PELVIC_HEMORRHAGE_REFERENCE_CONFIGURATION in src/modules/pelvicInjury/PelvicInjuryReference.ts",
+      "initialEstimatedBloodLossMl": 0,
+      "localAction": "APPLY_PELVIC_BINDER maps to supported PELVIC_STABILIZATION effect with CORRECT position"
+    },
+    "DEMO-PT-B": {
+      "scenario": "Thoracic trauma with pleural injury and hypoxaemic respiratory failure",
+      "pleuralConfigurationSource": "defaultPleuralInjuryConfiguration (WP-44/V1)",
+      "respiratoryConfigurationSource": "defaultRespiratoryFailureConfiguration (WP-17/V1)",
+      "circulatoryConfigurationSource": "Pelvic hemorrhage reference coefficients with baseline bleeding rate taken from default pleural blood accumulation rate (120 ml/min)",
+      "initialEstimatedBloodLossMl": 450,
+      "compositionStatus": "New synthetic demonstration composition; not a validated thoracic clinical package"
+    }
+  },
+  "vitalSignConfiguration": "defaultVitalSignConfiguration (WP-16/V1)",
+  "integrationStepSeconds": 1,
+  "maximumSimulationSeconds": 900,
+  "unsupported": ["Full ClinicalScenarioEngine root", "Clinical validation", "Death/terminal clinical aggregation", "Medication", "Laboratory", "Imaging", "Production ownership and writer authority"]
+}

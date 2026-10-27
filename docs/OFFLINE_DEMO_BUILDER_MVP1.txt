@@ -1,0 +1,114 @@
+Offline DEMO Builder MVP1 — 2026-10-19
+
+Scope: editable local drafts only. No runtime activation, clinical input editor,
+new treatment, canonical Builder import, Auth principal or publication path.
+Guardrail impact: isolated UI/projection/interaction/local persistence K/L/X/Z.
+All production A–Z contracts remain unchanged; full guardrail union is required.
+The accepted 0.4.0 default runtime is retained. Physical Builder acceptance remains
+BLOCKED until a separately authorized future signed build/device test.
+
+Architecture and source audit
+src/builder/DemoBuilderCapabilities.ts: imports only the exact approved local JSON
+manifest (already hash pinned). Read-only metadata and capability limits.
+src/builder/DemoBuilderDraft.ts: imports the capability registry; pure constructors
+and edits; identity uses local time/counter/random, plus store collision rejection.
+src/builder/DemoBuilderValidation.ts: imports only types and capability registry;
+pure validation with exact keys. No engine, service, storage or runtime imports.
+src/builder/DemoBuilderStore.ts: imports the preceding pure modules; injected
+storage, clock and IDs; no singleton or module-level database initialization.
+src/builder/DemoBuilderApplication.tsx: React/RN and preceding demo-only modules;
+local forms, bounded alerts and read-only preset/lab/image summaries.
+src/builder/DemoBuilderEntry.tsx: React/RN, expo-sqlite/kv-store and own modules;
+opens only the dedicated Builder database when the Builder is mounted.
+DemoBuilderActivationContract.ts: erased types/interfaces only, intentionally
+unreachable from runtime entry. No activation implementation or Start control.
+Every executable new Builder module is separately pinned by path and SHA-256.
+No wildcard permission, new external library or canonical import is introduced.
+
+Data and capability evolution
+Draft schema v1 has an array of patients, not a two-element tuple or A/B slots.
+DEMO-BUILDER-MVP1 applies 1–2 patients and one instance of each supported PELVIC/
+THORACIC preset; collection capacity 10. Recognized unavailable concepts have
+distinct capabilityState from unknown input. Additional presets/panels have no
+clinical implementation. Later expansion needs a new versioned capability policy,
+explicit validation/migration and tests; never bypass the MVP validator.
+Preset version 1.0.0 references controlled existing configuration identities.
+BP/HR/RR/SpO2/temperature/process rates are NOT editable outputs or parameters.
+Age 18–100 is an authoring scope restriction, not clinical validation and not a
+new age-dependent engine. Sex/age/triage/location are authoring metadata only.
+Locations: DEMO_ED, DEMO_SCENE. No production location service is invoked.
+Text limits: name 100, description 2000, patient name 80 characters. Raw URL/file
+references, extra credential/runtime fields and script markup are rejected.
+Free text is prose, not a generic source container: Unicode letters/numbers,
+spacing, and an explicit set of ordinary punctuation/units only. Colons, path
+separators, underscores, assignments, markup delimiters and encoded byte escapes
+are not allowed. Domain/IP/address-like text and general credential terminology
+are also rejected. Exact nested object keys reject arbitrary credential objects.
+The validator uses general content categories, not concealed service literals;
+the existing source scanner and production import policy are unchanged.
+Prototype boundary: plain object/array prototypes only, exact own keys including
+non-enumerable/symbol checks, no accessors, prototype-control keys, sparse/custom
+arrays, cycles or excessive object depth/node count. Original save input is checked
+BEFORE cloning/serialization can erase a nonstandard prototype. JSON parse does
+not grant trust: every restored draft is validated again.
+
+Confirmed reproduction: Expo Babel 57.0.2 transforms computed-key object spread
+to Object.assign({}, draft, {[key]: payload}). With key __proto__, native spread
+creates an own enumerable data property; Object.assign invokes the legacy target
+prototype setter instead. The former validator rejected the extra own key but
+missed the latter inherited payload. Both are now rejected. A literal-only
+__proto__ object is a separate case: the transformed assignment can drop its
+inherited payload entirely. Tests record that distinction, use explicit prototype
+construction for dangerous inputs and retain JSON/defineProperty coverage.
+Per-draft JSON limit 24000 characters; collection limit 260000 characters.
+Laboratory: seven existing analytes, 30 simulation seconds; no manual values.
+Imaging: existing exact preset-specific asset/report/hash references, 30 seconds.
+Approved imaging manifest, image bytes, clinical reports and attribution unchanged.
+
+Persistence and concurrency
+Separate database: russicaptor-offline-demo-builder-v1.db.
+Only key: russicaptor.offline-demo.builder.collection.v1.
+An injected SQLiteStorage updater performs the collection read/revision CAS/write
+inside the installed library's withTransactionSync. All writes are synchronous;
+there is no awaited callback, background save queue or competing runtime writer.
+The installed library adapter is tested with actual SQLite SQL via node:sqlite;
+only the Android native transport is substituted. Native device acceptance is
+not inferred from that test. Failed transaction rollback is verified.
+Exact readback is required before reporting success, including lost-ack recovery.
+Every save advances the draft revision. Stale saves/deletes fail, never upsert.
+Each edit invalidates the old validation receipt. Valid saves may issue a newly
+computed receipt for the new revision; it is never permission to run anything.
+Empty/incomplete drafts can be saved; completion validation requires name/patient.
+Unknown schema/capability and corrupt records block writes, preserving original
+bytes. No auto-upgrade/delete-on-read exists. Future migration must be explicit,
+versioned, non-destructive and interruption-tested. No future version is treated
+as empty. A corrupt record currently blocks the whole collection, not just itself.
+Reset uses runtime storage only; Builder data is independent and preserved.
+
+UI and callback safety
+Demo home -> Builder -> draft list -> edit -> validate/save -> draft list.
+Opening Builder calls the existing local controller background-pause path, then
+unmounts its timer. Returning restores the same runtime store, never activates a
+draft and never automatically resumes a paused simulation.
+Unsaved departure, patient removal and draft deletion require confirmation.
+Dialog callbacks carry a view epoch, are single-use and reject after edits or
+unmount. Store revision CAS additionally rejects writes to newer/deleted drafts.
+All controls use RN presentation primitives and >=48dp minimum targets. Tablet
+usability is planned, not physically accepted. No HTML or executable draft content.
+
+Future activation (NOT implemented)
+Draft -> strict validation -> immutable frozen definition -> candidate real-engine
+initialization -> T+0 verification -> atomic session replacement -> CM/EXCON.
+Future activation must preserve the default trauma pair, embed the definition
+instead of referencing mutable drafts, support definition-based recovery, fence
+old session generations, and preserve the old session if any stage fails.
+Requires separate authorization, runtime schema evolution, recovery tests and
+targeted physical acceptance. No canonical checkpoint format changes are planned.
+
+Validation requirements
+New model/store/mounted-UI/real-SQLite tests plus existing lab, imaging, clock,
+CM/EXCON, reset/recovery, isolation and canonical release regressions.
+Exact hash allowlists and source/bundle negative tests remain active.
+Run full Jest, TypeScript, standard and extended demo ESLint, runtime/security
+guardrail union, Builder published assets, source graph and git diff --check.
+No APK version change, build, installation, production write, push or publication.

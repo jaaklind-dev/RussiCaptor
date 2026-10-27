@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "fixtureVersion": "russicaptor.offline-demo.imaging@1.0.0",
+  "assets": [
+    {
+      "assetId": "offline-demo.pelvis.generated.v1",
+      "examinationId": "DEMO-PELVIS-XR",
+      "patientId": "DEMO-PT-A",
+      "version": "1.0.0",
+      "file": "pelvis-generated.jpg",
+      "format": "image/jpeg",
+      "width": 1280,
+      "height": 948,
+      "sha256": "67e0866d46ae3ebee501fe7b10cdd1fff6c19a4f0886bfce646d9e5d314a5f39",
+      "source": "User-supplied ChatGPT generated illustration; exact JPEG explicitly approved after PNG mismatch",
+      "creator": "ChatGPT generated illustration supplied and approved by the user",
+      "license": "USER_APPROVED_GENERATED_ILLUSTRATION",
+      "licenseUrl": "",
+      "attribution": "DEMO – genereeritud radioloogiline illustratsioon",
+      "modification": "Approved JPEG bytes unchanged; no regeneration or substituted Wikimedia image",
+      "reportId": "DEMO-PELVIS-REPORT-v1",
+      "report": "DEMO – sünteetiline õppetekst, mitte algne radioloogi raport. Genereeritud kujutis illustreerib vaagnarõnga katkemist ja häbemeliiduse laienemist. See ei ole päris patsiendi uuring.",
+      "clinicalBoundary": "Illustratsioon ei kinnita vaagnalahase paigaldamist ega selle mõju. Ei ole kliiniliselt valideeritud."
+    },
+    {
+      "assetId": "offline-demo.chest.heilman.v1",
+      "examinationId": "DEMO-CHEST-XR",
+      "patientId": "DEMO-PT-B",
+      "version": "1.0.0",
+      "file": "chest-pneumothorax.png",
+      "format": "image/png",
+      "width": 1041,
+      "height": 962,
+      "sha256": "c5a57c48190c85e8acbf067980f5741e3a895a5779ece097e6ebc259cc3ab2cd",
+      "source": "https://commons.wikimedia.org/wiki/File:Tpneumopneumomed.png",
+      "creator": "James Heilman, MD",
+      "license": "CC-BY-SA-3.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "attribution": "Tpneumopneumomed — James Heilman, MD — Wikimedia Commons — CC BY-SA 3.0. Pildifail muutmata. Autor ei ole selle demo toetajana esitatud.",
+      "modification": "Original image bytes unchanged; no crop, labels or alteration",
+      "reportId": "DEMO-CHEST-REPORT-v1",
+      "report": "DEMO – sünteetiline õppetekst, mitte algne radioloogi raport. Õppematerjal illustreerib õhkrinda. Hemotooraksit selle röntgenikujutise põhjal ei kinnitata. Kujutis ei ole sünteetilise patsiendi tegelik uuring.",
+      "clinicalBoundary": "Võimalik hemotooraks jääb kliiniliseks kahtluseks. Dreenist saadud veri oleks hilisema sekkumise leid; pleuradreeni paigaldamist selles demos ei lisata."
+    }
+  ]
+}
