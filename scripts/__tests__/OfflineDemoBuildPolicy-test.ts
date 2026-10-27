@@ -136,6 +136,6 @@ describe('dedicated signed offline-demo build contract', () => {
   test('new demo version metadata agrees without changing the canonical version', () => {
     const config = require('../../offline-demo/app.config.cjs')(); const pkg = require('../../offline-demo/package.json');
     expect(config.version).toBe(policy.applicationVersion); expect(config.android.versionCode).toBe(policy.versionCode); expect(pkg.version).toBe('0.5.0');
-    expect(require('../../app.json').expo.android.versionCode).toBe(181);
+    expect(require('../../app.json').expo.android.versionCode).toBe(188);
   });
 });
