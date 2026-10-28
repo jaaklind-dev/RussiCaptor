@@ -53,3 +53,12 @@ image, Wikimedia Commons CC-BY-SA-3.0; user-approved pelvic illustration, not a
 clinically validated patient image. Approval of the displayed wording is not a
 new clinical validation claim. No backend deployment, real exercise, broad role,
 public upload, push/merge, backup or A2 safe-hold access is included.
+
+The complete release lint run also exposed six pre-existing false `no-undef`
+errors in Node CommonJS files introduced with the recovered demo/tooling. Release
+housekeeping declares only Node's `__dirname` binding readonly for `.cjs` files;
+the `no-undef` rule, source/asset pins and runtime code are unchanged. A focused
+negative probe must still reject an actually undeclared global. The complete
+3530-test release run passed before this lint-only configuration correction;
+application source remains identical and the full lint/type/diff check is repeated
+after it. This does not claim a new physical demo acceptance.
