@@ -104,7 +104,7 @@ describe("explicit Builder package publication", () => {
   test("BUILDER-PUBLISH-09 clean copied checkout verifies image registry", () => {
     const directory = sandbox();
     try {
-      expect(run(directory, "builder-verify-published.mjs").stdout).toContain("assets=2");
+      expect(run(directory, "builder-verify-published.mjs").stdout).toContain("packages=1 assets=4");
       expect(readFileSync(path.join(directory, "src/services/imaging/ImagingBundledAssetRegistry.generated.ts"), "utf8"))
         .toContain("img-001.v1.png");
     } finally { rmSync(directory, { recursive: true, force: true }); }

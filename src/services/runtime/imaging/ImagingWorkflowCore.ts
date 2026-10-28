@@ -1,4 +1,4 @@
-import { IMAGING_WORKFLOW_SCHEMA_VERSION, type ImagingOrderDefinitionSnapshot,
+import { IMAGING_WORKFLOW_SCHEMA_VERSION, IMAGING_STAGED_WORKFLOW_SCHEMA_VERSION, type ImagingOrderDefinitionSnapshot,
   type ImagingStudyInstance, type ImagingWorkflowSnapshot } from "../../../models/ImagingWorkflow";
 import { deepFreeze, immutableClone } from "../../../utils/immutable";
 
@@ -31,6 +31,11 @@ export class ImagingWorkflowCore {
     this.assertMutable(); validTime(input.orderedAtSimulationTimeSec);
     if (input.patientId !== input.definition.patientId || input.definition.delaySeconds < 0 ||
       !Number.isFinite(input.definition.delaySeconds)) throw new Error("IMAGING_DEFINITION_SCOPE_DENIED");
+    const imageDelay = input.definition.imageDelaySeconds;
+    if (imageDelay !== undefined && (!Number.isFinite(imageDelay) || imageDelay < 0 ||
+      imageDelay > input.definition.delaySeconds || !input.definition.asset)) {
+      throw new Error("IMAGING_DEFINITION_SCOPE_DENIED");
+    }
     const imagingInstanceId = `IMAGING:${input.commandId}`;
     const duplicate = this.state.instances.find(item => item.imagingInstanceId === imagingInstanceId ||
       item.orderCommandId === input.commandId);
@@ -52,13 +57,16 @@ export class ImagingWorkflowCore {
       title: input.definition.title, modality: input.definition.modality, orderedBy: input.orderedBy,
       orderedAtSimulationTimeSec: input.orderedAtSimulationTimeSec,
       availableAtSimulationTimeSec: input.orderedAtSimulationTimeSec + input.definition.delaySeconds,
+      ...(imageDelay !== undefined ? { imageAvailableAtSimulationTimeSec: input.orderedAtSimulationTimeSec + imageDelay } : {}),
       repeatOrdinal, status: "ORDERED" as const, authoredSource: {
         reportText: input.definition.reportSource,
         reportSha256: this.dependencies.hashReport(input.definition.reportSource),
         ...(input.definition.asset ? { asset: input.definition.asset } : {}),
       },
     });
-    this.replace({ ...this.state, instances: [...this.state.instances, instance] });
+    this.replace({ ...this.state,
+      ...(imageDelay !== undefined ? { schemaVersion: IMAGING_STAGED_WORKFLOW_SCHEMA_VERSION } : {}),
+      instances: [...this.state.instances, instance] });
     return immutableClone(instance) as ImagingStudyInstance;
   }
 
@@ -68,13 +76,21 @@ export class ImagingWorkflowCore {
     const changed: ImagingStudyInstance[] = [];
     const instances = this.state.instances.map(item => {
       if (item.status === "RESULTED") return item;
+      const imageResult = item.imageResult ?? (item.imageAvailableAtSimulationTimeSec !== undefined &&
+        simulationTimeSec >= item.imageAvailableAtSimulationTimeSec && item.authoredSource.asset
+        ? deepFreeze({ imageResultId: `IMAGING_IMAGE:${item.imagingInstanceId}`,
+          imagingInstanceId: item.imagingInstanceId, patientId: item.patientId, definitionId: item.definitionId,
+          packageId: item.packageId, packageVersion: item.packageVersion, packageHash: item.packageHash,
+          asset: item.authoredSource.asset, releasedAtSimulationTimeSec: simulationTimeSec }) : undefined);
       if (simulationTimeSec < item.availableAtSimulationTimeSec) {
-        if (item.status === "PROCESSING") return item;
+        if (item.status === "PROCESSING" && imageResult === item.imageResult) return item;
         const processing = deepFreeze({ ...item, status: "PROCESSING" as const,
-          processingStartedAtSimulationTimeSec: simulationTimeSec });
+          processingStartedAtSimulationTimeSec: item.processingStartedAtSimulationTimeSec ?? simulationTimeSec,
+          ...(imageResult ? { imageResult } : {}) });
         changed.push(processing); return processing;
       }
       const resulted = deepFreeze({ ...item, status: "RESULTED" as const,
+        ...(imageResult ? { imageResult } : {}),
         processingStartedAtSimulationTimeSec: item.processingStartedAtSimulationTimeSec ?? item.orderedAtSimulationTimeSec,
         result: { resultId: `IMAGING_RESULT:${item.imagingInstanceId}`,
           imagingInstanceId: item.imagingInstanceId, patientId: item.patientId,
@@ -110,7 +126,8 @@ export class ImagingWorkflowCore {
     this.state = immutableClone(value) as ImagingWorkflowSnapshot;
   }
   private validate(value: ImagingWorkflowSnapshot): void {
-    if (value.schemaVersion !== IMAGING_WORKFLOW_SCHEMA_VERSION) throw new Error("IMAGING_UNSUPPORTED_SCHEMA");
+    if (value.schemaVersion !== IMAGING_WORKFLOW_SCHEMA_VERSION &&
+      value.schemaVersion !== IMAGING_STAGED_WORKFLOW_SCHEMA_VERSION) throw new Error("IMAGING_UNSUPPORTED_SCHEMA");
     const ids = new Set<string>(); const commands = new Set<string>();
     for (const item of value.instances) {
       if (!item.imagingInstanceId || !item.orderCommandId || !item.exerciseId || !item.patientId ||
@@ -127,6 +144,7 @@ export class ImagingWorkflowCore {
         throw new Error("IMAGING_INVALID_INSTANCE");
       }
       if (item.authoredSource.asset) this.dependencies.validateAsset(item.authoredSource.asset);
+      this.validateImageRelease(value, item);
       if (item.result && (item.result.resultId !== `IMAGING_RESULT:${item.imagingInstanceId}` ||
         item.result.imagingInstanceId !== item.imagingInstanceId || item.result.patientId !== item.patientId ||
         item.result.definitionId !== item.definitionId || item.result.packageId !== item.packageId ||
@@ -143,8 +161,35 @@ export class ImagingWorkflowCore {
     if (!this.dependencies.equal(value, immutableClone(value))) throw new Error("IMAGING_INVALID_SNAPSHOT");
   }
 
+  private validateImageRelease(snapshot: ImagingWorkflowSnapshot, item: ImagingStudyInstance): void {
+    const at = item.imageAvailableAtSimulationTimeSec;
+    const image = item.imageResult;
+    if (at === undefined) {
+      if (image !== undefined) throw new Error("IMAGING_INVALID_IMAGE_RESULT");
+      return;
+    }
+    validTime(at);
+    if (snapshot.schemaVersion !== IMAGING_STAGED_WORKFLOW_SCHEMA_VERSION || !item.authoredSource.asset ||
+      at < item.orderedAtSimulationTimeSec || at > item.availableAtSimulationTimeSec ||
+      (item.status === "RESULTED" && !image)) throw new Error("IMAGING_INVALID_IMAGE_RESULT");
+    if (image) {
+      validTime(image.releasedAtSimulationTimeSec);
+      if (item.status === "ORDERED" || image.releasedAtSimulationTimeSec < at ||
+        (item.result && image.releasedAtSimulationTimeSec > item.result.releasedAtSimulationTimeSec) ||
+        image.imageResultId !== `IMAGING_IMAGE:${item.imagingInstanceId}` ||
+        image.imagingInstanceId !== item.imagingInstanceId || image.patientId !== item.patientId ||
+        image.definitionId !== item.definitionId || image.packageId !== item.packageId ||
+        image.packageVersion !== item.packageVersion || image.packageHash !== item.packageHash ||
+        !this.dependencies.equal(image.asset, item.authoredSource.asset) ||
+        Object.keys(image).some(key => !["imageResultId", "imagingInstanceId", "patientId", "definitionId",
+          "packageId", "packageVersion", "packageHash", "asset", "releasedAtSimulationTimeSec"].includes(key))) {
+        throw new Error("IMAGING_INVALID_IMAGE_RESULT");
+      }
+    }
+  }
+
   private upgradeLegacySnapshot(value: Record<string, unknown>): ImagingWorkflowSnapshot {
-    if (value.schemaVersion === IMAGING_WORKFLOW_SCHEMA_VERSION) {
+    if (value.schemaVersion === IMAGING_WORKFLOW_SCHEMA_VERSION || value.schemaVersion === IMAGING_STAGED_WORKFLOW_SCHEMA_VERSION) {
       return immutableClone(value) as unknown as ImagingWorkflowSnapshot;
     }
     if (value.schemaVersion !== 1 || !Array.isArray(value.instances)) throw new Error("IMAGING_UNSUPPORTED_SCHEMA");

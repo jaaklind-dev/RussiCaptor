@@ -37,6 +37,12 @@ export default function ImagingTab({
         <View key={instance.imagingInstanceId} style={styles.study}>
           <Text style={styles.studyTitle}>{instance.title} #{instance.repeatOrdinal}</Text>
           <Text style={styles.status}>{imagingStatusLabel(instance.status)}</Text>
+          {instance.imageResult && !instance.result ? (
+            <>
+              <Text style={styles.status}>Pilt olemas, kirjeldus ootel</Text>
+              <ReleasedAsset asset={instance.imageResult.asset} />
+            </>
+          ) : null}
           {instance.status === "RESULTED" && instance.result ? (
             <>
               <Text style={styles.report}>{instance.result.reportText}</Text>

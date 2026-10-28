@@ -34,6 +34,51 @@
         "sourceUrl": "RussiCaptorTestAsset",
         "licenseId": "TEST_ONLY"
       }
+    },
+    {
+      "assetId": "russicaptor.narva-trauma.p01-pelvis-xr.pelvis-illustration.v1",
+      "sourceKind": "BUNDLED_LOCAL",
+      "resolverKey": "packages/russicaptor.narva-trauma/1.0.6/p01-pelvis-xr/pelvis-illustration.v1.jpg",
+      "sha256": "67e0866d46ae3ebee501fe7b10cdd1fff6c19a4f0886bfce646d9e5d314a5f39",
+      "mediaType": "image/jpeg",
+      "byteLength": 199495,
+      "width": 1280,
+      "height": 948,
+      "role": "SUPPORTING_IMAGE",
+      "packageId": "russicaptor.narva-trauma",
+      "packageVersion": "1.0.6",
+      "patientId": "PT-PELVIC-001",
+      "definitionId": "P01-PELVIS-XR",
+      "provenance": {
+        "sourceUrl": "User-approved generated illustration from offline demo 0.5.0",
+        "attribution": "ÕPPEILLUSTRATSIOON – genereeritud radioloogiline kujutis; ei ole pärispatsiendi uuring ega kliiniliselt valideeritud.",
+        "licenseId": "USER_APPROVED_GENERATED_ILLUSTRATION",
+        "contributor": "ChatGPT generated illustration supplied and approved by the user",
+        "modificationNote": "Approved JPEG bytes unchanged; no regeneration. Does not establish binder placement or treatment effect."
+      }
+    },
+    {
+      "assetId": "russicaptor.narva-trauma.p02-cxr.chest-pneumothorax.v1",
+      "sourceKind": "BUNDLED_LOCAL",
+      "resolverKey": "packages/russicaptor.narva-trauma/1.0.6/p02-cxr/chest-pneumothorax.v1.png",
+      "sha256": "c5a57c48190c85e8acbf067980f5741e3a895a5779ece097e6ebc259cc3ab2cd",
+      "mediaType": "image/png",
+      "byteLength": 840749,
+      "width": 1041,
+      "height": 962,
+      "role": "SUPPORTING_IMAGE",
+      "packageId": "russicaptor.narva-trauma",
+      "packageVersion": "1.0.6",
+      "patientId": "PT-CHEST-001",
+      "definitionId": "P02-CXR",
+      "provenance": {
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Tpneumopneumomed.png",
+        "attribution": "Tpneumopneumomed — James Heilman, MD — Wikimedia Commons — CC BY-SA 3.0. Pildifail muutmata.",
+        "licenseId": "CC-BY-SA-3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+        "contributor": "James Heilman, MD",
+        "modificationNote": "Original bytes unchanged; educational example, not this simulated patient’s actual image; hemothorax is not established by this image."
+      }
     }
   ]
 }

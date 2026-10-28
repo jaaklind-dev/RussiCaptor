@@ -101,6 +101,9 @@ export class ExercisePackageValidator {
         }
         if (!item.order.id?.trim() || !item.order.title?.trim()) add("INVALID_IMAGING_CONFIGURATION", `${path}.order`, "Imaging order identity and title are required");
         if (item.order.workflow.resultAction !== "imaging.available" || item.order.workflow.resultTargetId !== item.study.id || !Number.isFinite(item.order.workflow.delayMinutes) || item.order.workflow.delayMinutes < 0) add("INVALID_IMAGING_CONFIGURATION", `${path}.order.workflow`, "Imaging order must target its study with a non-negative delay");
+        const imageDelay = item.order.workflow.imageDelayMinutes;
+        if (imageDelay !== undefined && (!item.study.asset || !Number.isFinite(imageDelay) || imageDelay < 0 ||
+          imageDelay > item.order.workflow.delayMinutes)) add("INVALID_IMAGING_CONFIGURATION", `${path}.order.workflow.imageDelayMinutes`, "Staged Imaging requires an asset and an image delay no later than the report delay");
       });
     }
     const laboratory = pkg.laboratoryConfiguration;

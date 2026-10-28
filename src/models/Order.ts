@@ -21,6 +21,8 @@ export type OrderWorkflow = {
   >;
   resultTargetId: string;
   delayMinutes: number;
+  /** Imaging only: optional image availability; delayMinutes remains report availability. */
+  imageDelayMinutes?: number;
   resultTitle: string;
   resultDescription: string;
 };

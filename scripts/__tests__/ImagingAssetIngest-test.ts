@@ -138,6 +138,13 @@ describe("IMAGING-ASSET-INGEST-CORE-01 / IMG-ASSET-G01..G16", () => {
   });
 
   test("repository manifest remains exact and generated registry is current", () => {
-    expect(core.verifyManifest(process.cwd())).toEqual({ assetCount: 2 });
+    expect(core.verifyManifest(process.cwd())).toEqual({ assetCount: 4 });
+    const manifest = JSON.parse(readFileSync(path.join(process.cwd(), "assets/imaging/manifest.json"), "utf8"));
+    expect(manifest.assets.map((asset: { assetId: string; sha256: string }) => [asset.assetId, asset.sha256])).toEqual([
+      ["demo.head-ct.image01.v1", "ae38226a9d0d803fcdfcc4b3bbcc3003a9e3b5ac7ffacc5378d6d18a7ef072b4"],
+      ["russicaptor.builder-picker-test153.img-001.img-001.v1", "a4e030697a7571b3e95d31860e4da55d2f98e5e861e2b55e414f45a8556828ba"],
+      ["russicaptor.narva-trauma.p01-pelvis-xr.pelvis-illustration.v1", "67e0866d46ae3ebee501fe7b10cdd1fff6c19a4f0886bfce646d9e5d314a5f39"],
+      ["russicaptor.narva-trauma.p02-cxr.chest-pneumothorax.v1", "c5a57c48190c85e8acbf067980f5741e3a895a5779ece097e6ebc259cc3ab2cd"],
+    ]);
   });
 });

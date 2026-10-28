@@ -25,6 +25,7 @@ import { NARVA_IRO_EXERCISE_PACKAGE, NARVA_IRO_HISTORICAL_EXERCISE_PACKAGE_V1,
   NARVA_TRAUMA_EXERCISE_PACKAGE_V104 } from "./NarvaExercisePackages";
 import { loadGeneratedImagingAuthoredPackages } from "@/services/imaging/ImagingAuthoredPackageLoader";
 import { GENERATED_BUILDER_PACKAGES } from "@/services/builder/BuilderCompiledPackages.generated";
+import { NARVA_TRAUMA_EXERCISE_PACKAGE_V106 } from "./NarvaTraumaImagingV106";
 
 export const exercisePackageValidator = new ExercisePackageValidator(EXERCISE_DEFINITION_CATALOG);
 export const exercisePackageRegistry = new ExercisePackageRegistry(exercisePackageValidator);
@@ -57,6 +58,7 @@ exercisePackageLoader.load(TRANSPORT_REFERENCE_EXERCISE_PACKAGE);
 exercisePackageLoader.load(PHYSIOLOGIC_DECOMPENSATION_REFERENCE_EXERCISE_PACKAGE);
 exercisePackageLoader.load(PRESSURE_DEPENDENT_HEMORRHAGE_REFERENCE_EXERCISE_PACKAGE);
 exercisePackageLoader.load(NARVA_TRAUMA_EXERCISE_PACKAGE);
+exercisePackageLoader.load(NARVA_TRAUMA_EXERCISE_PACKAGE_V106);
 exercisePackageLoader.load(NARVA_TRAUMA_EXERCISE_PACKAGE_V104);
 exercisePackageLoader.load(NARVA_TRAUMA_EXERCISE_PACKAGE_V103);
 exercisePackageLoader.load(NARVA_TRAUMA_EXERCISE_PACKAGE_V102);

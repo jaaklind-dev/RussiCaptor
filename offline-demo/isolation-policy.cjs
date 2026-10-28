@@ -98,8 +98,8 @@ function assertAuditedDemoSource(relative, bytes) {
 }
 // Exact reviewed pure engines/presentation only. A source change requires a fresh side-effect audit.
 const SHARED_SOURCES = Object.freeze({
-  'src/services/runtime/imaging/ImagingWorkflowCore.ts': '101e3bdbdee441e0678b683aedc4b10cda647e14a850c69f66dca0186e842b00',
-  'src/models/ImagingWorkflow.ts': '4d2d5f98010b413a1e060dd83ce4d2bd064a1a15167c4959ce41bbb0d2306bbf',
+  'src/services/runtime/imaging/ImagingWorkflowCore.ts': 'b9e509c288826fd196d0071aeb0c675eb5ab3a8d5b63db429b548533f409fed3',
+  'src/models/ImagingWorkflow.ts': '83ca2a96271b407649081754730922f8cf523ab0da0488234e6a7d76a19f2f6e',
   'src/services/runtime/HemorrhagePatientProcess.ts': '5ed38db24ccf079c2d49937e3552afe7ef6a78e9c961cbd1949eff88dc4e70b5',
   'src/services/runtime/PleuralInjuryPatientProcess.ts': '0d620316416bc3b37d72e8ab1ec8b8794255b7d3f7c575d9174ebe5006f8eec5',
   'src/services/runtime/RespiratoryFailurePatientProcess.ts': '935010d592766f94faa3d88a46db7a2a6b971d0c7d615263075553899be1ce33',

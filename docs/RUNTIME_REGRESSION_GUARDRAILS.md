@@ -374,6 +374,61 @@ Package-owned Imaging uses the existing order, delayed workflow, persistence, an
 | IMG-G44 | Reader asset convergence | Readers restore asset metadata without local generation or mutation. |
 | IMG-G45 | Unsupported attachment safety | Unregistered workbook paths and URLs remain explicitly unresolved and never become trusted assets. |
 
+### Explicit Narva 1.0.6 content extension
+
+The 2026-10-28 user decision explicitly requests the existing chest educational
+image and generated pelvic illustration for the Narva trauma patients, including
+review of their reports. IMG-G26–IMG-G34 continue to freeze the accepted
+1.0.1–1.0.5 content; those packages, their hashes, and their existing regression
+assertions are unchanged. They are not silently expanded or reinterpreted.
+
+The separate 1.0.6 version adds exactly one package-owned study per Narva trauma
+patient with new asset identities, unchanged verified image bytes, and explicit
+educational provenance. It does not import demo patient identities, demo runtime
+code, demo's 30-second timing, or unrelated studies. Its reports cannot attribute
+hemothorax, blood-loss amount, binder placement, or treatment effect to images
+that do not establish those facts. The generated pelvic image remains explicitly
+not clinically validated. The chest's prior seven-minute delay is retained;
+the pelvis seven-minute image delay is an authored simulation setting approved
+by the user, not a claimed source-workbook or hospital turnaround value.
+
+`NarvaTraumaImagingV106-test.ts` adds coverage for the new explicit scope without
+removing any historical negative test. Applicable groups are imaging and runtime,
+plus package immutability and source-fidelity cross-regressions (V/W/X). Runtime
+authority, command routing, persistence algorithms, clinical physiology, old
+exercise state, and IRO package content are not changed. Before release, required
+release checks and the scope decision for new-image presentation remain separate
+from source-level verification; this change alone does not update APK188.
+
+### Explicit staged image/report extension (2026-10-28)
+
+The user subsequently approved the report wording and seven-minute image delay,
+and requested reports at ten simulation minutes from the same order. This is an
+explicit new lifecycle, not a redefinition of the historical combined result.
+Combined schema-2 studies, the offline demo, historical packages and their frozen
+tests remain unchanged. A staged study opts into schema 3 using an asset-backed
+image deadline no later than its report deadline. Mixed snapshots preserve older
+instances without inventing image-release artifacts for them. Old clients cannot
+restore schema 3; coordinated client release and physical acceptance are required.
+
+| ID | Additional staged invariant |
+| --- | --- |
+| IMG-ST01 | No image artifact before its own authoritative simulation deadline. |
+| IMG-ST02 | No clinical report result before the independent report deadline. |
+| IMG-ST03 | Image-only release has stable identity/provenance and contains no report text. |
+| IMG-ST04 | Both release artifacts and timestamps are immutable after their respective release. |
+| IMG-ST05 | Restore, reader hydration and takeover retain each stage exactly once. |
+| IMG-ST06 | Invalid timing, missing asset, tampered artifacts and schema downgrade fail closed. |
+| IMG-ST07 | Writer-only mutation, terminal fencing and repeat separation apply to both stages. |
+| IMG-ST08 | UI uses only released artifacts, never authored text or a local timer. |
+
+`ImagingStagedRelease-test.ts`, `NarvaTraumaImagingV106-test.ts`,
+`ImagingRuntimePersistence-test.ts` and `ImagingTabDurableLifecycle-test.tsx`
+cover the extension. IMG-G15/17/35/36/41 retain their combined-result contract;
+the new image artifact is not a RESULTED clinical report. No old negative guard
+is removed or weakened. Full required release checks and a scoped physical
+staged-display/restart/convergence gate remain mandatory before release.
+
 ### Imaging asset-ingest guardrails
 
 The local authoring pipeline validates image bytes, freezes exact integrity and package provenance, and generates Metro-compatible static resolvers. It does not fetch remote content or change runtime clinical behavior.

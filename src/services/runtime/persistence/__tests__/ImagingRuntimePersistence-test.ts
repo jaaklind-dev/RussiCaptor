@@ -63,4 +63,32 @@ describe("I2 Imaging canonical Runtime checkpoint persistence", () => {
     expect(restored.getImagingWorkflow()).toMatchObject({ terminalFencedAtSimulationTimeSec: 10,
       instances: [expect.objectContaining({ status: "ORDERED" })] });
   });
+
+  test("staged image-only full checkpoint survives async reader restore and writer takeover before report", async () => {
+    const patientId = "PT-001";
+    const asset = getRegisteredImagingAsset("russicaptor.builder-picker-test153.img-001.img-001.v1")!;
+    const source = new ClinicalScenarioEngine(undefined, undefined, () => true);
+    source.reset(structuredClone(createCanonicalBaselineRuntimeFixture(patientId)));
+    source.orderImaging({ commandId: "STAGED-PERSIST", exerciseId: "EX-STAGED", patientId,
+      orderedBy: "CM", orderedAtSimulationTimeSec: 0,
+      definition: { ...definition(patientId), asset, imageDelaySeconds: 420, delaySeconds: 600 } });
+    source.advanceTo(420);
+    const payload = JSON.parse(JSON.stringify(source.captureRuntimePayload()));
+    const image = source.getImagingWorkflow().instances[0].imageResult;
+    expect(payload.imaging).toMatchObject({ schemaVersion: 3, instances: [{ status: "PROCESSING",
+      imageResult: { asset, releasedAtSimulationTimeSec: 420 }, availableAtSimulationTimeSec: 600 }] });
+    expect(payload.imaging.instances[0].result).toBeUndefined();
+    expect(JSON.stringify(payload.imaging)).not.toMatch(/data:image|base64|iVBORw0KGgo/);
+    const reader = new ClinicalScenarioEngine();
+    await reader.rehydrateRuntimePayloadAsync(payload, async () => Promise.resolve());
+    expect(reader.getImagingWorkflow()).toEqual(payload.imaging);
+    const takeover = new ClinicalScenarioEngine(undefined, undefined, () => true);
+    takeover.rehydrateRuntimePayload(payload); takeover.advanceTo(599);
+    expect(takeover.getImagingWorkflow().instances[0].result).toBeUndefined();
+    takeover.advanceTo(600);
+    expect(takeover.getImagingWorkflow().instances[0]).toMatchObject({ imageResult: image,
+      result: { reportText: "Immutable report", releasedAtSimulationTimeSec: 600 } });
+    const completed = takeover.getImagingWorkflow();
+    takeover.advanceTo(900); expect(takeover.getImagingWorkflow()).toEqual(completed);
+  });
 });

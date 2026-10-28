@@ -203,6 +203,8 @@ export function createScenarioEngineInstructorRuntimeOwner(
             modality: configured.study.modality, reportSource: configured.study.report,
             ...(configured.study.asset ? { asset: configured.study.asset } : {}),
             delaySeconds: configured.order.workflow.delayMinutes * 60, packageId: pkg.packageId,
+            ...(configured.order.workflow.imageDelayMinutes !== undefined
+              ? { imageDelaySeconds: configured.order.workflow.imageDelayMinutes * 60 } : {}),
             packageVersion: pkg.packageVersion, packageHash: pkg.packageHash } });
         notifySync("local");
         return { ok: true, runtimeEventId: instance.imagingInstanceId };
