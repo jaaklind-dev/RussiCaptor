@@ -838,7 +838,7 @@ describe("WP-44B checkpoint startup coordination", () => {
   test("checkpoint publication is serialized and coalesces overlapping local ticks", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/services/RuntimeCheckpointSyncService.ts"), "utf8");
     const publish = source.slice(source.indexOf("let publishInFlight=false"), source.indexOf("const stopLocal="));
-    expect(publish).toContain("const runPublish=async()=>{");
+    expect(publish).toContain("const runPublish=async(exitDrainLease?:RuntimeWriterLease)=>{");
     expect(publish).toContain("if(publishInFlight){publishQueued=true;return;}");
     expect(publish).toContain("do {");
     expect(publish).toContain("while(publishQueued)");
@@ -896,7 +896,7 @@ describe("WP-44B checkpoint startup coordination", () => {
     });
 
     test("RB-A8 failed first publication stays dirty and retries instead of masquerading as acknowledged", () => {
-      const publication = startup.slice(startup.indexOf("const runPublish=async()=>{"), startup.indexOf("const publishNow="));
+      const publication = startup.slice(startup.indexOf("const runPublish=async(exitDrainLease?:RuntimeWriterLease)=>{"), startup.indexOf("const publishNow="));
       expect(publication).toContain("publicationDirty=true;");
       expect(publication).toContain("schedulePublicationRetry()");
       expect(publication).toContain('else { endPublish({ outcome: result.state }); publicationDirty=true;setStatus({state:"WRITER",code:result.code,revision:remoteRevision});schedulePublicationRetry(); }');

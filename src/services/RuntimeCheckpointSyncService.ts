@@ -34,6 +34,7 @@ import { isSharedWorkflowValidationHarnessEnabled } from "@/config/SharedWorkflo
 import { getRuntimeLeaseLifecycleTrace, nextRuntimeLeaseTraceLabel, startRuntimeWorkTrace, traceRuntimeLeaseLifecycle } from "@/services/runtime/persistence/RuntimeLeaseLifecycleTrace";
 import { getNativeLeaseHeartbeatDiagnostic, isNativeLeaseHeartbeatAvailable } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeat";
 import { RuntimeNativeLeaseHeartbeatController, type NativeLeaseHeartbeatSession } from "@/services/runtime/persistence/RuntimeNativeLeaseHeartbeatController";
+import { getRuntimeExitDiagnostics, recordRuntimeExitFailure, type RuntimeExitStage } from "@/services/runtime/persistence/RuntimeExitDiagnostics";
 import {
   installRuntimeCompletionIntentListener,
   settleRuntimeCompletionCheckpointIntent,
@@ -501,6 +502,7 @@ export function getRuntimeCheckpointOperationalState() {
     lastRecoveryOutcome: lastRecoveryOutcome ? Object.freeze({ ...lastRecoveryOutcome }) : undefined,
     renewalDiagnostics: Object.freeze(renewalDiagnostics.map(item => Object.freeze({ ...item }))),
     leaseLifecycleTrace: getRuntimeLeaseLifecycleTrace(),
+    runtimeExitDiagnostics: getRuntimeExitDiagnostics(),
   });
 }
 
@@ -1361,12 +1363,24 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
     if(isOperatorSignOutDraining()||generationStopped()||publicationRetryTimer||!publicationDirty||!lease||status.state!=="WRITER")return;
     publicationRetryTimer=setTimeout(()=>{publicationRetryTimer=undefined;requestPublish();},ROUTINE_CHECKPOINT_PUBLICATION_MS);
   };
-  const runPublish=async()=>{
+  // Only the explicit exit path may drain a previously failed publication.
+  // This is not restored command authority and cannot authorize a new writer.
+  const exitDrainPublicationCurrent=(candidate?:RuntimeWriterLease):boolean=>{
+    const frozen=getOperatorSignOutDrainContext();
+    return Boolean(candidate&&!generationStopped()&&isOperatorSignOutDraining()&&frozen&&
+      frozen.exerciseId===exerciseId&&candidate.exerciseId===exerciseId&&
+      frozen.writerGeneration===generation&&frozen.leaseId===candidate.leaseId&&
+      frozen.writerInstanceId===candidate.writerInstanceId&&lease?.leaseId===candidate.leaseId&&
+      lease?.writerInstanceId===candidate.writerInstanceId);
+  };
+  const runPublish=async(exitDrainLease?:RuntimeWriterLease)=>{
     publishInFlight=true;
     try {
       do {
         publishQueued=false;
-        const checkpoint=getLocalRuntimeCheckpoint(); if(!checkpoint||!lease||status.state!=="WRITER"||checkpoint.checkpointRevision<=remoteRevision||isIdenticalCheckpointPayload(lastPublishedCheckpoint,checkpoint)) return;
+        const checkpoint=getLocalRuntimeCheckpoint(); if(!checkpoint||!lease||
+          (exitDrainLease?!exitDrainPublicationCurrent(exitDrainLease):status.state!=="WRITER")||
+          checkpoint.checkpointRevision<=remoteRevision||isIdenticalCheckpointPayload(lastPublishedCheckpoint,checkpoint)) return;
         publicationDirty=true;
         const priority=checkpointPublicationPriority(checkpoint);
         if(activeCompletion?.status==="PENDING"&&priority==="ROUTINE"){
@@ -1406,7 +1420,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         const publication=publishRuntimeCheckpointTerminal(activePublicationRepository,lease,remoteRevision,checkpoint,undefined,lastPublishedCheckpoint,{
           priority,
           yieldControl:yieldToEventLoop,
-          shouldContinue:()=>!generationStopped()&&!publicationSuperseded&&(priority==="LIFECYCLE_CRITICAL"||terminalIntentGeneration===undefined)&&intentGeneration===publicationIntentGeneration,
+          shouldContinue:()=>!generationStopped()&&(!exitDrainLease||exitDrainPublicationCurrent(exitDrainLease))&&!publicationSuperseded&&(priority==="LIFECYCLE_CRITICAL"||terminalIntentGeneration===undefined)&&intentGeneration===publicationIntentGeneration,
           onRpcSubmitted:()=>{rpcSubmitted=true;traceRuntimeLeaseLifecycle("CHECKPOINT_PUBLICATION_RPC_SUBMITTED",{generation:traceGeneration,detail:{priority,intentGeneration}});},
         }).then(result=>({source:"RPC" as const,result}));
         const settled=await Promise.race([publication,echoAcknowledgement]);
@@ -1420,6 +1434,8 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
           traceRuntimeLeaseLifecycle("CHECKPOINT_PUBLICATION_PREEMPTED",{generation:traceGeneration,detail:{priority,intentGeneration,rpcSubmitted}});
           continue;
         }
+        if(isOperatorSignOutDraining()&&result.state!=="PUBLISHED"&&result.state!=="RECONCILED_FORWARD")
+          recordRuntimeExitFailure("PUBLICATION",new Error(result.code));
         if(result.state==="PUBLISHED") {
           const currentLocal=getLocalRuntimeCheckpoint();
           // A newer prepared checkpoint may exist by the time this ACK arrives.
@@ -1466,15 +1482,16 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
         else if(publicationResultRevokesWriter(result.state)) { endPublish({ outcome: result.state });rejectCanonicalCommandCommitWaiters("CANONICAL_COMMAND_WRITER_AUTHORITY_LOST"); releaseRuntimeOwner("PUBLICATION_AUTHORITY_LOST"); lease=undefined; stopClockRunner(); setStatus({state:"CONFLICT",code:result.code}); return; }
         else { endPublish({ outcome: result.state }); publicationDirty=true;setStatus({state:"WRITER",code:result.code,revision:remoteRevision});schedulePublicationRetry(); }
       } while(publishQueued);
-    } catch {
+    } catch (error) {
+      if(isOperatorSignOutDraining())recordRuntimeExitFailure("PUBLICATION",error);
       publicationDirty=true;schedulePublicationRetry();
     } finally { activePublicationPriority=undefined;publishInFlight=false;if(publicationDirty&&terminalIntentGeneration===undefined)schedulePublicationRetry(); }
   };
-  const publishNow=()=>{
+  const publishNow=(exitDrainLease?:RuntimeWriterLease)=>{
     if(generationStopped())return;
     if(routinePublishTimer){clearTimeout(routinePublishTimer);routinePublishTimer=undefined;}
     if(publishInFlight){publishQueued=true;return;}
-    const task=runPublish();
+    const task=runPublish(exitDrainLease);
     publicationBarrier=task.then(()=>undefined,()=>undefined);
   };
   const requestPublish=()=>{
@@ -1714,9 +1731,11 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
       writerGeneration:generation,
       checkpointRevision:remoteRevision,
     }));
+    let exitStage:RuntimeExitStage="DRAIN_IDENTITY";
     const task=(async()=>{
       traceRuntimeLeaseLifecycle("OPERATOR_SIGN_OUT_RELEASE_STARTED",{generation:traceGeneration,detail:{exerciseId}});
-      if(frozenContext.leaseId!==currentLease.leaseId||frozenContext.writerInstanceId!==currentLease.writerInstanceId||
+      if(frozenContext.exerciseId!==exerciseId||currentLease.exerciseId!==exerciseId||
+          frozenContext.leaseId!==currentLease.leaseId||frozenContext.writerInstanceId!==currentLease.writerInstanceId||
           frozenContext.writerGeneration!==generation)throw new Error("WRITER_SIGNOUT_LEASE_REPLACED_DURING_DRAIN");
       // Fail closed immediately: no new local command may enter while an
       // already-prepared canonical publication is allowed to settle.
@@ -1729,14 +1748,31 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
       if(routinePublishTimer){clearTimeout(routinePublishTimer);routinePublishTimer=undefined;}
       if(publicationRetryTimer){clearTimeout(publicationRetryTimer);publicationRetryTimer=undefined;}
       stopClockRunner();
-      if(publicationDirty||publishInFlight){publishNow();await publicationBarrier;
-        if(publicationDirty)throw new Error("WRITER_SIGNOUT_PUBLICATION_UNSETTLED");}
+      // Let an already submitted request settle; never duplicate an uncertain
+      // publication. A manual retry may drain only this frozen, server-confirmed
+      // lease without changing FAILED back into local WRITER authority.
+      if(publishInFlight){exitStage="PUBLICATION_DRAIN";await publicationBarrier;}
+      if(publicationDirty){
+        exitStage="PUBLICATION_LEASE_CHECK";
+        const drainLease=await repository.loadWriterLease(exerciseId);
+        if(!drainLease)throw new Error("WRITER_SIGNOUT_CANONICAL_AUTHORITY_UNAVAILABLE");
+        if(drainLease.leaseId!==currentLease.leaseId||drainLease.writerInstanceId!==currentLease.writerInstanceId)
+          throw new Error("WRITER_SIGNOUT_CANONICAL_AUTHORITY_CHANGED");
+        if(!exitDrainPublicationCurrent(currentLease))throw new Error("WRITER_SIGNOUT_LEASE_REPLACED_DURING_DRAIN");
+        exitStage="PUBLICATION_DRAIN";
+        publishNow(currentLease);await publicationBarrier;
+        if(publicationDirty)throw new Error("WRITER_SIGNOUT_PUBLICATION_UNSETTLED");
+      }
+      exitStage="DRAIN_IDENTITY";
       if(getOperatorSignOutDrainContext()?.leaseId!==currentLease.leaseId||lease?.leaseId!==currentLease.leaseId)
         throw new Error("WRITER_SIGNOUT_LEASE_REPLACED_DURING_DRAIN");
+      exitStage="CANONICAL_LEASE_CHECK";
       const canonicalLease=await repository.loadWriterLease(exerciseId);
       if(canonicalLease&&(canonicalLease.leaseId!==currentLease.leaseId||canonicalLease.writerInstanceId!==currentLease.writerInstanceId))
         throw new Error("WRITER_SIGNOUT_CANONICAL_AUTHORITY_CHANGED");
+      exitStage="LEASE_RELEASE";
       await repository.releaseWriter(currentLease);
+      exitStage="RELEASE_CONFIRMATION";
       const remainingLease=await repository.loadWriterLease(exerciseId);
       if(remainingLease?.writerInstanceId===currentLease.writerInstanceId)
         throw new Error("WRITER_SIGNOUT_RELEASE_UNCONFIRMED");
@@ -1747,6 +1783,7 @@ async function startRuntimeCheckpointSyncForExercise(exerciseId: string): Promis
       // Keep the authenticated session and the lease identity available for a
       // bounded retry, but never restore local write authority.
       setStatus({state:"FAILED",code:"WRITER_SIGNOUT_RELEASE_FAILED",revision:remoteRevision});
+      recordRuntimeExitFailure(exitStage,error);
       traceRuntimeLeaseLifecycle("OPERATOR_SIGN_OUT_RELEASE_FAILED",{generation:traceGeneration,detail:{exerciseId}});
       throw error;
     }).finally(()=>{if(signOutReleaseInFlight===task)signOutReleaseInFlight=undefined;});
