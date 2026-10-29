@@ -400,6 +400,19 @@ exercise state, and IRO package content are not changed. Before release, require
 release checks and the scope decision for new-image presentation remain separate
 from source-level verification; this change alone does not update APK188.
 
+### Explicit optional normal-study extension (2026-10-29)
+
+`russicaptor.narva-trauma@1.0.7` adds independently orderable normal PA chest
+for PT-PELVIC-001 and normal pelvis for PT-CHEST-001. It retains the two existing
+pathological definitions/reports, patient dataset and all historical versions.
+No order is automatic or mandatory. Exact unchanged image bytes are registered
+through asset-ingest with immutable version-bound provenance; retained pathological
+images gain additional 1.0.7 bindings, never replacements for their 1.0.6 identities.
+Existing schema-3 image-at-7/report-at-10 timing and runtime/viewer logic are reused.
+`NarvaTraumaImagingV107-test.ts` covers the additional scope. Imaging/runtime,
+source-fidelity and V/W/X checks remain mandatory, as do full release checks.
+Source verification is not new APK or physical-device acceptance.
+
 ### Explicit staged image/report extension (2026-10-28)
 
 The user subsequently approved the report wording and seven-minute image delay,

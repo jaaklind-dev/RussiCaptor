@@ -46,7 +46,9 @@ describe("Narva 1.0.6 explicitly authored two-patient educational Imaging", () =
     expect(Object.isFrozen(candidate.imagingConfiguration)).toBe(true);
     const loaded = exercisePackageRegistry.require(candidate.packageId, candidate.packageVersion);
     expect(exercisePackageValidator.validate(loaded)).toEqual([]);
-    expect(exercisePackageRegistry.latest(candidate.packageId)).toBe(loaded);
+    // 1.0.6 remains exactly addressable after separately versioned content additions.
+    expect(loaded.imagingConfiguration).toEqual(candidate.imagingConfiguration);
+    expect(loaded.packageHash).toBe("3cf0063a0c898e9947947baee277d313ae1f32067b52f27d92b9da5945dcc58f");
     expect(loaded.packageHash).not.toBe(exercisePackageRegistry.require(candidate.packageId, "1.0.5").packageHash);
   });
 

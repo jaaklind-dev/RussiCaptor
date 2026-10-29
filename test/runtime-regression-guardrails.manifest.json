@@ -423,6 +423,7 @@
       "src/services/exercise/__tests__/PackageOwnedImagingDefinitions-test.ts",
       "src/services/exercise/__tests__/NarvaTraumaImagingDefinitions-test.ts",
       "src/services/exercise/__tests__/NarvaTraumaImagingV106-test.ts",
+      "src/services/exercise/__tests__/NarvaTraumaImagingV107-test.ts",
       "src/services/runtime/imaging/__tests__/ImagingWorkflowRuntime-test.ts",
       "src/services/runtime/imaging/__tests__/ImagingStagedRelease-test.ts",
       "src/services/runtime/imaging/__tests__/ImagingReportAssetContract-test.ts",
