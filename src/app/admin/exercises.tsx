@@ -107,7 +107,7 @@ export default function AdminExercisesScreen() {
     <View style={styles.choices}>
       <Pressable testID="admin-exercises-current" accessibilityRole="button" accessibilityState={{ selected: listView === "CURRENT", disabled: busy }} disabled={busy}
         style={[styles.choice, listView === "CURRENT" && styles.choiceSelected]} onPress={() => changeListView("CURRENT")}>
-        <Text style={styles.choiceText}>Pooleli ({(exercises?.length ?? 0) - finishedCount})</Text>
+        <Text style={styles.choiceText}>Alustamata ja pooleli ({(exercises?.length ?? 0) - finishedCount})</Text>
       </Pressable>
       <Pressable testID="admin-exercises-finished" accessibilityRole="button" accessibilityState={{ selected: listView === "FINISHED", disabled: busy }} disabled={busy}
         style={[styles.choice, listView === "FINISHED" && styles.choiceSelected]} onPress={() => changeListView("FINISHED")}>
@@ -116,7 +116,7 @@ export default function AdminExercisesScreen() {
     </View>
     <Text style={styles.note}>Vaated filtreerivad serverist saadud nimekirja. Õppused säilivad serveris; andmeid ei kustutata ega viida Google Drive’i.</Text>
     {exercises && !loading && visibleExercises.length === 0 && <Text testID="admin-exercises-empty" style={styles.meta}>
-      {listView === "CURRENT" ? "Saadud nimekirjas pole pooleli õppusi." : "Saadud nimekirjas pole lõpetatud ega tühistatud õppusi."}
+      {listView === "CURRENT" ? "Saadud nimekirjas pole alustamata ega pooleli õppusi." : "Saadud nimekirjas pole lõpetatud ega tühistatud õppusi."}
     </Text>}
     {exercise && <View style={styles.panel}><Text style={styles.panelTitle}>Osalejad · {exercisePackageIdLabel(exercise.packageId)}</Text>
       {(["COMPLETED", "CANCELLED", "TERMINATED"].includes(exercise.lifecycleState)) && <Text style={styles.warning}>Terminalne õppus on kirjutuskaitstud.</Text>}

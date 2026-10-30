@@ -223,6 +223,7 @@ describe("Admin Exercises list stability", () => {
     const screen = await mount();
     expect(screen.root.findAllByProps({ testID: `admin-exercise-${target.exerciseId}` }).length).toBeGreaterThan(0);
     expect(screen.root.findByProps({ testID: "admin-exercises-current" }).props.accessibilityState.selected).toBe(true);
+    expect(visibleText(screen)).toContain("Alustamata ja pooleli");
   });
 
   test("view switching clears role selection and does not perform backend operations", async () => {
@@ -252,7 +253,7 @@ describe("Admin Exercises list stability", () => {
     await act(async () => { screen.root.findByProps({ testID: "admin-exercises-retry" }).props.onPress(); });
     expect(screen.root.findAllByProps({ testID: `admin-exercise-${target.exerciseId}` })).toHaveLength(0);
     expect(screen.root.findAllByType(TextInput)).toHaveLength(0);
-    expect(visibleText(screen)).toContain("Saadud nimekirjas pole pooleli õppusi");
+    expect(visibleText(screen)).toContain("Saadud nimekirjas pole alustamata ega pooleli õppusi");
     await act(async () => { screen.root.findByProps({ testID: "admin-exercises-finished" }).props.onPress(); });
     expect(screen.root.findAllByProps({ testID: `admin-exercise-${target.exerciseId}` }).length).toBeGreaterThan(0);
   });
