@@ -1,7 +1,8 @@
 import React from "react";
-import { Alert, Text } from "react-native";
+import { Alert, Text, TextInput } from "react-native";
 import TestRenderer, { act } from "react-test-renderer";
 import AdminExercisesScreen from "@/app/admin/exercises";
+import { filterAdminExercises, isFinishedAdminExercise } from "@/services/admin/AdminExerciseListSelectors";
 
 const mockListExercises = jest.fn();
 const mockListUsers = jest.fn();
@@ -195,5 +196,89 @@ describe("Admin Exercises list stability", () => {
     } finally {
       alert.mockRestore();
     }
+  });
+
+  test.each(["COMPLETED", "CANCELLED", "TERMINATED"])("finished %s stays preserved and is only shown on explicit selection", async lifecycleState => {
+    const finished = Object.freeze({ ...target, exerciseId: `EX-${lifecycleState}`, lifecycleState });
+    const source = Object.freeze([finished, target]);
+    mockListExercises.mockResolvedValue({ ...overview(true), exercises: source });
+    const screen = await mount();
+    expect(screen.root.findAllByProps({ testID: `admin-exercise-${finished.exerciseId}` })).toHaveLength(0);
+    expect(screen.root.findAllByProps({ testID: `admin-exercise-${target.exerciseId}` }).length).toBeGreaterThan(0);
+    await selectTarget(screen);
+    await act(async () => { screen.root.findByProps({ testID: "admin-exercises-finished" }).props.onPress(); });
+    expect(screen.root.findAllByProps({ testID: `admin-exercise-${target.exerciseId}` })).toHaveLength(0);
+    expect(screen.root.findAllByProps({ testID: "admin-cancel-ready" })).toHaveLength(0);
+    await act(async () => { screen.root.findByProps({ testID: `admin-exercise-${finished.exerciseId}` }).props.onPress(); });
+    expect(visibleText(screen)).toContain("Terminalne õppus on kirjutuskaitstud");
+    expect(screen.root.findByProps({ testID: "admin-exercise-grant-cm" }).props.disabled).toBe(true);
+    expect(screen.root.findByProps({ testID: "admin-exercise-grant-excon" }).props.disabled).toBe(true);
+    expect(mockListExercises).toHaveBeenCalledTimes(1);
+    expect(mockCancelReady).not.toHaveBeenCalled();
+    expect(source).toEqual([finished, target]);
+  });
+
+  test.each(["READY", "RUNNING", "PAUSED", "UNKNOWN", "UNRECOGNIZED_STATE"])("nonterminal or unknown %s remains visible by default", async lifecycleState => {
+    mockListExercises.mockResolvedValue({ ...overview(false), exercises: [{ ...target, lifecycleState }] });
+    const screen = await mount();
+    expect(screen.root.findAllByProps({ testID: `admin-exercise-${target.exerciseId}` }).length).toBeGreaterThan(0);
+    expect(screen.root.findByProps({ testID: "admin-exercises-current" }).props.accessibilityState.selected).toBe(true);
+  });
+
+  test("view switching clears role selection and does not perform backend operations", async () => {
+    mockListUsers.mockResolvedValue([{ userId: "USER-2", displayName: "Test User", email: "test@example.invalid", status: "ACTIVE", assignments: [] }]);
+    const screen = await mount();
+    await selectTarget(screen);
+    await act(async () => { screen.root.findByType(TextInput).props.onChangeText("Test"); });
+    await act(async () => { screen.root.findByProps({ testID: "admin-exercise-user-USER-2" }).props.onPress(); });
+    expect(screen.root.findByProps({ testID: "admin-exercise-grant-cm" }).props.disabled).toBe(false);
+    await act(async () => { screen.root.findByProps({ testID: "admin-exercises-finished" }).props.onPress(); });
+    expect(screen.root.findAllByType(TextInput)).toHaveLength(0);
+    await act(async () => { screen.root.findByProps({ testID: "admin-exercises-current" }).props.onPress(); });
+    expect(screen.root.findAllByType(TextInput)).toHaveLength(0);
+    await selectTarget(screen);
+    expect(screen.root.findByType(TextInput).props.value).toBe("");
+    expect(screen.root.findByProps({ testID: "admin-exercise-grant-cm" }).props.disabled).toBe(true);
+    expect(screen.root.findByProps({ testID: "admin-exercise-grant-excon" }).props.disabled).toBe(true);
+    expect(mockListExercises).toHaveBeenCalledTimes(1);
+    expect(mockRefreshSession).not.toHaveBeenCalled();
+    expect(mockCancelReady).not.toHaveBeenCalled();
+  });
+
+  test("refresh moves a completed item out of the current view without deleting it", async () => {
+    const screen = await mount();
+    await selectTarget(screen);
+    mockListExercises.mockResolvedValueOnce({ ...overview(false), exercises: [{ ...target, lifecycleState: "COMPLETED" }] });
+    await act(async () => { screen.root.findByProps({ testID: "admin-exercises-retry" }).props.onPress(); });
+    expect(screen.root.findAllByProps({ testID: `admin-exercise-${target.exerciseId}` })).toHaveLength(0);
+    expect(screen.root.findAllByType(TextInput)).toHaveLength(0);
+    expect(visibleText(screen)).toContain("Saadud nimekirjas pole pooleli õppusi");
+    await act(async () => { screen.root.findByProps({ testID: "admin-exercises-finished" }).props.onPress(); });
+    expect(screen.root.findAllByProps({ testID: `admin-exercise-${target.exerciseId}` }).length).toBeGreaterThan(0);
+  });
+
+  test("finished view retains cached records on read failure and remount defaults to current", async () => {
+    mockListExercises.mockResolvedValue({ ...overview(false), exercises: [{ ...target, lifecycleState: "COMPLETED" }] });
+    const screen = await mount();
+    await act(async () => { screen.root.findByProps({ testID: "admin-exercises-finished" }).props.onPress(); });
+    mockListExercises.mockRejectedValueOnce(new Error("unavailable"));
+    await act(async () => { screen.root.findByProps({ testID: "admin-exercises-retry" }).props.onPress(); });
+    expect(screen.root.findAllByProps({ testID: `admin-exercise-${target.exerciseId}` }).length).toBeGreaterThan(0);
+    expect(visibleText(screen)).toContain("Varasem nimekiri on endiselt nähtav");
+    await act(async () => screen.unmount());
+    const remounted = await mount();
+    expect(remounted.root.findByProps({ testID: "admin-exercises-current" }).props.accessibilityState.selected).toBe(true);
+    expect(remounted.root.findAllByProps({ testID: `admin-exercise-${target.exerciseId}` })).toHaveLength(0);
+  });
+
+  test("selector preserves object identity/order, is non-destructive and keeps unknown lifecycles visible", () => {
+    const completed = Object.freeze({ ...target, exerciseId: "EX-DONE", lifecycleState: "COMPLETED" });
+    const unknown = Object.freeze({ ...target, exerciseId: "EX-UNKNOWN", lifecycleState: "FUTURE_STATE" });
+    const source = Object.freeze([completed, target, unknown]);
+    expect(filterAdminExercises(source, "CURRENT")).toEqual([target, unknown]);
+    expect(filterAdminExercises(source, "FINISHED")).toEqual([completed]);
+    expect(filterAdminExercises(source, "CURRENT")[0]).toBe(target);
+    expect(source).toEqual([completed, target, unknown]);
+    expect(isFinishedAdminExercise(unknown)).toBe(false);
   });
 });
