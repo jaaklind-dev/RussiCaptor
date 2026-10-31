@@ -1103,18 +1103,33 @@ export class ClinicalScenarioEngine {
     const result = this.narvaIroScenario.setHold(hold, atSimulationTimeSec);
     this.publishResourceDebugSnapshot(false); return result;
   }
-  setNarvaIroCprQuality(quality: boolean): NarvaIroScenarioProjection {
-    return this.narvaIroScenario.setCprQuality(quality, this.simulationTimeSec);
+  hasAppliedNarvaIroControl(runtimeEventId: string): boolean {
+    return this.appliedEventIds.has(runtimeEventId);
   }
-  attemptNarvaIroRosc(): Readonly<{ status: "APPLIED" | "REJECTED"; projection: NarvaIroScenarioProjection }> {
-    const result = this.narvaIroScenario.attemptRosc(this.simulationTimeSec);
+  setNarvaIroCprQuality(quality: boolean, atSimulationTimeSec = this.simulationTimeSec,
+    runtimeEventId?: string): NarvaIroScenarioProjection {
+    if (runtimeEventId && this.appliedEventIds.has(runtimeEventId)) return this.getNarvaIroScenarioState();
+    this.narvaIroScenario.setCprQuality(quality, atSimulationTimeSec);
+    const result = this.narvaIroScenario.advanceTo(this.simulationTimeSec);
+    if (runtimeEventId) this.appliedEventIds.add(runtimeEventId);
+    this.publishResourceDebugSnapshot(false); return result;
+  }
+  attemptNarvaIroRosc(atSimulationTimeSec = this.simulationTimeSec,
+    runtimeEventId?: string): Readonly<{ status: "APPLIED" | "REJECTED"; projection: NarvaIroScenarioProjection }> {
+    if (runtimeEventId && this.appliedEventIds.has(runtimeEventId)) {
+      return { status: "APPLIED", projection: this.getNarvaIroScenarioState() };
+    }
+    const result = this.narvaIroScenario.attemptRosc(atSimulationTimeSec);
     if (result.status === "APPLIED") {
       const cardiac = this.lifecycleProcesses("CARDIAC_ARREST")[0] as CardiacArrestPatientProcessRuntime | undefined;
       if (cardiac?.clinicalState.cardiacState === "ARREST") {
         this.replaceLifecycleProcess(applyExplicitCardiacRhythmTransition(cardiac, "NARVA_IRO_CAUSE_CORRECTED_ROSC"));
       }
     }
-    this.aggregateProcesses(); return result;
+    this.narvaIroScenario.advanceTo(this.simulationTimeSec);
+    if (result.status === "APPLIED" && runtimeEventId) this.appliedEventIds.add(runtimeEventId);
+    this.aggregateProcesses(); this.publishResourceDebugSnapshot(false);
+    return { ...result, projection: this.getNarvaIroScenarioState() };
   }
   getNarvaIroScenarioState(): NarvaIroScenarioProjection {
     return this.narvaIroScenario.projectionAt(this.simulationTimeSec);

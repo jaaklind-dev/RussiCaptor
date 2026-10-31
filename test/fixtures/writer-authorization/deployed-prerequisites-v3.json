@@ -1,0 +1,1287 @@
+{
+  "schemaVersion": 3,
+  "id": "RC-CI-DEPLOYED-PREREQUISITES-V3",
+  "scope": "Disposable synthetic CI only. No operational migration, production data, credentials or relaxation.",
+  "source": {
+    "allocationSHA256": "7327098e18cd1e629b8f0ef43c9c895ee8063510e97d904d68229a2591753692",
+    "publicationSHA256": "02a7bc3f3fe3ef4b0c8fadeba5bac722f4c8ba8a701a27f46b4a8fb346291882",
+    "historyV3SHA256": "13c3ebbaa3d08994a06e2c40503949dabc72ad15a4fa16ca099b01094caf24fb"
+  },
+  "allocation": {
+    "schemaVersion": 1,
+    "id": "RC-EXISTING-ALLOCATION-PROTECTION-PREREQUISITE-V1",
+    "scope": "Synthetic local baseline only; no production rows. Complete eight existing rc_history function definitions plus allocation guard dependency metadata from trusted25Oct evidence.",
+    "source": {
+      "path": "/Users/jaak/.codex/.chatgpt-projects/g-p-6a5b1aeaa8a48191932e30e093e10e04/outputs/bootstrap-history-guard-fix-v2-2026-10-25/IMMEDIATE-BEFORE-FULL-CAS.json",
+      "sha256": "b91f161b6dd4e4b0868cfa86d37730c393d1a6e70e5b4561a2587b05deb86524",
+      "observedAt": "2026-10-25T16:44:34.295Z"
+    },
+    "functions": [
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner,postgres=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "rc_history.assert_operational_id(text)",
+        "definition": "CREATE OR REPLACE FUNCTION rc_history.assert_operational_id(p_id text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$DECLARE s text;BEGIN\n IF p_id IS NULL THEN RETURN;END IF;\n SELECT state INTO s FROM rc_history.identities WHERE exercise_id=p_id FOR UPDATE;\n IF NOT FOUND THEN RAISE EXCEPTION 'UNKNOWN_IDENTITY_NOT_REGISTERED' USING ERRCODE='42501';END IF;IF s<>'ACTIVE_ID' THEN RAISE EXCEPTION 'HISTORICAL_ID_RESERVED' USING ERRCODE='42501';END IF;\n END$function$\n",
+        "security_definer": true
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "rc_history.guard_new_owner()",
+        "definition": "CREATE OR REPLACE FUNCTION rc_history.guard_new_owner()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nDECLARE allocation rc_history.allocations%rowtype; actor uuid:=rc_history.request_actor();\nBEGIN\n SELECT * INTO allocation FROM rc_history.allocations WHERE exercise_id=NEW.exercise_id;\n IF NOT FOUND OR allocation.actor_user_id IS DISTINCT FROM actor OR actor IS NULL OR rc_history.request_is_anonymous() THEN RAISE EXCEPTION 'ALLOCATION_REQUIRED' USING ERRCODE='42501';END IF;\n IF NOT EXISTS(SELECT 1 FROM public.operator_profiles WHERE user_id=actor AND status='ACTIVE') THEN RAISE EXCEPTION 'ALLOCATION_UNAUTHORIZED' USING ERRCODE='42501';END IF;\n IF NOT EXISTS(SELECT 1 FROM public.exercise_bootstrap_authorizations b WHERE b.id=allocation.bootstrap_id AND b.user_id=actor AND b.status='ACTIVE' AND b.expires_at>clock_timestamp() AND b.consumed_exercise_id IS NULL) THEN RAISE EXCEPTION 'BOOTSTRAP_AUTHORIZATION_REQUIRED' USING ERRCODE='42501';END IF;\n IF NEW.revision<>1 OR NEW.updated_by IS DISTINCT FROM actor OR NEW.state->'exerciseSession'->>'exerciseId' IS DISTINCT FROM NEW.exercise_id OR NEW.state->'exerciseSession'->>'lifecycleState' IS DISTINCT FROM 'READY' OR NEW.state->'exerciseSession'->>'simulationTimeSec' IS DISTINCT FROM '0' OR NEW.state->'exerciseSession'->>'speed' IS DISTINCT FROM '1' OR coalesce(NEW.state->'exerciseSession'->>'lastCommandId','') NOT LIKE 'PREPARE-%' THEN RAISE EXCEPTION 'BOOTSTRAP_INITIAL_READY_PROJECTION_REQUIRED' USING ERRCODE='42501';END IF;\n -- This binding is only an input to the canonical token claim, never authority itself.\n PERFORM pg_catalog.set_config('russicaptor.bootstrap_authorization_id',allocation.bootstrap_id::text,true);\n RETURN NEW;\nEND$function$\n",
+        "security_definer": true
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "rc_history.guard_runtime()",
+        "definition": "CREATE OR REPLACE FUNCTION rc_history.guard_runtime()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n DECLARE d jsonb; id text; oldid text; s text;\n BEGIN\n d:=CASE WHEN TG_OP='DELETE' THEN to_jsonb(OLD) ELSE to_jsonb(NEW) END;\n IF TG_TABLE_NAME='authorization_role_assignments' AND d->>'scope_type'<>'EXERCISE' AND (TG_OP<>'UPDATE' OR to_jsonb(OLD)->>'scope_type'<>'EXERCISE') THEN RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;END IF;\n id:=coalesce(d->>'exercise_id',d->>'scope_id',d->>'consumed_exercise_id');\n IF id IS NULL AND TG_OP='UPDATE' AND TG_TABLE_NAME='authorization_role_assignments' THEN id:=to_jsonb(OLD)->>'scope_id';END IF;\n IF id IS NULL THEN RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;END IF;\n IF TG_OP='UPDATE' THEN oldid:=coalesce(to_jsonb(OLD)->>'exercise_id',to_jsonb(OLD)->>'scope_id',to_jsonb(OLD)->>'consumed_exercise_id');IF oldid IS NOT NULL AND oldid IS DISTINCT FROM id THEN\n IF TG_TABLE_NAME<>'authorization_role_assignments' THEN RAISE EXCEPTION 'IDENTITY_RENAME_FORBIDDEN' USING ERRCODE='42501';END IF;\n PERFORM 1 FROM rc_history.identities WHERE exercise_id IN(oldid,id) ORDER BY exercise_id FOR UPDATE;\n IF EXISTS(SELECT 1 FROM rc_history.identities WHERE exercise_id=oldid AND state<>'ACTIVE_ID') THEN RAISE EXCEPTION 'HISTORICAL_ID_RESERVED' USING ERRCODE='42501';END IF;\n END IF;END IF;\n IF NOT EXISTS(SELECT 1 FROM rc_history.identities WHERE exercise_id=id) THEN RAISE EXCEPTION 'UNKNOWN_IDENTITY_NOT_REGISTERED' USING ERRCODE='42501';END IF;\n SELECT state INTO STRICT s FROM rc_history.identities WHERE exercise_id=id FOR UPDATE;\n IF TG_OP='DELETE' THEN\n   IF true THEN RAISE EXCEPTION 'ARCHIVE_DELETE_NOT_READY' USING ERRCODE='42501';END IF;\n ELSE IF s<>'ACTIVE_ID' THEN RAISE EXCEPTION 'HISTORICAL_ID_RESERVED' USING ERRCODE='42501';END IF;\n END IF;\n RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;\n END$function$\n",
+        "security_definer": true
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "rc_history.immutable_allocation()",
+        "definition": "CREATE OR REPLACE FUNCTION rc_history.immutable_allocation()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nBEGIN RAISE EXCEPTION 'ALLOCATION_IMMUTABLE' USING ERRCODE='42501';END$function$\n",
+        "security_definer": false
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "rc_history.immutable_identity()",
+        "definition": "CREATE OR REPLACE FUNCTION rc_history.immutable_identity()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$BEGIN\n IF TG_OP='DELETE' OR NEW.exercise_id IS DISTINCT FROM OLD.exercise_id OR NEW.created_at IS DISTINCT FROM OLD.created_at OR (OLD.state<>'ACTIVE_ID' AND (NEW.state NOT IN ('ARCHIVED_ID','FORENSIC_ID') OR OLD.binding IS NOT NULL)) THEN RAISE EXCEPTION 'IDENTITY_IMMUTABLE' USING ERRCODE='42501';END IF;RETURN NEW;END$function$\n",
+        "security_definer": false
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "rc_history.next_identity()",
+        "definition": "CREATE OR REPLACE FUNCTION rc_history.next_identity()\n RETURNS text\n LANGUAGE sql\n SET search_path TO ''\nAS $function$SELECT 'EX-'||pg_catalog.gen_random_uuid()::text$function$\n",
+        "security_definer": false
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "rc_history.request_actor()",
+        "definition": "CREATE OR REPLACE FUNCTION rc_history.request_actor()\n RETURNS uuid\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nRETURN auth.uid()\n",
+        "security_definer": false
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "rc_history.request_is_anonymous()",
+        "definition": "CREATE OR REPLACE FUNCTION rc_history.request_is_anonymous()\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO ''\nRETURN COALESCE(((auth.jwt() ->> 'is_anonymous'::text))::boolean, false)\n",
+        "security_definer": false
+      }
+    ],
+    "tables": [
+      {
+        "acl": "{rc_identity_owner=arwdDxtm/rc_identity_owner}",
+        "rls": true,
+        "kind": "r",
+        "name": "allocations",
+        "owner": "rc_identity_owner",
+        "schema": "rc_history",
+        "force_rls": true
+      },
+      {
+        "acl": null,
+        "rls": true,
+        "kind": "r",
+        "name": "identities",
+        "owner": "rc_identity_owner",
+        "schema": "rc_history",
+        "force_rls": true
+      }
+    ],
+    "columns": [
+      {
+        "acl": null,
+        "name": "actor_user_id",
+        "type": "uuid",
+        "schema": "rc_history",
+        "not_null": true,
+        "position": 1,
+        "relation": "allocations",
+        "default_expression": null
+      },
+      {
+        "acl": null,
+        "name": "request_id",
+        "type": "uuid",
+        "schema": "rc_history",
+        "not_null": true,
+        "position": 2,
+        "relation": "allocations",
+        "default_expression": null
+      },
+      {
+        "acl": null,
+        "name": "bootstrap_id",
+        "type": "uuid",
+        "schema": "rc_history",
+        "not_null": true,
+        "position": 3,
+        "relation": "allocations",
+        "default_expression": null
+      },
+      {
+        "acl": null,
+        "name": "purpose",
+        "type": "text",
+        "schema": "rc_history",
+        "not_null": true,
+        "position": 4,
+        "relation": "allocations",
+        "default_expression": null
+      },
+      {
+        "acl": null,
+        "name": "exercise_id",
+        "type": "text",
+        "schema": "rc_history",
+        "not_null": true,
+        "position": 5,
+        "relation": "allocations",
+        "default_expression": null
+      },
+      {
+        "acl": null,
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "schema": "rc_history",
+        "not_null": true,
+        "position": 6,
+        "relation": "allocations",
+        "default_expression": "clock_timestamp()"
+      },
+      {
+        "acl": null,
+        "name": "exercise_id",
+        "type": "text",
+        "schema": "rc_history",
+        "not_null": true,
+        "position": 1,
+        "relation": "identities",
+        "default_expression": null
+      },
+      {
+        "acl": null,
+        "name": "state",
+        "type": "text",
+        "schema": "rc_history",
+        "not_null": true,
+        "position": 2,
+        "relation": "identities",
+        "default_expression": null
+      },
+      {
+        "acl": null,
+        "name": "binding",
+        "type": "text",
+        "schema": "rc_history",
+        "not_null": false,
+        "position": 3,
+        "relation": "identities",
+        "default_expression": null
+      },
+      {
+        "acl": null,
+        "name": "source_digest",
+        "type": "text",
+        "schema": "rc_history",
+        "not_null": false,
+        "position": 4,
+        "relation": "identities",
+        "default_expression": null
+      },
+      {
+        "acl": null,
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "schema": "rc_history",
+        "not_null": true,
+        "position": 5,
+        "relation": "identities",
+        "default_expression": "clock_timestamp()"
+      }
+    ],
+    "constraints": [
+      {
+        "name": "allocations_bootstrap_id_fkey",
+        "schema": "rc_history",
+        "relation": "rc_history.allocations",
+        "definition": "FOREIGN KEY (bootstrap_id) REFERENCES public.exercise_bootstrap_authorizations(id)"
+      },
+      {
+        "name": "allocations_bootstrap_id_key",
+        "schema": "rc_history",
+        "relation": "rc_history.allocations",
+        "definition": "UNIQUE (bootstrap_id)"
+      },
+      {
+        "name": "allocations_exercise_id_fkey",
+        "schema": "rc_history",
+        "relation": "rc_history.allocations",
+        "definition": "FOREIGN KEY (exercise_id) REFERENCES rc_history.identities(exercise_id)"
+      },
+      {
+        "name": "allocations_exercise_id_key",
+        "schema": "rc_history",
+        "relation": "rc_history.allocations",
+        "definition": "UNIQUE (exercise_id)"
+      },
+      {
+        "name": "allocations_pkey",
+        "schema": "rc_history",
+        "relation": "rc_history.allocations",
+        "definition": "PRIMARY KEY (actor_user_id, request_id)"
+      },
+      {
+        "name": "allocations_purpose_check",
+        "schema": "rc_history",
+        "relation": "rc_history.allocations",
+        "definition": "CHECK ((purpose = ANY (ARRAY['CREATE'::text, 'ADMIN'::text, 'BUILDER'::text, 'PACKAGE'::text, 'TEST'::text, 'CLONE'::text, 'RESTORE_AS_NEW'::text])))"
+      },
+      {
+        "name": "identities_binding_check",
+        "schema": "rc_history",
+        "relation": "rc_history.identities",
+        "definition": "CHECK ((binding ~ '^[0-9a-f]{64}$'::text))"
+      },
+      {
+        "name": "identities_exercise_id_check",
+        "schema": "rc_history",
+        "relation": "rc_history.identities",
+        "definition": "CHECK (((exercise_id = btrim(exercise_id)) AND ((length(exercise_id) >= 1) AND (length(exercise_id) <= 200))))"
+      },
+      {
+        "name": "identities_pkey",
+        "schema": "rc_history",
+        "relation": "rc_history.identities",
+        "definition": "PRIMARY KEY (exercise_id)"
+      },
+      {
+        "name": "identities_source_digest_check",
+        "schema": "rc_history",
+        "relation": "rc_history.identities",
+        "definition": "CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text))"
+      },
+      {
+        "name": "identities_state_check",
+        "schema": "rc_history",
+        "relation": "rc_history.identities",
+        "definition": "CHECK ((state = ANY (ARRAY['ACTIVE_ID'::text, 'COMPLETED_ID'::text, 'RESERVED_ID'::text, 'ARCHIVED_ID'::text, 'FORENSIC_ID'::text])))"
+      }
+    ],
+    "policies": [
+      {
+        "name": "rc_identity_bootstrap_read",
+        "roles": [
+          "rc_identity_owner"
+        ],
+        "command": "r",
+        "relation": "public.exercise_bootstrap_authorizations",
+        "permissive": true,
+        "check_expression": null,
+        "using_expression": "true"
+      },
+      {
+        "name": "rc_identity_profile_read",
+        "roles": [
+          "rc_identity_owner"
+        ],
+        "command": "r",
+        "relation": "public.operator_profiles",
+        "permissive": true,
+        "check_expression": null,
+        "using_expression": "true"
+      },
+      {
+        "name": "allocation_internal",
+        "roles": [
+          "rc_identity_owner"
+        ],
+        "command": "*",
+        "relation": "rc_history.allocations",
+        "permissive": true,
+        "check_expression": "true",
+        "using_expression": "true"
+      },
+      {
+        "name": "internal_identity_owner",
+        "roles": [
+          "rc_identity_owner"
+        ],
+        "command": "*",
+        "relation": "rc_history.identities",
+        "permissive": true,
+        "check_expression": "true",
+        "using_expression": "true"
+      }
+    ],
+    "triggers": [
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.authorization_role_assignments",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.authorization_role_assignments FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.exercise_bootstrap_authorizations",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.exercise_bootstrap_authorizations FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.exercise_state_publication_operations",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.exercise_state_publication_operations FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.exercise_states",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.exercise_states FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a1_allocation_claim",
+        "enabled": "O",
+        "relation": "public.exercise_states",
+        "definition": "CREATE TRIGGER a1_allocation_claim BEFORE INSERT ON public.exercise_states FOR EACH ROW EXECUTE FUNCTION rc_history.guard_new_owner()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_checkpoint_canonical_artifacts",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_checkpoint_canonical_artifacts FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_checkpoint_deltas",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_checkpoint_deltas FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_checkpoint_notifications",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_checkpoint_notifications FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_checkpoints",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_checkpoints FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_completion_requests",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_completion_requests FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_patient_command_notifications",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_patient_command_notifications FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_patient_commands",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_patient_commands FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_writer_leases",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_writer_leases FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.shared_workflow_commands",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.shared_workflow_commands FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.shared_workflow_notifications",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.shared_workflow_notifications FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.shared_workflow_patient_states",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.shared_workflow_patient_states FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "allocation_immutable",
+        "enabled": "O",
+        "relation": "rc_history.allocations",
+        "definition": "CREATE TRIGGER allocation_immutable BEFORE DELETE OR UPDATE ON rc_history.allocations FOR EACH ROW EXECUTE FUNCTION rc_history.immutable_allocation()"
+      },
+      {
+        "name": "identity_immutable",
+        "enabled": "O",
+        "relation": "rc_history.identities",
+        "definition": "CREATE TRIGGER identity_immutable BEFORE DELETE OR UPDATE ON rc_history.identities FOR EACH ROW EXECUTE FUNCTION rc_history.immutable_identity()"
+      }
+    ],
+    "columnPrivileges": [
+      {
+        "acl": "{rc_identity_owner=r/postgres}",
+        "name": "user_id",
+        "type": "uuid",
+        "schema": "public",
+        "not_null": true,
+        "position": 1,
+        "relation": "operator_profiles",
+        "default_expression": null
+      },
+      {
+        "acl": "{rc_identity_owner=r/postgres}",
+        "name": "status",
+        "type": "text",
+        "schema": "public",
+        "not_null": true,
+        "position": 3,
+        "relation": "operator_profiles",
+        "default_expression": "'ACTIVE'::text"
+      }
+    ],
+    "role": {
+      "name": "rc_identity_owner",
+      "login": false,
+      "inherit": false,
+      "create_db": false,
+      "superuser": false,
+      "bypass_rls": false,
+      "create_role": false
+    }
+  },
+  "publication": [
+    {
+      "identity": "publish_runtime_checkpoint_delta(uuid,text,bigint,jsonb,jsonb)",
+      "owner": "postgres",
+      "security_definer": true,
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.publish_runtime_checkpoint_delta(p_lease_id uuid, p_writer_instance_id text, p_expected_revision bigint, p_checkpoint jsonb, p_delta jsonb)\n RETURNS TABLE(checkpoint_revision bigint, payload_hash text, provenance_hash text, updated_at timestamp with time zone)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare v_lease public.runtime_writer_leases%rowtype; v_current bigint; v_current_hash text; v_next bigint;\n  v_checkpoint_bytes bigint:=octet_length(p_checkpoint::text); v_delta_bytes bigint:=octet_length(p_delta::text); v_now timestamptz:=clock_timestamp();\nbegin\n PERFORM rc_history.assert_operational_id((SELECT exercise_id FROM public.runtime_writer_leases WHERE lease_id=p_lease_id));\n\n  select * into v_lease from public.runtime_writer_leases where lease_id=p_lease_id for update;\n  if not found or v_lease.writer_user_id<>auth.uid() or v_lease.writer_instance_id<>p_writer_instance_id or v_lease.released_at is not null or v_lease.expires_at<=v_now then\n    insert into public.runtime_checkpoint_authority_audit(exercise_id,checkpoint_revision,event_type,writer_instance_id,user_id)\n      values(coalesce(v_lease.exercise_id,p_checkpoint->>'exerciseId'),p_expected_revision,'STALE_WRITE_REJECTED',p_writer_instance_id,auth.uid());\n    raise exception 'STALE_WRITER';\n  end if;\n  select checkpoint.checkpoint_revision,checkpoint.payload_hash into v_current,v_current_hash\n    from public.runtime_checkpoints checkpoint where checkpoint.exercise_id=v_lease.exercise_id for update;\n  v_current:=coalesce(v_current,0); v_next:=(p_checkpoint->>'checkpointRevision')::bigint;\n  if v_current<>p_expected_revision or v_next<=v_current or p_checkpoint->>'exerciseId'<>v_lease.exercise_id then raise exception 'CHECKPOINT_REVISION_CONFLICT'; end if;\n  if (p_delta->>'deltaVersion')::integer<>1 or p_delta->>'exerciseId'<>v_lease.exercise_id or\n     (p_delta->>'fromRevision')::bigint<>v_current or (p_delta->>'toRevision')::bigint<>v_next or\n     p_delta->>'baseHash'<>v_current_hash or p_delta->>'targetHash'<>p_checkpoint->>'payloadHash' or\n     p_delta->>'targetProvenanceHash'<>p_checkpoint->>'provenanceHash' then raise exception 'CHECKPOINT_DELTA_INVALID'; end if;\n\n  insert into public.runtime_checkpoints(exercise_id,checkpoint_revision,persisted_runtime_version,payload_hash,provenance_hash,payload,payload_bytes,writer_instance_id,writer_user_id,updated_at)\n    values(v_lease.exercise_id,v_next,(p_checkpoint->>'persistedRuntimeVersion')::integer,p_checkpoint->>'payloadHash',p_checkpoint->>'provenanceHash',p_checkpoint,v_checkpoint_bytes,p_writer_instance_id,auth.uid(),v_now)\n    on conflict(exercise_id) do update set checkpoint_revision=excluded.checkpoint_revision,persisted_runtime_version=excluded.persisted_runtime_version,\n      payload_hash=excluded.payload_hash,provenance_hash=excluded.provenance_hash,payload=excluded.payload,payload_bytes=excluded.payload_bytes,writer_instance_id=excluded.writer_instance_id,writer_user_id=excluded.writer_user_id,updated_at=excluded.updated_at;\n  insert into public.runtime_checkpoint_deltas(exercise_id,from_revision,to_revision,base_hash,target_hash,provenance_hash,delta_payload,payload_bytes,delta_version,persisted_runtime_version,writer_instance_id,created_at)\n    values(v_lease.exercise_id,v_current,v_next,v_current_hash,p_checkpoint->>'payloadHash',p_checkpoint->>'provenanceHash',p_delta,v_delta_bytes,(p_delta->>'deltaVersion')::integer,(p_delta->>'targetPersistedRuntimeVersion')::integer,p_writer_instance_id,v_now);\n  delete from public.runtime_checkpoint_deltas where exercise_id=v_lease.exercise_id and to_revision <= v_next-32;\n  insert into public.runtime_checkpoint_notifications(exercise_id,checkpoint_revision,payload_hash,provenance_hash,writer_instance_id,checkpoint_bytes,updated_at)\n    values(v_lease.exercise_id,v_next,p_checkpoint->>'payloadHash',p_checkpoint->>'provenanceHash',p_writer_instance_id,v_checkpoint_bytes,v_now)\n    on conflict(exercise_id) do update set checkpoint_revision=excluded.checkpoint_revision,payload_hash=excluded.payload_hash,\n      provenance_hash=excluded.provenance_hash,writer_instance_id=excluded.writer_instance_id,checkpoint_bytes=excluded.checkpoint_bytes,updated_at=excluded.updated_at;\n  insert into public.runtime_checkpoint_authority_audit(exercise_id,checkpoint_revision,event_type,writer_instance_id,user_id)\n    values(v_lease.exercise_id,v_next,'CHECKPOINT_PUBLISHED',p_writer_instance_id,auth.uid());\n  return query select v_next,p_checkpoint->>'payloadHash',p_checkpoint->>'provenanceHash',v_now;\nend $function$\n"
+    },
+    {
+      "identity": "persist_verified_runtime_checkpoint_canonical_artifact(text,bigint,text,text,integer,integer,text)",
+      "owner": "postgres",
+      "security_definer": true,
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.persist_verified_runtime_checkpoint_canonical_artifact(p_exercise_id text, p_checkpoint_revision bigint, p_payload_hash text, p_provenance_hash text, p_persisted_runtime_version integer, p_canonical_format_version integer, p_canonical_payload_text text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_checkpoint public.runtime_checkpoints%rowtype;\n  v_existing public.runtime_checkpoint_canonical_artifacts%rowtype;\n  v_actor uuid:=(select auth.uid());\n  v_bytes bigint:=octet_length(convert_to(p_canonical_payload_text,'UTF8'));\nbegin\n PERFORM rc_history.assert_operational_id(p_exercise_id);\n\n  select * into v_checkpoint from public.runtime_checkpoints\n    where exercise_id=p_exercise_id for update;\n  if not found or v_checkpoint.checkpoint_revision<>p_checkpoint_revision\n    or v_checkpoint.payload_hash<>p_payload_hash\n    or v_checkpoint.provenance_hash<>p_provenance_hash\n    or v_checkpoint.persisted_runtime_version<>p_persisted_runtime_version\n    or v_checkpoint.payload->'payload' is distinct from p_canonical_payload_text::jsonb then\n    raise exception 'CANONICAL_CHECKPOINT_SOURCE_MISMATCH' using errcode='55000';\n  end if;\n\n  select * into v_existing from public.runtime_checkpoint_canonical_artifacts\n    where exercise_id=p_exercise_id for update;\n  if found and v_existing.checkpoint_revision=p_checkpoint_revision then\n    if v_existing.payload_hash<>p_payload_hash\n      or v_existing.provenance_hash<>p_provenance_hash\n      or v_existing.persisted_runtime_version<>p_persisted_runtime_version\n      or v_existing.canonical_format_version<>p_canonical_format_version\n      or v_existing.canonical_payload_text<>p_canonical_payload_text then\n      raise exception 'CANONICAL_CHECKPOINT_IMMUTABILITY_VIOLATION' using errcode='23505';\n    end if;\n    return;\n  end if;\n  if found and v_existing.checkpoint_revision>p_checkpoint_revision then\n    raise exception 'CANONICAL_CHECKPOINT_REVISION_STALE' using errcode='55000';\n  end if;\n\n  insert into public.runtime_checkpoint_canonical_artifacts(\n    exercise_id,checkpoint_revision,persisted_runtime_version,canonical_format_version,\n    payload_hash,provenance_hash,canonical_payload_text,canonical_payload_bytes,\n    derivation_method,created_by,created_at,updated_at\n  ) values(\n    p_exercise_id,p_checkpoint_revision,p_persisted_runtime_version,p_canonical_format_version,\n    p_payload_hash,p_provenance_hash,p_canonical_payload_text,v_bytes,\n    'WRITER',v_actor,clock_timestamp(),clock_timestamp()\n  ) on conflict(exercise_id) do update set\n    checkpoint_revision=excluded.checkpoint_revision,\n    persisted_runtime_version=excluded.persisted_runtime_version,\n    canonical_format_version=excluded.canonical_format_version,\n    payload_hash=excluded.payload_hash,\n    provenance_hash=excluded.provenance_hash,\n    canonical_payload_text=excluded.canonical_payload_text,\n    canonical_payload_bytes=excluded.canonical_payload_bytes,\n    derivation_method=excluded.derivation_method,\n    created_by=excluded.created_by,\n    updated_at=excluded.updated_at;\n  insert into public.runtime_checkpoint_canonical_artifact_audit(\n    exercise_id,checkpoint_revision,payload_hash,provenance_hash,canonical_format_version,\n    canonical_payload_bytes,derivation_method,installed_by\n  ) values(\n    p_exercise_id,p_checkpoint_revision,p_payload_hash,p_provenance_hash,\n    p_canonical_format_version,v_bytes,'WRITER',v_actor\n  );\nend $function$\n"
+    },
+    {
+      "identity": "publish_runtime_checkpoint_canonical_payload_delta(uuid,text,bigint,jsonb,text,bigint,integer,text,text,integer,text)",
+      "owner": "postgres",
+      "security_definer": true,
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.publish_runtime_checkpoint_canonical_payload_delta(p_lease_id uuid, p_writer_instance_id text, p_expected_revision bigint, p_delta jsonb, p_exercise_id text, p_checkpoint_revision bigint, p_persisted_runtime_version integer, p_payload_hash text, p_provenance_hash text, p_canonical_format_version integer, p_canonical_payload_text text)\n RETURNS TABLE(checkpoint_revision bigint, payload_hash text, provenance_hash text, updated_at timestamp with time zone)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\n SET statement_timeout TO '60s'\nAS $function$\ndeclare v_checkpoint jsonb;\nbegin\n  v_checkpoint:=public.runtime_checkpoint_from_canonical_payload(\n    p_exercise_id,p_checkpoint_revision,p_persisted_runtime_version,p_payload_hash,\n    p_provenance_hash,p_canonical_format_version,p_canonical_payload_text);\n  perform public.publish_runtime_checkpoint_delta(\n    p_lease_id,p_writer_instance_id,p_expected_revision,v_checkpoint,p_delta);\n  perform public.persist_verified_runtime_checkpoint_canonical_artifact(\n    p_exercise_id,p_checkpoint_revision,p_payload_hash,p_provenance_hash,\n    p_persisted_runtime_version,p_canonical_format_version,p_canonical_payload_text);\n  return query select rc.checkpoint_revision,rc.payload_hash,rc.provenance_hash,rc.updated_at\n    from public.runtime_checkpoints rc where rc.exercise_id=p_exercise_id;\nend $function$\n"
+    }
+  ],
+  "submitBefore": {
+    "signature": "public.submit_runtime_patient_command(text,text,text,text,bigint,numeric,jsonb)",
+    "definition": "CREATE OR REPLACE FUNCTION public.submit_runtime_patient_command(p_exercise_id text, p_patient_id text, p_command_id text, p_command_type text, p_expected_patient_revision bigint, p_simulation_time_sec numeric, p_command_payload jsonb)\n RETURNS TABLE(status text, command_sequence bigint, patient_revision bigint, owner_user_id uuid)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_actor uuid:=(select auth.uid());\n  v_head public.shared_workflow_patient_states%rowtype;\n  v_duplicate public.runtime_patient_commands%rowtype;\n  v_exercise public.exercise_states%rowtype;\n  v_sequence bigint;\n  v_is_iro_control boolean:=p_command_type in (\n    'IRO_VASOPRESSOR_FAULT_START','IRO_VASOPRESSOR_FAULT_CORRECT',\n    'IRO_VENTILATION_FAULT_START','IRO_VENTILATION_FAULT_CORRECT','IRO_HOLD','IRO_RESUME'\n  );\nbegin\n PERFORM rc_history.assert_operational_id(p_exercise_id);\n\n  if v_actor is null or coalesce(((select auth.jwt())->>'is_anonymous')::boolean,false) then\n    raise exception 'AUTHENTICATION_REQUIRED' using errcode='42501';\n  end if;\n  if p_command_type not in (\n      'RESOURCE_APPLY','RESOURCE_STOP','MTP','CLINICAL_TREATMENT','TRANSPORT_START',\n      'IRO_VASOPRESSOR_FAULT_START','IRO_VASOPRESSOR_FAULT_CORRECT',\n      'IRO_VENTILATION_FAULT_START','IRO_VENTILATION_FAULT_CORRECT','IRO_HOLD','IRO_RESUME',\n      'LAB_ORDER','LAB_COLLECT','IMAGING_ORDER','ENDOTRACHEAL_INTUBATION','PATIENT_COMPLETE','PATIENT_LOCATION_TRANSFER'\n    ) or p_expected_patient_revision<0 or p_simulation_time_sec<0\n    or p_command_payload is null or jsonb_typeof(p_command_payload)<>'object' then\n    raise exception 'INVALID_RUNTIME_PATIENT_COMMAND' using errcode='22023';\n  end if;\n  if p_command_type='PATIENT_COMPLETE' and p_command_payload<>'{}'::jsonb then\n    raise exception 'INVALID_RUNTIME_PATIENT_COMMAND' using errcode='22023';\n  end if;\n  if v_is_iro_control and (\n      (p_command_type='IRO_VENTILATION_FAULT_START' and (\n        p_command_payload->>'faultType' not in (\n          'CIRCUIT_DISCONNECT','HIGH_PRESSURE_KINK','OXYGEN_DEPLETION','VENTILATOR_STOP'\n        ) or (p_command_payload - 'faultType') <> '{}'::jsonb\n      )) or\n      (p_command_type<>'IRO_VENTILATION_FAULT_START' and p_command_payload<>'{}'::jsonb)\n    ) then\n    raise exception 'INVALID_RUNTIME_PATIENT_COMMAND' using errcode='22023';\n  end if;\n  if p_command_type='LAB_ORDER' and (\n      p_command_payload->>'labPackageId' not in ('NARVA_POLYTRAUMA','NARVA_IRO_ASTRUP')\n      or (p_command_payload - 'labPackageId') <> '{}'::jsonb\n    ) then raise exception 'INVALID_RUNTIME_PATIENT_COMMAND' using errcode='22023'; end if;\n  if p_command_type='LAB_COLLECT' and (\n      nullif(p_command_payload->>'orderId','') is null\n      or (p_command_payload - 'orderId' - 'patientBloodIdentity') <> '{}'::jsonb\n      or (p_command_payload ? 'patientBloodIdentity' and\n        jsonb_typeof(p_command_payload->'patientBloodIdentity') <> 'object')\n    ) then raise exception 'INVALID_RUNTIME_PATIENT_COMMAND' using errcode='22023'; end if;\n  if p_command_type='IMAGING_ORDER' and (\n      nullif(p_command_payload->>'definitionId','') is null\n      or (p_command_payload - 'definitionId') <> '{}'::jsonb\n    ) then raise exception 'INVALID_RUNTIME_PATIENT_COMMAND' using errcode='22023'; end if;\n  if p_command_type='ENDOTRACHEAL_INTUBATION' and (\n      nullif(p_command_payload->>'tubeResourceId','') is null\n      or nullif(p_command_payload->>'laryngoscopeResourceId','') is null\n      or p_command_payload->>'device' not in ('DIRECT','VIDEO')\n      or jsonb_typeof(p_command_payload->'tubeSize') <> 'number'\n      or jsonb_typeof(p_command_payload->'cuff') <> 'boolean'\n      or jsonb_typeof(p_command_payload->'confirmation') <> 'boolean'\n      or (p_command_payload - 'tubeResourceId' - 'laryngoscopeResourceId'\n        - 'capnographyResourceId' - 'device' - 'tubeSize' - 'cuff' - 'confirmation') <> '{}'::jsonb\n      or (p_command_payload ? 'capnographyResourceId'\n        and nullif(p_command_payload->>'capnographyResourceId','') is null)\n    ) then raise exception 'INVALID_RUNTIME_PATIENT_COMMAND' using errcode='22023'; end if;\n  if v_is_iro_control then\n    if not public.has_authorization_permission('EXCON_EXERCISE_CONTROL',p_exercise_id) then\n      raise exception 'AUTHORIZATION_DENIED' using errcode='42501';\n    end if;\n  elsif not (public.has_authorization_permission('CM_WORKFLOW_WRITE',p_exercise_id)\n    or public.has_authorization_permission('EXCON_EXERCISE_CONTROL',p_exercise_id)) then\n    raise exception 'AUTHORIZATION_DENIED' using errcode='42501';\n  end if;\n\n  select rpc.* into v_duplicate from public.runtime_patient_commands as rpc\n  where rpc.exercise_id=p_exercise_id and rpc.command_id=p_command_id;\n  if found then\n    if v_duplicate.patient_id<>p_patient_id or v_duplicate.actor_user_id<>v_actor\n      or v_duplicate.command_type<>p_command_type\n      or v_duplicate.patient_base_revision<>p_expected_patient_revision\n      or v_duplicate.command_payload<>p_command_payload then\n      raise exception 'IDEMPOTENCY_KEY_REUSE' using errcode='23505';\n    end if;\n    return query select 'IDEMPOTENT'::text,v_duplicate.command_sequence,\n      v_duplicate.patient_resulting_revision,\n      (select swps.owner_user_id from public.shared_workflow_patient_states as swps\n        where swps.exercise_id=p_exercise_id and swps.patient_id=p_patient_id);\n    return;\n  end if;\n\n  select es.* into v_exercise from public.exercise_states as es\n  where es.exercise_id=p_exercise_id for update;\n  if not found then raise exception 'EXERCISE_NOT_FOUND' using errcode='22023'; end if;\n  if public.exercise_lifecycle_from_state(v_exercise.state)<>'RUNNING' then\n    raise exception 'EXERCISE_NOT_ACTIVE' using errcode='55000';\n  end if;\n  if p_command_type='LAB_ORDER' and not public.lab_catalog_scope_allowed(\n      p_exercise_id, v_exercise.state, p_command_payload->>'labPackageId') then\n    raise exception 'LAB_PACKAGE_SCOPE_DENIED' using errcode='42501';\n  end if;\n  if exists(select 1 from public.runtime_completion_requests as rcr\n    where rcr.exercise_id=p_exercise_id and rcr.status in ('PENDING','COMPLETED')) then\n    raise exception 'COMPLETION_FENCED' using errcode='55000';\n  end if;\n\n  select swps.* into v_head from public.shared_workflow_patient_states as swps\n  where swps.exercise_id=p_exercise_id and swps.patient_id=p_patient_id for update;\n  if not found then raise exception 'PATIENT_WORKFLOW_NOT_FOUND' using errcode='22023'; end if;\n  if v_head.revision<>p_expected_patient_revision then\n    return query select 'STALE_VERSION'::text,0::bigint,v_head.revision,v_head.owner_user_id; return;\n  end if;\n  if not v_is_iro_control\n    and not public.has_authorization_permission('EXCON_EXERCISE_CONTROL',p_exercise_id)\n    and v_head.owner_user_id is distinct from v_actor then\n    return query select 'NOT_OWNER'::text,0::bigint,v_head.revision,v_head.owner_user_id; return;\n  end if;\n\n  insert into public.runtime_patient_commands as rpc(exercise_id,patient_id,command_id,command_type,\n    command_payload,patient_base_revision,patient_resulting_revision,simulation_time_sec,actor_user_id)\n  values(p_exercise_id,p_patient_id,p_command_id,p_command_type,p_command_payload,\n    p_expected_patient_revision,p_expected_patient_revision+1,p_simulation_time_sec,v_actor)\n  returning rpc.command_sequence into v_sequence;\n  update public.shared_workflow_patient_states as swps\n  set revision=p_expected_patient_revision+1,updated_at=now(),updated_by=v_actor\n  where swps.exercise_id=p_exercise_id and swps.patient_id=p_patient_id;\n  insert into public.shared_workflow_commands(exercise_id,patient_id,command_id,mutation_kind,\n    base_revision,resulting_revision,actor_user_id)\n  values(p_exercise_id,p_patient_id,p_command_id,'MUTABLE',p_expected_patient_revision,\n    p_expected_patient_revision+1,v_actor);\n  insert into public.shared_workflow_notifications(exercise_id,patient_id,revision,updated_at,updated_by)\n  values(p_exercise_id,p_patient_id,p_expected_patient_revision+1,now(),v_actor)\n  on conflict(exercise_id,patient_id) do update set revision=excluded.revision,\n    updated_at=excluded.updated_at,updated_by=excluded.updated_by;\n  insert into public.runtime_patient_command_notifications(exercise_id,latest_command_sequence,updated_at)\n  values(p_exercise_id,v_sequence,now()) on conflict(exercise_id) do update set\n    latest_command_sequence=greatest(public.runtime_patient_command_notifications.latest_command_sequence,\n      excluded.latest_command_sequence),updated_at=excluded.updated_at;\n  return query select 'APPLIED'::text,v_sequence,p_expected_patient_revision+1,v_head.owner_user_id;\nend $function$\n",
+    "sha256": "8f2bfa76bc8c8b13f2182611fed011ed7846d7f9f3af9d97e986005c2e3350f4"
+  },
+  "historyAfter": {
+    "tables": [
+      {
+        "acl": "{postgres=arwdDxtm/postgres}",
+        "rls": true,
+        "owner": "postgres",
+        "relation": "rc_checkpoint_maintenance.delta_delete_permits",
+        "force_rls": false
+      },
+      {
+        "acl": "{postgres=arwdDxtm/postgres}",
+        "rls": true,
+        "owner": "postgres",
+        "relation": "rc_checkpoint_maintenance.delta_retention_audit",
+        "force_rls": false
+      },
+      {
+        "acl": "{rc_identity_owner=arwdDxtm/rc_identity_owner}",
+        "rls": true,
+        "owner": "rc_identity_owner",
+        "relation": "rc_history.allocations",
+        "force_rls": true
+      },
+      {
+        "acl": null,
+        "rls": true,
+        "owner": "rc_identity_owner",
+        "relation": "rc_history.identities",
+        "force_rls": true
+      }
+    ],
+    "columns": [
+      {
+        "acl": null,
+        "name": "backend_pid",
+        "type": "integer",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 1,
+        "relation": "rc_checkpoint_maintenance.delta_delete_permits"
+      },
+      {
+        "acl": null,
+        "name": "transaction_id",
+        "type": "bigint",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 2,
+        "relation": "rc_checkpoint_maintenance.delta_delete_permits"
+      },
+      {
+        "acl": null,
+        "name": "exercise_id",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 3,
+        "relation": "rc_checkpoint_maintenance.delta_delete_permits"
+      },
+      {
+        "acl": null,
+        "name": "to_revision",
+        "type": "bigint",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 4,
+        "relation": "rc_checkpoint_maintenance.delta_delete_permits"
+      },
+      {
+        "acl": null,
+        "name": "row_sha256",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 5,
+        "relation": "rc_checkpoint_maintenance.delta_delete_permits"
+      },
+      {
+        "acl": null,
+        "name": "canonical_revision",
+        "type": "bigint",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 6,
+        "relation": "rc_checkpoint_maintenance.delta_delete_permits"
+      },
+      {
+        "acl": null,
+        "name": "canonical_hash",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 7,
+        "relation": "rc_checkpoint_maintenance.delta_delete_permits"
+      },
+      {
+        "acl": null,
+        "name": "canonical_provenance",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 8,
+        "relation": "rc_checkpoint_maintenance.delta_delete_permits"
+      },
+      {
+        "acl": null,
+        "name": "retention_floor",
+        "type": "bigint",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 9,
+        "relation": "rc_checkpoint_maintenance.delta_delete_permits"
+      },
+      {
+        "acl": null,
+        "name": "id",
+        "type": "bigint",
+        "default": null,
+        "identity": "a",
+        "not_null": true,
+        "position": 1,
+        "relation": "rc_checkpoint_maintenance.delta_retention_audit"
+      },
+      {
+        "acl": null,
+        "name": "exercise_id",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 2,
+        "relation": "rc_checkpoint_maintenance.delta_retention_audit"
+      },
+      {
+        "acl": null,
+        "name": "canonical_revision",
+        "type": "bigint",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 3,
+        "relation": "rc_checkpoint_maintenance.delta_retention_audit"
+      },
+      {
+        "acl": null,
+        "name": "canonical_hash",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 4,
+        "relation": "rc_checkpoint_maintenance.delta_retention_audit"
+      },
+      {
+        "acl": null,
+        "name": "retention_floor",
+        "type": "bigint",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 5,
+        "relation": "rc_checkpoint_maintenance.delta_retention_audit"
+      },
+      {
+        "acl": null,
+        "name": "deleted_count",
+        "type": "integer",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 6,
+        "relation": "rc_checkpoint_maintenance.delta_retention_audit"
+      },
+      {
+        "acl": null,
+        "name": "remaining_eligible",
+        "type": "bigint",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 7,
+        "relation": "rc_checkpoint_maintenance.delta_retention_audit"
+      },
+      {
+        "acl": null,
+        "name": "occurred_at",
+        "type": "timestamp with time zone",
+        "default": "clock_timestamp()",
+        "identity": "",
+        "not_null": true,
+        "position": 8,
+        "relation": "rc_checkpoint_maintenance.delta_retention_audit"
+      },
+      {
+        "acl": null,
+        "name": "actor_role",
+        "type": "text",
+        "default": "SESSION_USER",
+        "identity": "",
+        "not_null": true,
+        "position": 9,
+        "relation": "rc_checkpoint_maintenance.delta_retention_audit"
+      },
+      {
+        "acl": null,
+        "name": "actor_user_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 1,
+        "relation": "rc_history.allocations"
+      },
+      {
+        "acl": null,
+        "name": "request_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 2,
+        "relation": "rc_history.allocations"
+      },
+      {
+        "acl": null,
+        "name": "bootstrap_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 3,
+        "relation": "rc_history.allocations"
+      },
+      {
+        "acl": null,
+        "name": "purpose",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 4,
+        "relation": "rc_history.allocations"
+      },
+      {
+        "acl": null,
+        "name": "exercise_id",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 5,
+        "relation": "rc_history.allocations"
+      },
+      {
+        "acl": null,
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "default": "clock_timestamp()",
+        "identity": "",
+        "not_null": true,
+        "position": 6,
+        "relation": "rc_history.allocations"
+      },
+      {
+        "acl": null,
+        "name": "exercise_id",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 1,
+        "relation": "rc_history.identities"
+      },
+      {
+        "acl": null,
+        "name": "state",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "position": 2,
+        "relation": "rc_history.identities"
+      },
+      {
+        "acl": null,
+        "name": "binding",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "position": 3,
+        "relation": "rc_history.identities"
+      },
+      {
+        "acl": null,
+        "name": "source_digest",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "position": 4,
+        "relation": "rc_history.identities"
+      },
+      {
+        "acl": null,
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "default": "clock_timestamp()",
+        "identity": "",
+        "not_null": true,
+        "position": 5,
+        "relation": "rc_history.identities"
+      }
+    ],
+    "policies": [
+      {
+        "cmd": "SELECT",
+        "qual": "true",
+        "roles": [
+          "rc_identity_owner"
+        ],
+        "tablename": "exercise_bootstrap_authorizations",
+        "permissive": "PERMISSIVE",
+        "policyname": "rc_identity_bootstrap_read",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "true",
+        "roles": [
+          "rc_identity_owner"
+        ],
+        "tablename": "operator_profiles",
+        "permissive": "PERMISSIVE",
+        "policyname": "rc_identity_profile_read",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "ALL",
+        "qual": "true",
+        "roles": [
+          "postgres"
+        ],
+        "tablename": "delta_delete_permits",
+        "permissive": "PERMISSIVE",
+        "policyname": "owner_only",
+        "schemaname": "rc_checkpoint_maintenance",
+        "with_check": "true"
+      },
+      {
+        "cmd": "ALL",
+        "qual": "true",
+        "roles": [
+          "postgres"
+        ],
+        "tablename": "delta_retention_audit",
+        "permissive": "PERMISSIVE",
+        "policyname": "owner_only",
+        "schemaname": "rc_checkpoint_maintenance",
+        "with_check": "true"
+      },
+      {
+        "cmd": "ALL",
+        "qual": "true",
+        "roles": [
+          "rc_identity_owner"
+        ],
+        "tablename": "allocations",
+        "permissive": "PERMISSIVE",
+        "policyname": "allocation_internal",
+        "schemaname": "rc_history",
+        "with_check": "true"
+      },
+      {
+        "cmd": "ALL",
+        "qual": "true",
+        "roles": [
+          "rc_identity_owner"
+        ],
+        "tablename": "identities",
+        "permissive": "PERMISSIVE",
+        "policyname": "internal_identity_owner",
+        "schemaname": "rc_history",
+        "with_check": "true"
+      }
+    ],
+    "triggers": [
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.authorization_role_assignments",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.authorization_role_assignments FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.exercise_bootstrap_authorizations",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.exercise_bootstrap_authorizations FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.exercise_state_publication_operations",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.exercise_state_publication_operations FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.exercise_states",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.exercise_states FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a1_allocation_claim",
+        "enabled": "O",
+        "relation": "public.exercise_states",
+        "definition": "CREATE TRIGGER a1_allocation_claim BEFORE INSERT ON public.exercise_states FOR EACH ROW EXECUTE FUNCTION rc_history.guard_new_owner()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_checkpoint_canonical_artifacts",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_checkpoint_canonical_artifacts FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_bounded_delta_delete_guard",
+        "enabled": "O",
+        "relation": "public.runtime_checkpoint_deltas",
+        "definition": "CREATE TRIGGER a0_bounded_delta_delete_guard BEFORE DELETE ON public.runtime_checkpoint_deltas FOR EACH ROW EXECUTE FUNCTION rc_checkpoint_maintenance.guard_delta_delete()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_checkpoint_deltas",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR UPDATE ON public.runtime_checkpoint_deltas FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_checkpoint_notifications",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_checkpoint_notifications FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_checkpoints",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_checkpoints FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_completion_requests",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_completion_requests FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_patient_command_notifications",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_patient_command_notifications FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_patient_commands",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_patient_commands FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.runtime_writer_leases",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.runtime_writer_leases FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.shared_workflow_commands",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.shared_workflow_commands FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.shared_workflow_notifications",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.shared_workflow_notifications FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "a0_historical_identity_guard",
+        "enabled": "O",
+        "relation": "public.shared_workflow_patient_states",
+        "definition": "CREATE TRIGGER a0_historical_identity_guard BEFORE INSERT OR DELETE OR UPDATE ON public.shared_workflow_patient_states FOR EACH ROW EXECUTE FUNCTION rc_history.guard_runtime()"
+      },
+      {
+        "name": "allocation_immutable",
+        "enabled": "O",
+        "relation": "rc_history.allocations",
+        "definition": "CREATE TRIGGER allocation_immutable BEFORE DELETE OR UPDATE ON rc_history.allocations FOR EACH ROW EXECUTE FUNCTION rc_history.immutable_allocation()"
+      },
+      {
+        "name": "identity_immutable",
+        "enabled": "O",
+        "relation": "rc_history.identities",
+        "definition": "CREATE TRIGGER identity_immutable BEFORE DELETE OR UPDATE ON rc_history.identities FOR EACH ROW EXECUTE FUNCTION rc_history.immutable_identity()"
+      }
+    ],
+    "functions": [
+      {
+        "acl": "{postgres=X/postgres}",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\"",
+          "TimeZone=UTC"
+        ],
+        "sha256": "f9a965420135b628126a31f86d254d9e44f9ed6ffd522eb05777ec4015d85ba8",
+        "signature": "rc_checkpoint_maintenance.guard_delta_delete()",
+        "body_sha256": "b1f72d480868948602733c5ec79c7bc34d6f5b531b066ef7d22ea775f604877a",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\"",
+          "TimeZone=UTC"
+        ],
+        "sha256": "ae60475e4d2ee9bb3a19d7c040e96d11486ad2f16f07039821e029e838b409be",
+        "signature": "rc_checkpoint_maintenance.prune_delta_batch(text,integer)",
+        "body_sha256": "51b3ebc9ecc4dc18bbbee4de06907a837a8de057759d5299a5fe78a21c66c0d6",
+        "security_definer": true
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner,postgres=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "sha256": "fddbbb35d77a791f982b62a8156cec5d277b4d94bbd338e3142ae1b5a3c55b93",
+        "signature": "rc_history.assert_operational_id(text)",
+        "body_sha256": "ae9795a8a4a9a87ddb2314e43b0a50be493f0613d65a4ac49e99db950d0ba586",
+        "security_definer": true
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "sha256": "3bda6ab33a37c1be85f0ce3497e901ec30a0d7a87e1d9ddab1c54737b5043ce9",
+        "signature": "rc_history.guard_new_owner()",
+        "body_sha256": "529bb1c77262f34395b9f772be84228680225943895e90b88d205bc54799f31e",
+        "security_definer": true
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "sha256": "ce4ab6c02b3ea5858b8643938b8ec4aa9a344c852d135f4aebb1a3e0bba83262",
+        "signature": "rc_history.guard_runtime()",
+        "body_sha256": "769b7fc08a7f52496da9fdac4d3228dbbbe90cdec6b2d70fda1213178e61fa95",
+        "security_definer": true
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "sha256": "9b2d783c4330320168997da5ac2adff427c25aff2fb9f8f3c921af926aa63ca8",
+        "signature": "rc_history.immutable_allocation()",
+        "body_sha256": "7e7a431356281606f75d82e851f5b3aab0ecf5f61a42b17382f1c5468710d535",
+        "security_definer": false
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "sha256": "cb95c69a74b477f78e62d4a63c4bb80c5dc08caf0f9b82bff8d4fa1735e0b017",
+        "signature": "rc_history.immutable_identity()",
+        "body_sha256": "d0679a83e0d0526af2d1fe0f3c916d082cf4b92d7f5b8e316b0e04a6feadbcf0",
+        "security_definer": false
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "sha256": "f7e9bb72f66de2a83562119174d32a2919ded347c50bc94f760e7354d72f27c3",
+        "signature": "rc_history.next_identity()",
+        "body_sha256": "b4a38b3a75db7e91d06600b63130297bf49625fb8d1510236be0cbc2b0edac49",
+        "security_definer": false
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "sha256": "7716ce6763e55d1c5b07bcdb21f477cabe70071a0e13b626e6a2dceac489ee3b",
+        "signature": "rc_history.request_actor()",
+        "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "security_definer": false
+      },
+      {
+        "acl": "{rc_identity_owner=X/rc_identity_owner}",
+        "owner": "rc_identity_owner",
+        "config": [
+          "search_path=\"\""
+        ],
+        "sha256": "a8cb533cd5188a510aad1e034d9962d29d98428770f58ff571d8b1476f332e73",
+        "signature": "rc_history.request_is_anonymous()",
+        "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "security_definer": false
+      }
+    ],
+    "sequences": [
+      {
+        "acl": "{postgres=rwU/postgres}",
+        "owner": "postgres",
+        "relation": "rc_checkpoint_maintenance.delta_retention_audit_id_seq"
+      }
+    ],
+    "constraints": [
+      {
+        "name": "delta_delete_permits_pkey",
+        "relation": "rc_checkpoint_maintenance.delta_delete_permits",
+        "validated": true,
+        "definition": "PRIMARY KEY (backend_pid, transaction_id, exercise_id, to_revision)"
+      },
+      {
+        "name": "delta_retention_audit_pkey",
+        "relation": "rc_checkpoint_maintenance.delta_retention_audit",
+        "validated": true,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "allocations_bootstrap_id_fkey",
+        "relation": "rc_history.allocations",
+        "validated": true,
+        "definition": "FOREIGN KEY (bootstrap_id) REFERENCES public.exercise_bootstrap_authorizations(id)"
+      },
+      {
+        "name": "allocations_bootstrap_id_key",
+        "relation": "rc_history.allocations",
+        "validated": true,
+        "definition": "UNIQUE (bootstrap_id)"
+      },
+      {
+        "name": "allocations_exercise_id_fkey",
+        "relation": "rc_history.allocations",
+        "validated": true,
+        "definition": "FOREIGN KEY (exercise_id) REFERENCES rc_history.identities(exercise_id)"
+      },
+      {
+        "name": "allocations_exercise_id_key",
+        "relation": "rc_history.allocations",
+        "validated": true,
+        "definition": "UNIQUE (exercise_id)"
+      },
+      {
+        "name": "allocations_pkey",
+        "relation": "rc_history.allocations",
+        "validated": true,
+        "definition": "PRIMARY KEY (actor_user_id, request_id)"
+      },
+      {
+        "name": "allocations_purpose_check",
+        "relation": "rc_history.allocations",
+        "validated": true,
+        "definition": "CHECK ((purpose = ANY (ARRAY['CREATE'::text, 'ADMIN'::text, 'BUILDER'::text, 'PACKAGE'::text, 'TEST'::text, 'CLONE'::text, 'RESTORE_AS_NEW'::text])))"
+      },
+      {
+        "name": "identities_binding_check",
+        "relation": "rc_history.identities",
+        "validated": true,
+        "definition": "CHECK ((binding ~ '^[0-9a-f]{64}$'::text))"
+      },
+      {
+        "name": "identities_exercise_id_check",
+        "relation": "rc_history.identities",
+        "validated": true,
+        "definition": "CHECK (((exercise_id = btrim(exercise_id)) AND ((length(exercise_id) >= 1) AND (length(exercise_id) <= 200))))"
+      },
+      {
+        "name": "identities_pkey",
+        "relation": "rc_history.identities",
+        "validated": true,
+        "definition": "PRIMARY KEY (exercise_id)"
+      },
+      {
+        "name": "identities_source_digest_check",
+        "relation": "rc_history.identities",
+        "validated": true,
+        "definition": "CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text))"
+      },
+      {
+        "name": "identities_state_check",
+        "relation": "rc_history.identities",
+        "validated": true,
+        "definition": "CHECK ((state = ANY (ARRAY['ACTIVE_ID'::text, 'COMPLETED_ID'::text, 'RESERVED_ID'::text, 'ARCHIVED_ID'::text, 'FORENSIC_ID'::text])))"
+      }
+    ],
+    "private_schema": {
+      "acl": "{postgres=UC/postgres}",
+      "owner": "postgres"
+    },
+    "identity_owner_role": {
+      "login": false,
+      "inherit": false,
+      "create_db": false,
+      "superuser": false,
+      "bypass_rls": false,
+      "create_role": false
+    },
+    "api_effective_access": [
+      {
+        "role": "anon",
+        "schema_usage": false,
+        "table_rights": false,
+        "schema_create": false,
+        "sequence_rights": false,
+        "function_execute": false,
+        "history_schema_usage": false,
+        "history_assert_execute": false
+      },
+      {
+        "role": "authenticated",
+        "schema_usage": false,
+        "table_rights": false,
+        "schema_create": false,
+        "sequence_rights": false,
+        "function_execute": false,
+        "history_schema_usage": false,
+        "history_assert_execute": false
+      },
+      {
+        "role": "service_role",
+        "schema_usage": false,
+        "table_rights": false,
+        "schema_create": false,
+        "sequence_rights": false,
+        "function_execute": false,
+        "history_schema_usage": false,
+        "history_assert_execute": false
+      }
+    ],
+    "allocation_dependency_access": {
+      "auth_jwt_execute": true,
+      "auth_uid_execute": true,
+      "bootstrap_select": true,
+      "auth_schema_usage": false,
+      "parsed_actor_helper": true,
+      "profile_status_select": true,
+      "profile_user_id_select": true,
+      "parsed_anonymous_helper": true,
+      "profile_full_table_select": false
+    }
+  }
+}

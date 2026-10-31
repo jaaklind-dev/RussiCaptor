@@ -152,7 +152,22 @@ export function createScenarioEngineInstructorRuntimeOwner(
           engine.correctNarvaIroVentilationFault(actionTime, currentSimulationTimeSec);
         }
         else if (commandType === "IRO_HOLD") engine.setNarvaIroHold(true, actionTime);
-        else engine.setNarvaIroHold(false, actionTime);
+        else if (commandType === "IRO_RESUME") engine.setNarvaIroHold(false, actionTime);
+        else if (commandType === "IRO_CPR_QUALITY_GOOD" || commandType === "IRO_CPR_QUALITY_POOR" ||
+          commandType === "IRO_ROSC_ATTEMPT") {
+          const runtimeEventId = `NARVA-IRO:${commandId}:${commandType}`;
+          if (engine.hasAppliedNarvaIroControl(runtimeEventId)) return { ok: true, runtimeEventId, controlAudit };
+          const scenario = engine.getNarvaIroScenarioState();
+          if (!scenario.arrest || scenario.rosc || scenario.arrestAtSimulationTimeSec === undefined ||
+            scenario.arrestAtSimulationTimeSec > actionTime) {
+            return { ok: false, reason: "IRO_ARREST_REQUIRED", controlAudit };
+          }
+          if (commandType === "IRO_ROSC_ATTEMPT") {
+            if (engine.attemptNarvaIroRosc(actionTime, runtimeEventId).status !== "APPLIED") {
+              return { ok: false, reason: "IRO_ROSC_PREREQUISITES_NOT_MET", controlAudit };
+            }
+          } else engine.setNarvaIroCprQuality(commandType === "IRO_CPR_QUALITY_GOOD", actionTime, runtimeEventId);
+        } else return { ok: false, reason: "INVALID_COMMAND_PAYLOAD", controlAudit };
         notifySync("local");
         return { ok: true, runtimeEventId: `NARVA-IRO:${commandId}:${commandType}`, controlAudit };
       } catch (error) {

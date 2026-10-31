@@ -21,7 +21,7 @@ try {
   fs.mkdirSync(folder,{recursive:true});
   fs.copyFileSync(path.join(root,'supabase/schema.sql'),path.join(source,'supabase/schema.sql'));
   for(const e of migrationBaseline.entries)fs.copyFileSync(path.join(root,'supabase/migrations',e.file),path.join(folder,e.file));
-  pass('exact56 independently pinned files and schema accepted',()=>assert.equal(verifyMigrationInventory(source).length,56));
+  pass('exact59 independently pinned files and schema accepted',()=>assert.equal(verifyMigrationInventory(source).length,59));
   let stage;
   pass('native54/55 stage exact verified prefixes without scheduling56',()=>{
     const stage54=stageQualificationProject(source,temp,54);stage=stageQualificationProject(source,temp,55);
@@ -44,7 +44,7 @@ try {
     const p=file(53),renamed=path.join(folder,'20261025162600_runtime_writer_controller_authorization.sql');fs.renameSync(p,renamed);
     try{assert.throws(()=>verifyMigrationInventory(source),/NATIVE_MIGRATION_INVENTORY_MISMATCH/);}finally{fs.renameSync(renamed,p);}
   });
-  for(const n of [53,54,55])pass(`altered protected migration${n+1} rejected`,()=>modified(file(n),()=>fs.appendFileSync(file(n),'\n-- altered\n'),/NATIVE_CANDIDATE_HASH_MISMATCH/));
+  for(const n of [53,54,55,56,57,58])pass(`altered protected migration${n+1} rejected`,()=>modified(file(n),()=>fs.appendFileSync(file(n),'\n-- altered\n'),/NATIVE_CANDIDATE_HASH_MISMATCH/));
   pass('altered earlier migration rejected too',()=>modified(file(0),()=>fs.appendFileSync(file(0),'\n-- altered\n'),/NATIVE_CANDIDATE_HASH_MISMATCH/));
   pass('source symlink substitution rejected',()=>{
     const p=file(0),saved=path.join(temp,'original.sql');fs.renameSync(p,saved);fs.symlinkSync(saved,p);

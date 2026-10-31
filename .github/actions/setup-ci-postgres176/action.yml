@@ -1,0 +1,25 @@
+name: Isolated PostgreSQL 17.6
+description: Build the pinned database test tool and start a Unix-socket-only synthetic cluster
+runs:
+  using: composite
+  steps:
+    - name: Install separately locked test driver
+      shell: bash
+      run: npm ci --prefix scripts/ci-pg-driver --ignore-scripts --no-audit --no-fund
+    - name: Prepare exact PostgreSQL tool
+      shell: bash
+      run: |
+        set -euo pipefail
+        umask 077
+        tool_root="$(mktemp -d "$RUNNER_TEMP/rc-pg176-tool-XXXXXX")"
+        curl --fail --silent --show-error --location https://ftp.postgresql.org/pub/source/v17.6/postgresql-17.6.tar.bz2 --output "$tool_root/postgresql-17.6.tar.bz2"
+        echo "e0630a3600aea27511715563259ec2111cd5f4353a4b040e0be827f94cd7a8b0  $tool_root/postgresql-17.6.tar.bz2" | sha256sum --check --strict
+        tar -xjf "$tool_root/postgresql-17.6.tar.bz2" -C "$tool_root"
+        cd "$tool_root/postgresql-17.6"
+        ./configure --prefix="$tool_root/install" --without-readline --without-zlib --without-icu --with-openssl
+        make -j2
+        make install
+        make -C contrib/pgcrypto -j2
+        make -C contrib/pgcrypto install
+        cd "$GITHUB_WORKSPACE"
+        node scripts/ci-postgres176.mjs start "$tool_root/install/bin"

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import {createHash} from 'node:crypto';
 import { fileURLToPath } from "node:url";
 import { buildPlan, localMigrationIntegrity, productionCompatibility, requireProductionCompatibility } from "./field-release-policy.mjs";
 
@@ -24,6 +25,7 @@ for (const migration of manifest.requiredSupabaseMigrations) {
   remoteVersions.add(migration.remoteVersion);
   const matches = fs.readdirSync(new URL("../supabase/migrations", import.meta.url)).includes(migration.localFile);
   if (!matches) fail(`migration file ${migration.localFile} is not tracked`);
+  if(migration.sha256 !== undefined && (!/^[a-f0-9]{64}$/.test(migration.sha256) || createHash('sha256').update(fs.readFileSync(new URL('../supabase/migrations/'+migration.localFile,import.meta.url))).digest('hex')!==migration.sha256)) fail(`required migration deployment hash mismatch: ${migration.localFile}`);
 }
 const modeArguments = process.argv.slice(2).filter(arg => arg.startsWith("--mode="));
 if (modeArguments.length > 1 || process.argv.slice(2).some(arg => arg !== "--json" && !arg.startsWith("--mode="))) fail("invalid verification arguments");

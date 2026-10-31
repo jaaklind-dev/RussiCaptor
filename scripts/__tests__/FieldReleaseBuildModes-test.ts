@@ -230,6 +230,14 @@ describe("local migration source integrity", () => {
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({ status: "PASS", count: 1 });
   });
+  test('exact required deployment SHA is checked in addition to committed-source identity',()=>{
+    const descriptor={requiredSupabaseMigrations:[{...fixtureDescriptor.requiredSupabaseMigrations[0],sha256:createHash('sha256').update('select 1;\n').digest('hex')}]};
+    expect(invoke('policy.localMigrationIntegrity(input.root,input.descriptor)',{root:fixture,descriptor}).status).toBe(0);
+  });
+  test('committed bytes cannot satisfy a wrong required deployment SHA',()=>{
+    const descriptor={requiredSupabaseMigrations:[{...fixtureDescriptor.requiredSupabaseMigrations[0],sha256:'0'.repeat(64)}]};
+    const r=invoke('policy.localMigrationIntegrity(input.root,input.descriptor)',{root:fixture,descriptor});expect(r.status).not.toBe(0);expect(r.stderr).toContain('required migration deployment hash mismatch');
+  });
   test("modified historical SQL fails closed", () => {
     fs.appendFileSync(path.join(fixture, "supabase/migrations", filename), "select 2;\n");
     expect(verify().status).not.toBe(0);

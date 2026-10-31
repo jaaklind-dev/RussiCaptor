@@ -28,8 +28,8 @@
     },
     {
       "path": "src/components/excon/NarvaIroScenarioControlsCard.tsx",
-      "sourceSha256": "978f57814619a7a2e5b796ad3fd973492f1f17e403e4ca79f4a8e532ec8b4f6b",
-      "canonicalSha256": "a9f20e0ceba55fb50b565d7bb84a0cbafc9f72edd223c8a6701d8774ebc5ac2f"
+      "sourceSha256": "02eadbaf6eabcaeda8ad4100d5133f3cdc1bc936d42ac978874ff3f71e9b049e",
+      "canonicalSha256": "3ee84bac4e193f1309b5b249e35999164e8122268a22e3dcdafbdc595bf0e4ec"
     },
     {
       "path": "src/components/patient/LaboratoryWorkflowCard.tsx",
@@ -63,8 +63,8 @@
     },
     {
       "path": "src/services/ScenarioEngine.ts",
-      "sourceSha256": "4419811281866d7a3ddbf8feec1f884e7609c7d528ebcccc0092e2b7242025f8",
-      "canonicalSha256": "4127d57af15ddeb838cf7b285bd3b79f4fcf8a7833c6c915d1f687c56fcece76"
+      "sourceSha256": "bf2db07e85c564b5ffea43886d831fc0f41661f452e64b3ab6041025e1e83140",
+      "canonicalSha256": "5f5c7399e442233d1f14592e47e8bc4565cd7fd362a208f93c58e9c1fe47fa80"
     },
     {
       "path": "src/services/StatePersistenceService.ts",

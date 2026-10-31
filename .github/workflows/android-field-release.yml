@@ -31,6 +31,7 @@ jobs:
           distribution: temurin
           java-version: 17
       - run: npm ci
+      - uses: ./.github/actions/setup-ci-postgres176
       - name: Require server writer authorization security suite
         run: npm run test:writer-authorization
       - name: Verify release and backend prerequisites
@@ -71,3 +72,6 @@ jobs:
           path: dist/field-release/
           if-no-files-found: error
           retention-days: 30
+      - name: Stop disposable PostgreSQL
+        if: always() && env.RUSSICAPTOR_CI_PG176_STATE != ''
+        run: node scripts/ci-postgres176.mjs stop "$RUSSICAPTOR_CI_PG176_STATE"

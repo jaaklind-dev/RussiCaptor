@@ -7,6 +7,9 @@ const frozen = <T>(value: T): T => Object.freeze(structuredClone(value));
 const elapsed = (clock: NarvaIroFaultClock, now: number): number => Math.max(0,
   (clock.heldAtSimulationTimeSec ?? now) - clock.startedAtSimulationTimeSec - clock.accumulatedHoldSec);
 const corrected = (clock?: NarvaIroFaultClock): boolean => clock?.correctedAtSimulationTimeSec !== undefined;
+const recoveryElapsed = (clock: NarvaIroFaultClock, now: number): number => Math.max(0,
+  (clock.recoveryHeldAtSimulationTimeSec ?? now) - clock.correctedAtSimulationTimeSec! -
+  (clock.accumulatedRecoveryHoldSec ?? 0));
 const VASOPRESSOR_IRREVERSIBLE_THRESHOLD_SEC = 180;
 const ventilationIrreversibleThresholdSec = (type: NarvaIroVentilationFault): number =>
   type === "HIGH_PRESSURE_KINK" ? 180 : 120;
@@ -23,7 +26,8 @@ export class NarvaIroScenarioRuntime {
   triggerVasopressorFault(simulationTimeSec: number): NarvaIroScenarioProjection {
     const state = this.require();
     if (!state.vasopressorFault || corrected(state.vasopressorFault)) this.state = frozen({ ...state,
-      vasopressorFault: { startedAtSimulationTimeSec: simulationTimeSec, accumulatedHoldSec: 0 },
+      vasopressorFault: { startedAtSimulationTimeSec: simulationTimeSec, accumulatedHoldSec: 0,
+        ...(state.hold ? { heldAtSimulationTimeSec: simulationTimeSec } : {}) },
       lastUpdatedSimulationTimeSec: simulationTimeSec });
     return this.advanceTo(simulationTimeSec);
   }
@@ -31,7 +35,8 @@ export class NarvaIroScenarioRuntime {
   triggerVentilationFault(type: NarvaIroVentilationFault, simulationTimeSec: number): NarvaIroScenarioProjection {
     const state = this.require();
     this.state = frozen({ ...state, ventilationFault: { type, startedAtSimulationTimeSec: simulationTimeSec,
-      accumulatedHoldSec: 0 }, lastUpdatedSimulationTimeSec: simulationTimeSec });
+      accumulatedHoldSec: 0, ...(state.hold ? { heldAtSimulationTimeSec: simulationTimeSec } : {}) },
+      lastUpdatedSimulationTimeSec: simulationTimeSec });
     return this.advanceTo(simulationTimeSec);
   }
 
@@ -69,7 +74,13 @@ export class NarvaIroScenarioRuntime {
   setHold(hold: boolean, simulationTimeSec: number): NarvaIroScenarioProjection {
     const state = this.require(); if (state.hold === hold) return this.advanceTo(simulationTimeSec);
     const update = <T extends NarvaIroFaultClock | undefined>(clock: T): T => {
-      if (!clock || corrected(clock)) return clock;
+      if (!clock) return clock;
+      if (corrected(clock)) return frozen(hold ? { ...clock,
+        recoveryHeldAtSimulationTimeSec: simulationTimeSec } : { ...clock,
+        accumulatedRecoveryHoldSec: (clock.accumulatedRecoveryHoldSec ?? 0) + Math.max(0,
+          simulationTimeSec - (clock.recoveryHeldAtSimulationTimeSec ?? simulationTimeSec)),
+        recoveryHeldAtSimulationTimeSec: undefined,
+      }) as T;
       return frozen(hold ? { ...clock, heldAtSimulationTimeSec: simulationTimeSec } : {
         ...clock, accumulatedHoldSec: clock.accumulatedHoldSec + Math.max(0,
           simulationTimeSec - (clock.heldAtSimulationTimeSec ?? simulationTimeSec)),
@@ -77,7 +88,12 @@ export class NarvaIroScenarioRuntime {
       }) as T;
     };
     this.state = frozen({ ...state, hold, vasopressorFault: update(state.vasopressorFault),
-      ventilationFault: update(state.ventilationFault), lastUpdatedSimulationTimeSec: simulationTimeSec });
+      ventilationFault: update(state.ventilationFault),
+      ...(state.rosc ? hold ? { postRoscHeldAtSimulationTimeSec: simulationTimeSec } : {
+        accumulatedPostRoscHoldSec: (state.accumulatedPostRoscHoldSec ?? 0) + Math.max(0,
+          simulationTimeSec - (state.postRoscHeldAtSimulationTimeSec ?? simulationTimeSec)),
+        postRoscHeldAtSimulationTimeSec: undefined,
+      } : {}), lastUpdatedSimulationTimeSec: simulationTimeSec });
     return this.advanceTo(simulationTimeSec);
   }
 
@@ -91,6 +107,8 @@ export class NarvaIroScenarioRuntime {
     if (!projection.roscEligible) return frozen({ status: "REJECTED", projection });
     this.state = frozen({ ...this.require(), arrest: false, rosc: true,
       roscAtSimulationTimeSec: simulationTimeSec, goNoGoRequired: true,
+      accumulatedPostRoscHoldSec: 0,
+      ...(this.require().hold ? { postRoscHeldAtSimulationTimeSec: simulationTimeSec } : {}),
       lastUpdatedSimulationTimeSec: simulationTimeSec });
     return frozen({ status: "APPLIED", projection: this.projectionAt(simulationTimeSec) });
   }
@@ -114,7 +132,9 @@ export class NarvaIroScenarioRuntime {
     const causesCorrected = (!state.vasopressorFault || corrected(state.vasopressorFault)) &&
       (!state.ventilationFault || corrected(state.ventilationFault));
     const vital = this.vitals(vasopressorStage, ventilationStage, arrest, state.rosc,
-      simulationTimeSec - (state.roscAtSimulationTimeSec ?? state.lastUpdatedSimulationTimeSec), simulationTimeSec);
+      Math.max(0, (state.postRoscHeldAtSimulationTimeSec ?? simulationTimeSec) -
+        (state.roscAtSimulationTimeSec ?? state.lastUpdatedSimulationTimeSec) -
+        (state.accumulatedPostRoscHoldSec ?? 0)), simulationTimeSec);
     const ventilationEvidence = this.ventilationEvidence();
     return frozen({ ...state, arrest, vasopressorStage: arrest && !state.rosc ? "PEA" : vasopressorStage,
       ventilationStage: arrest && !state.rosc ? "PEA" : ventilationStage, ...vital, ...ventilationEvidence,
@@ -159,10 +179,10 @@ export class NarvaIroScenarioRuntime {
     if (state.rosc) return "ROSC"; if (!clock) return "S0";
     if (corrected(clock)) {
       const atCorrection = elapsed(clock, clock.correctedAtSimulationTimeSec!);
-      const recoveryElapsed = Math.max(0, now - clock.correctedAtSimulationTimeSec!);
-      if (atCorrection < 60) return recoveryElapsed >= 120 ? "S0" : "S1R";
-      if (atCorrection < 120) return recoveryElapsed >= 180 ? "S0" : "S2R";
-      return recoveryElapsed >= 300 ? "S0" : "S3R";
+      const recoveryAge = recoveryElapsed(clock, now);
+      if (atCorrection < 60) return recoveryAge >= 120 ? "S0" : "S1R";
+      if (atCorrection < 120) return recoveryAge >= 180 ? "S0" : "S2R";
+      return recoveryAge >= 300 ? "S0" : "S3R";
     }
     const age = elapsed(clock, now); return age > VASOPRESSOR_IRREVERSIBLE_THRESHOLD_SEC ? "PEA" :
       age >= 120 ? "S3" : age >= 60 ? "S2" : age >= 30 ? "S1" : "S0";
@@ -170,7 +190,7 @@ export class NarvaIroScenarioRuntime {
 
   private ventilationStage(now: number): NarvaIroVentilationStage {
     const clock = this.require().ventilationFault; if (!clock) return "NORMAL";
-    if (corrected(clock)) return now - clock.correctedAtSimulationTimeSec! >= 180 ? "NORMAL" : "RECOVERING";
+    if (corrected(clock)) return recoveryElapsed(clock, now) >= 180 ? "NORMAL" : "RECOVERING";
     const age = elapsed(clock, now);
     const arrestAt = ventilationIrreversibleThresholdSec(clock.type);
     return age > arrestAt ? "PEA" : age >= 60 ? "CRITICAL" : age >= 30 ? "DETERIORATING" : "EARLY";
@@ -179,9 +199,8 @@ export class NarvaIroScenarioRuntime {
   private combinedCritical(now: number): boolean {
     const state = this.require(); if (!state.vasopressorFault || !state.ventilationFault ||
       corrected(state.vasopressorFault) || corrected(state.ventilationFault)) return false;
-    const secondStart = Math.max(state.vasopressorFault.startedAtSimulationTimeSec,
-      state.ventilationFault.startedAtSimulationTimeSec);
-    return now - secondStart > 90;
+    // Both faults must have overlapped for >90 active seconds, excluding HOLD.
+    return Math.min(elapsed(state.vasopressorFault, now), elapsed(state.ventilationFault, now)) > 90;
   }
 
   private irreversibleCauseAt(simulationTimeSec: number): NarvaIroScenarioState["arrestCause"] {
@@ -217,7 +236,9 @@ export class NarvaIroScenarioRuntime {
     const clock = state[key]!;
     const latencyOnlyArrest = logicallyCorrectable && state.arrest && state.arrestAtSimulationTimeSec !== undefined &&
       state.arrestAtSimulationTimeSec > intentSimulationTimeSec;
-    return frozen({ ...state, [key]: { ...clock, correctedAtSimulationTimeSec: intentSimulationTimeSec },
+    return frozen({ ...state, [key]: { ...clock, correctedAtSimulationTimeSec: intentSimulationTimeSec,
+      ...(state.hold ? { recoveryHeldAtSimulationTimeSec: Math.max(intentSimulationTimeSec,
+        clock.heldAtSimulationTimeSec ?? intentSimulationTimeSec) } : {}) },
       ...(latencyOnlyArrest ? { arrest: false, arrestAtSimulationTimeSec: undefined, arrestCause: undefined } : {}),
       lastUpdatedSimulationTimeSec: intentSimulationTimeSec });
   }

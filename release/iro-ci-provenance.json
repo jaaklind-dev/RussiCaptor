@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "status": "LOCAL_PREBUILD_SOURCE_CANDIDATE_NOT_AN_APK_RELEASE",
+  "baseCommit": "972b3a7e14ac68773877997e7298e93930bdc997",
+  "clientCandidateManifestSHA256": "62eb1981b6ba5c30b6b38082fe76977313fb0d3723706b5a8324a12702e8ef5a",
+  "deployedIROPackageManifestSHA256": "926a9783baeb4044d758d5e52aaddb17b4459c551db2c728569386c16d975b95",
+  "deployedRetentionPackageManifestSHA256": "a32cafd3353d8bb9f1fcb241e8e42525f2a5236f9770bf22beb7a74e01d70a7a",
+  "migrationInventory": {
+    "path": "test/fixtures/writer-authorization/migration-baseline-v3.json",
+    "sha256": "ea049091520da6bf51d0f5040a9da7e104ce2dc873e3664042e6f8e98dd2404d",
+    "count": 59,
+    "historicalV2PreservedUnchanged": true
+  },
+  "syntheticPrerequisites": {
+    "path": "test/fixtures/writer-authorization/deployed-prerequisites-v3.json",
+    "sha256": "8f9443881dde4baf7e11e70a473e151919d50f82a5b0a667da2f5bedaab140a9",
+    "scope": "Disposable CI database only; exact trusted protection definitions, synthetic identities, no production data"
+  },
+  "ciDatabase": {
+    "requiredVersion": "17.6",
+    "reason": "Unchanged deployed SQL verifies the exact PostgreSQL17 historical-protection catalog. PGlite0.5.10 runs PostgreSQL18.6, whose additional NOT NULL constraint catalog rows are incompatible with this exact catalog contract.",
+    "connection": "Fresh Unix-socket-only cluster and unique disposable database; no database URL fallback",
+    "driverLock": "scripts/ci-pg-driver/package-lock.json",
+    "applicationDependencyLockUnchanged": true,
+    "githubProvisioningExecution": "NOT_RUN_LOCALLY"
+  },
+  "remainingBeforeBuild": [
+    "Review and explicitly authorize a scoped source commit containing the candidate and byte-identical deployed SQL; existing actual-HEAD source-integrity gate stays enforced",
+    "Assign a separately approved next monotonic APK version; current 1.2.9/versionCode196 metadata is intentionally not a new build identity",
+    "Verify the exact committed candidate through required CI, including the new Ubuntu PostgreSQL17.6 provisioning path",
+    "Obtain and record applicable build, installation and physical acceptance authorization"
+  ],
+  "operationalReleaseAndAcceptance": "Existing operational artifact and accepted evidence unchanged; no new APK or physical acceptance claimed"
+}

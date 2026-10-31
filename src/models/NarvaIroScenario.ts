@@ -8,6 +8,9 @@ export const narvaIroScenarioControlCommandTypes = [
   "IRO_VENTILATION_FAULT_CORRECT",
   "IRO_HOLD",
   "IRO_RESUME",
+  "IRO_CPR_QUALITY_GOOD",
+  "IRO_CPR_QUALITY_POOR",
+  "IRO_ROSC_ATTEMPT",
 ] as const;
 
 export type NarvaIroScenarioControlCommandType = typeof narvaIroScenarioControlCommandTypes[number];
@@ -24,6 +27,9 @@ export type NarvaIroFaultClock = Readonly<{
   heldAtSimulationTimeSec?: number;
   accumulatedHoldSec: number;
   correctedAtSimulationTimeSec?: number;
+  /** Additive recovery clock; absent in legacy snapshots means zero recovery HOLD. */
+  accumulatedRecoveryHoldSec?: number;
+  recoveryHeldAtSimulationTimeSec?: number;
 }>;
 
 export type NarvaIroScenarioState = Readonly<{
@@ -40,6 +46,8 @@ export type NarvaIroScenarioState = Readonly<{
   cprQuality: boolean;
   rosc: boolean;
   roscAtSimulationTimeSec?: number;
+  accumulatedPostRoscHoldSec?: number;
+  postRoscHeldAtSimulationTimeSec?: number;
   goNoGoRequired: boolean;
   lastUpdatedSimulationTimeSec: number;
 }>;

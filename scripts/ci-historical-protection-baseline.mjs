@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
+import {deployedPrerequisites,verifyCIDeployedHistory} from './ci-deployed-runtime-prerequisites.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const bytes = fs.readFileSync(new URL('../test/fixtures/writer-authorization/historical-protection-v1.json', import.meta.url));
@@ -41,10 +42,11 @@ export async function installCIHistoricalBaseline(db) {
     }
   }
   for (const trigger of historicalBaseline.triggers) await db.exec(`${trigger.definition};`);
-  await verifyCIHistoricalBaseline(db);
+  await verifyCIHistoricalBaseline(db, 'V1');
 }
 
-export async function verifyCIHistoricalBaseline(db) {
+export async function verifyCIHistoricalBaseline(db, contract = 'V3') {
+  assert.ok(['V1','V3'].includes(contract));
   const old = (await db.query('show search_path')).rows[0].search_path;
   await db.exec('set search_path=pg_catalog');
   try {
@@ -66,7 +68,10 @@ export async function verifyCIHistoricalBaseline(db) {
       rolcreatedb create_db,rolcreaterole create_role,rolinherit inherit,rolbypassrls bypass_rls
       from pg_roles where rolname='rc_identity_owner'`)).rows[0];
     assert.deepEqual(role,{login:false,superuser:false,create_db:false,create_role:false,inherit:false,bypass_rls:false});
-    for (const trigger of historicalBaseline.triggers) {
+    const triggers = contract === 'V1' ? historicalBaseline.triggers : historicalBaseline.triggers.map(t => {
+      const expected=deployedPrerequisites.historyAfter.triggers.find(x=>x.relation===t.relation&&x.name===t.name);assert.ok(expected);return expected;
+    });
+    for (const trigger of triggers) {
       const actual = (await db.query(`select pg_get_triggerdef(oid) definition,tgenabled enabled
         from pg_trigger where tgrelid=$1::regclass and tgname=$2`, [trigger.relation,trigger.name])).rows[0];
       assert.deepEqual(actual, {definition:trigger.definition,enabled:trigger.enabled}, 'CI_HISTORICAL_TRIGGER_MISMATCH');
@@ -77,6 +82,7 @@ export async function verifyCIHistoricalBaseline(db) {
       has_schema_privilege('service_role','rc_history','USAGE') service_usage,
       has_function_privilege('authenticated','rc_history.assert_operational_id(text)','EXECUTE') auth_execute`)).rows[0];
     assert.deepEqual(rights,{auth_usage:false,anon_usage:false,service_usage:false,auth_execute:false});
+    if(contract==='V3')await verifyCIDeployedHistory(db);
   } finally { await db.query("select set_config('search_path',$1,false)",[old]); }
 }
 

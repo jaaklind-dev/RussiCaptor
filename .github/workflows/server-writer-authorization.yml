@@ -17,5 +17,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - uses: ./.github/actions/setup-ci-postgres176
       - name: Require isolated PostgreSQL writer authorization
         run: npm run test:writer-authorization
+      - name: Stop disposable PostgreSQL
+        if: always() && env.RUSSICAPTOR_CI_PG176_STATE != ''
+        run: node scripts/ci-postgres176.mjs stop "$RUSSICAPTOR_CI_PG176_STATE"

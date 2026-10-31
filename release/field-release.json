@@ -61,8 +61,23 @@
     {
       "remoteVersion": "20261016065854",
       "localFile": "20261016065854_ready_exercise_cancellation.sql"
+    },
+    {
+      "remoteVersion": "20261028195410",
+      "localFile": "20261028195410_decouple_runtime_checkpoint_delta_retention.sql",
+      "sha256": "be89191b16a3abbf4d26f58e83c603aabfda5a370a636886e1bbd0200fcc8abc"
+    },
+    {
+      "remoteVersion": "20261028203905",
+      "localFile": "20261028203905_bounded_checkpoint_delta_retention.sql",
+      "sha256": "d0429be0356d6f71c13e1fea72f340e27188d92e76105f02ae0cea881bea1842"
+    },
+    {
+      "remoteVersion": "20261031155028",
+      "localFile": "20261031155028_iro_resuscitation_controls.sql",
+      "sha256": "f6add2c749dd2323edd300f3e03af2831102ddad69608f938f52cb6f36e25a2e"
     }
   ],
-  "minimumCompatibleBackendState": "WP-EGRESS-01/03/04 + WP-NEXT-02/03 + PLATFORM_ADMIN_RECOVERY + BUILDER_LAB_BINDING + SERVER_WRITER_FENCE + ATOMIC_ACTIVE_TAKEOVER + READY_CANCELLATION_ACTIVATION_GATE deployed; cancellation remains OFF until compatible-client rollout is separately authorized",
+  "minimumCompatibleBackendState": "WP-EGRESS-01/03/04 + WP-NEXT-02/03 + PLATFORM_ADMIN_RECOVERY + BUILDER_LAB_BINDING + SERVER_WRITER_FENCE + ATOMIC_ACTIVE_TAKEOVER + READY_CANCELLATION_ACTIVATION_GATE + DECOUPLED_DELTA_PUBLICATION + BOUNDED_DELTA_RETENTION_V3 + IRO_CPR_ROSC_CONTROLS deployed; cancellation remains OFF until compatible-client rollout is separately authorized",
   "releaseNotes": "docs/OPERATIONAL_APK196.md"
 }

@@ -44,6 +44,67 @@ function setup(simulationTimeSec = 0): ClinicalScenarioEngine {
 }
 
 describe("WP-NARVA-10B1 durable IRO scenario controls", () => {
+  test("CPR/ROSC uses durable writer controls with cause gating, observable state and replay safety", () => {
+    const engine = setup();
+    expect(materializeRuntimePatientCommand(command("IRO_CPR_QUALITY_GOOD")))
+      .toMatchObject({ status: "REJECTED", result: { message: "IRO_ARREST_REQUIRED" } });
+    materializeRuntimePatientCommand(command("IRO_VASOPRESSOR_FAULT_START", {}, 2));
+    engine.advanceTo(181);
+    expect(materializeRuntimePatientCommand(command("IRO_CPR_QUALITY_GOOD", {}, 3, 181)))
+      .toMatchObject({ status: "MATERIALIZED" });
+    expect(getPatientResourceDebugSnapshot(patientId).narvaIroScenario?.cprQuality).toBe(true);
+    expect(materializeRuntimePatientCommand(command("IRO_ROSC_ATTEMPT", {}, 4, 181)))
+      .toMatchObject({ status: "REJECTED", result: { message: "IRO_ROSC_PREREQUISITES_NOT_MET" } });
+    materializeRuntimePatientCommand(command("IRO_CPR_QUALITY_POOR", {}, 5, 181));
+    engine.advanceTo(182);
+    materializeRuntimePatientCommand(command("IRO_VASOPRESSOR_FAULT_CORRECT", {}, 6, 182));
+    expect(engine.getNarvaIroScenarioState().roscEligible).toBe(false);
+    materializeRuntimePatientCommand(command("IRO_CPR_QUALITY_GOOD", {}, 7, 182));
+    const rosc = command("IRO_ROSC_ATTEMPT", {}, 8, 182);
+    expect(materializeRuntimePatientCommand(rosc)).toMatchObject({ status: "MATERIALIZED" });
+    expect(getPatientResourceDebugSnapshot(patientId).narvaIroScenario)
+      .toMatchObject({ rosc: true, arrest: false, goNoGoRequired: true });
+    const snapshot = engine.captureRuntimePayload();
+    expect(materializeRuntimePatientCommand(rosc)).toMatchObject({ status: "MATERIALIZED" });
+    expect(engine.captureRuntimePayload()).toEqual(snapshot);
+    const restored = new ClinicalScenarioEngine(); restored.rehydrateRuntimePayload(snapshot);
+    expect(restored.getNarvaIroScenarioState()).toEqual(engine.getNarvaIroScenarioState());
+    clearInstructorRuntimeOwners(); resetNarvaIroScenarioControlCommands();
+    registerInstructorRuntimeOwner(createScenarioEngineInstructorRuntimeOwner(restored, exerciseId, patientId));
+    const beforeReplay = restored.captureRuntimePayload();
+    for (const replay of [command("IRO_CPR_QUALITY_GOOD", {}, 3, 181),
+      command("IRO_CPR_QUALITY_POOR", {}, 5, 181), rosc]) {
+      expect(materializeRuntimePatientCommand(replay)).toMatchObject({ status: "MATERIALIZED" });
+    }
+    expect(restored.captureRuntimePayload()).toEqual(beforeReplay);
+  });
+
+  test.each(["IRO_CPR_QUALITY_GOOD", "IRO_CPR_QUALITY_POOR", "IRO_ROSC_ATTEMPT"] as const)(
+    "%s rejects payload injection and reader-local mutation", commandType => {
+      const engine = setup(); const before = engine.captureRuntimePayload();
+      expect(materializeRuntimePatientCommand(command(commandType, { override: true })))
+        .toMatchObject({ status: "REJECTED", result: { errorCode: "INVALID_COMMAND_PAYLOAD" } });
+      setRuntimeWriterAuthorityState("READER");
+      expect(materializeRuntimePatientCommand(command(commandType, {}, 2)))
+        .toMatchObject({ status: "REJECTED" });
+      expect(engine.captureRuntimePayload()).toEqual(before);
+    });
+
+  test.each(["IRO_CPR_QUALITY_GOOD", "IRO_CPR_QUALITY_POOR", "IRO_ROSC_ATTEMPT"] as const)(
+    "%s retains scoped EXCON-only submission and the completion fence", async commandType => {
+      let actor: RuntimeCommandActor = { userId: "CM-A", role: "CM", exerciseIds: [exerciseId] };
+      const gateway = new InMemoryRuntimePatientCommandGateway(() => actor); gateway.seed(exerciseId, patientId);
+      const input = { ...command(commandType) };
+      expect((await gateway.submit(input)).status).toBe("AUTHORIZATION_DENIED");
+      actor = { userId: "EXCON-A", role: "EXCON", exerciseIds: ["OTHER"] };
+      expect((await gateway.submit(input)).status).toBe("AUTHORIZATION_DENIED");
+      actor = { userId: "EXCON-A", role: "EXCON", exerciseIds: [exerciseId] };
+      expect((await gateway.submit(input)).status).toBe("APPLIED");
+      expect((await gateway.submit(input)).status).toBe("IDEMPOTENT");
+      gateway.fence(exerciseId);
+      expect((await gateway.submit({ ...command(commandType, {}, 2), patientBaseRevision: 1 })).status)
+        .toBe("COMPLETION_FENCED");
+    });
   afterEach(() => { clearInstructorRuntimeOwners(); resetNarvaIroScenarioControlCommands();
     resetRuntimePatientCommandCursor(); setRuntimeWriterAuthorityState("UNRESOLVED"); });
 

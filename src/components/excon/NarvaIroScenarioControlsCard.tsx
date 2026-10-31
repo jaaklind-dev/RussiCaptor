@@ -131,6 +131,9 @@ export function NarvaIroScenarioControlsCard({ exerciseId, patientId }: Readonly
   const correctVentilation = useCallback(() => { void apply("IRO_VENTILATION_FAULT_CORRECT"); }, [apply]);
   const hold = useCallback(() => { void apply("IRO_HOLD"); }, [apply]);
   const resume = useCallback(() => { void apply("IRO_RESUME"); }, [apply]);
+  const cprGood = useCallback(() => { void apply("IRO_CPR_QUALITY_GOOD"); }, [apply]);
+  const cprPoor = useCallback(() => { void apply("IRO_CPR_QUALITY_POOR"); }, [apply]);
+  const attemptRosc = useCallback(() => { void apply("IRO_ROSC_ATTEMPT"); }, [apply]);
   const selectVentilationFault = useCallback((fault: NarvaIroVentilationFault) => setVentilationFault(fault), []);
   const commandBlocked = (commandType: NarvaIroScenarioControlCommandType): boolean =>
     renderedInFlightTypes.has(commandType) || busy && !(resumeAccepted && !resumeFollowUpReserved &&
@@ -166,6 +169,23 @@ export function NarvaIroScenarioControlsCard({ exerciseId, patientId }: Readonly
       <ActionButton label="HOLD" disabled={commandBlocked("IRO_HOLD") || Boolean(scenario?.hold)} commandType="IRO_HOLD" onPress={hold} />
       <ActionButton label="RESUME" disabled={commandBlocked("IRO_RESUME") || !scenario?.hold} commandType="IRO_RESUME" onPress={resume} />
     </View>
+    <Text style={styles.section}>Elustamise juhendajahinnang</Text>
+    <Text style={styles.help}>Märgi tegelikult hinnatud CPR-kvaliteet. ROSC eeldab südameseiskust,
+      piisavat CPR-i ja rikete põhjuste kõrvaldamist; ravim või möödunud aeg üksi seda ei anna.</Text>
+    <Text style={styles.stateText}>CPR: {scenario?.cprQuality ? "piisav" : "piisavus kinnitamata"} ·
+      {scenario?.rosc ? " ROSC kinnitatud" : scenario?.arrest ? " südameseiskus" : " südameseiskust ei ole"}</Text>
+    <View style={styles.row}>
+      <ActionButton label="CPR piisav" commandType="IRO_CPR_QUALITY_GOOD" onPress={cprGood}
+        disabled={commandBlocked("IRO_CPR_QUALITY_GOOD") || !scenario?.arrest || Boolean(scenario?.rosc) || Boolean(scenario?.cprQuality)} />
+      <ActionButton label="CPR ebapiisav" commandType="IRO_CPR_QUALITY_POOR" onPress={cprPoor}
+        disabled={commandBlocked("IRO_CPR_QUALITY_POOR") || !scenario?.arrest || Boolean(scenario?.rosc) || !scenario?.cprQuality} />
+    </View>
+    <View style={styles.row}>
+      <ActionButton label="Kinnita ROSC" commandType="IRO_ROSC_ATTEMPT" onPress={attemptRosc}
+        disabled={commandBlocked("IRO_ROSC_ATTEMPT") || !scenario?.roscEligible || Boolean(scenario?.rosc)} />
+    </View>
+    {scenario?.goNoGoRequired && <Text style={styles.help}>Pärast ROSC-i on vaja uut GO/NO-GO otsust;
+      jätkamist ei kinnitata automaatselt.</Text>}
     {actions.map(action => <Text key={action.commandId} accessibilityLiveRegion="polite"
       style={action.status === "REJECTED" ? styles.error : styles.result}>
       {action.status === "SUBMITTING" ? "Saadan korraldust…" : action.status === "ACCEPTED" ? "Korraldus vastu võetud; ootan kinnitatud seisu…"

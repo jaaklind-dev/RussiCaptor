@@ -79,6 +79,7 @@ export function localMigrationIntegrity(root, descriptor) {
   if (tracked.length !== files.length) fail("local migration set differs from tracked history");
   for (const required of descriptor.requiredSupabaseMigrations) {
     if (!migrations.some(item => item.filename === required.localFile && item.version === required.remoteVersion)) fail("required migration identity mismatch");
+    if(required.sha256 !== undefined && (!/^[a-f0-9]{64}$/.test(required.sha256) || migrations.find(item=>item.filename===required.localFile)?.sha256!==required.sha256)) fail("required migration deployment hash mismatch");
   }
   return { status: "PASS", count: migrations.length, sha256: sha256(JSON.stringify(migrations)), migrations };
 }

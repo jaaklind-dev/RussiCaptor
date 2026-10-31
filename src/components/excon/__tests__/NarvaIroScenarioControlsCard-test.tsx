@@ -51,6 +51,40 @@ const gatewayWithResult = (result: RuntimePatientCommandGateway["submit"] extend
   } satisfies RuntimePatientCommandGateway);
 
 describe("IRO EXCON scenario-control presentation", () => {
+  test.each([
+    ["CPR piisav", "IRO_CPR_QUALITY_GOOD", false, false],
+    ["CPR ebapiisav", "IRO_CPR_QUALITY_POOR", true, false],
+    ["Kinnita ROSC", "IRO_ROSC_ATTEMPT", true, true],
+  ] as const)("%s reaches the existing durable gateway through its real rendered responder", async (label, commandType,
+    cprQuality, roscEligible) => {
+    const id = `EX-IRO-${commandType}`;
+    replaceCanonicalExerciseSnapshot({ exerciseId: id, lifecycleState: "RUNNING", simulationTimeSec: 182,
+      speed: 1, version: 2, clockVersion: 1, clockInitializedAtSimulationTimeSec: 0 });
+    observeSharedWorkflowHead(id, "PT-IRO-001", 0);
+    publishScenario(iroScenario("PT-IRO-001", { arrest: true, cprQuality, roscEligible,
+      lastUpdatedSimulationTimeSec: 182 }));
+    const gateway = gatewayWithResult({ status: "APPLIED", patientRevision: 1, commandSequence: 1 },
+      { status: "MATERIALIZED", result: { ok: true } });
+    setRuntimePatientCommandGateway(gateway);
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<NarvaIroScenarioControlsCard exerciseId={id} patientId="PT-IRO-001" />); });
+    await pressRenderedControl(renderer, label);
+    expect(gateway.submit).toHaveBeenCalledTimes(1);
+    expect(gateway.submit).toHaveBeenCalledWith(expect.objectContaining({ commandType, payload: {}, exerciseId: id }));
+    await act(async () => renderer.unmount());
+  });
+
+  test("CPR and ROSC controls fail closed before arrest and do not invent a GO decision", async () => {
+    publishScenario(iroScenario("PT-IRO-001")); let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<NarvaIroScenarioControlsCard exerciseId="EX-IRO-GATES" patientId="PT-IRO-001" />); });
+    for (const label of ["CPR piisav", "CPR ebapiisav", "Kinnita ROSC"]) {
+      expect(renderer.root.findByProps({ accessibilityLabel: label }).props.disabled).toBe(true);
+    }
+    await act(async () => publishScenario(iroScenario("PT-IRO-001", { rosc: true, goNoGoRequired: true })));
+    expect(renderedText(renderer)).toContain("uut GO/NO-GO otsust");
+    expect(renderer.root.findByProps({ accessibilityLabel: "Kinnita ROSC" }).props.disabled).toBe(true);
+    await act(async () => renderer.unmount());
+  });
   afterEach(() => setRuntimePatientCommandGateway(undefined));
 
   test("is visible only for authorized RUNNING IRO 1.0.1 context", () => {

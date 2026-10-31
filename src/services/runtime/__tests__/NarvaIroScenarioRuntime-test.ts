@@ -3,6 +3,65 @@ import { NarvaIroScenarioRuntime } from "../NarvaIroScenarioRuntime";
 const runtime = () => { const value = new NarvaIroScenarioRuntime(); value.reset("PT-IRO-001"); return value; };
 
 describe("WP-NARVA-02 deterministic IRO fault and recovery process", () => {
+  test("combined faults freeze during HOLD and cross the boundary only after RESUME", () => {
+    const value = runtime(); value.triggerVasopressorFault(0);
+    value.triggerVentilationFault("HIGH_PRESSURE_KINK", 10); value.setHold(true, 40);
+    expect(value.advanceTo(200)).toMatchObject({ hold: true, arrest: false });
+    value.setHold(false, 200);
+    expect(value.advanceTo(260).arrest).toBe(false);
+    expect(value.advanceTo(261)).toMatchObject({ arrest: true, arrestCause: "COMBINED" });
+  });
+
+  test.each([30, 60, 120])("vasopressor recovery from %ss freezes across repeated HOLD and restore", correction => {
+    const value = runtime(); value.triggerVasopressorFault(0); value.correctVasopressor(correction);
+    const before = value.setHold(true, correction + 10);
+    const restored = runtime(); restored.restore(value.snapshot());
+    expect(restored.advanceTo(1000).vasopressorStage).toBe(before.vasopressorStage);
+    restored.setHold(false, 1000); restored.setHold(true, 1010); restored.setHold(false, 2000);
+    const duration = correction < 60 ? 120 : correction < 120 ? 180 : 300;
+    expect(restored.advanceTo(2000 + duration - 21).vasopressorStage).toBe(before.vasopressorStage);
+    expect(restored.advanceTo(2000 + duration - 20).vasopressorStage).toBe("S0");
+  });
+
+  test.each(["CIRCUIT_DISCONNECT", "HIGH_PRESSURE_KINK", "OXYGEN_DEPLETION", "VENTILATOR_STOP"] as const)(
+    "%s recovery excludes HOLD and restores deterministically", fault => {
+      const value = runtime(); value.triggerVentilationFault(fault, 0); value.correctVentilation(40);
+      value.setHold(true, 60); const restored = runtime(); restored.restore(value.snapshot());
+      expect(restored.advanceTo(500).ventilationStage).toBe("RECOVERING");
+      restored.setHold(false, 500);
+      expect(restored.advanceTo(659).ventilationStage).toBe("RECOVERING");
+      expect(restored.advanceTo(660).ventilationStage).toBe("NORMAL");
+    });
+
+  test("a fault started and corrected while held cannot advance either clock", () => {
+    const value = runtime(); value.setHold(true, 0); value.triggerVasopressorFault(10);
+    expect(value.advanceTo(1000)).toMatchObject({ arrest: false, vasopressorStage: "S0" });
+    value.correctVasopressor(1000);
+    expect(value.advanceTo(2000).vasopressorStage).toBe("S1R");
+    value.setHold(false, 2000);
+    expect(value.advanceTo(2119).vasopressorStage).toBe("S1R");
+    expect(value.advanceTo(2120).vasopressorStage).toBe("S0");
+  });
+
+  test("post-ROSC stabilization excludes HOLD and retains the GO decision requirement", () => {
+    const value = runtime(); value.triggerVasopressorFault(0); value.advanceTo(181);
+    value.correctVasopressor(182); value.setCprQuality(true, 182); value.attemptRosc(182);
+    value.setHold(true, 200); const restored = runtime(); restored.restore(value.snapshot());
+    expect(restored.advanceTo(1000)).toMatchObject({ heartRate: 105, goNoGoRequired: true });
+    restored.setHold(false, 1000);
+    expect(restored.advanceTo(1101).heartRate).toBe(105);
+    expect(restored.advanceTo(1102)).toMatchObject({ heartRate: 100, goNoGoRequired: true });
+  });
+
+  test("legacy corrected snapshots with no recovery HOLD fields retain their original timing", () => {
+    const value = runtime(); value.restore({ schemaVersion: 1, state: { schemaVersion: 1,
+      patientId: "PT-IRO-001", enabled: true, hold: false, arrest: false, rosc: false,
+      cprQuality: false, goNoGoRequired: false, lastUpdatedSimulationTimeSec: 45,
+      vasopressorFault: { startedAtSimulationTimeSec: 0, accumulatedHoldSec: 0,
+        correctedAtSimulationTimeSec: 45 } } });
+    expect(value.advanceTo(164).vasopressorStage).toBe("S1R");
+    expect(value.advanceTo(165).vasopressorStage).toBe("S0");
+  });
   test.each([[0, "S0"], [30, "S1"], [60, "S2"], [120, "S3"], [181, "PEA"]] as const)(
     "vasopressor interruption at %ss reaches %s", (time, stage) => {
       const value = runtime(); value.triggerVasopressorFault(0);

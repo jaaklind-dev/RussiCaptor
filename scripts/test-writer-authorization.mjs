@@ -1,31 +1,26 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { privilegeSnapshot, assertPrivilegeOnlyChange, qualifyRuntimeTablePrivileges } from './qualify-runtime-table-privileges.mjs';
 import { verifyMigrationInventory } from './qualification-migration-baseline.mjs';
 import { installCIHistoricalBaseline, registerCIFixtureIdentity } from './ci-historical-protection-baseline.mjs';
 import { qualifyCIHistoricalProtection } from './test-ci-historical-protection.mjs';
+import {installCIDeployedRuntimePrerequisites,seedCIV3Exercise,verifyCIDeployedHistory} from './ci-deployed-runtime-prerequisites.mjs';
+import {createCI176Database} from './ci-postgres176-driver.mjs';
+import {qualifyCIIROControls} from './test-ci-iro-controls.mjs';
 
-// Only an in-memory PostgreSQL instance is constructed. No connection string,
-// Supabase client, remote endpoint, or production identity is accepted.
+// Only a uniquely named database in the verified disposable PostgreSQL17.6
+// Unix-socket cluster is accepted. No URL, Supabase client or TCP endpoint.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-const require = createRequire(import.meta.url);
-const modulePath = process.env.WRITER_AUTH_PGLITE_MODULE || '@electric-sql/pglite';
-const { PGlite } = require(modulePath);
-const { pgcrypto } = require(path.join(path.dirname(require.resolve(modulePath)), 'contrib/pgcrypto.cjs'));
-const db = new PGlite({ extensions: { pgcrypto } });
+const db = await createCI176Database();
 const results = [];
 const query = (sql, params = []) => db.query(sql, params);
 
 try {
   await db.exec(`
-    create role anon nologin;
-    create role authenticated nologin;
-    create role service_role nologin bypassrls;
     create schema auth;
     create schema extensions;
     create extension pgcrypto with schema extensions;
@@ -56,6 +51,8 @@ try {
       from pg_trigger t join pg_class c on c.oid=t.tgrelid where not t.tgisinternal order by c.relname,t.tgname`)).rows,
   });
   for (const file of migrations) {
+    if(file==='20261028195410_decouple_runtime_checkpoint_delta_retention.sql')await installCIDeployedRuntimePrerequisites(db);
+    if(file==='20261031155028_iro_resuscitation_controls.sql')await verifyCIDeployedHistory(db);
     if (file === migrations[53]) {
       await installCIHistoricalBaseline(db);
       results.push({name:'exact accepted historical-protection prerequisites installed before54',status:'PASS'});
@@ -80,15 +77,19 @@ try {
     }
   }
   console.log(JSON.stringify({ postgres: (await query('select version()')).rows[0], migrations: migrations.length,
-    isolation: 'fresh in-memory database; synthetic users only; actual complete migration chain' }));
+    isolation: 'fresh disposable PostgreSQL17.6 database; synthetic users only; actual complete migration chain' }));
   // Cases are registered below; the runner deliberately never skips an absent
   // dependency or a failed migration. Every rejection must be a real SQL error.
   const pass = async (name, action) => { await action(); results.push({ name, status: 'PASS' }); };
   const deny = async (name, action, expected) => pass(name, async () => {
     await assert.rejects(action, error => expected.test(error.message));
   });
-  await runCases({ db, query, pass, deny, registerFixtureIdentity: id => registerCIFixtureIdentity(query,id) });
+  await db.exec(fs.readFileSync(path.join(root,'supabase/tests/runtime_writer_authorization_test.sql'),'utf8'));
+  // Bootstrap-history cases precede fresh active writer fixture authorizations;
+  // no expiry assertion or retained consumed authorization is rewritten.
   await qualifyCIHistoricalProtection({db,query,pass});
+  await runCases({ db, query, pass, deny, fixtureReady:true, deployedBaseline:true, registerFixtureIdentity: id => registerCIFixtureIdentity(query,id) });
+  await qualifyCIIROControls({db,query,pass});
   await qualifyRuntimeTablePrivileges({ query, setCmIdentity: () => query(
     "select set_config('request.jwt.claim.sub',$1,false),set_config('request.jwt.claims',$2,false)",
     ['10000000-0000-0000-0000-000000000001', JSON.stringify({ sub: '10000000-0000-0000-0000-000000000001', role: 'authenticated', is_anonymous: false })]) });
@@ -101,7 +102,7 @@ try {
 }
 }
 
-export async function runCases({ db, query, pass, deny, fixtureReady = false, registerFixtureIdentity }) {
+export async function runCases({ db, query, pass, deny, fixtureReady = false, registerFixtureIdentity, deployedBaseline=false }) {
   if (!fixtureReady) await db.exec(fs.readFileSync(path.join(root, 'supabase/tests/runtime_writer_authorization_test.sql'), 'utf8'));
   const CM = '10000000-0000-0000-0000-000000000001';
   const A = '10000000-0000-0000-0000-000000000002';
@@ -136,7 +137,8 @@ export async function runCases({ db, query, pass, deny, fixtureReady = false, re
         (user_id,role,scope_type,scope_id,status,issued_by) values($1,$2,'EXERCISE',$3,'ACTIVE',$1)`, [user, role, id]);
     }
     await identity(A);
-    await query('insert into public.exercise_states(exercise_id,revision,state,updated_by) values($1,1,$2,$3)', [id, state(id), A]);
+    if(deployedBaseline)await seedCIV3Exercise(query,id,state(id),A);
+    else await query('insert into public.exercise_states(exercise_id,revision,state,updated_by) values($1,1,$2,$3)', [id, state(id), A]);
     return id;
   }
   const acquire = async (user, id, writer = 'writer-a', revision = 0) =>
