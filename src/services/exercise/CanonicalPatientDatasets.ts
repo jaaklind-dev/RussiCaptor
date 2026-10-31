@@ -14,6 +14,7 @@ import { NARVA_IRO_HISTORICAL_PATIENT_DATASET, NARVA_IRO_PATIENT_DATASET,
   NARVA_TRAUMA_OXYGEN_PATIENT_DATASET, NARVA_TRAUMA_OUTDOOR_PATIENT_DATASET,
   NARVA_TRAUMA_PATIENT_DATASET } from "./NarvaPatientDatasets";
 import { GENERATED_BUILDER_DATASETS } from "@/services/builder/BuilderCompiledPackages.generated";
+import { NARVA_TRAUMA_PELVIC_V108_DATASET } from "./NarvaTraumaPelvicV108";
 
 const clone = (patient: Patient): Patient => ({ ...patient, mist: { ...patient.mist } });
 const dataset = (datasetId: string, records: PackagePatientDataset["patients"]): PackagePatientDataset => Object.freeze({ datasetId, version: datasetId.split(".v").at(-1)!, patients: Object.freeze(records) });
@@ -117,6 +118,7 @@ export const packagePatientDatasetRegistry = new PackagePatientDatasetRegistry()
   NARVA_TRAUMA_PATIENT_DATASET,
   NARVA_TRAUMA_OXYGEN_PATIENT_DATASET,
   NARVA_TRAUMA_OUTDOOR_PATIENT_DATASET,
+  NARVA_TRAUMA_PELVIC_V108_DATASET,
   NARVA_IRO_HISTORICAL_PATIENT_DATASET,
   NARVA_IRO_PATIENT_DATASET,
   ...GENERATED_BUILDER_DATASETS,

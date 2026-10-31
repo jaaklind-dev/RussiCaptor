@@ -56,7 +56,9 @@ describe("Narva 1.0.7 optional normal radiographs through the existing workflow"
     expect(candidate.packageHash).toBe("64468d8ae2dcfbd8c54b4411bf1add55a8ff8b96ca6465bfee08dcebfe1cfc7e");
     expect(candidate.packageHash).toBe(calculateExercisePackageHash(candidate));
     expect(exercisePackageValidator.validate(candidate)).toEqual([]);
-    expect(exercisePackageRegistry.latest(candidate.packageId)).toBe(candidate);
+    expect(exercisePackageRegistry.require(candidate.packageId, "1.0.7")).toBe(candidate);
+    expect(exercisePackageRegistry.latest(candidate.packageId)).toMatchObject({ packageVersion: "1.0.8",
+      packageHash: "004bafe3c3641524a0a4872016f5e08c461b4c29f640c1b4cdf5590534c542f9" });
     expect(Object.isFrozen(candidate.imagingConfiguration!.definitions)).toBe(true);
     expect(previous.packageHash).toBe("3cf0063a0c898e9947947baee277d313ae1f32067b52f27d92b9da5945dcc58f");
     expect(exercisePackageRegistry.require(candidate.packageId, "1.0.5").packageHash)

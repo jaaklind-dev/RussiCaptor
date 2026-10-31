@@ -14,6 +14,7 @@ import { RuntimeOwnershipResolver } from "@/services/runtime/OwnershipResolver";
 import type { VitalRuntimeResolution } from "@/services/runtime/vitals/VitalSignRuntimeResolver";
 import { projectVitalSignState } from "@/services/runtime/vitals/VitalSignProjection";
 import { resolvePhysiologicDecompensation } from "@/services/runtime/PhysiologicDecompensationEngine";
+import type { Avpu } from "@/models/VitalSign";
 
 const constants = {
   criticalRecoverySec: 120,
@@ -28,6 +29,10 @@ const mentalRank: Record<MentalStatusCode, number> = {
   Obtunded: 4,
   Unresponsive: 5,
   Arrest: 6,
+};
+
+const physiologicMentalStatus: Record<Avpu, MentalStatusCode> = {
+  ALERT: "Alert", VOICE: "Drowsy", PAIN: "Obtunded", UNRESPONSIVE: "Unresponsive",
 };
 
 const statusRank: Record<RuntimeStatus, number> = {
@@ -332,12 +337,19 @@ export function aggregateResolvedRuntimeState(
   let monitor = vitalResolution.state;
   let decompensation = input.previous.physiologicDecompensation;
   let resolvedStatus = status.status;
+  let resolvedMentalStatus = mental.value;
   if (input.previous.physiologicDecompensationConfig) {
     if (input.previous.globalStatus === "Dead" && input.previous.vitalSignState) monitor = structuredClone(input.previous.vitalSignState);
     const resolved = resolvePhysiologicDecompensation({ monitor, previous: decompensation,
       config: input.previous.physiologicDecompensationConfig, simulationTimeSec: input.exerciseTimeSec,
       previousStatus: status.status === "Dead" || input.previous.globalStatus === "Dead" ? "Dead" : status.status });
     monitor = resolved.monitor; decompensation = resolved.state; resolvedStatus = resolved.status;
+    const monitorMentalStatus = physiologicMentalStatus[monitor.avpu];
+    // This derived floor exists only for the explicitly enabled model. Preserve
+    // more severe process ceilings; never make sedation/neurologic disease better.
+    if (mentalRank[monitorMentalStatus] > mentalRank[resolvedMentalStatus]) resolvedMentalStatus = monitorMentalStatus;
+    if (resolvedStatus === "Dead") resolvedMentalStatus = "Unresponsive";
+    else if (resolvedStatus === "Arrest") resolvedMentalStatus = "Arrest";
     events.push(...resolved.events);
   }
   const projection = projectVitalSignState(monitor);
@@ -353,7 +365,7 @@ export function aggregateResolvedRuntimeState(
     vitalSignState: monitor,
     vitalSignConfiguration: vitalResolution.configuration,
     mapCalculated: projection.mapCalculated,
-    mentalStatusCode: status.status === "Arrest" ? "Arrest" : mental.value,
+    mentalStatusCode: status.status === "Arrest" && resolvedStatus !== "Dead" ? "Arrest" : resolvedMentalStatus,
     gcsTarget: projection.gcsTarget,
     symptomTags: collections.symptomTags,
     visibleFindings: collections.visibleFindings,

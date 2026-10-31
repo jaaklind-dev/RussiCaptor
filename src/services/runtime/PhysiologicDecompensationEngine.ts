@@ -57,11 +57,16 @@ export function resolvePhysiologicDecompensation(input: Readonly<{
   if (previous.clinicalState === "DEAD" || input.previousStatus === "Dead") return { monitor: deadMonitor(monitor), state: { ...previous, clinicalState: "DEAD", pulseOxSignalQuality: "NO_SIGNAL" }, status: "Dead", events: [] };
   const profoundFailureSinceSec = profound ? previous.profoundFailureSinceSec ?? input.simulationTimeSec : undefined;
   const duration = profoundFailureSinceSec === undefined ? 0 : input.simulationTimeSec - profoundFailureSinceSec;
+  // Reuse the monitor's existing response classes. A patient responding only to
+  // pain (or not responding) cannot remain ALIVE/Stable merely because isolated
+  // hypoperfusion did not reach the combined hypoxia/perfusion threshold.
+  const impairedResponse = monitor.avpu === "PAIN" || monitor.avpu === "UNRESPONSIVE";
   const clinicalState = duration >= input.config.deathFailureDurationSec ? "DEAD" : duration >= input.config.terminalFailureDurationSec ? "TERMINAL"
-    : combined >= 0.55 ? "CRITICAL" : "ALIVE";
+    : combined >= 0.55 || impairedResponse ? "CRITICAL" : "ALIVE";
   const terminalSinceSec = clinicalState === "TERMINAL" || clinicalState === "DEAD" ? previous.terminalSinceSec ?? input.simulationTimeSec : undefined;
   const state: PhysiologicDecompensationState = { profoundFailureSinceSec, terminalSinceSec, clinicalState, gcsCause, pulseOxSignalQuality: signalQuality };
-  const status: RuntimeStatus = clinicalState === "DEAD" ? "Dead" : clinicalState === "TERMINAL" || clinicalState === "CRITICAL" ? "Critical" : input.previousStatus;
+  const status: RuntimeStatus = clinicalState === "DEAD" ? "Dead" : input.previousStatus === "Arrest" ? "Arrest"
+    : clinicalState === "TERMINAL" || clinicalState === "CRITICAL" ? "Critical" : input.previousStatus;
   const events: AggregationEvent[] = [];
   if (previous.clinicalState !== clinicalState) events.push({ eventType: clinicalState === "DEAD" ? "PATIENT_DIED" : "PHYSIOLOGIC_STATE_CHANGED", details: { from: previous.clinicalState, to: clinicalState, cause: gcsCause } });
   const oldSignal = previous.pulseOxSignalQuality ?? "GOOD";
